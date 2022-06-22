@@ -2,3 +2,8 @@
 *.jl.cov
 *.jl.mem
 /Manifest.toml
+
+.Rproj.user
+.DS_Store
+.Rhistory
+Rplots.pdf
