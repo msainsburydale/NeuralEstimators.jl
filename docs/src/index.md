@@ -1,17 +1,3 @@
-# Example.jl Documentation
+# NeuralEstimators.jl documentation
 
-```@contents
-```
-
-## Functions
-
-```@docs
-func(x)
-```
-- link to [Example.jl Documentation](@ref)
-- link to [`func(x)`](@ref)
-
-## Index
-
-```@index
-```
+Landing page and brief description of neural estimators as a recent likelihood-inference approach, and an alternative to ABC.
