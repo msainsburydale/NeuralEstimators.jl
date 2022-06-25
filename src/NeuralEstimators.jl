@@ -26,7 +26,7 @@ include("ParameterConfigurations.jl")
 export DeepSet
 include("DeepSet.jl")
 
-export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes, matern, fₛ, Fₛ, Fₛ⁻¹
+export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes, matern, maternchols, fₛ, Fₛ, Fₛ⁻¹
 include("DataSimulation.jl")
 export incgammalower
 include("IncGammaLower.jl")
@@ -40,7 +40,7 @@ include("Estimate.jl")
 export parametricbootstrap, nonparametricbootstrap
 include("Bootstrap.jl")
 
-export stack, expandgrid
+export stack, expandgrid, loadbestweights
 include("UtilityFunctions.jl")
 
 end

@@ -1,4 +1,4 @@
-# Background theory
+# Motivation
 
 
 Definition of an estimator:

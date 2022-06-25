@@ -1,17 +1,23 @@
 # Core functions
 
-## Deep Set representation
+## Parameters
 
 ```@docs
-DeepSet
-
-DeepSet(ψ, ϕ; aggregation::String)
+ParameterConfigurations
 ```
 
 ## Simulation
 
 ```@docs
 simulate
+```
+
+## Deep Set representation
+
+```@docs
+DeepSet
+
+DeepSet(ψ, ϕ; aggregation::String)
 ```
 
 ## Training

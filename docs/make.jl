@@ -5,7 +5,7 @@ makedocs(
     sitename="NeuralEstimators.jl",
     pages = [
            "Home" => "index.md",
-           "backgroundtheory.md",
+           "motivation.md",
            "Workflow" => [
                 "Overview" => "workflow/overview.md",
                 "Simple example" => "workflow/simple.md",

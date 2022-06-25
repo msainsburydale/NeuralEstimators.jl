@@ -9,9 +9,11 @@ simulateschlather
 simulateconditionalextremes
 ```
 
-## Intermediate functions
+## Intermediate objects
 ```@docs
 matern
+
+maternchols
 
 incgammalower
 

@@ -1,9 +1,11 @@
+# TODO Finish the documentation for all of the simulateX functions..
+
+
 """
 	simulate(parameters::P, m::Integer, num_rep::Integer) where {P <: ParameterConfigurations}
 
-Generic method that simulates `m` independent replicates for each parameter
-configuration (by internally calling `simulate(parameters, m)`), repeated a
-total of `num_rep` times.
+Generic method that simulates `num_rep` sets of  sets of `m` independent replicates for each parameter
+configuration by calling `simulate(parameters, m)`.
 
 See also [Data simulation](@ref).
 """
@@ -114,18 +116,46 @@ delta(h; δ₁) = 1 + exp(-(h / δ₁)^2)
 C̃(h, ρ, ν) = matern(h, ρ, ν)
 σ̃₀(h, ρ, ν) = √(2 - 2 * C̃(h, ρ, ν))
 
-# TODO Finish this documentation.
+
 """
-	simulateconditionalextremes(L::AbstractArray{T, 2}, h, s₀_idx, u; <keyword args>)
-	simulateconditionalextremes(L::AbstractArray{T, 2}, h, s₀_idx, m::Integer; <keyword args>)
+	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, h, s₀, u;)
+	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, h, s₀, m::Integer)
 
 
 Simulates from the spatial conditional extremes model.
 """
 function simulateconditionalextremes(
-	L::AbstractArray{T, 2}, h, s₀_idx, u; # TODO should s₀ just be provided rather than s₀_idx? Also, is this the neatest treatment of the parameters? maybe u should be a keyword argument too.
-	ρ, ν, κ, λ, β, μ, τ, δ₁
+	θ, L::AbstractArray{T, 2}, h, s₀, u, m::Integer
 	) where T <: Number
+
+	n = size(L, 1)
+	Z = similar(L, n, 1, m)
+	Threads.@threads for k ∈ 1:m
+		Z[:, 1, k] = simulateconditionalextremes(θ, L, h, s₀, u)
+	end
+
+	return Z
+end
+
+function simulateconditionalextremes(
+	θ, L::AbstractArray{T, 2}, h, s₀, u
+	) where T <: Number
+
+	@assert size(θ, 1) == 8 "The conditional extremes model requires 8 parameters: `θ` should be an 8-dimensional vector."
+
+	s₀_idx = findfirst(x -> x == 0.0, map(norm, eachslice(S .- s₀, dims = 1)))
+
+	# Parameters associated with a(.) and b(.):
+	κ = θ[1]
+	λ = θ[2]
+	β = θ[3]
+	# Covariance parameters associated with the Gaussian process
+	ρ = θ[4]
+	ν = θ[5]
+	# Location and scale parameters for the residual process
+	μ = θ[6]
+	τ = θ[7]
+	δ₁ = θ[8]
 
 	# Construct the parameter δ used in the Subbotin distribution:
 	δ = delta.(h, δ₁ = δ₁)
@@ -162,15 +192,7 @@ function simulateconditionalextremes(
 	return Z
 end
 
-function simulateconditionalextremes(L::AbstractArray{T, 2}, h, s₀_idx, u, m::Integer; ρ, ν, κ, λ, β, μ, τ, δ₁) where T <: Number
-	n = size(L, 1)
-	Z = similar(L, n, 1, m)
-	Threads.@threads for k ∈ 1:m
-		Z[:, 1, k] = simulateconditionalextremes(L, h, s₀_idx, u, ρ = ρ, ν = ν, κ = κ, λ = λ, β = β, μ = μ, τ = τ, δ₁ = δ₁)
-	end
 
-	return Z
-end
 
 # ---- Intermeditate functions ----
 
@@ -205,6 +227,22 @@ end
 
 matern(h, ρ) =  matern(h, ρ, 1)
 
+"""
+    maternchols(D, ρ, ν)
+Given a distance matrix `D`, compute corresponding covariance matrix Σ under the
+Matérn covariance function `matern` with range `ρ` and smoothness `ν`, and
+return the Cholesky factor of this matrix.
+
+Providing vectors for `ρ` and `ν` will yield a three-dimensional array of
+Cholesky factors.
+"""
+function maternchols(D, ρ, ν)
+	L = [cholesky(Symmetric(matern.(D, ρ[i], ν[i]))).L  for i ∈ eachindex(ρ)]
+	L = convert.(Array, chols) # TODO Would be better if stack() could handle other classes. Maybe it would work if I remove the type from stack()
+	L = stack(L, merge = false)
+	return L
+end
+
 
 @doc raw"""
 	fₛ(x, μ, τ, δ)
@@ -237,17 +275,11 @@ Fₛ⁻¹.(p, μ, τ, δ)
 ```
 """
 fₛ(x, μ, τ, δ)   = δ * exp(-(abs((x - μ)/τ)^δ)) / (2τ * gamma(1/δ))
-Fₛ(q, μ, τ, δ)   = 0.5 + 0.5 * sign(q - μ) * (1 / gamma(1/δ)) * γ(1/δ, abs((q - μ)/τ)^δ)
+Fₛ(q, μ, τ, δ)   = 0.5 + 0.5 * sign(q - μ) * (1 / gamma(1/δ)) * incgammalower(1/δ, abs((q - μ)/τ)^δ)
 Fₛ⁻¹(p, μ, τ, δ) = μ + sign(p - 0.5) * (τ^δ * quantile(Gamma(1/δ), 2 * abs(p - 0.5)))^(1/δ)
 
-
-ϕ(y)   = pdf(Normal(0, 1), y)
 Φ(q)   = cdf(Normal(0, 1), q)
-Φ⁻¹(p) = quantile(Normal(0, 1), p)
 t(ỹ₀₁, μ, τ, δ) = Fₛ⁻¹(Φ(ỹ₀₁), μ, τ, δ)
-t⁻¹(y, μ, τ, δ) = Φ⁻¹(Fₛ(y, μ, τ, δ))
-t′(y, μ, τ, δ)  = ϕ(y) / fₛ(y, μ, τ, δ) # NB this isn't used currently but it may be useful for unit testing
-ln_t′_t⁻¹(y, μ, τ, δ) = log(ϕ(t⁻¹(y, μ, τ, δ))) - log(fₛ(y, μ, τ, δ))
 
 
 # TODO add these in runtests.jl

@@ -26,13 +26,14 @@ end
 # ---- Functions for finding, saving, and loading the best neural network ----
 
 common_docstring = """
-Given a path to a training run containing network objects saved with names
-'network_epochXX.bson' and an object saved as 'loss_per_epoch.bson',
+Given a `path` to a training run containing neural networks saved with names
+'network_epochx.bson' and an object saved as 'loss_per_epoch.bson',
 """
 
 """
-	$common_docstring finds the epoch of the best network (measured by
-	validation loss).
+	_findbestweights(path::String)
+
+$common_docstring finds the epoch of the best network (measured by validation loss).
 """
 function _findbestweights(path::String)
 	loss_per_epoch = load(joinpath(path, "loss_per_epoch.bson"), @__MODULE__)[:loss_per_epoch]
@@ -41,8 +42,9 @@ function _findbestweights(path::String)
 end
 
 """
-	$common_docstring saves the weights of the best network (measured by
-	validation loss) as 'best_network.bson'.
+	_savebestweights(path::String)
+
+$common_docstring saves the weights of the best network (measured by validation loss) as 'best_network.bson'.
 """
 function _savebestweights(path::String)
 	best_epoch = _findbestweights(path)
@@ -53,8 +55,9 @@ function _savebestweights(path::String)
 end
 
 """
-	$common_docstring returns the weights of the best network (measured by
-	validation loss).
+	loadbestweights(path::String)
+
+$common_docstring returns the weights of the best network (measured by validation loss).
 """
 function loadbestweights(path::String)
 	loadpath     = joinpath(path, "best_network.bson")
@@ -65,8 +68,10 @@ end
 
 # TODO Decide if this is really general enough to be useful.
 """
-	loadpath: Path containing one or more folders of training runs called 'runs_*', where * is arbitrary.
-	architecture: A closure that returns the architecture (a Flux model) used for the neural estimators in loadpath.
+	loadneuralestimators(loadpath::String, architecture)
+
+`loadpath`: Path containing one or more folders of training runs called 'runs_x', where 'x' is arbitrary.
+`architecture`: A closure that returns the architecture used for the neural estimators in `loadpath` (must be the same architecture).
 """
 function loadneuralestimators(loadpath::String, architecture)
 
@@ -95,11 +100,12 @@ function loadneuralestimators(loadpath::String, architecture)
 			ϕ = identity
 		end
 
-		DeepSet(ψ, ϕ) # FIXME can't assume this: 1) May not be a DeepSet, 2) may have different aggregation function.
+		DeepSet(ψ, ϕ) # FIXME  can't assume this in general: 1) May not be a DeepSet, 2) may have different aggregation function.
 	end
 
 	return (estimators = estimators, titles = titles)
 end
+
 
 function _runondevice(network, x, use_gpu::Bool; batchsize = min(length(x), 32))
 

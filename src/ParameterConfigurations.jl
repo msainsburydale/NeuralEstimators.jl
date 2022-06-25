@@ -1,9 +1,20 @@
 """
 	ParameterConfigurations
 
-An abstract supertype for `Parameters`.
+An abstract supertype for storing parameters `θ` and any intermediate objects
+needed for data simulation with `simulate`.
 """
 abstract type ParameterConfigurations end
+
+import Base: show
+# this is used to handle a call to `print`
+Base.show(io::IO, parameters::P) where {P <: ParameterConfigurations} = print(io, "\nA sub-type of `ParameterConfigurations` K = $(size(parameters, 2)) instances of the $(size(parameters, 1))-dimensional parameter vector θ.")
+# this is used to show values in the REPL and when using IJulia
+Base.show(io::IO, m::MIME"text/plain", parameters::P) where {P <: ParameterConfigurations} = print(io, parameters)
+
+import Base: size
+size(parameters::P) where {P <: ParameterConfigurations} = size(parameters.θ)
+size(parameters::P, d::Integer) where {P <: ParameterConfigurations} = size(parameters.θ, d)
 
 # ---- _ParameterLoader: Analogous to DataLoader for ParameterConfigurations objects ----
 
@@ -17,10 +28,6 @@ struct _ParameterLoader{P <: ParameterConfigurations, I <: Integer}
     shuffle::Bool
 end
 
-# TODO document this method extension
-import Base: size
-size(parameters::P) where {P <: ParameterConfigurations} = size(parameters.θ)
-size(parameters::P, d::Integer) where {P <: ParameterConfigurations} = size(parameters.θ, d)
 
 function _ParameterLoader(parameters::P; batchsize::Integer = 1, shuffle::Bool = false, partial::Bool = true) where {P <: ParameterConfigurations}
     @assert batchsize > 0
