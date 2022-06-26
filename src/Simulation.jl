@@ -2,21 +2,21 @@
 
 
 """
-	simulate(parameters::P, m::Integer, num_rep::Integer) where {P <: ParameterConfigurations}
+	simulate(parameters::P, ξ, m::Integer, num_rep::Integer) where {P <: ParameterConfigurations}
 
 Generic method that simulates `num_rep` sets of  sets of `m` independent replicates for each parameter
-configuration by calling `simulate(parameters, m)`.
+configuration by calling `simulate(parameters, ξ, m)`.
 
 See also [Data simulation](@ref).
 """
-function simulate(parameters::P, m::Integer, num_rep::Integer) where {P <: ParameterConfigurations}
-	v = [simulate(parameters, m) for i ∈ 1:num_rep]
+function simulate(parameters::P, ξ, m::Integer, num_rep::Integer) where {P <: ParameterConfigurations}
+	v = [simulate(parameters, ξ, m) for i ∈ 1:num_rep]
 	v = vcat(v...) # should be ok since we're only splatting num_rep vectors, which doesn't get prohibitively large even during bootstrapping. No reason not to use stack, though.
 	return v
 end
 
 # Wrapper function that returns simulated data and the true parameter values
-_simulate(params::P, m) where {P <: ParameterConfigurations} = (simulate(params, m), params.θ)
+_simulate(params::P, ξ, m) where {P <: ParameterConfigurations} = (simulate(params, ξ, m), params.θ)
 
 
 

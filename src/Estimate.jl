@@ -2,9 +2,9 @@
 	estimate(estimators, parameters::P, m; <keyword args>) where {P <: ParameterConfigurations}
 
 Using a collection of `estimators`, compute estimates from data simulated from a
-set of `parameters`.
+set of `parameters` with invariant information `ξ`.
 
-`estimate()` requires the user to have defined a method `simulate(parameters, m::Integer)`.
+`estimate()` requires the user to have defined a method `simulate(parameters, ξ, m::Integer)`.
 
 # Keyword arguments
 - `m::Vector{Integer} where I <: Integer`: sample sizes to estimate from.
@@ -14,7 +14,7 @@ set of `parameters`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
 """
 function estimate(
-    estimators, parameters::P; m::Vector{I},
+    estimators, ξ, parameters::P; m::Vector{I},
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
 	num_rep::Integer = 1, use_gpu = true
@@ -64,7 +64,7 @@ function _estimate(
 
 	# Simulate data
 	println("	Simulating data...")
-    y = simulate(parameters, m, num_rep)
+    y = simulate(parameters, ξ, m, num_rep)
 
 	# Initialise a DataFrame to record the run times
 	runtime = DataFrame(estimator = [], m = [], time = [])
