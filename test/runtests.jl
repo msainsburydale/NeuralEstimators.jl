@@ -27,15 +27,15 @@ end
 	@test _getindices(v) == [1:3, 4:7, 8:13]
 end
 
-@testset "stack" begin
+@testset "stackarrays" begin
 	# Vector containing arrays of the same size:
 	A = rand(2, 3, 4); v = [A, A]; N = ndims(A);
-	@test stack(v) == cat(v..., dims = N)
-	@test stack(v, merge = false) == cat(v..., dims = N + 1)
+	@test stackarrays(v) == cat(v..., dims = N)
+	@test stackarrays(v, merge = false) == cat(v..., dims = N + 1)
 
 	# Vector containing arrays with differing final dimension size:
 	A₁ = rand(2, 3, 4); A₂ = rand(2, 3, 5); v = [A₁, A₂];
-	@test stack(v) == cat(v..., dims = N)
+	@test stackarrays(v) == cat(v..., dims = N)
 end
 
 @testset "subsetparameters" begin
@@ -57,21 +57,16 @@ end
 
 # Simple example for testing.
 struct Parameters <: ParameterConfigurations θ end
-Ω = Normal(0, 0.5)
-function Parameters(Ω, K::Integer)
-	θ = rand(Ω, 1, K)
+ξ = (Ω = Normal(0, 0.5), σ = 1)
+function Parameters(ξ, K::Integer)
+	θ = rand(ξ.Ω, 1, K)
 	Parameters(θ)
 end
-function simulate(parameters::Parameters, m::Integer)
+function simulate(parameters::Parameters, ξ, m::Integer)
 	n = 1
-	σ = 1
 	θ = vec(parameters.θ)
-	Z = [rand(Normal(μ, σ), n, 1, m) for μ ∈ θ]
+	Z = [rand(Normal(μ, ξ.σ), n, 1, m) for μ ∈ θ]
 end
-
-# Constructor needed for indexing in _getparameters() # TODO remove this when I think of a neater solution to indexing in general
-Parameters(parameters, θ) = Parameters(θ)
-
 
 
 @testset "core" begin
@@ -99,10 +94,11 @@ Parameters(parameters, θ) = Parameters(θ)
 	# test train()
 	# FIXME prevent runs being saved. Should be able to provide
 	# an empty string, or maybe nothing, which means we don't save anything.
-	θ̂ = train(θ̂, Ω, Parameters, m = 10, epochs = 5)
-	parameters = Parameters(Ω, 100)
-	θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5) # FIXME not good seeing so many warnings
-	θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, epochs_per_Z_refresh = 2) # FIXME not good seeing so many warnings
+	θ̂ = train(θ̂, ξ, Parameters, m = 10, epochs = 5, savepath = "")
+	# parameters = Parameters(ξ, 100)
+	parameters = Parameters(ξ, 5000)
+	θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "") # FIXME not good seeing so many warnings when K = 100; think it's _ParameterLoader?
+	θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "", epochs_per_Z_refresh = 2) # FIXME not good seeing so many warnings; think it's _ParameterLoader?
 
 	# test _runondevice()
 	θ̂₁ = θ̂(v)
@@ -111,7 +107,7 @@ Parameters(parameters, θ) = Parameters(θ)
 	@test θ̂₁ ≈ θ̂₂
 
 	# test estimate()
-	estimate([θ̂], parameters, m = [30, 90, 150])
+	estimate([θ̂], ξ, parameters, m = [30, 90, 150])
 
 	# Test on the GPU if it is available
 	if CUDA.functional()

@@ -3,7 +3,7 @@
 ```@docs
 loadbestweights
 
-stack
+stackarrays
 
 expandgrid
 ```

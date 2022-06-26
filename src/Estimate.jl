@@ -22,7 +22,7 @@ function estimate(
 
 	obj = map(m) do i
 	 	_estimate(
-		estimators, parameters, i,
+		estimators, ξ, parameters, i,
 		estimator_names = estimator_names, parameter_names = parameter_names,
 		num_rep = num_rep, use_gpu = use_gpu
 		)
@@ -45,7 +45,7 @@ function estimate(
 end
 
 function _estimate(
-	estimators, parameters::P, m::Integer;
+	estimators, ξ, parameters::P, m::Integer;
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
 	num_rep::Integer = 1, use_gpu = true

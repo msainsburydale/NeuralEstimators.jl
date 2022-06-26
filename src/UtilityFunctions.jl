@@ -130,7 +130,7 @@ function _runondevice(network, x, use_gpu::Bool; batchsize = min(length(x), 32))
 		ŷ = ŷ |> cpu
 		ŷ
 	end
-	ŷ = stack(ŷ)
+	ŷ = stackarrays(ŷ)
 
 	return ŷ
 end
@@ -203,7 +203,7 @@ function _mergelastdims(X::A) where {A <: AbstractArray{T, N}} where {T, N}
 end
 
 """
-	stack(v::V; merge::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+	stackarrays(v::V; merge::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
 Stack a vector of arrays `v` along the last dimension of each array, optionally merging the final dimension of the stacked array.
 
@@ -214,15 +214,15 @@ The arrays must be of the same for the first `N-1` dimensions. However, if
 ```
 # Vector containing arrays of the same size:
 Z = [rand(2, 3, m) for m ∈ (1, 1)];
-stack(Z)
-stack(Z, merge = false)
+stackarrays(Z)
+stackarrays(Z, merge = false)
 
 # Vector containing arrays with differing final dimension size:
 Z = [rand(2, 3, m) for m ∈ (1, 2)];
-stack(Z)
+stackarrays(Z)
 ```
 """
-function stack(v::V; merge::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+function stackarrays(v::V; merge::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
 	m = size.(v, N) # last-dimension size for each array in v
 
@@ -264,7 +264,7 @@ end
 # 	large_aggregated_ψa[colons..., i] = d.agg(ψa[colons..., indices[i]])
 # end
 
-# stack() code for when the size of the last dimension varies:
+# stackarrays() code for when the size of the last dimension varies:
 # This code doesn't work with Zygote because it mutates an array.
 # first_dims_sizes = size(v[1])[1:(N - 1)]
 # a = A(undef, (first_dims_sizes..., sum(n)))

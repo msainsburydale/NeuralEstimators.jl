@@ -2,10 +2,9 @@
 
 Perhaps the simplest estimation task involves inferring μ from N(μ, σ) data, where σ = 1 is known.
 
-The first step is to define an object `ξ` that contains invariant model information; that is, information that does not change with time. In this example, we have two invariant objects: The prior distribution of the parameters is fixed, so it is included here, as is the standard deviation, σ.
+The first step is to define an object `ξ` that contains invariant model information; that is, information that does not change with time. In this example, we have two invariant objects: The prior distribution of the parameters, Ω, which we take to be a N(0, 0.5) distribution, and the standard deviation, σ.
 ```
-Ω = Normal(0, 0.5)  
-ξ = (Ω = Ω, σ = 1)
+ξ = (Ω = Normal(0, 0.5), σ = 1)
 ```
 
 Next, we define a subtype of `ParameterConfigurations`; for this model, we need only store the, `θ`, which must be stored as a p × K matrix, where p is the dimension of θ (here, p = 1).

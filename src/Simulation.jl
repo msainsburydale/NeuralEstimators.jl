@@ -238,8 +238,8 @@ Cholesky factors.
 """
 function maternchols(D, ρ, ν)
 	L = [cholesky(Symmetric(matern.(D, ρ[i], ν[i]))).L  for i ∈ eachindex(ρ)]
-	L = convert.(Array, L) # TODO Would be better if stack() could handle other classes. Maybe it would work if I remove the type from stack()
-	L = stack(L, merge = false)
+	L = convert.(Array, L) # TODO Would be better if stackarrays() could handle other classes. Maybe it would work if I remove the type from stackarrays()
+	L = stackarrays(L, merge = false)
 	return L
 end
 

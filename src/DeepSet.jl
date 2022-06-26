@@ -35,7 +35,7 @@ is associated with one parameter vector.
 # Examples
 ```jldoctest
 n = 10 # observations in each realisation
-p = 5  # number of parameters in the statistical model 
+p = 5  # number of parameters in the statistical model
 w = 32 # width of each layer
 ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
 ϕ = Chain(Dense(w, w, relu), Dense(w, p));
@@ -84,7 +84,7 @@ Base.show(io::IO, m::MIME"text/plain", D::DeepSet) = print(io, D)
 
 # function (d::DeepSet)(v::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 #   θ̂ = d.ϕ.(d.agg.(d.ψ.(v)))
-#   θ̂ = stack(θ̂)
+#   θ̂ = stackarrays(θ̂)
 #   return θ̂
 # end
 
@@ -94,7 +94,7 @@ Base.show(io::IO, m::MIME"text/plain", D::DeepSet) = print(io, D)
 function (d::DeepSet)(v::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
 	# Convert to a single large Array
-	a = stack(v)
+	a = stackarrays(v)
 
 	# Apply the inner neural network
 	ψa = d.ψ(a)
@@ -111,7 +111,7 @@ function (d::DeepSet)(v::V) where {V <: AbstractVector{A}} where {A <: AbstractA
 	# where the last dimension of this large array has size equal to length(v).
 	# Note that we cannot pre-allocate and fill an array, since array mutation
 	# is not supported by Zygote (which is needed during training).
-	large_aggregated_ψa = [d.agg(ψa[colons..., idx]) for idx ∈ indices] |> stack
+	large_aggregated_ψa = [d.agg(ψa[colons..., idx]) for idx ∈ indices] |> stackarrays
 
 	# Apply the outer network
 	θ̂ = d.ϕ(large_aggregated_ψa)

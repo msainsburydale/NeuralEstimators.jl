@@ -1,3 +1,6 @@
+# TODO Could add argument to train, verbose::Bool = true, and could do the same for estimate().
+
+
 _common_kwd_args = """
 - `m`: sample sizes (either an `Integer` or a collection of `Integers`).
 - `batchsize::Integer = 32`
@@ -5,10 +8,12 @@ _common_kwd_args = """
 - `epochs_per_Z_refresh::Integer = 1`: how often to refresh the training data.
 - `loss = mae`: the loss function, which should return an average loss when applied to multiple replicates.
 - `optimiser = ADAM(1e-4)`
-- `savepath::String = "runs/"`: path to save the trained `θ̂` and other information.
+- `savepath::String = "runs/"`: path to save the trained `θ̂` and other information; if savepath is an empty string (i.e., `""`), nothing is saved.
 - `stopping_epochs::Integer = 10`: halt training if the risk doesn't improve in `stopping_epochs` epochs.
 - `use_gpu::Bool = true`
 """
+
+
 
 """
 	train(θ̂, ξ, P; <keyword args>) where {P <: ParameterConfigurations}
@@ -35,7 +40,7 @@ function train(θ̂, ξ, P;
 	stopping_epochs::Integer = 10,
     use_gpu::Bool      = true,
     savepath::String   = "runs/",
-	K::Integer  = 10_000
+	K::Integer  = 10_000,
 	)
 
 	epochs_per_Z_refresh = 1 # TODO
@@ -48,9 +53,12 @@ function train(θ̂, ξ, P;
 	@assert K > 0
 	@assert epochs_per_θ_refresh % epochs_per_Z_refresh  == 0 "`epochs_per_θ_refresh` must be a multiple of `epochs_per_Z_refresh`"
 
-	loss_path = joinpath(savepath, "loss_per_epoch.bson")
-	if isfile(loss_path) rm(loss_path) end
-	if !ispath(savepath) mkpath(savepath) end
+	savebool = savepath != "" # turn off saving if savepath is an empty string
+	if savebool
+		loss_path = joinpath(savepath, "loss_per_epoch.bson")
+		if isfile(loss_path) rm(loss_path) end
+		if !ispath(savepath) mkpath(savepath) end
+	end
 
 	device = _checkgpu(use_gpu)
     θ̂ = θ̂ |> device
@@ -69,7 +77,7 @@ function train(θ̂, ξ, P;
 
 	# Save the initial θ̂. This is to prevent bugs in the case that
 	# the initial loss does not improve
-	_saveweights(θ̂, 0, savepath)
+	savebool && _saveweights(θ̂, 0, savepath)
 
 	# Number of batches of θ to use for each epoch
 	batches = ceil((K / batchsize))
@@ -83,7 +91,7 @@ function train(θ̂, ξ, P;
 	local early_stopping_counter = 0
 	train_time = @elapsed for epoch ∈ 1:epochs
 
-		# For each batch, update θ̂ and save the training loss
+		# For each batch, update θ̂ and compute the training loss
 		local train_loss = zero(initial_val_risk)
 		epoch_time_train = @elapsed for _ ∈ 1:batches
 			parameters = P(ξ, batchsize)
@@ -98,13 +106,13 @@ function train(θ̂, ξ, P;
 		println("Epoch: $epoch  Validation loss: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
 
 		# save the loss every epoch in case training is prematurely halted
-		@save loss_path loss_per_epoch
+		savebool && @save loss_path loss_per_epoch
 
 		# If the current loss is better than the previous best, save θ̂ and
 		# update the minimum validation risk; otherwise, add to the early
 		# stopping counter
 		if current_val_risk <= min_val_risk
-			_saveweights(θ̂, epoch, savepath)
+			savebool && _saveweights(θ̂, epoch, savepath)
 			min_val_risk = current_val_risk
 			early_stopping_counter = 0
 		else
@@ -115,14 +123,14 @@ function train(θ̂, ξ, P;
     end
 
 	# save information, the final θ̂, and save the best θ̂ as best_network.bson.
-	_saveinfo(loss_per_epoch, train_time, savepath)
-	_saveweights(θ̂, epochs, savepath)
-	_savebestweights(savepath)
+	savebool && _saveinfo(loss_per_epoch, train_time, savepath)
+	savebool && _saveweights(θ̂, epochs, savepath)
+	savebool && _savebestweights(savepath)
 
     return θ̂
 end
 
-
+# FIXME Is this method bugged? It doesn't seem to reduce the validation loss consistently... Could be something going astray with _ParameterLoader.
 """
 	train(θ̂, ξ, θ_train::P, θ_val::P; <keyword args>) where {P <: ParameterConfigurations}
 
@@ -144,9 +152,12 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 
 	_checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 
-	loss_path = joinpath(savepath, "loss_per_epoch.bson")
-	if isfile(loss_path) rm(loss_path) end
-	if !ispath(savepath) mkpath(savepath) end
+	savebool = savepath != "" # turn off saving if savepath is an empty string
+	if savebool
+		loss_path = joinpath(savepath, "loss_per_epoch.bson")
+		if isfile(loss_path) rm(loss_path) end
+		if !ispath(savepath) mkpath(savepath) end
+	end
 
 	device = _checkgpu(use_gpu)
     θ̂ = θ̂ |> device
@@ -164,7 +175,7 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 
 	# Save the initial θ̂. This is to prevent bugs in the case that the initial
 	# risk does not improve
-	_saveweights(θ̂, 0, savepath)
+	savebool && _saveweights(θ̂, 0, savepath)
 
 	# for loops create a new scope for the variables that are not present in the
 	# enclosing scope, and such variables get a new binding in each iteration of
@@ -185,7 +196,7 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 			println(" Finished in $(round(t, digits = 3)) seconds")
 		end
 
-		# For each batch, update θ̂ and save the training loss
+		# For each batch, update θ̂ and compute the training loss
 		local train_loss = zero(initial_val_risk)
 		epoch_time_train = @elapsed if epochs_per_Z_refresh > 1
 			 for (Z, θ) in Z_train
@@ -206,13 +217,13 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 		println("Epoch: $epoch  Validation loss: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
 
 		# save the loss every epoch in case training is prematurely halted
-		@save loss_path loss_per_epoch
+		savebool && @save loss_path loss_per_epoch
 
 		# If the current loss is better than the previous best, save θ̂ and
 		# update the minimum validation risk; otherwise, add to the early
 		# stopping counter
 		if current_val_risk <= min_val_risk
-			_saveweights(θ̂, epoch, savepath)
+			savebool && _saveweights(θ̂, epoch, savepath)
 			min_val_risk = current_val_risk
 			early_stopping_counter = 0
 		else
@@ -222,10 +233,10 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 
     end
 
-	# save information, the final θ̂, and the best θ̂ as best_network.bson.
-	_saveinfo(loss_per_epoch, train_time, savepath)
-	_saveweights(θ̂, epochs, savepath)
-	_savebestweights(savepath)
+	# save information, the final θ̂, and save the best θ̂ as best_network.bson.
+	savebool && _saveinfo(loss_per_epoch, train_time, savepath)
+	savebool && _saveweights(θ̂, epochs, savepath)
+	savebool && _savebestweights(savepath)
 
     return θ̂
 end

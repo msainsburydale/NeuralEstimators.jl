@@ -40,7 +40,7 @@ include("Estimate.jl")
 export parametricbootstrap, nonparametricbootstrap
 include("Bootstrap.jl")
 
-export stack, expandgrid, loadbestweights # FIXME Why is stack not defined? I think because DataFrames also exports it. Might need to choose another name; stackarrays seems good..
+export stackarrays, expandgrid, loadbestweights 
 include("UtilityFunctions.jl")
 
 end
