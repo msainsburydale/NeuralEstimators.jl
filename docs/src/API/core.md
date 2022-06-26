@@ -4,6 +4,8 @@
 
 ```@docs
 ParameterConfigurations
+
+subsetparameters
 ```
 
 ## Simulation

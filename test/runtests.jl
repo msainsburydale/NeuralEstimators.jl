@@ -38,6 +38,22 @@ end
 	@test stack(v) == cat(v..., dims = N)
 end
 
+@testset "subsetparameters" begin
+
+	struct TestParameters <: ParameterConfigurations
+		v
+		θ
+		chols
+	end
+
+	K = 4
+	parameters = TestParameters(rand(K), rand(3, K), rand(2, 2, K))
+	indices = 2:3
+	parameters_subset = subsetparameters(parameters, indices)
+	@test parameters_subset.θ     == parameters.θ[:, indices]
+	@test parameters_subset.chols == parameters.chols[:, :, indices]
+	@test parameters_subset.v     == parameters.v[indices]
+end
 
 # Simple example for testing.
 struct Parameters <: ParameterConfigurations θ end

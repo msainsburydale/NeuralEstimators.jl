@@ -20,14 +20,14 @@ using SpecialFunctions: besselk, gamma
 using Statistics: mean, median, sum
 using Zygote
 
-export ParameterConfigurations
-include("ParameterConfigurations.jl")
+export ParameterConfigurations, subsetparameters
+include("Parameters.jl")
 
 export DeepSet
 include("DeepSet.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes, matern, maternchols, fₛ, Fₛ, Fₛ⁻¹
-include("DataSimulation.jl")
+include("Simulation.jl")
 export incgammalower
 include("IncGammaLower.jl")
 
@@ -40,7 +40,7 @@ include("Estimate.jl")
 export parametricbootstrap, nonparametricbootstrap
 include("Bootstrap.jl")
 
-export stack, expandgrid, loadbestweights
+export stack, expandgrid, loadbestweights # FIXME Why is stack not defined? I think because DataFrames also exports it. Might need to choose another name; stackarrays seems good..
 include("UtilityFunctions.jl")
 
 end

@@ -11,7 +11,7 @@ set of `parameters`.
 - `estimator_names::Vector{String}`: estimator names used when combining estimates into a `DataFrame` (e.g., `["NeuralEstimator", "BayesEstimator", "MLE"]`), with sensible default values provided.
 - `parameter_names::Vector{String}`: parameter names used when combining estimates into a `DataFrame` (e.g., `["μ", "σ"]`), with sensible default values provided.
 - `num_rep::Integer = 1`: the number of times to replicate each parameter in `parameters` to reduce the effect of sample variability when assessing the estimators.
-- `use_gpu = true`: should be a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
+- `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
 """
 function estimate(
     estimators, parameters::P; m::Vector{I},

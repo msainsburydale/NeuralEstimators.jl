@@ -1,3 +1,5 @@
+# TODO Add simulate_just_in_time::Bool = true to train() so that subsetting isn't compulsory
+
 _common_kwd_args = """
 - `m`: sample sizes (either an `Integer` or a collection of `Integers`).
 - `batchsize::Integer = 32`

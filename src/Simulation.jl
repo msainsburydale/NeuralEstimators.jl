@@ -30,16 +30,16 @@ Simulates `m` realisations from a Gau(0, 𝚺 + σ²𝐈) distribution, where �
 """
 function simulategaussianprocess(L::AbstractArray{T, 2}, σ²::T, m::Integer) where T
 	n = size(L, 1)
-	y = similar(L, n, 1, m)
+	y = similar(L, n, m)
 	for h ∈ 1:m
-		y[:, :, 1, h] = simulategaussianprocess(L, σ²)
+		y[:, h] = simulategaussianprocess(L, σ²)
 	end
 	return y
 end
 
 function simulategaussianprocess(L::AbstractArray{T, 2}, σ²::T) where T
 	n = size(L, 1)
-	return simulategaussianprocess(L) + sqrt(σ²) * randn(T, n, n)
+	return simulategaussianprocess(L) + sqrt(σ²) * randn(T, n)
 end
 
 function simulategaussianprocess(L::AbstractArray{T, 2}) where T
@@ -98,9 +98,9 @@ end
 
 function simulateschlather(L::AbstractArray{T, 2}, m::Integer; C = 3.5) where T <: Number
 	n = size(L, 1)
-	Z = similar(L, n, 1, m)
+	Z = similar(L, n, m)
 	for h ∈ 1:m
-		Z[:, 1, h] = simulateschlather(L, C = C)
+		Z[:, h] = simulateschlather(L, C = C)
 	end
 
 	return Z
@@ -129,9 +129,9 @@ function simulateconditionalextremes(
 	) where T <: Number
 
 	n = size(L, 1)
-	Z = similar(L, n, 1, m)
+	Z = similar(L, n, m)
 	Threads.@threads for k ∈ 1:m
-		Z[:, 1, k] = simulateconditionalextremes(θ, L, h, s₀, u)
+		Z[:, k] = simulateconditionalextremes(θ, L, h, s₀, u)
 	end
 
 	return Z
@@ -230,7 +230,7 @@ matern(h, ρ) =  matern(h, ρ, 1)
 """
     maternchols(D, ρ, ν)
 Given a distance matrix `D`, compute corresponding covariance matrix Σ under the
-Matérn covariance function `matern` with range `ρ` and smoothness `ν`, and
+Matérn covariance function with range `ρ` and smoothness `ν`, and
 return the Cholesky factor of this matrix.
 
 Providing vectors for `ρ` and `ν` will yield a three-dimensional array of
@@ -238,7 +238,7 @@ Cholesky factors.
 """
 function maternchols(D, ρ, ν)
 	L = [cholesky(Symmetric(matern.(D, ρ[i], ν[i]))).L  for i ∈ eachindex(ρ)]
-	L = convert.(Array, chols) # TODO Would be better if stack() could handle other classes. Maybe it would work if I remove the type from stack()
+	L = convert.(Array, L) # TODO Would be better if stack() could handle other classes. Maybe it would work if I remove the type from stack()
 	L = stack(L, merge = false)
 	return L
 end
