@@ -34,13 +34,14 @@ include("IncGammaLower.jl")
 export train
 include("Train.jl")
 
-export estimate
+export estimate, Estimates
+import Base: merge
 include("Estimate.jl")
 
 export parametricbootstrap, nonparametricbootstrap
 include("Bootstrap.jl")
 
-export stackarrays, expandgrid, loadbestweights 
+export stackarrays, expandgrid, loadbestweights
 include("UtilityFunctions.jl")
 
 end

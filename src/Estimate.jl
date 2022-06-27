@@ -1,19 +1,42 @@
+"""
+	Estimates(θ, θ̂, runtime)
+
+A set of true parameters `θ`, corresponding estimates `θ̂`, and the `runtime` to
+obtain `θ̂`, as returned by a call to `estimate`.
+"""
 struct Estimates
 	θ::DataFrame
 	θ̂::DataFrame
 	runtime::DataFrame
 end
 
+# Clean printing:
+# Base.show(io::IO, E::Estimates) = print(io, "\nEstimates object with:\nTrue values θ: $(E.θ)\nEstimates θ̂:  $(E.θ̂)\nruntime:  $(print(E.runtime))")
+# Base.show(io::IO, m::MIME"text/plain", E::Estimates) = print(io, E)
+
+"""
+	merge(estimates::Estimates)
+
+Merge `estimates` into a single long-form `DataFrame` containing the true
+parameters and the corresponding estimates.
+"""
 function merge(estimates::Estimates)
 	θ = estimates.θ
 	θ̂ = estimates.θ̂
+
+	# Replicate θ to match the number of rows in θ̂. Note that the parameter
+	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
+	# in an outer fashion.
+	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
 
 	# Transform θ and θ̂ to long form:
 	θ = stack(θ, variable_name = :parameter, value_name = :truth)
 	θ̂ = stack(θ̂, Not([:estimator, :m, :k]), variable_name = :parameter, value_name = :estimate)
 
-	# Merge θ and θ̂:
-	# TODO Figure out which join is needed (and if it's even a join that I'm looking for; might just need to code up the behaviour myself)
+	# Merge θ and θ̂: All we have to do is add :truth column to θ̂
+	θ̂[!, :truth] = θ[:, :truth]
+
+	return θ̂
 end
 
 """
@@ -22,13 +45,13 @@ end
 Using a collection of `estimators`, compute estimates from data simulated from a
 set of `parameters` with invariant information `ξ`.
 
-`estimate()` requires the user to have defined a method `simulate(parameters, ξ, m::Integer)`.
+Note that `estimate()` requires the user to have defined a method `simulate(parameters, ξ, m::Integer)`.
 
 # Keyword arguments
 - `m::Vector{Integer} where I <: Integer`: sample sizes to estimate from.
-- `estimator_names::Vector{String}`: estimator names used when combining estimates into a `DataFrame` (e.g., `["NeuralEstimator", "BayesEstimator", "MLE"]`), with sensible default values provided.
-- `parameter_names::Vector{String}`: parameter names used when combining estimates into a `DataFrame` (e.g., `["μ", "σ"]`), with sensible default values provided.
-- `num_rep::Integer = 1`: the number of times to replicate each parameter in `parameters` to reduce the effect of sample variability when assessing the estimators.
+- `estimator_names::Vector{String}`: names of the estimators (sensible default values provided).
+- `parameter_names::Vector{String}`: names of the parameters (sensible default values provided).
+- `num_rep::Integer = 1`: the number of times to replicate each parameter in `parameters`. 
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
 """
 function estimate(
