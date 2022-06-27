@@ -24,22 +24,25 @@ _simulate(params::P, ξ, m) where {P <: ParameterConfigurations} = (simulate(par
 
 
 """
-	simulategaussianprocess(L::AbstractArray{T, 2}, σ²::T, m::Integer)
+	simulategaussianprocess(L::AbstractArray{T, 2}, σ::T, m::Integer)
+	simulategaussianprocess(L::AbstractArray{T, 2})
 
 Simulates `m` realisations from a Gau(0, 𝚺 + σ²𝐈) distribution, where 𝚺 ≡ LL'.
+
+If `σ` and `m` are not provided, a single field without nugget variance is returned.
 """
-function simulategaussianprocess(L::AbstractArray{T, 2}, σ²::T, m::Integer) where T
+function simulategaussianprocess(L::AbstractArray{T, 2}, σ::T, m::Integer) where T
 	n = size(L, 1)
 	y = similar(L, n, m)
 	for h ∈ 1:m
-		y[:, h] = simulategaussianprocess(L, σ²)
+		y[:, h] = simulategaussianprocess(L, σ)
 	end
 	return y
 end
 
-function simulategaussianprocess(L::AbstractArray{T, 2}, σ²::T) where T
+function simulategaussianprocess(L::AbstractArray{T, 2}, σ::T) where T
 	n = size(L, 1)
-	return simulategaussianprocess(L) + sqrt(σ²) * randn(T, n)
+	return simulategaussianprocess(L) + σ * randn(T, n)
 end
 
 function simulategaussianprocess(L::AbstractArray{T, 2}) where T
@@ -166,9 +169,7 @@ function simulateconditionalextremes(
 	# Simulate a mean-zero Gaussian random field with unit marginal variance,
     # independently of Z₀. Note that Ỹ inherits the order of L. Therefore, we
 	# can use s₀_idx to access s₀ in all subsequent vectors.
-	n  = size(L, 1)  # number of spatial locations
-	y  = randn(T, n)
-	Ỹ  = L * y
+	Ỹ  = simulategaussianprocess(L)
 
 	# Adjust the Gaussian process so that it is 0 at s₀
 	Ỹ₀ = Ỹ .- Ỹ[s₀_idx]

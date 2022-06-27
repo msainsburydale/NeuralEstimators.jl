@@ -92,7 +92,7 @@ function train(θ̂, ξ, P;
 	train_time = @elapsed for epoch ∈ 1:epochs
 
 		# For each batch, update θ̂ and compute the training loss
-		local train_loss = zero(initial_val_risk)
+		train_loss = zero(initial_val_risk)
 		epoch_time_train = @elapsed for _ ∈ 1:batches
 			parameters = P(ξ, batchsize)
 			Z = simulate(parameters, ξ, m)
@@ -103,8 +103,7 @@ function train(θ̂, ξ, P;
 
 		epoch_time_val = @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_loss current_val_risk])
-		println("Epoch: $epoch  Validation loss: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
-
+		println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
 		# save the loss every epoch in case training is prematurely halted
 		savebool && @save loss_path loss_per_epoch
 
@@ -130,7 +129,7 @@ function train(θ̂, ξ, P;
     return θ̂
 end
 
-# FIXME Is this method bugged? It doesn't seem to reduce the validation loss consistently... Could be something going astray with _ParameterLoader.
+# FIXME The training loss is extremely low; I think it's to do with the way that I am computing it.
 """
 	train(θ̂, ξ, θ_train::P, θ_val::P; <keyword args>) where {P <: ParameterConfigurations}
 
@@ -197,7 +196,7 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 		end
 
 		# For each batch, update θ̂ and compute the training loss
-		local train_loss = zero(initial_val_risk)
+		train_loss = zero(initial_val_risk) # FIXME removed local train_loss
 		epoch_time_train = @elapsed if epochs_per_Z_refresh > 1
 			 for (Z, θ) in Z_train
 				train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
@@ -209,12 +208,11 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 				train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 			end
 		end
-		K = size(θ_train, 2)
-		train_loss = train_loss / K
+		train_loss = train_loss / size(θ_train, 2)
 
 		epoch_time_val = @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_loss current_val_risk])
-		println("Epoch: $epoch  Validation loss: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
+		println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
 
 		# save the loss every epoch in case training is prematurely halted
 		savebool && @save loss_path loss_per_epoch
