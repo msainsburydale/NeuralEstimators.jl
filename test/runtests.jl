@@ -76,7 +76,7 @@ end
 	w = 4
 	ψ = Chain(Dense(n, w), Dense(w, w))
 	p = 1
-	ϕ = Chain(Dense(w, w), Dense(w, p), Flux.flatten)
+	ϕ = Chain(Dense(w, w), Dense(w, p), Flux.flatten, x -> exp.(x))
 	θ̂ = DeepSet(ψ, ϕ)
 	@test size(θ̂(v), 1) == p
 	@test size(θ̂(v), 2) == K
@@ -92,8 +92,6 @@ end
 	Flux.update!(optimiser, γ, gradients)
 
 	# test train()
-	# FIXME prevent runs being saved. Should be able to provide
-	# an empty string, or maybe nothing, which means we don't save anything.
 	θ̂ = train(θ̂, ξ, Parameters, m = 10, epochs = 5, savepath = "")
 	# parameters = Parameters(ξ, 100)
 	parameters = Parameters(ξ, 5000)
@@ -123,3 +121,67 @@ end
 		Flux.update!(optimiser, γ, gradients)
 	end
 end
+
+
+
+
+
+# @testset "DeepSetExpert" begin
+# 	n = 1
+# 	v = [rand(Float32, n, 1, m) for m ∈ (7, 8, 9)]
+# 	N = length(v)
+# 	w = 4
+# 	qₜ = 3
+# 	ψ = Chain(Dense(n, w), Dense(w, qₜ))
+# 	S = [samplesize, mean, sum] # NB Needs to be a vector and not a tuple
+# 	qₛ = length(S)
+# 	p = 2
+# 	ϕ = Chain(Dense(qₜ + qₛ, w), Dense(w, p), Flux.flatten)
+# 	network = DeepSetExpert(ψ, ϕ, S)
+# 	θ̂ = network(v)
+# 	@test size(θ̂, 1) == p
+# 	@test size(θ̂, 2) == N
+#
+# 	# Test that we can use gradient descent to update the network weights
+# 	loss       = Flux.Losses.mae
+#     parameters = Flux.params(network)
+#     optimiser  = ADAM(0.01)
+# 	θ = rand(p, N)
+# 	@test isa(loss(network(v), θ), Number)
+#
+# 	gradients = gradient(() -> loss(network(v), θ), parameters) # FIXME error in optimised version occurs in this line. Something to do with stack(). I tested it with vectors containing equal sized arrays, and it's still broken.
+# 	Flux.update!(optimiser, parameters, gradients)
+#
+# 	# Test on the GPU if it is available
+# 	if CUDA.functional()
+# 		network = network |> gpu
+# 		v = v |> gpu
+# 		θ = θ |> gpu
+#
+# 		θ̂ = network(v)
+# 		@test size(θ̂, 1) == p
+# 		@test size(θ̂, 2) == N
+#
+# 		gradients = gradient(() -> loss(network(v), θ), parameters)
+# 		Flux.update!(optimiser, parameters, gradients)
+#
+# 		# Code for prototyping the DeepSetExpert function if needed:
+# 		# import SpatialDeepSets: DeepSetExpert
+# 		# d = network
+# 		# t = d.Σ.(d.ψ.(v))
+# 	    # s = d.S.(v)
+# 		# x = v[1]
+# 		# convert(CuArray, d.S(x))
+# 		# s = map(v) do x
+# 		# 	d.S(x)
+# 		# end
+# 		# Stuple = (samplesize, mean, sum)
+# 		# map
+# 		#
+# 	    # s = s |> gpu # FIXME s needs to be on the GPU from the call above... shouldn't have to move it there.
+# 	    # u = vcat.(t, s)
+# 	    # θ̂ = d.ϕ.(u)
+# 	    # θ̂ = stack(θ̂)
+# 	end
+# end
+#

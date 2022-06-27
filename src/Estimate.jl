@@ -1,3 +1,21 @@
+struct Estimates
+	θ::DataFrame
+	θ̂::DataFrame
+	runtime::DataFrame
+end
+
+function merge(estimates::Estimates)
+	θ = estimates.θ
+	θ̂ = estimates.θ̂
+
+	# Transform θ and θ̂ to long form:
+	θ = stack(θ, variable_name = :parameter, value_name = :truth)
+	θ̂ = stack(θ̂, Not([:estimator, :m, :k]), variable_name = :parameter, value_name = :estimate)
+
+	# Merge θ and θ̂:
+	# TODO Figure out which join is needed (and if it's even a join that I'm looking for; might just need to code up the behaviour myself)
+end
+
 """
 	estimate(estimators, parameters::P, m; <keyword args>) where {P <: ParameterConfigurations}
 
@@ -22,30 +40,23 @@ function estimate(
 
 	obj = map(m) do i
 	 	_estimate(
-		estimators, ξ, parameters, i,
+		estimators, ξ, parameters, m = i,
 		estimator_names = estimator_names, parameter_names = parameter_names,
 		num_rep = num_rep, use_gpu = use_gpu
 		)
 	end
 
-	# Original code:
-	# if length(m) > 1
-	# 	θ̂ = vcat(map(x -> x.θ̂, obj)...)
-	# 	runtime = vcat(map(x -> x.runtime, obj)...)
-	# else
-	# 	θ̂ = obj.θ̂
-	# 	runtime = obj.runtime
-	# end
-
 	θ = obj[1].θ
 	θ̂ = vcat(map(x -> x.θ̂, obj)...)
 	runtime = vcat(map(x -> x.runtime, obj)...)
 
-	return (θ = θ, θ̂ = θ̂, runtime = runtime)
+	estimates = Estimates(θ, θ̂, runtime)
+
+	return estimates
 end
 
 function _estimate(
-	estimators, ξ, parameters::P, m::Integer;
+	estimators, ξ, parameters::P; m::Integer,
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
 	num_rep::Integer = 1, use_gpu = true
@@ -54,9 +65,10 @@ function _estimate(
 	println("Estimating with m = $m...")
 
 	E = length(estimators)
-	K = size(parameters, 1)
+	p = size(parameters, 1)
+	K = size(parameters, 2)
 	@assert length(estimator_names) == E
-	@assert length(parameter_names) == K
+	@assert length(parameter_names) == p
 
 	@assert eltype(use_gpu) == Bool
 	if typeof(use_gpu) == Bool use_gpu = repeat([use_gpu], E) end
@@ -81,6 +93,7 @@ function _estimate(
     θ̂ = DataFrame(θ̂', parameter_names)
     θ̂[!, "estimator"] = repeat(estimator_names, inner = nrow(θ̂) ÷ E)
     θ̂[!, "m"] = repeat([m], nrow(θ̂))
+	θ̂[!, "k"] = repeat(1:K, E * num_rep)
 
 	# Also provide the true parameters for comparison with the estimates
 	# θ = repeat(parameters.θ, outer = (1, num_rep))
