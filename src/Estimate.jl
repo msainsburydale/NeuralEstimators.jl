@@ -11,6 +11,7 @@ Note that `estimate()` requires the user to have defined a method `simulate(para
 - `estimator_names::Vector{String}`: names of the estimators (sensible default values provided).
 - `parameter_names::Vector{String}`: names of the parameters (sensible default values provided).
 - `num_rep::Integer = 1`: the number of times to replicate each parameter in `parameters`.
+- `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses the invariant model information, `ξ`: If it does, the estimator will be applied as `estimator(Z, ξ)`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
 - `verbose::Bool = true`
 """
@@ -18,6 +19,7 @@ function estimate(
     estimators, ξ, parameters::P; m::Vector{I},
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
+	use_ξ = false,
 	num_rep::Integer = 1, use_gpu = true,
 	verbose::Bool = true
 	) where {P <: ParameterConfigurations, I <: Integer}
@@ -26,7 +28,7 @@ function estimate(
 	 	_estimate(
 		estimators, ξ, parameters, m = i,
 		estimator_names = estimator_names, parameter_names = parameter_names,
-		num_rep = num_rep, use_gpu = use_gpu, verbose = verbose
+		num_rep = num_rep, use_ξ = use_ξ, use_gpu = use_gpu, verbose = verbose
 		)
 	end
 
@@ -42,7 +44,7 @@ end
 function _estimate(
 	estimators, ξ, parameters::P; m::Integer,
 	estimator_names::Vector{String}, parameter_names::Vector{String},
-	num_rep::Integer, use_gpu, verbose
+	num_rep::Integer, use_ξ, use_gpu, verbose
 	) where {P <: ParameterConfigurations}
 
 	verbose && println("Estimating with m = $m...")
@@ -53,20 +55,30 @@ function _estimate(
 	@assert length(estimator_names) == E
 	@assert length(parameter_names) == p
 
+	@assert eltype(use_ξ) == Bool
 	@assert eltype(use_gpu) == Bool
+	if typeof(use_ξ) == Bool use_ξ = repeat([use_ξ], E) end
 	if typeof(use_gpu) == Bool use_gpu = repeat([use_gpu], E) end
+	@assert length(use_ξ) == E
 	@assert length(use_gpu) == E
 
 	# Simulate data
 	verbose && println("	Simulating data...")
-    y = simulate(parameters, ξ, m, num_rep)
+    Z = simulate(parameters, ξ, m, num_rep)
 
 	# Initialise a DataFrame to record the run times
 	runtime = DataFrame(estimator = [], m = [], time = [])
 
 	θ̂ = map(eachindex(estimators)) do i
+
 		verbose && println("	Running estimator $(estimator_names[i])...")
-		time = @elapsed θ̂ = _runondevice(estimators[i], y, use_gpu[i])
+
+		if use_ξ[i]
+			time = @elapsed θ̂ = estimators[i](Z, ξ)
+		else
+			time = @elapsed θ̂ = _runondevice(estimators[i], Z, use_gpu[i])
+		end
+
 		push!(runtime, [estimator_names[i], m, time])
 		θ̂
 	end
