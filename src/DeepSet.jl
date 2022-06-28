@@ -9,12 +9,12 @@ sumlastdim(X::A)  where {A <: AbstractArray{T, N}} where {T, N} = sum(X, dims = 
 LSElastdim(X::A)  where {A <: AbstractArray{T, N}} where {T, N} = logsumexp(X, dims = N)
 
 function _agg(aggregation::String)
-	@assert aggregation ∈ ["mean", "sum", "LSE"]
+	@assert aggregation ∈ ["mean", "sum", "logsumexp"]
 	if aggregation == "mean"
 		agg = meanlastdim
 	elseif aggregation == "sum"
 		agg = sumlastdim
-	elseif aggregation == "LSE"
+	elseif aggregation == "logsumexp"
 		agg = LSElastdim
 	end
 	return agg
@@ -67,7 +67,7 @@ end
     DeepSet(ψ, ϕ; aggregation::String = "mean")
 
 Convenient constructor for a `DeepSet` object with `agg` equal to the `"mean"`, `"sum"`, or
-`"log-sum-exp"` function.
+`"logsumexp"` function.
 """
 DeepSet(ψ, ϕ; aggregation::String = "mean") = DeepSet(ψ, ϕ, _agg(aggregation))
 

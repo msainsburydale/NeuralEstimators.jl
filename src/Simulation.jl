@@ -121,8 +121,8 @@ C̃(h, ρ, ν) = matern(h, ρ, ν)
 
 
 """
-	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, h, s₀, u;)
-	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, h, s₀, m::Integer)
+	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, h, s₀, u)
+	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, h, s₀, u, m::Integer)
 
 
 Simulates from the spatial conditional extremes model.

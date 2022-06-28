@@ -11,6 +11,7 @@ _common_kwd_args = """
 - `savepath::String = "runs/"`: path to save the trained `θ̂` and other information; if savepath is an empty string (i.e., `""`), nothing is saved.
 - `stopping_epochs::Integer = 10`: halt training if the risk doesn't improve in `stopping_epochs` epochs.
 - `use_gpu::Bool = true`
+- `verbose::Bool = true`
 """
 
 
@@ -38,9 +39,10 @@ function train(θ̂, ξ, P;
     batchsize::Integer = 32,
     epochs::Integer    = 100,
 	stopping_epochs::Integer = 10,
+	savepath::String   = "runs/",
     use_gpu::Bool      = true,
-    savepath::String   = "runs/",
-	K::Integer  = 10_000,
+	verbose::Bool      = true,
+	K::Integer         = 10_000
 	)
 
 	epochs_per_Z_refresh = 1 # TODO
@@ -60,20 +62,20 @@ function train(θ̂, ξ, P;
 		if !ispath(savepath) mkpath(savepath) end
 	end
 
-	device = _checkgpu(use_gpu)
+	device = _checkgpu(use_gpu, verbose = verbose)
     θ̂ = θ̂ |> device
     γ = Flux.params(θ̂)
 
-	println("Simulating validation parameters and validation data...")
+	verbose && println("Simulating validation parameters and validation data...")
 	θ_val = P(ξ, K ÷ 5 + 1)
 	Z_val = _simulate(θ_val, ξ, m)
 	Z_val = _quietDataLoader(Z_val, batchsize)
 
 	# Initialise the loss per epoch matrix.
-	print("Computing the initial validation risk...")
+	verbose && print("Computing the initial validation risk...")
 	initial_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
 	loss_per_epoch   = [initial_val_risk initial_val_risk;]
-	println(" Initial validation loss = $initial_val_risk")
+	verbose && println(" Initial validation loss = $initial_val_risk")
 
 	# Save the initial θ̂. This is to prevent bugs in the case that
 	# the initial loss does not improve
@@ -103,7 +105,7 @@ function train(θ̂, ξ, P;
 
 		epoch_time_val = @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_loss current_val_risk])
-		println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
+		verbose && println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
 		# save the loss every epoch in case training is prematurely halted
 		savebool && @save loss_path loss_per_epoch
 
@@ -122,14 +124,14 @@ function train(θ̂, ξ, P;
     end
 
 	# save information, the final θ̂, and save the best θ̂ as best_network.bson.
-	savebool && _saveinfo(loss_per_epoch, train_time, savepath)
+	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	savebool && _saveweights(θ̂, epochs, savepath)
 	savebool && _savebestweights(savepath)
 
     return θ̂
 end
 
-# FIXME The training loss is extremely low; I think it's to do with the way that I am computing it.
+
 """
 	train(θ̂, ξ, θ_train::P, θ_val::P; <keyword args>) where {P <: ParameterConfigurations}
 
@@ -138,16 +140,17 @@ explicitly as `θ_train` and `θ_val`, which are both held fixed during training
 as well as the invariant model information `ξ`.
 """
 function train(θ̂, ξ, θ_train::P, θ_val::P;
-	m,
-	loss = Flux.Losses.mae,
-	optimiser = ADAM(1e-4),
-	batchsize::Integer = 256,
-	epochs::Integer = 100,
-    use_gpu::Bool = true,
-    savepath::String = "runs/",
-	stopping_epochs::Integer = 10,
-	epochs_per_Z_refresh::Integer = 1
-	) where {P <: ParameterConfigurations}
+		m,
+		batchsize::Integer = 256,
+		epochs_per_Z_refresh::Integer = 1,
+		epochs::Integer  = 100,
+		loss             = Flux.Losses.mae,
+		optimiser        = ADAM(1e-4),
+		savepath::String = "runs/",
+		stopping_epochs::Integer = 10,
+		use_gpu::Bool    = true,
+		verbose::Bool    = true
+		) where {P <: ParameterConfigurations}
 
 	_checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 
@@ -158,16 +161,16 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 		if !ispath(savepath) mkpath(savepath) end
 	end
 
-	device = _checkgpu(use_gpu)
+	device = _checkgpu(use_gpu, verbose = verbose)
     θ̂ = θ̂ |> device
     γ = Flux.params(θ̂)
 
-	println("Simulating validation data...")
+	verbose && println("Simulating validation data...")
 	Z_val = _simulate(θ_val, ξ, m)
 	Z_val = _quietDataLoader(Z_val, batchsize)
-	print("Computing the initial validation risk...")
+	verbose && print("Computing the initial validation risk...")
 	initial_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
-	println(" Initial validation loss = $initial_val_risk")
+	verbose && println(" Initial validation loss = $initial_val_risk")
 
 	# Initialise the loss per epoch matrix (NB just using validation for both for now)
 	loss_per_epoch = [initial_val_risk initial_val_risk;]
@@ -187,16 +190,16 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 		# If we are not refreshing Z_train every epoch, we must simulate it in
 		# its entirety so that it can be used in subsequent epochs.
 		if epochs_per_Z_refresh > 1 && (epoch == 1 || (epoch % epochs_per_Z_refresh) == 0)
-			print("Simulating training data...")
+			verbose && print("Simulating training data...")
 			Z_train = nothing
 			@sync gc()
 			t = @elapsed Z_train = _simulate(θ_train, ξ, m)
 			Z_train = _quietDataLoader(Z_train, batchsize)
-			println(" Finished in $(round(t, digits = 3)) seconds")
+			verbose && println(" Finished in $(round(t, digits = 3)) seconds")
 		end
 
 		# For each batch, update θ̂ and compute the training loss
-		train_loss = zero(initial_val_risk) # FIXME removed local train_loss
+		train_loss = zero(initial_val_risk)
 		epoch_time_train = @elapsed if epochs_per_Z_refresh > 1
 			 for (Z, θ) in Z_train
 				train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
@@ -212,7 +215,7 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 
 		epoch_time_val = @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_loss current_val_risk])
-		println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
+		verbose && println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
 
 		# save the loss every epoch in case training is prematurely halted
 		savebool && @save loss_path loss_per_epoch
@@ -232,7 +235,7 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
     end
 
 	# save information, the final θ̂, and save the best θ̂ as best_network.bson.
-	savebool && _saveinfo(loss_per_epoch, train_time, savepath)
+	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	savebool && _saveweights(θ̂, epochs, savepath)
 	savebool && _savebestweights(savepath)
 
@@ -277,9 +280,9 @@ function _saveweights(θ̂, epoch, savepath)
 end
 
 
-function _saveinfo(loss_per_epoch, train_time, savepath::String)
+function _saveinfo(loss_per_epoch, train_time, savepath::String; verbose::Bool = true)
 
-	println("Finished training in $(train_time) seconds")
+	verbose && println("Finished training in $(train_time) seconds")
 
 	# Recall that we initialised the training loss to the initial validation
 	# loss. Slightly better to just use the training loss from the second epoch:
@@ -304,6 +307,6 @@ function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 	update!(optimiser, γ, gradients)
 
 	# Assuming that loss returns an average, convert it to a sum.
-	ls * size(θ)[end]
+	ls = ls * size(θ)[end]
 	return ls
 end

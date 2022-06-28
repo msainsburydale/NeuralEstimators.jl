@@ -16,11 +16,26 @@ simulate
 
 ## Deep Set representation
 
+### Vanilla Deep Set
+
 ```@docs
 DeepSet
 
 DeepSet(ψ, ϕ; aggregation::String)
 ```
+
+### Deep Set with expert summary statistics
+
+```@docs
+DeepSetExpert
+
+DeepSetExpert(deepset::DeepSet, ϕ, S)
+
+DeepSetExpert(ψ, ϕ, S; aggregation::String)
+
+samplesize
+```
+
 
 ## Training
 
