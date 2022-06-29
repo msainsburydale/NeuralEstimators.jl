@@ -148,6 +148,8 @@ function simulateconditionalextremes(
 
 	@assert size(θ, 1) == 8 "The conditional extremes model requires 8 parameters: `θ` should be an 8-dimensional vector."
 
+	# NB: More general to use D = pairwise(Euclidean(), S, S, dims = 1), or similar. Leave
+	# for now to avoid dependency on Distances.jl.
 	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
 	h = map(norm, eachslice(S .- s₀, dims = 1))
 	s₀_idx = findfirst(x -> x == 0.0, map(norm, eachslice(S .- s₀, dims = 1)))
@@ -285,24 +287,3 @@ Fₛ⁻¹(p, μ, τ, δ) = μ + sign(p - 0.5) * (τ^δ * quantile(Gamma(1/δ), 2
 
 Φ(q)   = cdf(Normal(0, 1), q)
 t(ỹ₀₁, μ, τ, δ) = Fₛ⁻¹(Φ(ỹ₀₁), μ, τ, δ)
-
-
-# TODO add these in runtests.jl
-# # Unit testing
-# let
-# 	# Check that the Subbotin pdf is consistent with the cdf using finite differences
-# 	finite_diff(y, μ, τ, δ, ϵ = 0.000001) = (Fₛ(y + ϵ, μ, τ, δ) - Fₛ(y, μ, τ, δ)) / ϵ
-# 	function finite_diff_check(y, μ, τ, δ)
-# 		@test abs(finite_diff(y, μ, τ, δ) - fₛ(y, μ, τ, δ)) < 0.0001
-# 	end
-#
-# 	finite_diff_check(-1, 0.1, 3, 1.2)
-# 	finite_diff_check(0, 0.1, 3, 1.2)
-# 	finite_diff_check(0.9, 0.1, 3, 1.2)
-# 	finite_diff_check(3.3, 0.1, 3, 1.2)
-#
-# 	# Check that f⁻¹(f(y)) ≈ y
-# 	μ = 0.5; τ = 1.3; δ = 2.4; y = 0.3
-# 	@test abs(y - Fₛ⁻¹(Fₛ(y, μ, τ, δ), μ, τ, δ)) < 0.0001
-# 	@test abs(y - t⁻¹(t(y, μ, τ, δ), μ, τ, δ)) < 0.0001
-# end

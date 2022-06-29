@@ -1,6 +1,5 @@
 # Advanced usage
 
-## Reusing intermediate objects (e.g., Cholesky factors) for multiple parameter configurations
 
 
 ## Balancing time and memory complexity
@@ -15,7 +14,14 @@ There are three variants of on-the-fly and just-in-time simulation, each with ad
 
 The keyword arguments `epochs_per_θ_refresh` and `epochs_per_Z_refresh` in `train()` are intended to cater for these simulation variants.
 
+
 ## Loading previously saved estimators
+
+
+## Reusing intermediate objects (e.g., Cholesky factors) for multiple parameter configurations
+
+Use the Gaussian process example. 
+
 
 ## Piece-wise estimators conditional on the sample size  
 
