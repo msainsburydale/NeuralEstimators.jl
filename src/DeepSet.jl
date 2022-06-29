@@ -33,7 +33,7 @@ over the last dimension (the replicates/batch dimension) of an array.
 is associated with one parameter vector.
 
 # Examples
-```jldoctest
+```
 n = 10 # observations in each realisation
 p = 5  # number of parameters in the statistical model
 w = 32 # width of each layer

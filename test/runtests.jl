@@ -85,6 +85,8 @@ S = [samplesize]
 θ̂_deepsetexpert = DeepSetExpert(θ̂_deepset, ϕ₂, S)
 estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 
+
+
 verbose = false
 
 @testset verbose = true "$key" for key ∈ keys(estimators)
@@ -117,75 +119,29 @@ verbose = false
 			θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "", epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
 		end
 
-		# FIXME On the GPU, get  bug in this test: I think that a variable is
+		# FIXME On the GPU, get bug in this test: I think that a variable is undefined?
 		@testset "_runondevice" begin
 			θ̂₁ = θ̂(Z)
 			θ̂₂ = _runondevice(θ̂, Z, use_gpu)
 			@test size(θ̂₁) == size(θ̂₂)
-			@test θ̂₁ ≈ θ̂₂ # checked that this is fine by seeing if the following replacement fixes things: @test maximum(abs.(θ̂₁ .- θ̂₂)) < 0.0001 
+			@test θ̂₁ ≈ θ̂₂ # checked that this is fine by seeing if the following replacement fixes things: @test maximum(abs.(θ̂₁ .- θ̂₂)) < 0.0001
 		end
 
 		@testset "estimate" begin
 			estimates = estimate([θ̂], ξ, parameters, m = [30, 90, 150], use_gpu = use_gpu, verbose = verbose)
 			@test typeof(merge(estimates)) == DataFrame
 		end
-
 	end
 end
 
 
-
-# @testset verbose = true "core" begin
-#
-# 	loss = Flux.Losses.mae
-# 	γ    = Flux.params(θ̂)
-# 	θ    = rand(p, K)
-#
-# 	@testset "DeepSet" begin
-#
-# 		@test size(θ̂(Z), 1) == p
-# 		@test size(θ̂(Z), 2) == K
-#
-# 		@test isa(loss(θ̂(Z), θ), Number)
-#
-# 		# Test that we can use gradient descent to update the θ̂ weights
-# 		optimiser = ADAM(0.01)
-# 		gradients = gradient(() -> loss(θ̂(v), θ), γ)
-# 		Flux.update!(optimiser, γ, gradients)
-# 	end
-#
-#
-# 	@testset "train" begin
-# 		θ̂ = train(θ̂, ξ, Parameters, m = 10, epochs = 5, savepath = "")
-# 		θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "")
-# 		θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "", epochs_per_Z_refresh = 2)
-# 	end
-#
-# 	@testset "_runondevice" begin
-# 		θ̂₁ = θ̂(Z)
-# 		θ̂₂ = _runondevice(θ̂, Z, false)
-# 		@test size(θ̂₁) == size(θ̂₂)
-# 		@test θ̂₁ ≈ θ̂₂
-# 	end
-#
-# 	# test estimate()
-# 	estimate([θ̂], ξ, parameters, m = [30, 90, 150])
-#
-# 	# Test on the GPU if it is available
-# 	if CUDA.functional()
-# 		θ̂ = θ̂ |> gpu
-# 		Z = Z |> gpu
-# 		θ = θ |> gpu
-#
-# 		θ̂ = θ̂(Z)
-# 		@test size(θ̂, 1) == p
-# 		@test size(θ̂, 2) == N
-#
-# 		gradients = gradient(() -> loss(θ̂(Z), θ), γ)
-# 		Flux.update!(optimiser, γ, gradients)
-# 	end
-# end
-
+@testset "DeepSetPiecewise" begin
+	θ̂_deepsetpiecewise = DeepSetPiecewise((θ̂_deepset, θ̂_deepsetexpert), (30))
+	Z = [randn(Float32, n, 1, 10),  randn(Float32, n, 1, 50)]
+	θ̂₁ = hcat(θ̂_deepset(Z[[1]]), θ̂_deepsetexpert(Z[[2]]))
+	θ̂₂ = θ̂_deepsetpiecewise(Z)
+	@test θ̂₁ ≈ θ̂₂
+end
 
 
 

@@ -25,9 +25,12 @@ include("Parameters.jl")
 
 export DeepSet
 include("DeepSet.jl")
-
 export DeepSetExpert, samplesize
 include("DeepSetExpert.jl")
+export DeepSetPiecewise
+include("DeepSetPiecewise.jl")
+
+
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes, matern, maternchols, fₛ, Fₛ, Fₛ⁻¹
 include("Simulation.jl")

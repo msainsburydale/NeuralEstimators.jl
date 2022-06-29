@@ -36,6 +36,12 @@ DeepSetExpert(ψ, ϕ, S; aggregation::String)
 samplesize
 ```
 
+### Piecewise Deep Set neural estimators
+
+```@docs
+DeepSetPiecewise
+```
+
 
 ## Training
 

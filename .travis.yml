@@ -1,6 +1,7 @@
 # Documentation: http://docs.travis-ci.com/user/languages/julia
 CODECOV_TOKEN='51315f14-4dea-48b6-b58f-fd37babbc990'
 language: julia
+codecov: true
 notifications:
   email: msdale@uow.edu.au
 julia:
