@@ -78,7 +78,7 @@ end
     return (batch, nexti)
 end
 
-function Base.length(d::_ParameterLoader)
-    n = d.nobs / d.batchsize
-    d.partial ? ceil(Int, n) : floor(Int, n)
-end
+# function Base.length(d::_ParameterLoader)
+#     n = d.nobs / d.batchsize
+#     d.partial ? ceil(Int, n) : floor(Int, n)
+# end

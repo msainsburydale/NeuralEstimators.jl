@@ -66,47 +66,6 @@ function loadbestweights(path::String)
 end
 
 
-# TODO Decide if this is really general enough to be useful.
-"""
-	loadneuralestimators(loadpath::String, architecture)
-
-`loadpath`: Path containing one or more folders of training runs called 'runs_x', where 'x' is arbitrary.
-`architecture`: A closure that returns the architecture used for the neural estimators in `loadpath` (must be the same architecture).
-"""
-function loadneuralestimators(loadpath::String, architecture)
-
-	# Network names
-	titles = readdir(loadpath)
-	titles = titles[findall(occursin.("runs_", titles))]
-	titles = replace.(titles, "runs_" => "")
-	println("Neural network estimators: $(join(titles, ", "))")
-
-	estimators = map(titles) do title
-
-		# Regardless of whether we are aggregating information within the network
-		# or at the end, we first load the network into a regular network object:
-		network = architecture()
-		path = joinpath(pwd(), loadpath, "runs_$title")
-		Flux.loadparams!(network, loadbestweights(path))
-
-		# Now convert to our custom struct, so that we can apply the networks to
-		# multiple field replicates:
-		if occursin("D", title)
-			l = CSV.read("$path/layers_before_agg.csv", DataFrame, header = false)[1, 1]
-			ψ = network[1:l]
-			ϕ = network[(l + 1):end]
-		else
-			ψ = network
-			ϕ = identity
-		end
-
-		DeepSet(ψ, ϕ) # FIXME  can't assume this in general: 1) May not be a DeepSet, 2) may have different aggregation function.
-	end
-
-	return (estimators = estimators, titles = titles)
-end
-
-
 function _runondevice(network, x, use_gpu::Bool; batchsize = min(length(x), 32))
 
 	device  = _checkgpu(use_gpu, verbose = false)
@@ -164,13 +123,13 @@ end
 expandgrid(N::Integer) = expandgrid(1:N, 1:N)
 
 
-# Source: https://en.wikipedia.org/wiki/ANSI_escape_code#CSI_sequences
-function _overprint(str)
-   print("\u1b[1F") #Moves cursor to beginning of the line n (default 1) lines up
-   print(str)   #prints the new line
-   print("\u1b[0K") # clears  part of the line.
-   println() #prints a new line
-end
+# # Source: https://en.wikipedia.org/wiki/ANSI_escape_code#CSI_sequences
+# function _overprint(str)
+#    print("\u1b[1F") #Moves cursor to beginning of the line n (default 1) lines up
+#    print(str)   #prints the new line
+#    print("\u1b[0K") # clears  part of the line.
+#    println() #prints a new line
+# end
 
 
 

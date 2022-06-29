@@ -17,4 +17,6 @@ The keyword arguments `epochs_per_θ_refresh` and `epochs_per_Z_refresh` in `tra
 
 ## Loading previously saved estimators
 
-## Piece-wise estimators conditional on the sample size
+## Piece-wise estimators conditional on the sample size  
+
+## Bootstrapping with real data

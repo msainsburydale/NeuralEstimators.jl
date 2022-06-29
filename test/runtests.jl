@@ -3,11 +3,13 @@ using NeuralEstimators: _getindices, _runondevice
 import NeuralEstimators: simulate
 using CUDA
 using DataFrames
+using LinearAlgebra: norm
 using Distributions: Normal
 using Flux
 using Statistics: mean, sum
 using Test
 using Zygote
+
 
 if CUDA.functional()
 	@info "Testing on both the CPU and the GPU... "
@@ -80,10 +82,18 @@ p = 1
 ψ = Chain(Dense(n, w), Dense(w, w))
 ϕ = Chain(Dense(w, w), Dense(w, p), Flux.flatten, x -> exp.(x))
 θ̂_deepset = DeepSet(ψ, ϕ)
+θ̂_deepset
 S = [samplesize]
 ϕ₂ = Chain(Dense(w + length(S), w), Dense(w, p), Flux.flatten, x -> exp.(x))
 θ̂_deepsetexpert = DeepSetExpert(θ̂_deepset, ϕ₂, S)
+θ̂_deepsetexpert
 estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
+
+function MLE(Z) where {T <: Number, N <: Int, A <: AbstractArray{T, N}, V <: AbstractVector{A}}
+    mean.(Z)'
+end
+
+MLE(Z, ξ) = MLE(Z) # this function doesn't actually need ξ, but include it for testing
 
 
 
@@ -117,9 +127,14 @@ verbose = false
 			θ̂ = train(θ̂, ξ, Parameters, m = 10, epochs = 5, savepath = "", use_gpu = use_gpu, verbose = verbose)
 			θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "", use_gpu = use_gpu, verbose = verbose)
 			θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "", epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
+
+			# Decided not to test this code, because we can't always assume that we have write privledges
+			# θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "dummy123", use_gpu = use_gpu, verbose = verbose)
+			# θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "dummy123", use_gpu = use_gpu, verbose = verbose)
+			# then rm dummy123 folder
 		end
 
-		# FIXME On the GPU, get bug in this test: I think that a variable is undefined?
+		# FIXME On the GPU, bug in this test
 		@testset "_runondevice" begin
 			θ̂₁ = θ̂(Z)
 			θ̂₂ = _runondevice(θ̂, Z, use_gpu)
@@ -130,7 +145,38 @@ verbose = false
 		@testset "estimate" begin
 			estimates = estimate([θ̂], ξ, parameters, m = [30, 90, 150], use_gpu = use_gpu, verbose = verbose)
 			@test typeof(merge(estimates)) == DataFrame
+
+			# Test that estimators needing invariant model information can be used:
+			estimate([MLE], ξ, parameters, m = [30, 90, 150], verbose = verbose)
 		end
+
+		@testset "bootstrap" begin
+			parametricbootstrap(θ̂, Parameters(ξ, 1), ξ, 50; use_gpu = use_gpu)
+			nonparametricbootstrap(θ̂, Z[1]; use_gpu = use_gpu)
+			nonparametricbootstrap(θ̂, Z[1], use_gpu = use_gpu)
+		end
+
+		@testset "simulation" begin
+			S = rand(10, 2)
+			D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
+			ρ = [0.6, 0.8]
+			ν = [0.5, 0.7]
+			L = maternchols(D, ρ, ν)
+			L₁ = L[:, :, 1]
+			m = 5
+
+			simulateschlather(L₁, m)
+
+			σ = 0.1
+			simulategaussianprocess(L₁, σ, m)
+
+			θ = fill(0.5, 8, 1)
+			s₀ = S[1, :]'
+			u = 0.7
+			simulateconditionalextremes(θ, L₁, S, s₀, u, m)
+		end
+
+
 	end
 end
 
@@ -142,103 +188,3 @@ end
 	θ̂₂ = θ̂_deepsetpiecewise(Z)
 	@test θ̂₁ ≈ θ̂₂
 end
-
-
-
-
-# @testset "DeepSetExpert" begin
-# 	n = 1
-# 	v = [rand(Float32, n, 1, m) for m ∈ (7, 8, 9)]
-# 	N = length(v)
-# 	w = 4
-# 	qₜ = 3
-# 	ψ = Chain(Dense(n, w), Dense(w, qₜ))
-# 	S = [samplesize, mean, sum] # NB Needs to be a vector and not a tuple
-# 	qₛ = length(S)
-# 	p = 2
-# 	ϕ = Chain(Dense(qₜ + qₛ, w), Dense(w, p), Flux.flatten)
-# 	network = DeepSetExpert(ψ, ϕ, S)
-# 	θ̂ = network(v)
-# 	@test size(θ̂, 1) == p
-# 	@test size(θ̂, 2) == N
-#
-# 	# Test that we can use gradient descent to update the network weights
-# 	loss       = Flux.Losses.mae
-#     parameters = Flux.params(network)
-#     optimiser  = ADAM(0.01)
-# 	θ = rand(p, N)
-# 	@test isa(loss(network(v), θ), Number)
-#
-# 	gradients = gradient(() -> loss(network(v), θ), parameters) # FIXME error in optimised version occurs in this line. Something to do with stack(). I tested it with vectors containing equal sized arrays, and it's still broken.
-# 	Flux.update!(optimiser, parameters, gradients)
-#
-# 	# Test on the GPU if it is available
-# 	if CUDA.functional()
-# 		network = network |> gpu
-# 		v = v |> gpu
-# 		θ = θ |> gpu
-#
-# 		θ̂ = network(v)
-# 		@test size(θ̂, 1) == p
-# 		@test size(θ̂, 2) == N
-#
-# 		gradients = gradient(() -> loss(network(v), θ), parameters)
-# 		Flux.update!(optimiser, parameters, gradients)
-#
-# 		# Code for prototyping the DeepSetExpert function if needed:
-# 		# import SpatialDeepSets: DeepSetExpert
-# 		# d = network
-# 		# t = d.Σ.(d.ψ.(v))
-# 	    # s = d.S.(v)
-# 		# x = v[1]
-# 		# convert(CuArray, d.S(x))
-# 		# s = map(v) do x
-# 		# 	d.S(x)
-# 		# end
-# 		# Stuple = (samplesize, mean, sum)
-# 		# map
-# 		#
-# 	    # s = s |> gpu # FIXME s needs to be on the GPU from the call above... shouldn't have to move it there.
-# 	    # u = vcat.(t, s)
-# 	    # θ̂ = d.ϕ.(u)
-# 	    # θ̂ = stack(θ̂)
-# 	end
-# end
-
-
-
-
-# print("Testing expertstatistics()... ")
-# let
-# 	S = [samplesize, maximum, mean]
-#
-# 	# Single array (i.e., a single parameter configuration)
-# 	m = 5
-# 	z = reshape(10:(10+m-1), 1, 1, m) |> copy
-# 	z = Float32.(z)
-#
-# 	s = expertstatistics(S, z)
-# 	@test s[1] == m
-# 	@test s[2] == 10+m-1
-#
-# 	# Vector of arrays (i.e., multiple parameter configurations)
-# 	nᵥ = 4
-# 	v = [reshape(10:(10+m-1), 1, 1, m) |> copy for m in 1:nᵥ]
-# 	v = broadcast.(Float32, v)
-# 	s = expertstatistics(S, v)
-# 	@test s[1]  == [s(v[1])  for s ∈ S]
-# 	@test s[nᵥ] == [s(v[nᵥ]) for s ∈ S]
-#
-# 	@test wrappertype(expertstatistics(S, z)) == wrappertype(z)
-# 	@test wrappertype(expertstatistics(S, v)) == wrappertype(v)
-# 	if CUDA.functional()
-# 		z = z |> gpu
-# 		v = v |> gpu
-# 		expertstatistics(S, z)
-# 		expertstatistics(S, v)
-# 		@test wrappertype(expertstatistics(S, z)) == wrappertype(z)
-# 		@test wrappertype(expertstatistics(S, v)) == wrappertype(v)
-#
-# 	end
-# end
-# printstyled("Test Passed\n"; bold = true, color = :green)

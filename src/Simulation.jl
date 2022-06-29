@@ -1,4 +1,6 @@
 # TODO Finish the documentation for all of the simulateX functions..
+# TODO throughout the repo, I should be consistent with the order in which ξ and
+# parameters appear; I think it's best for ξ to appear before parameters.
 
 
 """
@@ -121,31 +123,33 @@ C̃(h, ρ, ν) = matern(h, ρ, ν)
 
 
 """
-	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, h, s₀, u)
-	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, h, s₀, u, m::Integer)
+	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, S, s₀, u)
+	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, S, s₀, u, m::Integer)
 
 
 Simulates from the spatial conditional extremes model.
 """
 function simulateconditionalextremes(
-	θ, L::AbstractArray{T, 2}, h, s₀, u, m::Integer
+	θ, L::AbstractArray{T, 2}, S, s₀, u, m::Integer
 	) where T <: Number
 
 	n = size(L, 1)
 	Z = similar(L, n, m)
 	Threads.@threads for k ∈ 1:m
-		Z[:, k] = simulateconditionalextremes(θ, L, h, s₀, u)
+		Z[:, k] = simulateconditionalextremes(θ, L, S, s₀, u)
 	end
 
 	return Z
 end
 
 function simulateconditionalextremes(
-	θ, L::AbstractArray{T, 2}, h, s₀, u
+	θ, L::AbstractArray{T, 2}, S, s₀, u
 	) where T <: Number
 
 	@assert size(θ, 1) == 8 "The conditional extremes model requires 8 parameters: `θ` should be an 8-dimensional vector."
 
+	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
+	h = map(norm, eachslice(S .- s₀, dims = 1))
 	s₀_idx = findfirst(x -> x == 0.0, map(norm, eachslice(S .- s₀, dims = 1)))
 
 	# Parameters associated with a(.) and b(.):
@@ -230,7 +234,7 @@ matern(h, ρ) =  matern(h, ρ, 1)
 
 """
     maternchols(D, ρ, ν)
-Given a distance matrix `D`, compute corresponding covariance matrix Σ under the
+Given a distance matrix `D`, computes the covariance matrix Σ under the
 Matérn covariance function with range `ρ` and smoothness `ν`, and
 return the Cholesky factor of this matrix.
 
