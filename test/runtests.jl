@@ -112,7 +112,7 @@ verbose = false
 		γ    = Flux.params(θ̂)  |> device
 		θ    = rand(p, K)      |> device
 
-		Z = [randn(Float32, n, 1, m) for m ∈ rand(1:30, K)] |> device
+		Z = [randn(Float32, n, 1, m) for m ∈ rand(29:30, K)] |> device
 		@test size(θ̂(Z), 1) == p
 		@test size(θ̂(Z), 2) == K
 		@test isa(loss(θ̂(Z), θ), Number)
@@ -153,7 +153,7 @@ verbose = false
 		@testset "bootstrap" begin
 			parametricbootstrap(θ̂, Parameters(ξ, 1), ξ, 50; use_gpu = use_gpu)
 			nonparametricbootstrap(θ̂, Z[1]; use_gpu = use_gpu)
-			blocks = rand(1:5, size(Z[1])[end])
+			blocks = rand(1:2, size(Z[1])[end])
 			nonparametricbootstrap(θ̂, Z[1], blocks, use_gpu = use_gpu)
 		end
 
