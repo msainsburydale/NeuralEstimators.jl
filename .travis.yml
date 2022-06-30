@@ -17,14 +17,14 @@ jobs:
   fast_finish: true
   allow_failures:
     - julia: nightly
-    - stage: "Documentation"
-      os: linux
-      script:
-        - julia --color=yes --project=docs/ -e 'using Pkg; Pkg.instantiate()'
-        - julia --color=yes --project=docs/ docs/make.jl
 env:
   - CODECOV_TOKEN='51315f14-4dea-48b6-b58f-fd37babbc990'
 after_success:
+  - julia -e 'Pkg.add("Documenter")'
+  - julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+  - julia --project=docs/ docs/make.jl
+  # - julia -e 'ENV["DOCUMENTER_DEBUG"] = "true"; cd(Pkg.dir("ReactiveBasics", "docs")); include("make.jl")'
+  # push coverage results to Codecov:
   - |
     julia -e '
       using Pkg
