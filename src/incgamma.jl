@@ -1,31 +1,30 @@
-# This code is taken from IncGammaBeta.jl, which I do not include as a dependency
-# because it introduced incompatabilities (it has not been updated since 2016)
+# This code has been adapted from IncGammaBeta.jl, which I do not include as a
+# dependency because it introduced incompatabilities (it has not been updated since 2016)
+
+# TODO incgammalower => incgammalowerunregularised. Or, just export incgamma().
 
 """
     incgammalower(a, x)
-For positive `a` and `x`, computes the lower incomplete gamma function, ``\\gamma(a, x) = \\int_{0}^x t^{a-1}e^{-t}dt``.
+For positive `a` and `x`, computes the lower unregularised incomplete gamma
+function, ``\\gamma(a, x) = \\int_{0}^x t^{a-1}e^{-t}dt``.
 """
-function incgammalower(a, x)
-    return incGamma(a, x, false, false)
-end
+incgammalower(a, x) = incgamma(a, x; upper = false, reg = false)
 
 
+"""
+    incgamma(a::T, x::T; upper::Bool, reg::Bool) where {T <: AbstractFloat}
 
-#     incGamma(a, x, upper, reg)
-#
-# Evaluate an incomplete gamma function with real arguments.
-# The exact kind of the returned value depends on parameters
-# `upper` and `reg`.
-#
-# # Arguments:
-# * `a`: parameter of the incomplete gamma function
-# * `x`: second input argument, the integration limit
-# * `upper::Bool`: should the upper (if 'true') or the lower (if 'false') inc. gamma function be returned
-# * `reg::Bool`: if 'true', the regularized gamma function is returned, i.e. divided by `gamma(a)`
-#
-# Note that both `a` and `x` must be strictly greater than 0.
-#
-function incGamma(a::T, x::T, upper::Bool, reg::Bool) where {T<:AbstractFloat}
+For positive `a` and `x`, computes the incomplete gamma function.
+
+# Arguments:
+- `a`: parameter of the incomplete gamma function.
+- `x`: second input argument, the integration limit.
+- `upper::Bool`: should the upper (if 'true') or the lower (if 'false') inc. gamma function be returned.
+- `reg::Bool`: if 'true', the regularized gamma function is returned, i.e. divided by `gamma(a)`.
+
+Note that both `a` and `x` must be strictly greater than 0.
+"""
+function incgamma(a::T, x::T; upper::Bool, reg::Bool) where {T <: AbstractFloat}
 
     EPS = eps(T)
     # sanity check:

@@ -8,9 +8,9 @@ makedocs(
            "motivation.md",
            "Workflow" => [
                 "Overview" => "workflow/overview.md",
-                "Simple example" => "workflow/simple.md",
-                "More complicated example" => "workflow/morecomplicated.md",
-                "Advanced usage" => "workflow/advanced.md"
+                "Simple example" => "workflow/simpleexample.md",
+                "More complicated example" => "workflow/morecomplicatedexample.md",
+                "Advanced usage" => "workflow/advancedusage.md"
            ],
            "API" => [
                 "Core functions" => "API/core.md",

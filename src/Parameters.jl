@@ -20,11 +20,12 @@ size(parameters::P, d::Integer) where {P <: ParameterConfigurations} = size(para
 	subsetparameters(parameters::Parameters, indices) where {Parameters <: ParameterConfigurations}
 Subset `parameters` using a collection of `indices`.
 
-The default method assumes that each field of `parameters` is an array with the
-last dimension corresponding to the parameter configurations (i.e., it subsets
-over the last dimension of each array). If this is not the case, define an
-appropriate subsetting method by overloading `subsetparameters` after running
-`import NeuralEstimators: subsetparameters`.
+The default method assumes that each field of `parameters` is an array. If the
+last dimension of the array has size equal to the number of parameter
+configurations, K, then the array is subsetted over its last dimension using
+`indices`; otherwise, the field is returned unchanged. If this default does not
+cover your use case, define an appropriate subsetting method by overloading
+`subsetparameters` after running `import NeuralEstimators: subsetparameters`.
 """
 function subsetparameters(parameters::Parameters, indices) where {Parameters <: ParameterConfigurations}
 
@@ -33,11 +34,17 @@ function subsetparameters(parameters::Parameters, indices) where {Parameters <: 
 
 	fields = [getfield(parameters, name) for name ∈ fieldnames(Parameters)]
 	fields = map(fields) do field
-		colons  = ntuple(_ -> (:), ndims(field) - 1)
-		field[colons..., indices]
+		N = ndims(field)
+		if size(field, N) == K
+			colons  = ntuple(_ -> (:), N - 1)
+			field[colons..., indices]
+		else
+			field
+		end
 	end
 	return Parameters(fields...)
 end
+
 
 # ---- _ParameterLoader: Analogous to DataLoader for ParameterConfigurations objects ----
 

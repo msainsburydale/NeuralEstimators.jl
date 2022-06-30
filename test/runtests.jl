@@ -1,5 +1,9 @@
+# TODO Remove all calls to rand(); need to remove randomness for consistency..
+# this is very important, as errors can occur for some values, but not others,
+# so we need to make sure that the same numbers are being crunched every time.
+
 using NeuralEstimators
-using NeuralEstimators: _getindices, _runondevice
+using NeuralEstimators: _getindices, _runondevice, incgammalower
 import NeuralEstimators: simulate
 using CUDA
 using DataFrames
@@ -9,7 +13,10 @@ using Flux
 using Statistics: mean, sum
 using Test
 using Zygote
+using Random: seed!
+using SpecialFunctions: gamma
 
+seed!(1)
 
 if CUDA.functional()
 	@info "Testing on both the CPU and the GPU... "
@@ -40,6 +47,41 @@ end
 	# Vector containing arrays with differing final dimension size:
 	A₁ = rand(2, 3, 4); A₂ = rand(2, 3, 5); v = [A₁, A₂];
 	@test stackarrays(v) == cat(v..., dims = N)
+end
+
+@testset "incgamma" begin
+
+	# tests based on the "Special values" section of https://en.wikipedia.org/wiki/Incomplete_gamma_function
+
+	@testset "unregularised" begin
+
+		reg = false
+		a = 1.0
+
+		x = 0.5 # x < a
+		@test incgamma(a, x, upper = true, reg = reg) ≈ exp(-x)
+		@test incgamma(a, x, upper = false, reg = reg) ≈ 1 - exp(-x)
+		@test incgammalower(a, x) ≈ incgamma(a, x, upper = false, reg = reg)
+
+
+		x = 1.5 # x > a
+		@test incgamma(a, x, upper = true, reg = reg) ≈ exp(-x)
+		@test incgamma(a, x, upper = false, reg = reg) ≈ 1 - exp(-x)
+		@test incgammalower(a, x) ≈ incgamma(a, x, upper = false, reg = reg)
+
+	end
+
+	@testset "regularised" begin
+
+		reg = true
+		a = 1.0
+
+		x = 0.5 # x < a
+		@test incgamma(a, x, upper = false, reg = true) ≈ incgamma(a, x, upper = false, reg = false)  / gamma(a)
+		@test incgamma(a, x, upper = true, reg = true) ≈ incgamma(a, x, upper = true, reg = false)  / gamma(a)
+
+	end
+
 end
 
 @testset "subsetparameters" begin

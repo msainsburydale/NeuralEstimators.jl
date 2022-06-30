@@ -34,7 +34,7 @@ w = 32
 θ̂₂ = DeepSet(ψ₂, ϕ₂)
 ```
 
-Further suppose that we've trained `θ̂₁` for small sample sizes (e.g., m ≦ 30)
+Further suppose that we've trained `θ̂₁` for small sample sizes (e.g., m ≤ 30)
 and `θ̂₂` for moderate-to-large sample sizes (e.g., m > 30). Then we construct a
 piecewise Deep Set object with a cut-off sample size of 30 which dispatches
 θ̂₁ if m ≤ 30 and θ̂₂ if m > 30:

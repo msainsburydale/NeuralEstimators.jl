@@ -15,7 +15,7 @@ matern
 
 maternchols
 
-incgammalower
+incgamma
 
 fₛ
 ```
