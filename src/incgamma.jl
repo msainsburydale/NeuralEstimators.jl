@@ -5,16 +5,12 @@
 """
     incgamma(a::T, x::T; upper::Bool, reg::Bool) where {T <: AbstractFloat}
 
-For positive `a` and `x`, computes the incomplete gamma function, as described
+For positive parameter `a` and positive integration limit `x`, computes the incomplete gamma function, as described
 by the [Wikipedia article](https://en.wikipedia.org/wiki/Incomplete_gamma_function).
 
-# Arguments:
-- `a`: parameter of the incomplete gamma function.
-- `x`: second input argument, the integration limit.
-- `upper::Bool`: should the upper (if 'true') or the lower (if 'false') inc. gamma function be returned.
-- `reg::Bool`: if 'true', the regularized gamma function is returned, i.e. divided by `gamma(a)`.
-
-Note that both `a` and `x` must be strictly greater than 0.
+# Keyword arguments:
+- `upper::Bool`: if `true`, the upper incomplete gamma function is returned; otherwise, the lower version is returned.
+- `reg::Bool`: if `true`, the regularized incomplete gamma function is returned; otherwise, the unregularized version is returned.
 """
 function incgamma(a::T, x::T; upper::Bool, reg::Bool) where {T <: AbstractFloat}
 
@@ -94,7 +90,7 @@ function incgamma(a::T, x::T; upper::Bool, reg::Bool) where {T <: AbstractFloat}
     else
 
         # In this case evaluate the lower gamma function as described above.
-        
+
         G = ( false==upper && false==reg ? T(0) : gamma(a) )
 
         # Initial term of the Taylor series at i=0:

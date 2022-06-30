@@ -20,3 +20,8 @@ makedocs(
            ]
        ]
 )
+
+
+deploydocs(;
+    repo="github.com/msainsburydale/NeuralEstimators.jl",
+)
