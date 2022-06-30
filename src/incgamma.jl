@@ -1,20 +1,12 @@
 # This code has been adapted from IncGammaBeta.jl, which I do not include as a
 # dependency because it introduced incompatabilities (it has not been updated since 2016)
 
-# TODO incgammalower => incgammalowerunregularised. Or, just export incgamma().
-
-"""
-    incgammalower(a, x)
-For positive `a` and `x`, computes the lower unregularised incomplete gamma
-function, ``\\gamma(a, x) = \\int_{0}^x t^{a-1}e^{-t}dt``.
-"""
-incgammalower(a, x) = incgamma(a, x; upper = false, reg = false)
-
 
 """
     incgamma(a::T, x::T; upper::Bool, reg::Bool) where {T <: AbstractFloat}
 
-For positive `a` and `x`, computes the incomplete gamma function.
+For positive `a` and `x`, computes the incomplete gamma function, as described
+by the [Wikipedia article](https://en.wikipedia.org/wiki/Incomplete_gamma_function).
 
 # Arguments:
 - `a`: parameter of the incomplete gamma function.
@@ -27,15 +19,13 @@ Note that both `a` and `x` must be strictly greater than 0.
 function incgamma(a::T, x::T; upper::Bool, reg::Bool) where {T <: AbstractFloat}
 
     EPS = eps(T)
-    # sanity check:
-    if ( a < EPS || x < EPS )
-        error("a and x should be positive")
-    end
+    @assert a  > EPS "a should be positive"
+    @assert x  > EPS "x should be positive"
 
     # The algorithm for numerical approximation of the incomplete gamma function
     # as proposed by [Numerical Recipes], section 6.2:
     #
-    # When x > (a+1), the upper gamma function can be evaluated as
+    # When x > a+1, the upper gamma function can be evaluated as
     #   G(a,x) ~= e⁻ˣxᵃ / cf(a,x)
     # where 'cf(a,x) is the continued fraction defined above, its coefficients
     # 'a(i)' and 'b(i)' are implemented in 'inc_gamma_ctdfrac_closure'.
@@ -80,22 +70,19 @@ function incgamma(a::T, x::T; upper::Bool, reg::Bool) where {T <: AbstractFloat}
     ginc = exp(-x) * (x^a)
 
     if ( x > (a + 1) )
-        #
-        # x > (a + 1)
-        #
+
         # In this case evaluate the upper gamma function as described above.
-        #
 
         fa, fb = inc_gamma_ctdfrac_closure(a, x)
         G = ( true==upper && false==reg ? T(0) : gamma(a) )
 
         ginc /= ctdfrac_eval(fa, fb)
 
-        #
+
         # Apply properties of the incomplete gamma function
         # if anything else except a generalized upper incomplete
         # gamma function is desired.
-        #
+
         if ( false == upper )
             ginc = G - ginc
         end
@@ -105,11 +92,9 @@ function incgamma(a::T, x::T; upper::Bool, reg::Bool) where {T <: AbstractFloat}
             ginc /= G
         end
     else
-        #
-        # x < (a + 1)
-        #
+
         # In this case evaluate the lower gamma function as described above.
-        #
+        
         G = ( false==upper && false==reg ? T(0) : gamma(a) )
 
         # Initial term of the Taylor series at i=0:

@@ -3,7 +3,7 @@
 # so we need to make sure that the same numbers are being crunched every time.
 
 using NeuralEstimators
-using NeuralEstimators: _getindices, _runondevice, incgammalower
+using NeuralEstimators: _getindices, _runondevice, _incgammalowerunregularised
 import NeuralEstimators: simulate
 using CUDA
 using DataFrames
@@ -58,16 +58,16 @@ end
 		reg = false
 		a = 1.0
 
-		x = 0.5 # x < a
+		x = a + 0.5 # x < (a + 1)
 		@test incgamma(a, x, upper = true, reg = reg) ≈ exp(-x)
 		@test incgamma(a, x, upper = false, reg = reg) ≈ 1 - exp(-x)
-		@test incgammalower(a, x) ≈ incgamma(a, x, upper = false, reg = reg)
+		@test _incgammalowerunregularised(a, x) ≈ incgamma(a, x, upper = false, reg = reg)
 
 
-		x = 1.5 # x > a
+		x = a + 1.5 # x > (a + 1)
 		@test incgamma(a, x, upper = true, reg = reg) ≈ exp(-x)
 		@test incgamma(a, x, upper = false, reg = reg) ≈ 1 - exp(-x)
-		@test incgammalower(a, x) ≈ incgamma(a, x, upper = false, reg = reg)
+		@test _incgammalowerunregularised(a, x) ≈ incgamma(a, x, upper = false, reg = reg)
 
 	end
 
@@ -76,7 +76,11 @@ end
 		reg = true
 		a = 1.0
 
-		x = 0.5 # x < a
+		x = a + 0.5 # x < (a + 1)
+		@test incgamma(a, x, upper = false, reg = true) ≈ incgamma(a, x, upper = false, reg = false)  / gamma(a)
+		@test incgamma(a, x, upper = true, reg = true) ≈ incgamma(a, x, upper = true, reg = false)  / gamma(a)
+
+		x = a + 1.5 # x > (a + 1)
 		@test incgamma(a, x, upper = false, reg = true) ≈ incgamma(a, x, upper = false, reg = false)  / gamma(a)
 		@test incgamma(a, x, upper = true, reg = true) ≈ incgamma(a, x, upper = true, reg = false)  / gamma(a)
 

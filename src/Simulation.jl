@@ -3,6 +3,7 @@
 # parameters appear; I think it's best for ξ to appear before parameters.
 
 
+
 """
 	simulate(parameters::P, ξ, m::Integer, num_rep::Integer) where {P <: ParameterConfigurations}
 
@@ -282,8 +283,16 @@ Fₛ⁻¹.(p, μ, τ, δ)
 ```
 """
 fₛ(x, μ, τ, δ)   = δ * exp(-(abs((x - μ)/τ)^δ)) / (2τ * gamma(1/δ))
-Fₛ(q, μ, τ, δ)   = 0.5 + 0.5 * sign(q - μ) * (1 / gamma(1/δ)) * incgammalower(1/δ, abs((q - μ)/τ)^δ)
+Fₛ(q, μ, τ, δ)   = 0.5 + 0.5 * sign(q - μ) * (1 / gamma(1/δ)) * _incgammalowerunregularised(1/δ, abs((q - μ)/τ)^δ) 
 Fₛ⁻¹(p, μ, τ, δ) = μ + sign(p - 0.5) * (τ^δ * quantile(Gamma(1/δ), 2 * abs(p - 0.5)))^(1/δ)
 
 Φ(q)   = cdf(Normal(0, 1), q)
 t(ỹ₀₁, μ, τ, δ) = Fₛ⁻¹(Φ(ỹ₀₁), μ, τ, δ)
+
+
+"""
+    _incgammalowerunregularised(a, x)
+For positive `a` and `x`, computes the lower unregularised incomplete gamma
+function, ``\\gamma(a, x) = \\int_{0}^x t^{a-1}e^{-t}dt``.
+"""
+_incgammalowerunregularised(a, x) = incgamma(a, x; upper = false, reg = false)
