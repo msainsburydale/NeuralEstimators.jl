@@ -1,9 +1,9 @@
 # Simple example
 
-Here, we consider a very simple estimation task, namely, inferring ``\mu`` from ``\rm{N}(\mu, \sigma)`` data, where ``\sigma`` is known. Specifically, we will develop a neural estimator for ``μ``, where
+Here, we consider a very simple estimation task, namely, inferring ``\mu`` from ``N(\mu, \sigma)`` data, where ``\sigma`` is known. Specifically, we will develop a neural estimator for ``μ``, where
 
 ```math
-\mu \sim \rm{N}(0, 0.5), \quad \mathcal{Z} \equiv \{Z_1, \dots, Z_m\}, \; Z_i \sim \rm{N}(μ, 1).
+\mu \sim N(0, 0.5), \quad \mathcal{Z} \equiv \{Z_1, \dots, Z_m\}, \; Z_i \sim N(μ, 1).
 ```
 
 The first step is to define an object `ξ` that contains invariant model information. In this example, we have two invariant objects: The prior distribution of the parameters, Ω, and the standard deviation, σ.

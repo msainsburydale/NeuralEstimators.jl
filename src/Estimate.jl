@@ -1,5 +1,5 @@
 """
-	estimate(estimators, parameters::P, m; <keyword args>) where {P <: ParameterConfigurations}
+	estimate(estimators, ξ, parameters::P; <keyword args>) where {P <: ParameterConfigurations}
 
 Using a collection of `estimators`, compute estimates from data simulated from a
 set of `parameters` with invariant information `ξ`.
@@ -7,20 +7,23 @@ set of `parameters` with invariant information `ξ`.
 Note that `estimate()` requires the user to have defined a method `simulate(parameters, ξ, m::Integer)`.
 
 # Keyword arguments
-- `m::Vector{Integer} where I <: Integer`: sample sizes to estimate from.
+- `m::Vector{Integer}`: sample sizes to estimate from.
 - `estimator_names::Vector{String}`: names of the estimators (sensible default values provided).
 - `parameter_names::Vector{String}`: names of the parameters (sensible default values provided).
 - `num_rep::Integer = 1`: the number of times to replicate each parameter in `parameters`.
+- `save::Vector{String}`: by default, no objects are saved; however, if `save` is provided, four `DataFrames` respectively containing the true parameters `θ`, estimates `θ̂`, runtimes, and merged `θ` and `θ̂` will be saved in the directory `save[1]` with file *names* (not extensions) suffixed by `save[2]`.
 - `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses the invariant model information, `ξ`: If it does, the estimator will be applied as `estimator(Z, ξ)`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
 - `verbose::Bool = true`
 """
 function estimate(
     estimators, ξ, parameters::P; m::Vector{I},
+	num_rep::Integer = 1,
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
+	save::Vector{String} = ["", ""],
 	use_ξ = false,
-	num_rep::Integer = 1, use_gpu = true,
+	use_gpu = true,
 	verbose::Bool = true
 	) where {P <: ParameterConfigurations, I <: Integer}
 
@@ -37,6 +40,15 @@ function estimate(
 	runtime = vcat(map(x -> x.runtime, obj)...)
 
 	estimates = Estimates(θ, θ̂, runtime)
+
+	if save != ["", ""]
+		savepath = save[1]
+		savename = save[2]
+		CSV.write(joinpath(savepath, "runtime_$savename.csv"), estimates.runtime)
+		CSV.write(joinpath(savepath, "parameters_$savename.csv"), estimates.θ)
+		CSV.write(joinpath(savepath, "estimates_$savename.csv"), estimates.θ̂)
+		CSV.write(joinpath(savepath, "merged_$savename.csv"), merge(estimates))
+	end
 
 	return estimates
 end
