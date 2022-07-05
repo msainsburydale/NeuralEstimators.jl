@@ -143,7 +143,7 @@ MLE(Z, ξ) = MLE(Z) # this function doesn't actually need ξ, but include it for
 
 
 
-verbose = false
+verbose = true
 
 @testset verbose = true "$key" for key ∈ keys(estimators)
 
@@ -173,6 +173,7 @@ verbose = false
 			θ̂ = train(θ̂, ξ, Parameters, m = 10, epochs = 5, savepath = "", use_gpu = use_gpu, verbose = verbose)
 			θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "", use_gpu = use_gpu, verbose = verbose)
 			θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "", epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
+			θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "", epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
 
 			# Decided not to test this code, because we can't always assume that we have write privledges
 			# θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "dummy123", use_gpu = use_gpu, verbose = verbose)

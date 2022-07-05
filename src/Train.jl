@@ -9,7 +9,8 @@ _common_kwd_args = """
 - `loss = mae`: the loss function, which should return an average loss when applied to multiple replicates.
 - `optimiser = ADAM(1e-4)`
 - `savepath::String = "runs/"`: path to save the trained `θ̂` and other information; if savepath is an empty string (i.e., `""`), nothing is saved.
-- `stopping_epochs::Integer = 10`: halt training if the risk doesn't improve in `stopping_epochs` epochs.
+- `simulate_just_in_time::Bool = false`: should we do "just-in-time" data simulation, which improves memory complexity at the cost of time complexity?
+- `stopping_epochs::Integer = 10`: cease training if the risk doesn't improve in `stopping_epochs` epochs.
 - `use_gpu::Bool = true`
 - `verbose::Bool = true`
 """
@@ -38,17 +39,20 @@ function train(θ̂, ξ, P;
 	optimiser          = ADAM(1e-4),
     batchsize::Integer = 32,
     epochs::Integer    = 100,
-	stopping_epochs::Integer = 10,
 	savepath::String   = "runs/",
+	# simulate_just_in_time::Bool = false, # TODO
+	stopping_epochs::Integer = 10,
     use_gpu::Bool      = true,
 	verbose::Bool      = true,
 	K::Integer         = 10_000
 	)
 
+
+	simulate_just_in_time::Bool = false # TODO
 	epochs_per_Z_refresh = 1 # TODO
 	epochs_per_θ_refresh = 1 # TODO
 
-    _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
+    _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh, simulate_just_in_time)
 
 	# TODO better way to enforce P to be a type and specifically a sub-type of ParameterConfigurations?
 	@assert P <: ParameterConfigurations
@@ -147,12 +151,13 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 		loss             = Flux.Losses.mae,
 		optimiser        = ADAM(1e-4),
 		savepath::String = "runs/",
+		simulate_just_in_time::Bool = false,
 		stopping_epochs::Integer = 10,
 		use_gpu::Bool    = true,
 		verbose::Bool    = true
 		) where {P <: ParameterConfigurations}
 
-	_checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
+	_checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh, simulate_just_in_time)
 
 	savebool = savepath != "" # turn off saving if savepath is an empty string
 	if savebool
@@ -179,6 +184,12 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 	# risk does not improve
 	savebool && _saveweights(θ̂, 0, savepath)
 
+	# We may simulate Z_train in its entirety either because (i) we
+	# want to avoid the overhead of simulating continuously or (ii) we are
+	# not refreshing Z_train every epoch so we need it for subsequent epochs.
+	# Either way, store this decision in a variable.
+	store_entire_Z_train = !simulate_just_in_time || epochs_per_Z_refresh != 1
+
 	# for loops create a new scope for the variables that are not present in the
 	# enclosing scope, and such variables get a new binding in each iteration of
 	# the loop; circumvent this by declaring local variables.
@@ -187,31 +198,40 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 	local early_stopping_counter = 0
 	train_time = @elapsed for epoch in 1:epochs
 
-		# If we are not refreshing Z_train every epoch, we must simulate it in
-		# its entirety so that it can be used in subsequent epochs.
-		if epochs_per_Z_refresh > 1 && (epoch == 1 || (epoch % epochs_per_Z_refresh) == 0)
-			verbose && print("Simulating training data...")
-			Z_train = nothing
-			@sync gc()
-			t = @elapsed Z_train = _simulate(θ_train, ξ, m)
-			Z_train = _quietDataLoader(Z_train, batchsize)
-			verbose && println(" Finished in $(round(t, digits = 3)) seconds")
-		end
-
-		# For each batch, update θ̂ and compute the training loss
 		train_loss = zero(initial_val_risk)
-		epoch_time_train = @elapsed if epochs_per_Z_refresh > 1
-			 for (Z, θ) in Z_train
-				train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+
+		if store_entire_Z_train
+
+			# Simulate new training data if needed
+			if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
+				verbose && print("Simulating training data...")
+				Z_train = nothing
+				@sync gc()
+				t = @elapsed Z_train = _simulate(θ_train, ξ, m)
+				Z_train = _quietDataLoader(Z_train, batchsize)
+				verbose && println(" Finished in $(round(t, digits = 3)) seconds")
 			end
+
+			# For each batch, update θ̂ and compute the training loss
+			epoch_time_train = @elapsed for (Z, θ) in Z_train
+			   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+			end
+
 		else
+
+			# For each batch, update θ̂ and compute the training loss
+			epoch_time_simulate = 0.0
+			epoch_time_train    = 0.0
 			for parameters ∈ _ParameterLoader(θ_train, batchsize = batchsize)
-				Z = simulate(parameters, ξ, m)
+				epoch_time_simulate += @elapsed Z = simulate(parameters, ξ, m)
 				θ = parameters.θ
-				train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+				epoch_time_train    += @elapsed train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 			end
+			println("Total time spent simulating data: $(round(epoch_time_simulate, digits = 3)) seconds")
+
 		end
 		train_loss = train_loss / size(θ_train, 2)
+
 
 		epoch_time_val = @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_loss current_val_risk])
@@ -246,11 +266,12 @@ end
 
 # ---- Helper functions ----
 
-function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
+function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh, simulate_just_in_time)
 	@assert batchsize > 0
 	@assert epochs > 0
 	@assert stopping_epochs > 0
 	@assert epochs_per_Z_refresh > 0
+	if simulate_just_in_time && epochs_per_Z_refresh != 1 @error "We cannot simulate the data just-in-time if we aren't refreshing it every epoch; please either set ` simulate_just_in_time = false` or `epochs_per_Z_refresh = 1`" end
 end
 
 
