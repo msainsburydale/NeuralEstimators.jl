@@ -136,7 +136,7 @@ function simulateconditionalextremes(
 
 	n = size(L, 1)
 	Z = similar(L, n, m)
-	Threads.@threads for k ∈ 1:m
+	for k ∈ 1:m
 		Z[:, k] = simulateconditionalextremes(θ, L, S, s₀, u)
 	end
 
@@ -283,7 +283,7 @@ Fₛ⁻¹.(p, μ, τ, δ)
 ```
 """
 fₛ(x, μ, τ, δ)   = δ * exp(-(abs((x - μ)/τ)^δ)) / (2τ * gamma(1/δ))
-Fₛ(q, μ, τ, δ)   = 0.5 + 0.5 * sign(q - μ) * (1 / gamma(1/δ)) * _incgammalowerunregularised(1/δ, abs((q - μ)/τ)^δ) 
+Fₛ(q, μ, τ, δ)   = 0.5 + 0.5 * sign(q - μ) * (1 / gamma(1/δ)) * _incgammalowerunregularised(1/δ, abs((q - μ)/τ)^δ)
 Fₛ⁻¹(p, μ, τ, δ) = μ + sign(p - 0.5) * (τ^δ * quantile(Gamma(1/δ), 2 * abs(p - 0.5)))^(1/δ)
 
 Φ(q)   = cdf(Normal(0, 1), q)

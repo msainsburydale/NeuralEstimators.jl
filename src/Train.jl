@@ -127,9 +127,8 @@ function train(θ̂, ξ, P;
 
     end
 
-	# save information, the final θ̂, and save the best θ̂ as best_network.bson.
+	# save key information and save the best θ̂ as best_network.bson.
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
-	savebool && _saveweights(θ̂, epochs, savepath)
 	savebool && _savebestweights(savepath)
 
     return θ̂
@@ -254,9 +253,8 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 
     end
 
-	# save information, the final θ̂, and save the best θ̂ as best_network.bson.
+	# save key information and save the best θ̂ as best_network.bson.
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
-	savebool && _saveweights(θ̂, epochs, savepath)
 	savebool && _savebestweights(savepath)
 
     return θ̂
