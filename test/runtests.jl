@@ -143,7 +143,7 @@ MLE(Z, ξ) = MLE(Z) # this function doesn't actually need ξ, but include it for
 
 
 
-verbose = true
+verbose = false
 
 @testset verbose = true "$key" for key ∈ keys(estimators)
 

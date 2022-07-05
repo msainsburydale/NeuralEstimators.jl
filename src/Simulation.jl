@@ -155,6 +155,8 @@ function simulateconditionalextremes(
 	h = map(norm, eachslice(S .- s₀, dims = 1))
 	s₀_idx = findfirst(x -> x == 0.0, map(norm, eachslice(S .- s₀, dims = 1)))
 
+	@assert !isnothing(s₀_idx) "The provided conditioning site `s₀` does not match any of the spatial locations in `S`."
+
 	# Parameters associated with a(.) and b(.):
 	κ = θ[1]
 	λ = θ[2]
