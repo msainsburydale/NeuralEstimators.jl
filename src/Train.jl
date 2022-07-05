@@ -75,7 +75,7 @@ function train(θ̂, ξ, P;
 	verbose && print("Computing the initial validation risk...")
 	initial_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
 	loss_per_epoch   = [initial_val_risk initial_val_risk;]
-	verbose && println(" Initial validation loss = $initial_val_risk")
+	verbose && println(" Initial validation risk = $initial_val_risk")
 
 	# Save the initial θ̂. This is to prevent bugs in the case that
 	# the initial loss does not improve
@@ -170,7 +170,7 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 	Z_val = _quietDataLoader(Z_val, batchsize)
 	verbose && print("Computing the initial validation risk...")
 	initial_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
-	verbose && println(" Initial validation loss = $initial_val_risk")
+	verbose && println(" Initial validation risk = $initial_val_risk")
 
 	# Initialise the loss per epoch matrix (NB just using validation for both for now)
 	loss_per_epoch = [initial_val_risk initial_val_risk;]

@@ -124,12 +124,23 @@ simulate(parameters::Parameters, ξ, m::Integer) = simulate(parameters, ξ, rang
 
 See [`DeepSetPiecewise`](@ref).
 
+```math
+\hat{\mathbf{\theta}}(\mathcal{Z})
+=
+\begin{cases}
+\hat{\mathbf{\theta}}_1(\mathcal{Z}) & |\mathcal{Z}| \leq m_1,\\
+\hat{\mathbf{\theta}}_2(\mathcal{Z}) & m_1 < |\mathcal{Z}| \leq m_2,\\
+\quad \vdots \\
+\hat{\mathbf{\theta}}_l(\mathcal{Z}) & |\mathcal{Z}| > m_{l-1}.
+\end{cases}
+```
+
 
 ## Combining neural and expert summary statistics
 
 See [`DeepSetExpert`](@ref).
 
 
-## Bootstrapping 
+## Bootstrapping
 
 Bootstrapping is a powerful technique for estimating the distribution of an estimator and, hence, facilitating uncertainty quantification. Bootstrap methods are considered to be accurate but often too computationally expensive for traditional likelihood-based estimators, but are well suited to fast neural estimators. We implement bootstrapping with  [`parametricbootstrap`](@ref) and [`nonparametricbootstrap`](@ref), with the latter also catering for so-called block bootstrapping.
