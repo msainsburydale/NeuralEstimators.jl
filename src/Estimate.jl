@@ -101,6 +101,7 @@ function _estimate(
     θ̂[!, "estimator"] = repeat(estimator_names, inner = nrow(θ̂) ÷ E)
     θ̂[!, "m"] = repeat([m], nrow(θ̂))
 	θ̂[!, "k"] = repeat(1:K, E * num_rep)
+	θ̂[!, "replicate"] = repeat(repeat(1:num_rep, inner = K), E) # FIXME Need to add "replicate" column. See GP/nuVaried/Results.R
 
 	# Also provide the true parameters for comparison with the estimates
 	# θ = repeat(parameters.θ, outer = (1, num_rep))
@@ -138,7 +139,7 @@ function merge(estimates::Estimates)
 
 	# Transform θ and θ̂ to long form:
 	θ = stack(θ, variable_name = :parameter, value_name = :truth)
-	θ̂ = stack(θ̂, Not([:estimator, :m, :k]), variable_name = :parameter, value_name = :estimate)
+	θ̂ = stack(θ̂, Not([:estimator, :m, :k, :replicate]), variable_name = :parameter, value_name = :estimate)
 
 	# Merge θ and θ̂: All we have to do is add :truth column to θ̂
 	θ̂[!, :truth] = θ[:, :truth]

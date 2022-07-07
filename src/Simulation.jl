@@ -298,3 +298,39 @@ For positive `a` and `x`, computes the lower unregularised incomplete gamma
 function, ``\\gamma(a, x) = \\int_{0}^x t^{a-1}e^{-t}dt``.
 """
 _incgammalowerunregularised(a, x) = incgamma(a, x; upper = false, reg = false)
+
+
+"""
+	objectindices(objects, θ::AbstractMatrix{T}) where T
+Returns a vector of indices giving element of `objects` associated with each
+parameter configuration in `θ`.
+
+The number of parameter configurations, `K = size(θ, 2)`, must be a multiple of
+the number of objects, `N = size(objects)[end]`. Further, repeated parameters
+used to generate `objects` must be stored in `θ` after using the `inner` keyword
+argument of `repeat()` (see example below).
+
+# Examples
+```
+K = 6
+N = 3
+σₑ = rand(K)
+ρ = rand(N)
+ν = rand(N)
+S = expandgrid(1:9, 1:9)
+D = pairwise(Euclidean(), S, S, dims = 1)
+L = maternchols(D, ρ, ν)
+ρ = repeat(ρ, inner = K ÷ N)
+ν = repeat(ν, inner = K ÷ N)
+θ = hcat(σₑ, ρ, ν)'
+objectindices(L, θ)
+```
+"""
+function objectindices(objects, θ::AbstractMatrix{T}) where T
+
+	K = size(θ, 2)
+	N = size(objects)[end]
+	@assert K % N == 0 "The nu"
+
+	return repeat(1:N, inner = K ÷ N)
+end

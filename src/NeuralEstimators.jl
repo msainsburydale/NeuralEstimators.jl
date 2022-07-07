@@ -32,7 +32,8 @@ include("DeepSetPiecewise.jl")
 
 
 
-export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes, matern, maternchols, fₛ, Fₛ, Fₛ⁻¹
+export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
+export objectindices, matern, maternchols, fₛ, Fₛ, Fₛ⁻¹
 include("Simulation.jl")
 export incgamma
 include("incgamma.jl")

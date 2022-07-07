@@ -48,42 +48,30 @@ struct Parameters <: ParameterConfigurations
 end
 ```
 
-Then, we adapt our `Parameters` constructor so that, instead of sampling `K` parameter pairs independently, we sample `num_reuse` values of `σ` and `K ÷ num_reuse` values of `ρ`, and construct the `K` parameter configurations by taking all combinations of of these parameters. The advantage of this approach is clear, in that we need only compute `K ÷ num_reuse` Cholesky factors.
+Then, we adapt our `Parameters` constructor so that, instead of sampling `K` parameter pairs independently, we sample `K ÷ N` values of `ρ`, and then repeat these parameters so that the final parameter vector has length `K`. The advantage of this approach is clear, in that we need only compute `K ÷ N` Cholesky factors.
 
 ```
-function Parameters(ξ, K::Integer; num_reuse = 10)
+function Parameters(ξ, K::Integer; N = 10)
 
-	@assert K % num_reuse == 0
+	@assert K % N == 0
 
 	Ω = ξ.Ω
 
-	σ = rand(Ω.σ, num_reuse)
-	ρ = rand(Ω.ρ, K ÷ num_reuse)
+	σ = rand(Ω.σ, N)
+	ρ = rand(Ω.ρ, K ÷ N)
 
 	chols = maternchols(ξ.D, ρ, 1)
 
 	# Construct θ such that σ runs faster than ρ
-	σ = repeat(σ, outer = K ÷ num_reuse)
-	ρ = repeat(ρ, inner = num_reuse)
+	σ = repeat(σ, outer = K ÷ N)
+	ρ = repeat(ρ, inner = N)
 	θ = hcat(σ, ρ)'
 
-	Parameters(θ, chols, computecholsindex(chols, θ))
+	Parameters(θ, chols, objectindices(chols, θ))
 end
 ```
 
-The above constructor requires a function to compute the index of the Cholesky factor associated with each parameter configuration, and this can be achieved in the following manner:
-```
-"""
-	computecholsindex(chols, θ)
-Computes the Cholesky factor in `chols` associated with each parameter configuration in `θ`, where `σ` is assumed to be stored in the first row of `θ` and to run faster than `ρ`.
-"""
-function computecholsindex(chols, θ)
-	K = size(θ, 2)
-	num_chols = size(chols, 3)
-	num_reuse = K ÷ num_chols
-	chol_index  = repeat(1:num_chols, inner = num_reuse)
-end
-```
+The above constructor makes use of the the convenience function [`objectindices`](@ref), which computes the index of the Cholesky factor associated with each parameter configuration (and with intermediate objects more generally).
 
 Note that the default subsetting method for `ParameterConfigurations` objects automatically handles cases like this; in some applications, however, it may be necessary to define an appropriate subsetting method by overloading [`subsetparameters`](@ref).
 

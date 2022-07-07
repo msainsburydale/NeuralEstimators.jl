@@ -105,6 +105,22 @@ end
 	@test parameters_subset.v     == parameters.v[indices]
 end
 
+# This could just be done with a jldoctest, since this is just a copy paste from the example. 
+@testset "objectindices" begin
+	K = 6
+	N = 3
+	σₑ = rand(K)
+	ρ = rand(N)
+	ν = rand(N)
+	S = expandgrid(1:9, 1:9)
+	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
+	L = maternchols(D, ρ, ν)
+	ρ = repeat(ρ, inner = K ÷ N)
+	ν = repeat(ν, inner = K ÷ N)
+	θ = hcat(σₑ, ρ, ν)'
+	@test objectindices(L, θ) == repeat(1:N, inner = K ÷ N)
+end
+
 # Simple example for testing.
 struct Parameters <: ParameterConfigurations θ end
 ξ = (Ω = Normal(0, 0.5), σ = 1)
