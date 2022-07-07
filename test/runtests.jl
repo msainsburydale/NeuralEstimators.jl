@@ -63,7 +63,6 @@ end
 		@test incgamma(a, x, upper = false, reg = reg) ≈ 1 - exp(-x)
 		@test _incgammalowerunregularised(a, x) ≈ incgamma(a, x, upper = false, reg = reg)
 
-
 		x = a + 1.5 # x > (a + 1)
 		@test incgamma(a, x, upper = true, reg = reg) ≈ exp(-x)
 		@test incgamma(a, x, upper = false, reg = reg) ≈ 1 - exp(-x)
@@ -108,6 +107,11 @@ end
 @testset "scaledlogistic" begin
 	@test all(4 .<= scaledlogistic.(-10:10, 4, 5) .<= 5)
 	@test all(scaledlogit.(scaledlogistic.(-10:10, 4, 5), 4, 5) .≈ -10:10)
+
+	Ω = (σ = 1:10, ρ = (2, 7))
+	Ω = [Ω...] # convert to array since broadcasting over dictionaries and NamedTuples is reserved 
+	θ = [-10, 15]
+	@test all(minimum.(Ω) .<= scaledlogistic.(θ, Ω) .<= maximum.(Ω))
 end
 
 # This could just be done with a jldoctest, since this is just a copy paste from the example.
