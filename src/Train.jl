@@ -226,7 +226,7 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 				θ = parameters.θ
 				epoch_time_train    += @elapsed train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 			end
-			println("Total time spent simulating data: $(round(epoch_time_simulate, digits = 3)) seconds")
+			verbose && println("Total time spent simulating data: $(round(epoch_time_simulate, digits = 3)) seconds")
 
 		end
 		train_loss = train_loss / size(θ_train, 2)

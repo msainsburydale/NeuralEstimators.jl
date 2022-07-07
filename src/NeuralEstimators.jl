@@ -33,10 +33,13 @@ include("DeepSetPiecewise.jl")
 
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
-export objectindices, matern, maternchols, fₛ, Fₛ, Fₛ⁻¹
+export objectindices, matern, maternchols, fₛ, Fₛ, Fₛ⁻¹, scaledlogistic, scaledlogit
 include("Simulation.jl")
 export incgamma
 include("incgamma.jl")
+
+export gaussianloglikelihood, schlatherbivariatedensity
+include("densities.jl")
 
 export train
 include("Train.jl")

@@ -14,7 +14,7 @@ makedocs(
            ],
            "API" => [
                 "Core functions" => "API/core.md",
-                "Data simulation" => "API/simulation.md",
+                "Simulation and density functions" => "API/simulation.md",
                 "Utility functions" => "API/utility.md",
                 "Index" => "API/index.md"
            ]

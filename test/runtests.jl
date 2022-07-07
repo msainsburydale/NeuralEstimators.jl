@@ -105,7 +105,12 @@ end
 	@test parameters_subset.v     == parameters.v[indices]
 end
 
-# This could just be done with a jldoctest, since this is just a copy paste from the example. 
+@testset "scaledlogistic" begin
+	@test all(4 .<= scaledlogistic.(-10:10, 4, 5) .<= 5)
+	@test all(scaledlogit.(scaledlogistic.(-10:10, 4, 5), 4, 5) .≈ -10:10)
+end
+
+# This could just be done with a jldoctest, since this is just a copy paste from the example.
 @testset "objectindices" begin
 	K = 6
 	N = 3
@@ -120,6 +125,58 @@ end
 	θ = hcat(σₑ, ρ, ν)'
 	@test objectindices(L, θ) == repeat(1:N, inner = K ÷ N)
 end
+
+@testset "schlatherbivariatedensity" begin
+
+	# Check that the pdf is consistent with the cdf using finite differences
+	using NeuralEstimators: _schlatherbivariatecdf
+	function finitedifference(z₁, z₂, ψ, ϵ = 0.0001)
+		(_schlatherbivariatecdf(z₁ + ϵ, z₂ + ϵ, ψ) - _schlatherbivariatecdf(z₁ - ϵ, z₂ + ϵ, ψ) - _schlatherbivariatecdf(z₁ + ϵ, z₂ - ϵ, ψ) + _schlatherbivariatecdf(z₁ - ϵ, z₂ - ϵ, ψ)) / (4 * ϵ^2)
+	end
+	function finitedifference_check(z₁, z₂, ψ)
+		@test abs(finitedifference(z₁, z₂, ψ) - schlatherbivariatedensity(z₁, z₂, ψ; logdensity=false)) < 0.0001
+	end
+	finitedifference_check(0.3, 0.8, 0.2)
+	finitedifference_check(0.3, 0.8, 0.9)
+	finitedifference_check(3.3, 3.8, 0.2)
+	finitedifference_check(3.3, 3.8, 0.9)
+end
+
+
+@testset "SubbotinDistribution" begin
+
+	# Check that the pdf is consistent with the cdf using finite differences
+	finitedifference(y, μ, τ, δ, ϵ = 0.000001) = (Fₛ(y + ϵ, μ, τ, δ) - Fₛ(y, μ, τ, δ)) / ϵ
+	function finitedifference_check(y, μ, τ, δ)
+		@test abs(finitedifference(y, μ, τ, δ) - fₛ(y, μ, τ, δ)) < 0.0001
+	end
+
+	finitedifference_check(-1, 0.1, 3, 1.2)
+	finitedifference_check(0, 0.1, 3, 1.2)
+	finitedifference_check(0.9, 0.1, 3, 1.2)
+	finitedifference_check(3.3, 0.1, 3, 1.2)
+
+	# Check that f⁻¹(f(y)) ≈ y
+	μ = 0.5; τ = 1.3; δ = 2.4; y = 0.3
+	@test abs(y - Fₛ⁻¹(Fₛ(y, μ, τ, δ), μ, τ, δ)) < 0.0001
+	# @test abs(y - t⁻¹(t(y, μ, τ, δ), μ, τ, δ)) < 0.0001
+end
+
+@testset "objectindices" begin
+	K = 6
+	N = 3
+	σₑ = rand(K)
+	ρ = rand(N)
+	ν = rand(N)
+	S = expandgrid(1:9, 1:9)
+	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
+	L = maternchols(D, ρ, ν)
+	ρ = repeat(ρ, inner = K ÷ N)
+	ν = repeat(ν, inner = K ÷ N)
+	θ = hcat(σₑ, ρ, ν)'
+	@test objectindices(L, θ) == repeat(1:N, inner = K ÷ N)
+end
+
 
 # Simple example for testing.
 struct Parameters <: ParameterConfigurations θ end
@@ -251,24 +308,4 @@ end
 	θ̂₁ = hcat(θ̂_deepset(Z[[1]]), θ̂_deepsetexpert(Z[[2]]))
 	θ̂₂ = θ̂_deepsetpiecewise(Z)
 	@test θ̂₁ ≈ θ̂₂
-end
-
-
-@testset "SubbotinDistribution" begin
-
-	# Check that the Subbotin pdf is consistent with the cdf using finite differences
-	finite_diff(y, μ, τ, δ, ϵ = 0.000001) = (Fₛ(y + ϵ, μ, τ, δ) - Fₛ(y, μ, τ, δ)) / ϵ
-	function finite_diff_check(y, μ, τ, δ)
-		@test abs(finite_diff(y, μ, τ, δ) - fₛ(y, μ, τ, δ)) < 0.0001
-	end
-
-	finite_diff_check(-1, 0.1, 3, 1.2)
-	finite_diff_check(0, 0.1, 3, 1.2)
-	finite_diff_check(0.9, 0.1, 3, 1.2)
-	finite_diff_check(3.3, 0.1, 3, 1.2)
-
-	# Check that f⁻¹(f(y)) ≈ y
-	μ = 0.5; τ = 1.3; δ = 2.4; y = 0.3
-	@test abs(y - Fₛ⁻¹(Fₛ(y, μ, τ, δ), μ, τ, δ)) < 0.0001
-	# @test abs(y - t⁻¹(t(y, μ, τ, δ), μ, τ, δ)) < 0.0001
 end

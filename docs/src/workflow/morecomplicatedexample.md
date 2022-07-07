@@ -12,7 +12,7 @@ where ``\mathbf{Z} \equiv (Z_1, \dots, Z_n)^\top`` are data observed at location
  C(\mathbf{h}) = \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \left(\frac{\|\mathbf{h}\|}{\rho}\right) K_\nu \left(\frac{\|\mathbf{h}\|}{\rho}\right),
 ```
 
- where ``\sigma`` is the marginal variance parameter, ``\Gamma(\cdot)`` is the gamma function, ``K_\nu(\cdot)`` is the Bessel function of the second kind of order ``\nu``, and ``\rho > 0`` and ``\nu > 0`` are the range and smoothness parameters, respectively. We follow the common practice decision to fix ``\sigma`` to 1, and we also fix ``\nu = 1`` for simplicity. This leaves two unknown parameters that need to be estimated: ``\mathbf{\theta} \equiv (\sigma_\epsilon, \rho)^\top``.
+ where ``\sigma`` is the marginal variance parameter, ``\Gamma(\cdot)`` is the gamma function, ``K_\nu(\cdot)`` is the Bessel function of the second kind of order ``\nu``, and ``\rho > 0`` and ``\nu > 0`` are the range and smoothness parameters, respectively. We follow the common practice to fix ``\sigma`` to 1, and we also fix ``\nu = 1`` for simplicity. This leaves two unknown parameters that need to be estimated: ``\mathbf{\theta} \equiv (\sigma_\epsilon, \rho)^\top``.
 
  The invariant model objects in this example are the prior distribution, the spatial locations, and the distance matrix. We'll assume prior independence between the parameters with log-uniform margins. We'll take our spatial domain of interest, ``\mathcal{D}``, to be ``[0, 9] \times [0, 9]``, and we'll simulate data on a regular grid with neighbours in each dimension separated by 1 unit.
 

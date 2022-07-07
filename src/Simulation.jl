@@ -3,7 +3,6 @@
 # parameters appear; I think it's best for ξ to appear before parameters.
 
 
-
 """
 	simulate(parameters::P, ξ, m::Integer, num_rep::Integer) where {P <: ParameterConfigurations}
 
@@ -122,6 +121,10 @@ delta(h; δ₁) = 1 + exp(-(h / δ₁)^2)
 C̃(h, ρ, ν) = matern(h, ρ, ν)
 σ̃₀(h, ρ, ν) = √(2 - 2 * C̃(h, ρ, ν))
 
+Φ(q)   = cdf(Normal(0, 1), q)
+t(ỹ₀₁, μ, τ, δ) = Fₛ⁻¹(Φ(ỹ₀₁), μ, τ, δ)
+
+
 
 """
 	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, S, s₀, u)
@@ -191,7 +194,7 @@ function simulateconditionalextremes(
 	# Probability integral transform from the standard Gaussian scale to the
 	# standard uniform scale, and then inverse probability integral transform
 	# from the standard uniform scale to the Subbotin scale:
-    Y = t.(Ỹ₀₁, μ, τ, δ) # = Fₛ⁻¹.(Φ.(Ỹ₀₁), μ, τ, δ)
+    Y = t.(Ỹ₀₁, μ, τ, δ)
 
 	# Apply the functions a(⋅) and b(⋅) to simulate data throughout the domain:
 	Z = a.(h, Z₀, λ = λ, κ = κ) + b.(h, Z₀, β = β, λ = λ, κ = κ) .* Y
@@ -204,7 +207,7 @@ end
 
 
 
-# ---- Intermeditate functions ----
+# ---- Miscellaneous functions ----
 
 @doc raw"""
     matern(h, ρ, ν, σ² = 1)
@@ -252,45 +255,6 @@ function maternchols(D, ρ, ν)
 	L = stackarrays(L, merge = false)
 	return L
 end
-
-
-@doc raw"""
-	fₛ(x, μ, τ, δ)
-	Fₛ(q, μ, τ, δ)
-	Fₛ⁻¹(p, μ, τ, δ)
-
-The density, distribution, and quantile functions Subbotin (delta-Laplace)
-distribution with location parameter `μ`, scale parameter `τ`, and shape
-parameter `δ`:
-
-```math
- f_S(y; \mu, \tau, \delta) = \frac{\delta}{2\tau \Gamma(1/\delta)} \exp{\left(-\left|\frac{y - \mu}{\tau}\right|^\delta\right)},\\
- F_S(y; \mu, \tau, \delta) = \frac{1}{2} + \textrm{sign}(y - \mu) \frac{1}{2 \Gamma(1/\delta)} \gamma\!\left(1/\delta, \left|\frac{y - \mu}{\tau}\right|^\delta\right),\\
- F_S^{-1}(p; \mu, \tau, \delta) = \text{sign}(p - 0.5)G^{-1}\left(2|p - 0.5|; \frac{1}{\delta}, \frac{1}{(k\tau)^\delta}\right)^{1/\delta} + \mu,
-```
-
-with ``\gamma(\cdot)`` and ``G^{-1}(\cdot)`` the unnormalised incomplete lower gamma function and quantile function of the Gamma distribution, respectively.
-
-# Examples
-```
-p = [0.025, 0.05, 0.5, 0.9, 0.95, 0.975]
-
-# Standard Gaussian:
-μ = 0.0; τ = sqrt(2); δ = 2.0
-Fₛ⁻¹.(p, μ, τ, δ)
-
-# Standard Laplace:
-μ = 0.0; τ = 1.0; δ = 1.0
-Fₛ⁻¹.(p, μ, τ, δ)
-```
-"""
-fₛ(x, μ, τ, δ)   = δ * exp(-(abs((x - μ)/τ)^δ)) / (2τ * gamma(1/δ))
-Fₛ(q, μ, τ, δ)   = 0.5 + 0.5 * sign(q - μ) * (1 / gamma(1/δ)) * _incgammalowerunregularised(1/δ, abs((q - μ)/τ)^δ)
-Fₛ⁻¹(p, μ, τ, δ) = μ + sign(p - 0.5) * (τ^δ * quantile(Gamma(1/δ), 2 * abs(p - 0.5)))^(1/δ)
-
-Φ(q)   = cdf(Normal(0, 1), q)
-t(ỹ₀₁, μ, τ, δ) = Fₛ⁻¹(Φ(ỹ₀₁), μ, τ, δ)
-
 
 """
     _incgammalowerunregularised(a, x)

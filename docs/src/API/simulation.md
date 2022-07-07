@@ -9,15 +9,23 @@ simulateschlather
 simulateconditionalextremes
 ```
 
-## Intermediate objects
+## Density functions
+
+```@docs
+gaussianloglikelihood
+
+schlatherbivariatedensity
+
+fₛ
+```
+
+## Miscellaneous functions
 ```@docs
 matern
 
 maternchols
 
-objectindices
-
 incgamma
 
-fₛ
+objectindices
 ```
