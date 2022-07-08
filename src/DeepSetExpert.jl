@@ -1,11 +1,19 @@
 
 """
-	samplesize(x::A) where {A <: AbstractArray{T, N}} where {T, N}
+	samplesize(Z::A) where {A <: AbstractArray{T, N}} where {T, N}
 
 Computes the sample size m for a set of independent realisations `Z`, useful
 as an expert summary statistic in `DeepSetExpert` objects.
 """
 samplesize(Z::A) where {A <: AbstractArray{T, N}} where {T, N} = T(size(Z, ndims(Z)))
+
+"""
+	inversesamplesize(Z::A) where {A <: AbstractArray{T, N}} where {T, N}
+
+Computes the inverse of the sample size for a set of independent realisations `Z`, useful
+as an expert summary statistic in `DeepSetExpert` objects.
+"""
+inversesamplesize(Z::A) where {A <: AbstractArray{T, N}} where {T, N} = T(1/size(Z, ndims(Z)))
 
 
 # ---- DeepSetExpert Type and constructors ----

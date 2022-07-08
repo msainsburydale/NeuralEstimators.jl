@@ -223,7 +223,7 @@ package `fields`, but differs to the parametrisation given by Wikipedia.
 Note that the `Julia` functions for ``\Gamma(\cdot)`` and ``K_\nu(\cdot)``, respectively `gamma()` and
 `besselk()`, do not work on the GPU and, hence, nor does `matern()`.
 """
-function matern(h, ρ, ν, σ² = 1.0)
+function matern(h, ρ, ν, σ² = one(typeof(h)))
 
 	@assert h >= 0 "h should be non-negative"
 	@assert ρ > 0 "ρ should be positive"

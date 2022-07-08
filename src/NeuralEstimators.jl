@@ -25,7 +25,7 @@ include("Parameters.jl")
 
 export DeepSet
 include("DeepSet.jl")
-export DeepSetExpert, samplesize
+export DeepSetExpert, samplesize, inversesamplesize
 include("DeepSetExpert.jl")
 export DeepSetPiecewise
 include("DeepSetPiecewise.jl")

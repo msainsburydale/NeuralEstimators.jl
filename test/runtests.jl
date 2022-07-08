@@ -32,6 +32,11 @@ end
     @test expandgrid(1:2, 1:2) == expandgrid(2)
 end
 
+@testset "samplesize" begin
+	Z = rand(3, 4, 1, 6)
+    @test inversesamplesize(Z) ≈ 1/samplesize(Z)
+end
+
 @testset "_getindices" begin
 	m = (3, 4, 6)
 	v = [rand(16, 16, 1, mᵢ) for mᵢ ∈ m]
@@ -109,7 +114,7 @@ end
 	@test all(scaledlogit.(scaledlogistic.(-10:10, 4, 5), 4, 5) .≈ -10:10)
 
 	Ω = (σ = 1:10, ρ = (2, 7))
-	Ω = [Ω...] # convert to array since broadcasting over dictionaries and NamedTuples is reserved 
+	Ω = [Ω...] # convert to array since broadcasting over dictionaries and NamedTuples is reserved
 	θ = [-10, 15]
 	@test all(minimum.(Ω) .<= scaledlogistic.(θ, Ω) .<= maximum.(Ω))
 end
