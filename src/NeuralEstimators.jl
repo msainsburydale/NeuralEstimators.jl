@@ -38,7 +38,7 @@ include("Simulation.jl")
 export incgamma
 include("incgamma.jl")
 
-export gaussianloglikelihood, schlatherbivariatedensity
+export gaussiandensity, schlatherbivariatedensity
 include("densities.jl")
 
 export train

@@ -12,7 +12,7 @@ simulateconditionalextremes
 ## Density functions
 
 ```@docs
-gaussianloglikelihood
+gaussiandensity
 
 schlatherbivariatedensity
 

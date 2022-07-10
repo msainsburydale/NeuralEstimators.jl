@@ -8,34 +8,46 @@ scaledlogistic(θ, a, b) = a + (b - a) / (1 + exp(-θ))
 scaledlogit(f, Ω)    = scaledlogit(f, minimum(Ω), maximum(Ω))
 scaledlogit(f, a, b) = log((f - a) / (b - f))
 
+
 # ---- Efficient gaussianloglikelihood ----
 
-"""
-    gaussianloglikelihood(y::A, L) where {A <: AbstractArray{T, 1}} where T
-	gaussianloglikelihood(y::A, Σ) where {A <: AbstractArray{T, N}} where {T, N}
+@doc raw"""
+    gaussiandensity(y::A, L; logdensity::Bool = true) where {A <: AbstractArray{T, 1}} where T
+	gaussiandensity(y::A, Σ; logdensity::Bool = true) where {A <: AbstractArray{T, N}} where {T, N}
 
-The log-likelihood function (up to an additive constant that does not affect
-optimisation) for `y` ~ 𝑁(0, `Σ`), with `L` the lower Cholesky factor of the
+Efficiently computes the density function for `y` ~ 𝑁(0, `Σ`), with `L` the lower Cholesky factor of the
 covariance matrix `Σ`.
 
 The second method assumes that the last dimension of `y` corresponds to the
 replicates dimension, and it exploits the fact that we need to compute
 the Cholesky factor `L` for these replicates once only.
+
+The density function is
+```math
+|2\pi\mathbf{\Sigma}|^{-1/2} \exp{-\frac{1}{2}\mathbf{y}^\top \mathbf{\Sigma}^{-1}\mathbf{y}},
+```
+and the log-density is
+```math
+-\frac{1}{2}\ln{2\pi}  -\frac{1}{2}\ln{|\mathbf{\Sigma}|} -\frac{1}{2}\mathbf{y}^\top \mathbf{\Sigma}^{-1}\mathbf{y}.
+```
 """
-function gaussianloglikelihood(y::A, L) where {A <: AbstractArray{T, 1}} where T
-    x = L \ y # solution to Lx = y. If we need non-zero μ in the future, use x = L \ (y - μ)
-    return -2logdet(L) - x'x
+function gaussiandensity(y::A, L; logdensity::Bool = true) where {A <: AbstractArray{T, 1}} where T
+	n = length(y)
+	x = L \ y # solution to Lx = y. If we need non-zero μ in the future, use x = L \ (y - μ)
+	l = -0.5n*log(2π) -logdet(L) -0.5x'x
+    return logdensity ? l : exp(l)
 end
 
-function gaussianloglikelihood(y::A, Σ) where {A <: AbstractArray{T, N}} where {T, N}
+function gaussiandensity(y::A, Σ; logdensity::Bool = true) where {A <: AbstractArray{T, N}} where {T, N}
 
 	# Here, we use `Symmetric()` to indicate that Σ is positive-definite;
 	# this can help to alleviate issues caused by rounding, as described at
 	# https://discourse.julialang.org/t/is-this-a-bug-with-cholesky/16970/3.
 	L  = cholesky(Symmetric(Σ)).L
-	ll = mapslices(y -> gaussianloglikelihood(vec(y), L), y, dims = 1:(N-1))
-	return sum(ll) # NB: Could improve computational efficiency using the diag trick
+	ll = mapslices(y -> gaussianlogdensity(vec(y), L), y, dims = 1:(N-1))
+	return sum(ll)
 end
+
 
 
 # ---- Bivariate density function for Schlather's model ----
