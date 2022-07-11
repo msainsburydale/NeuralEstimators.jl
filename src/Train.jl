@@ -319,7 +319,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train, Z_val;
 	verbose && println(" Initial validation risk = $initial_val_risk")
 
 	verbose && print("Computing the initial training risk...")
-	tmp = _quietDataLoader((indexdata(Z_train, 1:m), θ_val.θ), batchsize)
+	tmp = _quietDataLoader((indexdata(Z_train, 1:m), θ_train.θ), batchsize)
 	initial_train_risk = _lossdataloader(loss, tmp, θ̂, device)
 	verbose && println(" Initial training risk = $initial_train_risk")
 
