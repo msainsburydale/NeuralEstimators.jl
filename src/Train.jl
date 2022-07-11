@@ -1,6 +1,3 @@
-# TODO Could add argument to train, verbose::Bool = true, and could do the same for estimate().
-
-
 _common_kwd_args = """
 - `m`: sample sizes (either an `Integer` or a collection of `Integers`).
 - `batchsize::Integer = 32`
@@ -14,8 +11,6 @@ _common_kwd_args = """
 - `use_gpu::Bool = true`
 - `verbose::Bool = true`
 """
-
-
 
 """
 	train(θ̂, ξ, P; <keyword args>) where {P <: ParameterConfigurations}
@@ -138,7 +133,7 @@ end
 """
 	train(θ̂, ξ, θ_train::P, θ_val::P; <keyword args>) where {P <: ParameterConfigurations}
 
-Train the neural estimator `θ̂` by providing the training and validation sets
+Train the neural estimator `θ̂` by providing the training and validation parameter sets
 explicitly as `θ_train` and `θ_val`, which are both held fixed during training,
 as well as the invariant model information `ξ`.
 """
@@ -259,6 +254,126 @@ function train(θ̂, ξ, θ_train::P, θ_val::P;
 
     return θ̂
 end
+
+
+function indexdata(Z::V, m) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+	colons  = ntuple(_ -> (:), N - 1)
+	broadcast(z -> z[colons..., m], Z)
+end
+
+
+"""
+	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; <keyword args>) where {T, P <: ParameterConfigurations}
+
+Train the neural estimator `θ̂` by providing the training and validation parameter
+sets, `θ_train` and `θ_val`, and the training and validation data sets,
+`Z_train` and `Z_val`, all of which are held fixed during training.
+
+The sample size argument `m` is inferred from `Z_val`. The training data `Z_train`
+can contain `M` replicates, where `M` is a multiple of `m`; the training data will
+then be recycled to imitate on-the-fly simulation. For example, if `M = 50` and
+`m = 10`, epoch 1 uses the first 10 replicates, epoch 2 uses the second 10
+replicates, and so on, until epoch 6 again uses the first 10 replicates.
+
+Note that the elements of `Z_train` and `Z_val` should be equally replicated; that
+is, the size of the last dimension in each array in `Z_train` should be constant,
+and similarly for `Z_val`.
+"""
+function train(θ̂, θ_train::P, θ_val::P, Z_train, Z_val;
+		batchsize::Integer = 256,
+		epochs::Integer  = 100,
+		loss             = Flux.Losses.mae,
+		optimiser        = ADAM(1e-4),
+		savepath::String = "runs/",
+		stopping_epochs::Integer = 10,
+		use_gpu::Bool    = true,
+		verbose::Bool    = true
+		) where {P <: ParameterConfigurations}
+
+	@assert batchsize > 0
+	@assert epochs > 0
+	@assert stopping_epochs > 0
+
+	m = unique(broadcast(z -> size(z)[end], Z_val))
+	M = unique(broadcast(z -> size(z)[end], Z_train))
+	@assert length(m) == 1 "The elements of `Z_val` should be equally replicated; that is, the size of the last dimension in each array in `Z_val` should be constant."
+	@assert length(M) == 1 "The elements of `Z_train` should be equally replicated; that is, the size of the last dimension in each array in `Z_train` should be constant."
+	M = M[1]
+	m = m[1]
+	@assert M % m == 0 "The number of replicates in the training data, `M`, should be a multiple of the number of replicates in the validation data, `m`."
+
+	savebool = savepath != "" # turn off saving if savepath is an empty string
+	if savebool
+		loss_path = joinpath(savepath, "loss_per_epoch.bson")
+		if isfile(loss_path) rm(loss_path) end
+		if !ispath(savepath) mkpath(savepath) end
+	end
+
+	device = _checkgpu(use_gpu, verbose = verbose)
+    θ̂ = θ̂ |> device
+    γ = Flux.params(θ̂)
+
+	verbose && print("Computing the initial validation risk...")
+	Z_val = _quietDataLoader((Z_val, θ_val.θ), batchsize)
+	initial_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
+	verbose && println(" Initial validation risk = $initial_val_risk")
+
+	verbose && print("Computing the initial training risk...")
+	tmp = _quietDataLoader((indexdata(Z_train, 1:m), θ_val.θ), batchsize)
+	initial_train_risk = _lossdataloader(loss, tmp, θ̂, device)
+	verbose && println(" Initial training risk = $initial_train_risk")
+
+	# Initialise the loss per epoch matrix
+	loss_per_epoch = [initial_train_risk initial_val_risk;]
+
+	# Save the initial θ̂
+	savebool && _saveweights(θ̂, 0, savepath)
+
+	# Training data recycles every x epochs
+	x = M ÷ m
+	replicates = repeat([(1:m) .+ i*m for i ∈ 0:(x - 1)], outer = ceil(Integer, epochs/x))
+
+	local min_val_risk = initial_val_risk
+	local early_stopping_counter = 0
+	train_time = @elapsed for epoch in 1:epochs
+
+		train_loss = zero(initial_train_risk)
+
+		# For each batch update θ̂ and compute the training loss
+		Z_train_current = _quietDataLoader((indexdata(Z_train, replicates[epoch]), θ_train.θ), batchsize)
+		epoch_time_train = @elapsed for (Z, θ) in Z_train_current
+		   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+		end
+		train_loss = train_loss / size(θ_train, 2)
+
+		epoch_time_val = @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
+		loss_per_epoch = vcat(loss_per_epoch, [train_loss current_val_risk])
+		verbose && println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
+
+		# save the loss every epoch in case training is prematurely halted
+		savebool && @save loss_path loss_per_epoch
+
+		# If the current loss is better than the previous best, save θ̂ and
+		# update the minimum validation risk; otherwise, add to the early
+		# stopping counter
+		if current_val_risk <= min_val_risk
+			savebool && _saveweights(θ̂, epoch, savepath)
+			min_val_risk = current_val_risk
+			early_stopping_counter = 0
+		else
+			early_stopping_counter += 1
+			early_stopping_counter > stopping_epochs && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
+		end
+
+    end
+
+	# save key information and the best θ̂ as best_network.bson.
+	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
+	savebool && _savebestweights(savepath)
+
+    return θ̂
+end
+
 
 
 
