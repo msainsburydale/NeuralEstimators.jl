@@ -297,28 +297,28 @@ verbose = false
 end
 
 @testset "simulation" begin
-	S = rand(10, 2)
+	S = rand(Float32, 10, 2)
 	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
-	ρ = [0.6, 0.8]
-	ν = [0.5, 0.7]
+	ρ = Float32.([0.6, 0.8])
+	ν = Float32.([0.5, 0.7])
 	L = maternchols(D, ρ, ν)
 	L₁ = L[:, :, 1]
 	m = 5
 
-	simulateschlather(L₁, m)
+	@test eltype(simulateschlather(L₁, m)) == Float32
 	# @code_warntype simulateschlather(L₁, m)
 
-	σ = 0.1
-	simulategaussianprocess(L₁, σ, m)
+	σ = 0.1f0
+	@test eltype(simulategaussianprocess(L₁, σ, m)) == Float32
 	# @code_warntype simulategaussianprocess(L₁, σ, m)
 
-	θ = fill(0.5, 8)
+	θ = fill(0.5f0, 8)
 	s₀ = S[1, :]'
-	u = 0.7
+	u = 0.7f0
 	h = map(norm, eachslice(S .- s₀, dims = 1))
-	s₀_idx = findfirst(x -> x == 0.0, map(norm, eachslice(S .- s₀, dims = 1)))
-	simulateconditionalextremes(θ, L₁, h, s₀_idx, u, m)
-	# @code_warntype simulateconditionalextremes(θ, L₁, h, s₀_idx, u)
+	s₀_idx = findfirst(x -> x == 0.0, h)
+	@test eltype(simulateconditionalextremes(θ, L₁, h, s₀_idx, u, m)) == Float32
+	# using NeuralEstimators: delta, a, b, t, σ̃₀, Φ
 	# @code_warntype simulateconditionalextremes(θ, L₁, h, s₀_idx, u, m)
 end
 

@@ -118,4 +118,6 @@ Fₛ⁻¹.(p, μ, τ, δ)
 """
 fₛ(x, μ, τ, δ)   = δ * exp(-(abs((x - μ)/τ)^δ)) / (2τ * gamma(1/δ))
 Fₛ(q, μ, τ, δ)   = 0.5 + 0.5 * sign(q - μ) * (1 / gamma(1/δ)) * _incgammalowerunregularised(1/δ, abs((q - μ)/τ)^δ)
-Fₛ⁻¹(p, μ, τ, δ) = μ + sign(p - 0.5) * (τ^δ * quantile(Gamma(1/δ), 2 * abs(p - 0.5)))^(1/δ)
+# Fₛ⁻¹(p, μ, τ, δ) = μ + sign(p - 0.5) * (τ^δ * quantile(Gamma(1/δ), 2 * abs(p - 0.5)))^(1/δ)
+Fₛ⁻¹(p::T, μ::T, τ::T, δ::T) where T <: Number = μ + sign(p - T(0.5)) * (τ^δ * quantile(Gamma(1/δ), 2 * abs(p - T(0.5))))^(1/δ)
+# FIXME these aren't type stable!!
