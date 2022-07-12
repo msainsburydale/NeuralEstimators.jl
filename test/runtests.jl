@@ -290,28 +290,36 @@ verbose = false
 			nonparametricbootstrap(θ̂, Z[1], blocks, use_gpu = use_gpu)
 		end
 
-		@testset "simulation" begin
-			S = rand(10, 2)
-			D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
-			ρ = [0.6, 0.8]
-			ν = [0.5, 0.7]
-			L = maternchols(D, ρ, ν)
-			L₁ = L[:, :, 1]
-			m = 5
 
-			simulateschlather(L₁, m)
-
-			σ = 0.1
-			simulategaussianprocess(L₁, σ, m)
-
-			θ = fill(0.5, 8, 1)
-			s₀ = S[1, :]'
-			u = 0.7
-			simulateconditionalextremes(θ, L₁, S, s₀, u, m)
-		end
 
 
 	end
+end
+
+@testset "simulation" begin
+	S = rand(10, 2)
+	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
+	ρ = [0.6, 0.8]
+	ν = [0.5, 0.7]
+	L = maternchols(D, ρ, ν)
+	L₁ = L[:, :, 1]
+	m = 5
+
+	simulateschlather(L₁, m)
+	# @code_warntype simulateschlather(L₁, m)
+
+	σ = 0.1
+	simulategaussianprocess(L₁, σ, m)
+	# @code_warntype simulategaussianprocess(L₁, σ, m)
+
+	θ = fill(0.5, 8)
+	s₀ = S[1, :]'
+	u = 0.7
+	h = map(norm, eachslice(S .- s₀, dims = 1))
+	s₀_idx = findfirst(x -> x == 0.0, map(norm, eachslice(S .- s₀, dims = 1)))
+	simulateconditionalextremes(θ, L₁, h, s₀_idx, u, m)
+	# @code_warntype simulateconditionalextremes(θ, L₁, h, s₀_idx, u)
+	# @code_warntype simulateconditionalextremes(θ, L₁, h, s₀_idx, u, m)
 end
 
 

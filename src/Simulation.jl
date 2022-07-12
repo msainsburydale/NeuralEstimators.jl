@@ -8,8 +8,6 @@
 
 Generic method that simulates `num_rep` sets of  sets of `m` independent replicates for each parameter
 configuration by calling `simulate(parameters, ξ, m)`.
-
-See also [Data simulation](@ref).
 """
 function simulate(parameters::P, ξ, m::Integer, num_rep::Integer) where {P <: ParameterConfigurations}
 	v = [simulate(parameters, ξ, m) for i ∈ 1:num_rep]
@@ -125,40 +123,35 @@ C̃(h, ρ, ν) = matern(h, ρ, ν)
 t(ỹ₀₁, μ, τ, δ) = Fₛ⁻¹(Φ(ỹ₀₁), μ, τ, δ)
 
 
-
 """
-	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, S, s₀, u)
-	simulateconditionalextremes(θ, L::AbstractArray{T, 2}, S, s₀, u, m::Integer)
-
+	simulateconditionalextremes(θ::AbstractVector{T}, L::AbstractArray{T, 2}, h::AbstractVector{T}, s₀_idx::Integer, u::T) where T <: Number
+	simulateconditionalextremes(θ::AbstractVector{T}, L::AbstractArray{T, 2}, h::AbstractVector{T}, s₀_idx::Integer, u::T, m::Integer) where T <: Number
 
 Simulates from the spatial conditional extremes model.
 """
 function simulateconditionalextremes(
-	θ, L::AbstractArray{T, 2}, S, s₀, u, m::Integer
+	θ::AbstractVector{T}, L::AbstractArray{T, 2}, h::AbstractVector{T}, s₀_idx::Integer, u::T, m::Integer
 	) where T <: Number
 
 	n = size(L, 1)
 	Z = similar(L, n, m)
 	for k ∈ 1:m
-		Z[:, k] = simulateconditionalextremes(θ, L, S, s₀, u)
+		Z[:, k] = simulateconditionalextremes(θ, L, h, s₀_idx, u)
 	end
 
 	return Z
 end
 
+
 function simulateconditionalextremes(
-	θ, L::AbstractArray{T, 2}, S, s₀, u
+	θ::AbstractVector{T}, L::AbstractArray{T, 2}, h::AbstractVector{T}, s₀_idx::Integer, u::T
 	) where T <: Number
 
-	@assert size(θ, 1) == 8 "The conditional extremes model requires 8 parameters: `θ` should be an 8-dimensional vector."
-
-	# NB: More general to use D = pairwise(Euclidean(), S, S, dims = 1), or similar. Leave
-	# for now to avoid dependency on Distances.jl.
-	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
-	h = map(norm, eachslice(S .- s₀, dims = 1))
-	s₀_idx = findfirst(x -> x == 0.0, map(norm, eachslice(S .- s₀, dims = 1)))
-
-	@assert !isnothing(s₀_idx) "The provided conditioning site `s₀` does not match any of the spatial locations in `S`."
+	@assert length(θ) == 8 
+	@assert s₀_idx > 0
+	@assert s₀_idx <= length(h)
+	@assert size(L, 1) == size(L, 2)
+	@assert size(L, 1) == length(h)
 
 	# Parameters associated with a(.) and b(.):
 	κ = θ[1]
@@ -204,6 +197,7 @@ function simulateconditionalextremes(
 
 	return Z
 end
+
 
 
 
