@@ -130,6 +130,7 @@ t(ỹ₀₁, μ, τ, δ) = Fₛ⁻¹(Φ(ỹ₀₁), μ, τ, δ)
 Simulates from the spatial conditional extremes model for parameters.
 
 # Examples
+```
 S = rand(Float32, 10, 2)
 D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
 L = maternchols(D, 0.6f0, 0.5f0)
@@ -138,6 +139,7 @@ h = map(norm, eachslice(S .- s₀, dims = 1))
 s₀_idx = findfirst(x -> x == 0.0, h)
 u = 0.7f0
 simulateconditionalextremes(θ, L[:, :, 1], h, s₀_idx, u)
+```
 """
 function simulateconditionalextremes(
 	θ::AbstractVector{T}, L::AbstractArray{T, 2}, h::AbstractVector{T}, s₀_idx::Integer, u::T, m::Integer
@@ -268,6 +270,8 @@ function, ``\\gamma(a, x) = \\int_{0}^x t^{a-1}e^{-t}dt``.
 _incgammalowerunregularised(a, x) = incgamma(a, x; upper = false, reg = false)
 
 
+# FIXME This is a bit confusing. I don't think this should be a function in
+# NeuralEstimators.jl.
 """
 	objectindices(objects, θ::AbstractMatrix{T}) where T
 Returns a vector of indices giving element of `objects` associated with each

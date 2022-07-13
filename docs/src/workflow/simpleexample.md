@@ -42,10 +42,11 @@ We then choose an architecture for modelling ψ(⋅) and ϕ(⋅) in the Deep Set
 and initialise the neural estimator as a [`DeepSet`](@ref) object.
 ```
 p = 1
+n = 1
 w = 32
 q = 16
 ψ = Chain(Dense(n, w, relu), Dense(w, q, relu))
-ϕ = Chain(Dense(q, w, relu), Dense(w, p), flatten)
+ϕ = Chain(Dense(q, w, relu), Dense(w, p), Flux.flatten)
 θ̂ = DeepSet(ψ, ϕ)
 ```
 
