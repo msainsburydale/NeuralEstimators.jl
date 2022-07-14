@@ -11,6 +11,8 @@ scaledlogit(f, a, b) = log((f - a) / (b - f))
 
 # ---- Efficient gaussianloglikelihood ----
 
+# TODO Add unit tests for these density functions
+
 @doc raw"""
     gaussiandensity(y::A, L; logdensity::Bool = true) where {A <: AbstractArray{T, 1}} where T
 	gaussiandensity(y::A, Σ; logdensity::Bool = true) where {A <: AbstractArray{T, N}} where {T, N}
@@ -44,7 +46,7 @@ function gaussiandensity(y::A, Σ; logdensity::Bool = true) where {A <: Abstract
 	# this can help to alleviate issues caused by rounding, as described at
 	# https://discourse.julialang.org/t/is-this-a-bug-with-cholesky/16970/3.
 	L  = cholesky(Symmetric(Σ)).L
-	ll = mapslices(y -> gaussianlogdensity(vec(y), L), y, dims = 1:(N-1))
+	ll = mapslices(y -> gaussiandensity(vec(y), L, logdensity = logdensity), y, dims = 1:(N-1))
 	return sum(ll)
 end
 
