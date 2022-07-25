@@ -30,7 +30,7 @@ The density function is
 ```
 and the log-density is
 ```math
--\frac{1}{2}\ln{2\pi}  -\frac{1}{2}\ln{|\mathbf{\Sigma}|} -\frac{1}{2}\mathbf{y}^\top \mathbf{\Sigma}^{-1}\mathbf{y}.
+-\frac{n}{2}\ln{2\pi}  -\frac{1}{2}\ln{|\mathbf{\Sigma}|} -\frac{1}{2}\mathbf{y}^\top \mathbf{\Sigma}^{-1}\mathbf{y}.
 ```
 """
 function gaussiandensity(y::A, L; logdensity::Bool = true) where {A <: AbstractArray{T, 1}} where T
@@ -74,28 +74,16 @@ _schlatherbivariatecdf(z₁, z₂, ψ) = G(z₁, z₂, ψ)
 
 # ---- Subbotin (delta-Laplace) distribution ----
 
-# TODO As written, there is no documentation for the function Fₛ and Fₛ⁻¹. Might
-# need to define a Subbotin object, which would also be in line with Distributions.jl.
-# See the following for a guide:
+# See the following for a guide on extending Distributions:
 # https://github.com/JuliaStats/Distributions.jl/blob/6ab4c1f5bd1b5b6890bbb6afc9d3349dc90cad6a/src/univariate/continuous/normal.jl
 # https://juliastats.org/Distributions.jl/stable/extends/
-# struct Subbotin{T <: Real} <: ContinuousUnivariateDistribution
-# 	μ::T
-# 	τ::T
-# 	δ::T
-# 	Subbotin{T}(µ::T, τ::T, δ::T) where {T <: Real} = new{T}(µ, τ, δ)
-# end
-# const DeltaLaplace = Normal
-
 
 @doc raw"""
-	fₛ(x, μ, τ, δ)
-	Fₛ(q, μ, τ, δ)
-	Fₛ⁻¹(p, μ, τ, δ)
+	Subbotin(µ, τ, δ)
 
-The density, distribution, and quantile functions of the Subbotin (delta-Laplace)
-distribution with location parameter `μ`, scale parameter `τ`, and shape
-parameter `δ`:
+The Subbotin (delta-Laplace) distribution with location parameter `μ`,
+scale parameter `τ>0`, and shape parameter `δ>0` has density, distribution, and
+quantile function,
 
 ```math
  f_S(y; \mu, \tau, \delta) = \frac{\delta}{2\tau \Gamma(1/\delta)} \exp{\left(-\left|\frac{y - \mu}{\tau}\right|^\delta\right)},\\
@@ -103,23 +91,71 @@ parameter `δ`:
  F_S^{-1}(p; \mu, \tau, \delta) = \text{sign}(p - 0.5)G^{-1}\left(2|p - 0.5|; \frac{1}{\delta}, \frac{1}{(k\tau)^\delta}\right)^{1/\delta} + \mu,
 ```
 
-with ``\gamma(\cdot)`` and ``G^{-1}(\cdot)`` the unnormalised incomplete lower gamma function and quantile function of the Gamma distribution, respectively.
+where ``\gamma(\cdot)`` is the unnormalised incomplete lower gamma function and ``G^{-1}(\cdot)``  is the quantile function of the Gamma distribution.
 
 # Examples
-```
-p = [0.025, 0.05, 0.5, 0.9, 0.95, 0.975]
+```julia
+d = Subbotin(0.7, 2, 2.5)
 
-# Standard Gaussian:
+logpdf(d, 2.0)
+cdf(d, 2.0)
+quantile(d, 0.7)
+
+# Standard Gaussian distribution:
 μ = 0.0; τ = sqrt(2); δ = 2.0
-Fₛ⁻¹.(p, μ, τ, δ)
+Subbotin(μ, τ, δ)
 
-# Standard Laplace:
+# Standard Laplace distribution:
 μ = 0.0; τ = 1.0; δ = 1.0
-Fₛ⁻¹.(p, μ, τ, δ)
+Subbotin(μ, τ, δ)
 ```
 """
-fₛ(x, μ, τ, δ)   = δ * exp(-(abs((x - μ)/τ)^δ)) / (2τ * gamma(1/δ))
+struct Subbotin{T <: Real} <: ContinuousUnivariateDistribution
+	μ::T
+	τ::T
+	δ::T
+	Subbotin{T}(µ::T, τ::T, δ::T) where {T <: Real} = new{T}(µ, τ, δ)
+end
+
+# Aliases
+const DeltaLaplace = Subbotin
+const GeneralisedGaussian = Subbotin
+
+# Constructors
+function Subbotin(μ::T, τ::T, δ::T) where {T <: Real}
+	# allow zero incase of numerical underflow
+    @assert τ >= 0
+	@assert δ >= 0
+    return Subbotin{T}(µ, τ, δ)
+end
+Subbotin(μ::Real, τ::Real, δ::Real) = Subbotin(promote(μ, τ, δ)...)
+Subbotin(μ::Integer, τ::Integer, δ::Integer) = Subbotin(float(μ), float(τ), float(δ))
+
+# Methods
+cdf(d::Subbotin, q::Real) = Fₛ(q, d.μ, d.τ, d.δ)
+logpdf(d::Subbotin, x::Real) = log(d.δ)  - (abs((x - d.μ)/d.τ))^d.δ - (log(2) + log(d.τ) + loggamma(1/d.δ))
+quantile(d::Subbotin, p::Real) = Fₛ⁻¹(p, d.μ, d.τ, d.δ)
+minimum(d::Subbotin)  = -Inf
+maximum(d::Subbotin)  = Inf
+insupport(d::Subbotin, x::Real) = true
+mean(d::Subbotin)     = d.μ
+var(d::Subbotin)      = d.τ^2 * gamma((3*one(d.δ))/d.δ) / gamma(one(d.δ)/d.δ)
+mode(d::Subbotin)     = d.μ
+skewness(d::Subbotin) = zero(d.μ)
+
+# Note that I still keep these as separate functions for backwards compatability
+# with code in the paper.
+fₛ(x, μ, τ, δ)   = δ * exp(-(abs((x - μ)/τ))^δ) / (2τ * gamma(1/δ))
 Fₛ(q, μ, τ, δ)   = 0.5 + 0.5 * sign(q - μ) * (1 / gamma(1/δ)) * _incgammalowerunregularised(1/δ, abs((q - μ)/τ)^δ)
-# Fₛ⁻¹(p, μ, τ, δ) = μ + sign(p - 0.5) * (τ^δ * quantile(Gamma(1/δ), 2 * abs(p - 0.5)))^(1/δ)
-Fₛ⁻¹(p::T, μ::T, τ::T, δ::T) where T <: Number = μ + sign(p - T(0.5)) * (τ^δ * quantile(Gamma(1/δ), 2 * abs(p - T(0.5))))^(1/δ)
-# FIXME these aren't type stable!!
+Fₛ⁻¹(p::T, μ::T, τ::T, δ::T) where T <: Real = μ + sign(p - T(0.5)) * (τ^δ * quantile(Gamma(1/δ), 2 * abs(p - T(0.5))))^(1/δ)
+
+# NB Distributions.jl say that we should implement the following methods,
+# but I haven't done so because I haven't need to use them yet.
+# Required:
+# rand(::AbstractRNG, d::UnivariateDistribution)
+# kurtosis(d::Distribution, ::Bool)
+# entropy(d::Subbotin, ::Real)
+# sampler(d::Distribution)
+# Optional:
+# mgf(d::UnivariateDistribution, ::Any)
+# cf(d::UnivariateDistribution, ::Any)

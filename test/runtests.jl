@@ -8,7 +8,7 @@ import NeuralEstimators: simulate
 using CUDA
 using DataFrames
 using LinearAlgebra: norm
-using Distributions: Normal
+using Distributions: Normal, cdf, logpdf, quantile
 using Flux
 using Statistics: mean, sum
 using Test
@@ -119,21 +119,6 @@ end
 	@test all(minimum.(Ω) .<= scaledlogistic.(θ, Ω) .<= maximum.(Ω))
 end
 
-# This could just be done with a jldoctest, since this is just a copy paste from the example.
-@testset "objectindices" begin
-	K = 6
-	N = 3
-	σₑ = rand(K)
-	ρ = rand(N)
-	ν = rand(N)
-	S = expandgrid(1:9, 1:9)
-	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
-	L = maternchols(D, ρ, ν)
-	ρ = repeat(ρ, inner = K ÷ N)
-	ν = repeat(ν, inner = K ÷ N)
-	θ = hcat(σₑ, ρ, ν)'
-	@test objectindices(L, θ) == repeat(1:N, inner = K ÷ N)
-end
 
 @testset "schlatherbivariatedensity" begin
 
@@ -151,7 +136,7 @@ end
 	finitedifference_check(3.3, 3.8, 0.9)
 end
 
-
+using NeuralEstimators: fₛ, Fₛ, Fₛ⁻¹
 @testset "SubbotinDistribution" begin
 
 	# Check that the pdf is consistent with the cdf using finite differences
@@ -169,21 +154,21 @@ end
 	μ = 0.5; τ = 1.3; δ = 2.4; y = 0.3
 	@test abs(y - Fₛ⁻¹(Fₛ(y, μ, τ, δ), μ, τ, δ)) < 0.0001
 	# @test abs(y - t⁻¹(t(y, μ, τ, δ), μ, τ, δ)) < 0.0001
-end
 
-@testset "objectindices" begin
-	K = 6
-	N = 3
-	σₑ = rand(K)
-	ρ = rand(N)
-	ν = rand(N)
-	S = expandgrid(1:9, 1:9)
-	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
-	L = maternchols(D, ρ, ν)
-	ρ = repeat(ρ, inner = K ÷ N)
-	ν = repeat(ν, inner = K ÷ N)
-	θ = hcat(σₑ, ρ, ν)'
-	@test objectindices(L, θ) == repeat(1:N, inner = K ÷ N)
+	d = Subbotin(μ, τ, δ)
+	@test mean(d) == μ
+	@test logpdf(d, y) ≈ log(fₛ(y, μ, τ, δ))
+	@test cdf(d, y) ≈ Fₛ(y, μ, τ, δ)
+	@test quantile(d, cdf(d, y)) ≈ y
+
+	# # Standard Gaussian distribution:
+    # μ = 0.0; τ = sqrt(2); δ = 2.0
+	# d = Subbotin(μ, τ, δ)
+	#
+	# # Standard Laplace distribution:
+	# μ = 0.0; τ = 1.0; δ = 1.0
+	# d = Subbotin(μ, τ, δ)
+
 end
 
 

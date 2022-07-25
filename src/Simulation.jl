@@ -58,14 +58,13 @@ end
 	simulateschlather(L::AbstractArray{T, 2}; C = 3.5)
 	simulateschlather(L::AbstractArray{T, 2}, m::Integer; C = 3.5)
 
-Simulates from Schlather's max-stable model. Based on Algorithm 1.2.2 of Dey DK, Yan J (2016). Extreme value modeling and
-risk analysis: methods and applications. CRC Press, Boca Raton, Florida.
+Simulates from Schlather's max-stable model.
 """
 function simulateschlather(L::AbstractArray{T, 2}; C = 3.5) where T <: Number
 
 	n = size(L, 1)  # number of spatial locations
 
-	Z   = fill(zero(T), n) # TODO Why fill this with zeros? Just do undef.
+	Z   = fill(zero(T), n)
 	ζ⁻¹ = randexp(T)
 	ζ   = 1 / ζ⁻¹
 
@@ -268,41 +267,3 @@ For positive `a` and `x`, computes the lower unregularised incomplete gamma
 function, ``\\gamma(a, x) = \\int_{0}^x t^{a-1}e^{-t}dt``.
 """
 _incgammalowerunregularised(a, x) = incgamma(a, x; upper = false, reg = false)
-
-
-# FIXME This is a bit confusing. I don't think this should be a function in
-# NeuralEstimators.jl.
-"""
-	objectindices(objects, θ::AbstractMatrix{T}) where T
-Returns a vector of indices giving element of `objects` associated with each
-parameter configuration in `θ`.
-
-The number of parameter configurations, `K = size(θ, 2)`, must be a multiple of
-the number of objects, `N = size(objects)[end]`. Further, repeated parameters
-used to generate `objects` must be stored in `θ` after using the `inner` keyword
-argument of `repeat()` (see example below).
-
-# Examples
-```
-K = 6
-N = 3
-σₑ = rand(K)
-ρ = rand(N)
-ν = rand(N)
-S = expandgrid(1:9, 1:9)
-D = pairwise(Euclidean(), S, S, dims = 1)
-L = maternchols(D, ρ, ν)
-ρ = repeat(ρ, inner = K ÷ N)
-ν = repeat(ν, inner = K ÷ N)
-θ = hcat(σₑ, ρ, ν)'
-objectindices(L, θ)
-```
-"""
-function objectindices(objects, θ::AbstractMatrix{T}) where T
-
-	K = size(θ, 2)
-	N = size(objects)[end]
-	@assert K % N == 0 "The nu"
-
-	return repeat(1:N, inner = K ÷ N)
-end

@@ -16,7 +16,7 @@ gaussiandensity
 
 schlatherbivariatedensity
 
-fₛ
+Subbotin
 ```
 
 ## Miscellaneous functions
@@ -26,6 +26,4 @@ matern
 maternchols
 
 incgamma
-
-objectindices
 ```

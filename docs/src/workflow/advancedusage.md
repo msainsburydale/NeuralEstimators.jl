@@ -37,41 +37,38 @@ For some models, computationally expensive intermediate objects, such as Cholesk
 
 Recall that in the [More complicated example](@ref) considered previously, we computed the Cholesky factor for each parameter configuration. However, for that model, the Cholesky factor depends only on ``\rho`` and, hence, we can modify our design to exploit this fact and significantly reduce the computational burden in generating [`ParameterConfigurations`](@ref) objects. The following is one such approach.
 
-
-The key to our approach is the inclusion of an additional field in `Parameters` that gives index of the Cholesky factor associated with each parameter configuration:
+The key to our approach is the inclusion of an additional field in `Parameters` that gives the index of the Cholesky factor associated with each parameter configuration: Specifically, we add a pointer `chol_idx` where `chol_idx[i]` gives the Cholesky factor associated with parameter configuration `θ[:, i]`.
 
 ```
-struct Parameters <: ParameterConfigurations
-	θ
-	chols
-	chol_index
+struct Parameters{T, I} <: ParameterConfigurations
+	θ::Matrix{T}
+		chols::Array{Float64, 3}
+	chol_idx::Vector{I}
 end
 ```
 
-Then, we adapt our `Parameters` constructor so that, instead of sampling `K` parameter pairs independently, we sample `K ÷ N` values of `ρ`, and then repeat these parameters so that the final parameter vector has length `K`. The advantage of this approach is clear, in that we need only compute `K ÷ N` Cholesky factors.
+Then, we adapt our `Parameters` constructor so that each of the `K` parameter pairs are repeated `J` times. Since the parameters are repeated, we need only compute `K` Cholesky factors.
 
 ```
-function Parameters(ξ, K::Integer; N = 10)
-
-	@assert K % N == 0
+function Parameters(ξ, K::Integer; J::Integer = 10)
 
 	Ω = ξ.Ω
 
-	σ = rand(Ω.σ, N)
-	ρ = rand(Ω.ρ, K ÷ N)
-
+	σ     = rand(Ω.σ, K)
+	ρ     = rand(Ω.ρ, K)
 	chols = maternchols(ξ.D, ρ, 1)
 
-	# Construct θ such that σ runs faster than ρ
-	σ = repeat(σ, outer = K ÷ N)
-	ρ = repeat(ρ, inner = N)
+	# Construct θ with σ and ρ repeated J times
+	σ = repeat(σ, inner = J)
+	ρ = repeat(ρ, inner = J)
 	θ = hcat(σ, ρ)'
 
-	Parameters(θ, chols, objectindices(chols, θ))
+	# Create a pointer for the Cholesky factors
+	chol_idx = repeat(1:K, inner = J)
+
+	Parameters(θ, chols, 	chol_idx)
 end
 ```
-
-The above constructor makes use of the the convenience function [`objectindices`](@ref), which computes the index of the Cholesky factor associated with each parameter configuration (and with intermediate objects more generally).
 
 Note that the default subsetting method for `ParameterConfigurations` objects automatically handles cases like this; in some applications, however, it may be necessary to define an appropriate subsetting method by overloading [`subsetparameters`](@ref).
 
