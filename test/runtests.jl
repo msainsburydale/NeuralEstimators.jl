@@ -208,9 +208,8 @@ end
 
 MLE(Z, ξ) = MLE(Z) # this function doesn't actually need ξ, but include it for testing
 
+verbose = false # verbose used in the NeuralEstimators code
 
-
-verbose = false
 
 @testset verbose = true "$key" for key ∈ keys(estimators)
 
@@ -261,11 +260,25 @@ verbose = false
 		end
 
 		@testset "assess" begin
-			assessment = assess([θ̂], ξ, parameters, m = [30, 90, 150], use_gpu = use_gpu, verbose = verbose)
+
+			all_m = [10, 20, 30]
+
+			# Method that does not require the user to provide data
+			assessment = assess([θ̂], ξ, parameters, m = all_m, use_gpu = use_gpu, verbose = verbose)
+			@test typeof(merge(assessment)) == DataFrame
+
+			# Method that require the user to provide data: J == 1
+			Z_test = [simulate(parameters, ξ, m) for m ∈ all_m]
+			assessment = assess([θ̂], ξ, parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
+			@test typeof(merge(assessment)) == DataFrame
+
+			# Method that require the user to provide data: J == 5 > 1
+			Z_test = [simulate(parameters, ξ, m, 5) for m ∈ all_m]
+			assessment = assess([θ̂], ξ, parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
 			@test typeof(merge(assessment)) == DataFrame
 
 			# Test that estimators needing invariant model information can be used:
-			assess([MLE], ξ, parameters, m = [30, 90, 150], verbose = verbose)
+			assess([MLE], ξ, parameters, m = all_m, verbose = verbose)
 		end
 
 		@testset "bootstrap" begin
@@ -274,10 +287,6 @@ verbose = false
 			blocks = rand(1:2, size(Z[1])[end])
 			nonparametricbootstrap(θ̂, Z[1], blocks, use_gpu = use_gpu)
 		end
-
-
-
-
 	end
 end
 
