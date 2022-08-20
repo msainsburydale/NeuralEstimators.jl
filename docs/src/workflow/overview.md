@@ -8,7 +8,7 @@ To develop a neural estimator with `NeuralEstimators.jl`,
 - Implicitly define the statistical model by overloading the function [`simulate`](@ref).
 - Initialise neural networks `ψ` and `ϕ`, and a [`DeepSet`](@ref) object `θ̂ = DeepSet(ψ, ϕ)`.
 - Train `θ̂` using [`train`](@ref) under an arbitrary loss function.
-- Test `θ̂` using [`estimate`](@ref).
+- Assess `θ̂` using [`assess`](@ref).
 - Apply `θ̂` to a real data set, using [`parametricbootstrap`](@ref) or [`nonparametricbootstrap`](@ref) to estimate the distribution of the estimator and, hence, facilitate uncertainty quantification.
 
-For clarity, see a [Simple example](@ref) and a [More complicated example](@ref). Once familiar with the basic workflow, see [Advanced usage](@ref) for some important practical considerations and how to construct neural estimators most effectively.
+For clarity, see the [Examples](@ref) and, once familiar with the basic workflow, see [Advanced usage](@ref) for some practical considerations and how to construct neural estimators most effectively.

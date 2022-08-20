@@ -260,12 +260,12 @@ verbose = false
 			@test θ̂₁ ≈ θ̂₂ # checked that this is fine by seeing if the following replacement fixes things: @test maximum(abs.(θ̂₁ .- θ̂₂)) < 0.0001
 		end
 
-		@testset "estimate" begin
-			estimates = estimate([θ̂], ξ, parameters, m = [30, 90, 150], use_gpu = use_gpu, verbose = verbose)
-			@test typeof(merge(estimates)) == DataFrame
+		@testset "assess" begin
+			assessment = assess([θ̂], ξ, parameters, m = [30, 90, 150], use_gpu = use_gpu, verbose = verbose)
+			@test typeof(merge(assessment)) == DataFrame
 
 			# Test that estimators needing invariant model information can be used:
-			estimate([MLE], ξ, parameters, m = [30, 90, 150], verbose = verbose)
+			assess([MLE], ξ, parameters, m = [30, 90, 150], verbose = verbose)
 		end
 
 		@testset "bootstrap" begin

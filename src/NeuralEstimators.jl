@@ -44,9 +44,9 @@ include("densities.jl")
 export train
 include("Train.jl")
 
-export estimate, Estimates
+export assess, Assessment
 import Base: merge
-include("Estimate.jl")
+include("Assess.jl")
 
 export parametricbootstrap, nonparametricbootstrap
 include("Bootstrap.jl")
@@ -56,16 +56,18 @@ include("UtilityFunctions.jl")
 
 end
 
-# TODO
-# - Document the simulation functions. Also add an argument stabilise_variance::Bool = true for the Schlather and conditional extremes models. (Probably should set it false by default)
-# - Include julia versions of plotrisk() and plotjointdistribution(). Then, NeuralEstimators.jl will be self contained. A nice way to do this would be to Julia RCall() to NeuralEstimatorsR.
+
+# TODO NeuralEstimators.R
+# - For now, it may be easier to focus NeuralEsimators.R to the method of
+#   train() that keeps the data fixed. Then, R users won't have to worry about
+#   defining a data simulator.
+# - Vignette showing i) pure R treatment using wrappers and ii) exploiting the
+#   full functionality of NeuralEsimators.jl from R.
+
 
 # TODO
-# 1.	NeuralEstimators.R
-# a.	Work on the vignette when I get into my office.
-# b.	Workflow functions.
-#       i.	Right now, I don’t think there’s too much that I can add workflow wise. I’m going to require people to write Julia code for Parameters and simulate(), so it’s not too hard for them to simply write the calls to train() and estimate(). I think this makes the most sense since then NeuralEsimatorsR will simply be a few small plotting functions.
-#       ii.	It might not be too hard to have simple wrappers around train() and estimate(),
+# - Document the simulation functions. Add stabilise_variance::Bool = false for
+#   the Schlather and conditional extremes models.
 
 
 # TODO once I've made the repo public:
@@ -82,3 +84,10 @@ end
 # - See if DeepSet.jl is something that the Flux people would like to include. (They may also improve the code.)
 # - With the fixed parameters method of train, there seems to be substantial overhead with my current implementation of simulation on the fly. When epochs_per_Z_refresh = 1, the run-time increases by a factor of 4 for the Gaussian process with nu varied and with m = 1. For now, I’ve added an argument simulate_on_the_fly::Bool, which allows us not to switch off on-the-fly simulation even when epochs_per_Z_refresh = 1. However, it would be good to reduce this overhead.
 # - Callback function for plotting during training! See https://www.youtube.com/watch?v=ObYDHi_jJXk&ab_channel=TheJuliaProgrammingLanguage. Also, I know there is a specific module for call backs while training Flux models, so may this is already possible in Julia too. In either case, I think train() should have an additional argument, callback. See also the example at: https://github.com/stefan-m-lenz/JuliaConnectoR.
+# - Frameworks based on Neyman inversion allow for confidence sets with correct conditional coverage.
+# - Include julia versions of plotrisk() and plotjointdistribution(). Then, NeuralEstimators.jl will be self contained. A nice way to do this would be to Julia RCall() to NeuralEstimatorsR.
+
+
+## TODO (save these points for writing the manuscript later)
+# Why Julia?
+# Julia has many [attractive features](https://julialang.org/); in particular, it has been designed to alleviate the so-called two-language problem, so that it is both easily developed and fast in its execution. This means that users can write performant code for data simulation without needing to vectorise (i.e., `for` loops are fine, which is often very helpful). Further, many Julia packages are written entirely in Julia and, hence, their source code is easily understood and extended; this includes `NeuralEstimators` and the deep learning framework on which it is built upon, [Flux](https://fluxml.ai/Flux.jl/stable/).

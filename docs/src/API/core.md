@@ -1,6 +1,9 @@
 # Core functions
 
-## Parameters
+This page documents the functions that are central to the workflow of `NeuralEstimators`. Its organisation reflects the order in which these functions appear in a standard implementation; that is, from storing parameters sampled from the prior distribution, to uncertainty quantification of the final estimates via bootstrapping.
+
+
+## Storing parameters
 
 ```@docs
 ParameterConfigurations
@@ -8,15 +11,15 @@ ParameterConfigurations
 subsetparameters
 ```
 
-## Simulation
+## Data simulation
 
 ```@docs
 simulate
 ```
 
-## Deep Set representation
+## Neural estimator representations
 
-### Vanilla Deep Set
+### Deep Set (vanilla)
 
 ```@docs
 DeepSet
@@ -24,7 +27,7 @@ DeepSet
 DeepSet(ψ, ϕ; aggregation::String)
 ```
 
-### Deep Set with expert summary statistics
+### Deep Set (with expert summary statistics)
 
 ```@docs
 DeepSetExpert
@@ -36,7 +39,7 @@ DeepSetExpert(ψ, ϕ, S; aggregation::String)
 samplesize
 ```
 
-### Piecewise Deep Set neural estimators
+### Piecewise neural estimators
 
 ```@docs
 DeepSetPiecewise
@@ -51,14 +54,14 @@ There are two training methods. For both methods, the validation parameters and 
 train
 ```
 
-## Estimation
+## Assessment
 
 ```@docs
-estimate
+assess
 
-Estimates
+Assessment
 
-merge(::Estimates)
+merge(::Assessment)
 ```
 
 ## Bootstrapping

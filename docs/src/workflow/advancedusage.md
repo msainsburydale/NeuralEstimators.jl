@@ -35,7 +35,7 @@ The keyword arguments `epochs_per_θ_refresh` and `epochs_per_Z_refresh` in `tra
 
 For some models, computationally expensive intermediate objects, such as Cholesky factors when working with Gaussian process models, can be shared between multiple parameter configurations (Gerber and Nychka, 2021), and this can significantly reduce the training time and alleviate memory pressure.
 
-Recall that in the [More complicated example](@ref) considered previously, we computed the Cholesky factor for each parameter configuration. However, for that model, the Cholesky factor depends only on ``\rho`` and, hence, we can modify our design to exploit this fact and significantly reduce the computational burden in generating [`ParameterConfigurations`](@ref) objects. The following is one such approach.
+Recall that in the [Gaussian process model](@ref) example, we computed the Cholesky factor for each parameter configuration. However, for that model, the Cholesky factor depends only on ``\rho`` and, hence, we can modify our design to exploit this fact and significantly reduce the computational burden in generating [`ParameterConfigurations`](@ref) objects. The following is one such approach.
 
 The key to our approach is the inclusion of an additional field in `Parameters` that gives the index of the Cholesky factor associated with each parameter configuration: Specifically, we add a pointer `chol_idx` where `chol_idx[i]` gives the Cholesky factor associated with parameter configuration `θ[:, i]`.
 

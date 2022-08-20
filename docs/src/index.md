@@ -1,13 +1,13 @@
 # NeuralEstimators
 
-Neural estimators are a recent approach to likelihood-free inference, and have emerged as a promising alternative to the well-establish approximate Bayesian computation (ABC). `NeuralEstimators` aims to faciliate the development of neural estimators in a user-friendly manner. In particular, it aims to alleviate the user from the substantial amount of boilerplate code needed to implement neural estimators from scratch. To this end, the main task asked of the user is to implicitly define the statistical model by providing a function for simulating data; everything else is handled by `NeuralEstimators`.
+A *neural estimator* is a neural network that takes data as input, transforms them via a composition of nonlinear mappings, and provides a parameter estimate as an output. Neural estimators, have recently emerged as a promising alternative to traditional likelihood-free approaches, such approximate Bayesian computation (ABC). Neural estimators, once "trained", have two main advantages over conventional estimators:  First, neural estimators are fast with a predictable run-time and, . Second, neural estimators are universal function approximators, and they can therefore be expected to outperform constrained estimators such as best linear unbiased estimators. Uncertainty quantification with neural estimators is also straightforward through the bootstrap distribution, which is essentially available "for free" with a neural estimator, as the trained network can be reused repeatedly at almost no computational cost.
 
-Julia has many [attractive features](https://julialang.org/); in particular, it has been designed to alleviate the so-called two-language problem, whereby it aims to be both easily developed and fast. This means that users can easily write code for data simulation without needing to vectorise (i.e., `for` loops are fine!). Further, many Julia packages are written entirely in Julia and, hence, their source code is easily understood and extended; this includes `NeuralEstimators` and the deep learning framework on which it is built upon, [Flux](https://fluxml.ai/Flux.jl/stable/).
+The package `NeuralEstimators` aims to facilitate the development of neural estimators in a user-friendly manner. The package is able to cater for arbitrary statistical models by relying on the user to define the statistical model implicitly, either by providing data simulated from the model or by defining a function for data simulation.
 
 
 ## Installation
 
-Download [Julia](https://julialang.org/) if you haven't already. To install `NeuralEstimators` from Julia's package manager, use the following commands inside the Julia REPL:
+Download [Julia](https://julialang.org/), then install `NeuralEstimators` from Julia's package manager using the following commands inside the Julia REPL:
 
 ```
 using Pkg
