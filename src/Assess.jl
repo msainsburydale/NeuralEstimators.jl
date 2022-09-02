@@ -114,7 +114,7 @@ end
 # Z = [[rand(n, 1, m) for k in 1:K] for m in (5, 10, 15)]
 # TODO not sure what to do with ξ. Don't need it for simulation but some of the estimators may need it. For now just provide nothing.
 function assess(
-	estimators, ξ, parameters::P, Z; # TODO enforce Z to be a Vector{Vector{Array}}
+	estimators, ξ, parameters::P, Z; # TODO enforce Z to be a Vector{Vector{Array}}. Also need to document this behaviour. 
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
 	save::Vector{String} = ["", ""],
@@ -136,7 +136,7 @@ function assess(
 	KJ = KJ[1]
 	@assert KJ % K == 0 "The number of data sets in Z must be a multiple of the number of parameters"
 	J = KJ ÷ K
-	J > 1 && @info "There are more data sets than parameters; this is fine, but ensure that the data are repeated in an inner fashion, so that replicates from a given set of parameters are adjacent." #TODO tidy the wording up here.
+	J > 1 && @info "There are more data sets than parameter configurations; this is fine, but ensure that the data sets are repeated in an inner fashion, so that data sets from a given set of parameters are adjacent."
 
 	obj = map(Z) do z
 

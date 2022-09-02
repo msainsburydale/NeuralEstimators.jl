@@ -68,6 +68,8 @@ end
 # TODO
 # - Document the simulation functions. Add stabilise_variance::Bool = false for
 #   the Schlather and conditional extremes models.
+# - train() is actually a mutating function, so we should call it train!()
+
 
 
 # TODO once I've made the repo public:
@@ -91,3 +93,7 @@ end
 ## TODO (save these points for writing the manuscript later)
 # Why Julia?
 # Julia has many [attractive features](https://julialang.org/); in particular, it has been designed to alleviate the so-called two-language problem, so that it is both easily developed and fast in its execution. This means that users can write performant code for data simulation without needing to vectorise (i.e., `for` loops are fine, which is often very helpful). Further, many Julia packages are written entirely in Julia and, hence, their source code is easily understood and extended; this includes `NeuralEstimators` and the deep learning framework on which it is built upon, [Flux](https://fluxml.ai/Flux.jl/stable/).
+
+
+#  This is redundant for the current simple example, but it is necessary for certain techniques discussed in [Advanced usage](@ref).
+# In `NeuralEstimators`, the parameters are stored in a user-defined subtype of [`ParameterConfigurations`](@ref). 
