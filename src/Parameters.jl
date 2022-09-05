@@ -1,8 +1,22 @@
 """
 	ParameterConfigurations
 
-An abstract supertype for storing parameters `θ` and any intermediate objects
-needed for data simulation with `simulate`.
+An abstract supertype for user-defined types that store parameters and any
+intermediate objects needed for data simulation with [`simulate`](@ref).
+
+The user-defined type must have a field `θ` that stores the ``p`` × ``K`` matrix
+of parameters, where ``p`` is the number of parameters in the model and ``K`` is the
+number of parameter vectors sampled from the prior distribution. There are no
+other restrictions.
+
+# Examples
+
+```
+struct P <: ParameterConfigurations
+	θ
+	# ...
+end
+```
 """
 abstract type ParameterConfigurations end
 
@@ -13,42 +27,60 @@ Base.show(io::IO, parameters::P) where {P <: ParameterConfigurations} = print(io
 Base.show(io::IO, m::MIME"text/plain", parameters::P) where {P <: ParameterConfigurations} = print(io, parameters)
 
 import Base: size
-size(parameters::P) where {P <: ParameterConfigurations} = size(parameters.θ)
-size(parameters::P, d::Integer) where {P <: ParameterConfigurations} = size(parameters.θ, d)
+size(parameters::P) where {P <: ParameterConfigurations} = size(_extractθ(parameters))
+size(parameters::P, d::Integer) where {P <: ParameterConfigurations} = size(_extractθ(parameters), d)
+
+_extractθ(params::P) where {P <: ParameterConfigurations} = params.θ
+_extractθ(params::P) where {P <: AbstractMatrix} = params
 
 """
-	subsetparameters(parameters::Parameters, indices) where {Parameters <: ParameterConfigurations}
+	subsetparameters(parameters::M, indices) where {M <: AbstractMatrix}
+	subsetparameters(parameters::P, indices) where {P <: ParameterConfigurations}
+
 Subset `parameters` using a collection of `indices`.
 
-The default method assumes that each field of `parameters` is an array. If the
-last dimension of the array has size equal to the number of parameter
-configurations, K, then the array is subsetted over its last dimension using
-`indices`; otherwise, the field is returned unchanged. If this default does not
-cover your use case, define an appropriate subsetting method by overloading
-`subsetparameters` after running `import NeuralEstimators: subsetparameters`.
+Arrays in `parameters::P` with last dimension equal in size to the
+number of parameter configurations, K, are also subsetted (over their last dimension)
+using `indices`. All other fields are left unchanged. To modify this default
+behaviour, redefine `subsetparameters` after running
+`import NeuralEstimators: subsetparameters`.
 """
-function subsetparameters(parameters::Parameters, indices) where {Parameters <: ParameterConfigurations}
+function subsetparameters(parameters::P, indices) where {P <: ParameterConfigurations}
 
 	K = size(parameters, 2)
 	@assert maximum(indices) <= K
 
-	fields = [getfield(parameters, name) for name ∈ fieldnames(Parameters)]
+	fields = [getfield(parameters, name) for name ∈ fieldnames(P)]
 	fields = map(fields) do field
-		N = ndims(field)
-		if size(field, N) == K
-			colons  = ntuple(_ -> (:), N - 1)
-			field[colons..., indices]
-		else
+
+		try
+			N = ndims(field)
+			if size(field, N) == K
+				colons  = ntuple(_ -> (:), N - 1)
+				field[colons..., indices]
+			else
+				field
+			end
+		catch
 			field
 		end
+
 	end
-	return Parameters(fields...)
+	return P(fields...)
+end
+
+function subsetparameters(parameters::M, indices) where {M <: AbstractMatrix}
+
+	K = size(parameters, 2)
+	@assert maximum(indices) <= K
+
+	return parameters[:, indices]
 end
 
 
 # ---- _ParameterLoader: Analogous to DataLoader for ParameterConfigurations objects ----
 
-struct _ParameterLoader{P <: ParameterConfigurations, I <: Integer}
+struct _ParameterLoader{P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
     parameters::P
     batchsize::Integer
     nobs::Integer

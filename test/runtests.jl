@@ -32,10 +32,10 @@ end
     @test expandgrid(1:2, 1:2) == expandgrid(2)
 end
 
-@testset "samplesize" begin
-	Z = rand(3, 4, 1, 6)
-    @test inversesamplesize(Z) ≈ 1/samplesize(Z)
-end
+# @testset "samplesize" begin
+# 	Z = rand(3, 4, 1, 6)
+#     @test inversesamplesize(Z) ≈ 1/samplesize(Z)
+# end
 
 @testset "_getindices" begin
 	m = (3, 4, 6)
@@ -173,19 +173,25 @@ end
 
 
 # Simple example for testing.
-struct Parameters <: ParameterConfigurations θ end
-ξ = (Ω = Normal(0, 0.5), σ = 1)
-function Parameters(ξ, K::Integer)
-	θ = rand(ξ.Ω, 1, K)
-	Parameters(θ)
+struct Parameters <: ParameterConfigurations
+	θ
+	σ
 end
-function simulate(parameters::Parameters, ξ, m::Integer)
+ξ = (
+	Ω = Normal(0, 0.5),
+	σ = 1
+)
+function Parameters(K::Integer, ξ)
+	θ = rand(ξ.Ω, 1, K)
+	Parameters(θ, ξ.σ)
+end
+function simulate(parameters::Parameters, m::Integer)
 	n = 1
 	θ = vec(parameters.θ)
-	Z = [rand(Normal(μ, ξ.σ), n, 1, m) for μ ∈ θ]
+	Z = [rand(Normal(μ, parameters.σ), n, 1, m) for μ ∈ θ]
 end
-parameters = Parameters(ξ, 5000)
-# parameters = Parameters(ξ, 100) # FIXME the fixed-parameter method for train() gives many warnings when K = 100; think it's _ParameterLoader?
+parameters = Parameters(5000, ξ)
+# parameters = Parameters(100, ξ) # FIXME the fixed-parameter method for train() gives many warnings when K = 100; think it's _ParameterLoader?
 
 n = 1
 K = 100
@@ -195,18 +201,16 @@ p = 1
 ψ = Chain(Dense(n, w), Dense(w, w))
 ϕ = Chain(Dense(w, w), Dense(w, p), Flux.flatten, x -> exp.(x))
 θ̂_deepset = DeepSet(ψ, ϕ)
-θ̂_deepset
-S = [samplesize]
-ϕ₂ = Chain(Dense(w + length(S), w), Dense(w, p), Flux.flatten, x -> exp.(x))
-θ̂_deepsetexpert = DeepSetExpert(θ̂_deepset, ϕ₂, S)
-θ̂_deepsetexpert
-estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
+# S = [samplesize]
+# ϕ₂ = Chain(Dense(w + length(S), w), Dense(w, p), Flux.flatten, x -> exp.(x))
+# θ̂_deepsetexpert = DeepSetExpert(θ̂_deepset, ϕ₂, S)
+estimators = (DeepSet = θ̂_deepset, ) #, DeepSetExpert = θ̂_deepsetexpert)
 
 function MLE(Z) where {T <: Number, N <: Int, A <: AbstractArray{T, N}, V <: AbstractVector{A}}
     mean.(Z)'
 end
 
-MLE(Z, ξ) = MLE(Z) # this function doesn't actually need ξ, but include it for testing
+MLE(Z, ξ) = MLE(Z) # the MLE obviously doesn't need ξ, but we include it for testing
 
 verbose = false # verbose used in the NeuralEstimators code
 
@@ -236,18 +240,18 @@ verbose = false # verbose used in the NeuralEstimators code
 
 	    use_gpu = device == gpu
 		@testset "train" begin
-			θ̂ = train(θ̂, ξ, Parameters, m = 10, epochs = 5, savepath = "", use_gpu = use_gpu, verbose = verbose)
-			θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "", use_gpu = use_gpu, verbose = verbose)
-			θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "", epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
-			θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "", epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
+			θ̂ = train(θ̂, Parameters, m = 10, epochs = 5, savepath = "", use_gpu = use_gpu, verbose = verbose, ξ = ξ)
+			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "", use_gpu = use_gpu, verbose = verbose)
+			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "", epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
+			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "", epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
 
-			Z_train = simulate(parameters, ξ, 20)
-			Z_val = simulate(parameters, ξ, 10)
+			Z_train = simulate(parameters, 20)
+			Z_val = simulate(parameters, 10)
 			θ̂ = train(θ̂, parameters, parameters, Z_train, Z_val, epochs = 5, savepath = "", use_gpu = use_gpu, verbose = verbose)
 
-			# Decided not to test this code, because we can't always assume that we have write privledges
-			# θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "dummy123", use_gpu = use_gpu, verbose = verbose)
-			# θ̂ = train(θ̂, ξ, parameters, parameters, m = 10, epochs = 5, savepath = "dummy123", use_gpu = use_gpu, verbose = verbose)
+			# Decided not to test the saving function, because we can't always assume that we have write privledges
+			# θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "dummy123", use_gpu = use_gpu, verbose = verbose)
+			# θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "dummy123", use_gpu = use_gpu, verbose = verbose)
 			# then rm dummy123 folder
 		end
 
@@ -264,25 +268,26 @@ verbose = false # verbose used in the NeuralEstimators code
 			all_m = [10, 20, 30]
 
 			# Method that does not require the user to provide data
-			assessment = assess([θ̂], ξ, parameters, m = all_m, use_gpu = use_gpu, verbose = verbose)
+			assessment = assess([θ̂], parameters, m = all_m, use_gpu = use_gpu, verbose = verbose)
 			@test typeof(merge(assessment)) == DataFrame
 
 			# Method that require the user to provide data: J == 1
-			Z_test = [simulate(parameters, ξ, m) for m ∈ all_m]
-			assessment = assess([θ̂], ξ, parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
+			Z_test = [simulate(parameters, m) for m ∈ all_m]
+			assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
 			@test typeof(merge(assessment)) == DataFrame
 
 			# Method that require the user to provide data: J == 5 > 1
-			Z_test = [simulate(parameters, ξ, m, 5) for m ∈ all_m]
-			assessment = assess([θ̂], ξ, parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
+			Z_test = [simulate(parameters, m, 5) for m ∈ all_m]
+			assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
 			@test typeof(merge(assessment)) == DataFrame
 
 			# Test that estimators needing invariant model information can be used:
-			assess([MLE], ξ, parameters, m = all_m, verbose = verbose)
+			assess([MLE], parameters, m = all_m, verbose = verbose)
+			# assess([MLE], parameters, m = all_m, verbose = verbose, ξ = ξ, use_ξ = true) #FIXME this causes an error at the end of _asses()
 		end
 
 		@testset "bootstrap" begin
-			parametricbootstrap(θ̂, Parameters(ξ, 1), ξ, 50; use_gpu = use_gpu)
+			parametricbootstrap(θ̂, Parameters(1, ξ), 50; use_gpu = use_gpu)
 			nonparametricbootstrap(θ̂, Z[1]; use_gpu = use_gpu)
 			blocks = rand(1:2, size(Z[1])[end])
 			nonparametricbootstrap(θ̂, Z[1], blocks, use_gpu = use_gpu)
@@ -317,10 +322,10 @@ end
 end
 
 
-@testset "DeepSetPiecewise" begin
-	θ̂_deepsetpiecewise = DeepSetPiecewise((θ̂_deepset, θ̂_deepsetexpert), (30))
+@testset "PiecewiseEstimator" begin
+	θ̂_piecewise = PiecewiseEstimator((θ̂_deepset, MLE), (30))
 	Z = [randn(Float32, n, 1, 10),  randn(Float32, n, 1, 50)]
-	θ̂₁ = hcat(θ̂_deepset(Z[[1]]), θ̂_deepsetexpert(Z[[2]]))
-	θ̂₂ = θ̂_deepsetpiecewise(Z)
+	θ̂₁ = hcat(θ̂_deepset(Z[[1]]), MLE(Z[[2]]))
+	θ̂₂ = θ̂_piecewise(Z)
 	@test θ̂₁ ≈ θ̂₂
 end

@@ -3,21 +3,20 @@
 # ---- Parameteric bootstrap ----
 
 """
-	parametricbootstrap(θ̂, parameters::P, ξ, m::Integer; B::Integer = 100, use_gpu::Bool = true) where {P <: ParameterConfigurations}
+	parametricbootstrap(θ̂, parameters::P, m::Integer; B::Integer = 100, use_gpu::Bool = true) where {P <: ParameterConfigurations}
 
 Returns `B` parameteric bootstrap samples of an estimator `θ̂` as a p × `B`
 matrix, where p is the number of parameters in the statistical model, based on
-data sets of size `m` simulated using the invariant model information `ξ` and
-parameter configurations, `parameters`.
+data sets of size `m` simulated parameter configurations, `parameters`.
 
-This function requires the user to have defined a method `simulate(parameters::P, ξ, m::Integer`).
+This function requires the user to have defined a method `simulate(parameters, m::Integer`).
 """
-function parametricbootstrap(θ̂, parameters::P, ξ, m::Integer; B::Integer = 100, use_gpu::Bool = true) where {P <: ParameterConfigurations}
+function parametricbootstrap(θ̂, parameters, m::Integer; B::Integer = 100, use_gpu::Bool = true)
 
 	K = size(parameters, 2)
 	@assert K == 1 "parametric bootstrap is defined for a single parameter configuration only"
 
-	Z̃ = simulate(parameters, ξ, m, B)
+	Z̃ = simulate(parameters, m, B)
 	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃)  #TODO Need to add _checkgpu() calls instead of just use_gpu
 	return θ̃
 end

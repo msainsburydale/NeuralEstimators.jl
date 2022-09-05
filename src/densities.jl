@@ -13,25 +13,26 @@ scaledlogit(f, a, b) = log((f - a) / (b - f))
 
 # TODO Add unit tests for these density functions
 
+# The density function is
+# ```math
+# |2\pi\mathbf{\Sigma}|^{-1/2} \exp{-\frac{1}{2}\mathbf{y}^\top \mathbf{\Sigma}^{-1}\mathbf{y}},
+# ```
+# and the log-density is
+# ```math
+# -\frac{n}{2}\ln{2\pi}  -\frac{1}{2}\ln{|\mathbf{\Sigma}|} -\frac{1}{2}\mathbf{y}^\top \mathbf{\Sigma}^{-1}\mathbf{y}.
+# ```
+
 @doc raw"""
     gaussiandensity(y::A, L; logdensity::Bool = true) where {A <: AbstractArray{T, 1}} where T
 	gaussiandensity(y::A, Σ; logdensity::Bool = true) where {A <: AbstractArray{T, N}} where {T, N}
 
-Efficiently computes the density function for `y` ~ 𝑁(0, `Σ`), with `L` the lower Cholesky factor of the
-covariance matrix `Σ`.
+Efficiently computes the density function for `y` ~ 𝑁(0, `Σ`), with `L` the
+lower Cholesky factor of the covariance matrix `Σ`.
 
-The second method assumes that the last dimension of `y` corresponds to the
-replicates dimension, and it exploits the fact that we need to compute
-the Cholesky factor `L` for these replicates once only.
-
-The density function is
-```math
-|2\pi\mathbf{\Sigma}|^{-1/2} \exp{-\frac{1}{2}\mathbf{y}^\top \mathbf{\Sigma}^{-1}\mathbf{y}},
-```
-and the log-density is
-```math
--\frac{n}{2}\ln{2\pi}  -\frac{1}{2}\ln{|\mathbf{\Sigma}|} -\frac{1}{2}\mathbf{y}^\top \mathbf{\Sigma}^{-1}\mathbf{y}.
-```
+The method gaussiandensity(y::A, Σ) assumes that the last dimension of `y`
+corresponds to the indepdenent-replicates dimension, and it exploits the fact
+that we need to compute the Cholesky factor `L` for these independent replicates
+once only.
 """
 function gaussiandensity(y::A, L; logdensity::Bool = true) where {A <: AbstractArray{T, 1}} where T
 	n = length(y)
@@ -66,7 +67,7 @@ V₁₂(z₁, z₂, ψ) = -0.5(1 - ψ^2) * f(z₁, z₂, ψ)^-1.5
 """
 	schlatherbivariatedensity(z₁, z₂, ψ; logdensity::Bool = true)
 The bivariate density function for Schlather's max-stable model, as given in
-Raphaël Huser's PhD thesis (pg. 231-232) and Appendix C of the manuscript.
+Raphaël Huser's PhD thesis (pg. 231-232) and in the supplementary material of the manuscript.
 """
 schlatherbivariatedensity(z₁, z₂, ψ; logdensity::Bool = true) = logdensity ? logG₁₂(z₁, z₂, ψ) : G₁₂(z₁, z₂, ψ)
 _schlatherbivariatecdf(z₁, z₂, ψ) = G(z₁, z₂, ψ)

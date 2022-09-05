@@ -1,22 +1,22 @@
 # TODO Finish the documentation for all of the simulateX functions..
-# TODO throughout the repo, I should be consistent with the order in which ξ and
-# parameters appear; I think it's best for ξ to appear before parameters.
 
 
+#TODO Why do I need to force m to be an integer?
 """
-	simulate(parameters::P, ξ, m::Integer, num_rep::Integer) where {P <: ParameterConfigurations}
+	simulate(parameters, m::Integer, J::Integer)
 
-Generic method that simulates `num_rep` sets of  sets of `m` independent replicates for each parameter
-configuration by calling `simulate(parameters, ξ, m)`.
+Simulates `J` sets of `m` independent replicates for each parameter vector in
+`parameters` by calling `simulate(parameters, m)` a total of `J` times.
 """
-function simulate(parameters::P, ξ, m::Integer, num_rep::Integer) where {P <: ParameterConfigurations}
-	v = [simulate(parameters, ξ, m) for i ∈ 1:num_rep]
-	v = vcat(v...) # should be ok since we're only splatting num_rep vectors, which doesn't get prohibitively large even during bootstrapping. No reason not to use stack, though.
+function simulate(parameters, m::Integer, J::Integer)
+	v = [simulate(parameters, m) for i ∈ 1:J]
+	v = vcat(v...) # should be ok since we're only splatting J vectors, which doesn't get prohibitively large even during bootstrapping. TODO No reason not to use stack, though.
 	return v
 end
 
+
 # Wrapper function that returns simulated data and the true parameter values
-_simulate(params::P, ξ, m) where {P <: ParameterConfigurations} = (simulate(params, ξ, m), params.θ)
+_simulate(params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (simulate(params, m), _extractθ(params))
 
 
 
@@ -214,6 +214,7 @@ end
 
 # ---- Miscellaneous functions ----
 
+#TODO replace besselk with https://github.com/cgeoga/BesselK.jl
 @doc raw"""
     matern(h, ρ, ν, σ² = 1)
 For two points separated by `h` units, compute the Matérn covariance function
@@ -245,11 +246,13 @@ end
 
 matern(h, ρ) =  matern(h, ρ, 1.0)
 
+
+# TODO a bit weird that we're forcing σ = 1
 """
     maternchols(D, ρ, ν)
-Given a distance matrix `D`, computes the covariance matrix Σ under the
+Given a distance matrix `D`, computes the covariance matrix under the
 Matérn covariance function with range `ρ` and smoothness `ν`, and
-return the Cholesky factor of this matrix.
+returns the Cholesky factor of this covariance matrix.
 
 Providing vectors for `ρ` and `ν` will yield a three-dimensional array of
 Cholesky factors.

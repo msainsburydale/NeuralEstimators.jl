@@ -15,7 +15,7 @@ using Pkg; Pkg.add("NeuralEstimators")
 
 ## Getting started
 
-Once familiar with the details of the [Framework](@ref), see [Workflow overview](@ref).
+Once familiar with the details of the [Framework](@ref), see some [Examples](@ref).
 
 
 ## Supporting and citing
@@ -30,3 +30,7 @@ This software was developed as part of academic research. If you would like to s
   howpublished = {arXiv:2208.12942}
 }
 ```
+
+## Correspondence
+
+If you'd like to get in touch for any reason, please email Matthew Sainsbury-Dale using msainsburydale@gmail.com.  

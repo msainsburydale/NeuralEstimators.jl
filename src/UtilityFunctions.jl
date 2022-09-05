@@ -23,6 +23,7 @@ function _checkgpu(use_gpu::Bool; verbose::Bool = true)
 end
 
 
+
 # ---- Functions for finding, saving, and loading the best neural network ----
 
 common_docstring = """

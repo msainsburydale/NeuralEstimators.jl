@@ -22,15 +22,41 @@ end
 
 # ---- DeepSet Type and constructors ----
 
+#TODO Change "agg" and "aggregation" to simply "a", which aligns with the notation I use in the paper.
+
 """
-    DeepSet(ψ, ϕ, agg)
+    DeepSet(ψ, ϕ, a)
+	DeepSet(ψ, ϕ; a::String = "mean")
 
-Implementation of the Deep Set framework, where `ψ` and `ϕ`
-are neural networks (e.g., `Flux` networks) and `agg` is a symmetric function that pools data
-over the last dimension (the replicates/batch dimension) of an array.
+A Deep Set neural estimator,
 
-`DeepSet` objects are applied to `AbstractVectors` of `AbstractArrays`, where each array
-is associated with one parameter vector.
+```math
+θ̂(𝐙) ≡ ϕ(a(\\{𝐙ᵢ : i = 1, …, m\\})),
+```
+
+where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent and identically distributed (iid)
+realisations from the model under a single parameter vector 𝛉, `ψ` and `ϕ` are
+neural networks, and `a` is a permutation-invariant aggregation function. Note
+that `ψ` and `ϕ` depend on trainable parameters, but we omit this dependence for
+notational convenience.
+
+
+Although the above defintion of a neural estimator is with respect to a single
+data set 𝐙, `DeepSet` estimators instead act on sets of data sets, stored as
+`Vector`s of `Array`s, where each array corresponds to one set of iid
+realisations from the model. The last dimension of each array stores the
+realisations; for example, if 𝐙 is a 3-dimensional array, then 𝐙[:, :, 1]
+contains the first realisation, 𝐙[:, :, 2] contains the second realisation, and
+so on.
+
+The neural networks `ψ` and `ϕ` and typically `Flux` neural networks. The
+function `a` must act on an `Array` and, since it aggregates the iid realisations,
+it must aggregate over the last dimension of the array.
+
+When initialising a `DeepSet` object, one may provide their own aggregation function
+by treating `a` via the constructor that has `a` as a positional argument, or
+simply use the convenient constructor that has `a` as a keyword argument, in which
+case `a` may be the elementwise `"mean"`, `"sum"`, or `"logsumexp"` function.
 
 # Examples
 ```
@@ -39,20 +65,19 @@ p = 5  # number of parameters in the statistical model
 w = 32 # width of each layer
 ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
 ϕ = Chain(Dense(w, w, relu), Dense(w, p));
-agg(X) = sum(X, dims = ndims(X))
-θ̂  = DeepSet(ψ, ϕ, agg)
+θ̂ = DeepSet(ψ, ϕ)
 
-# A single set of m=3 realisations:
+# Apply the estimator to a single set of m=3 realisations:
 Z = [rand(n, 1, 3)];
-θ̂ (Z)
+θ̂(Z)
 
-# Two sets each containing m=3 realisations:
+# Apply the estimator to two sets each containing m=3 realisations:
 Z = [rand(n, 1, m) for m ∈ (3, 3)];
-θ̂ (Z)
+θ̂(Z)
 
-# Two sets respectivaly containing m=3 and m=4 realisations:
+# Apply the estimator to two sets containing m=3 and m=4 realisations, respectively:
 Z = [rand(n, 1, m) for m ∈ (3, 4)];
-θ̂ (Z)
+θ̂(Z)
 ```
 """
 struct DeepSet{T, F, G}
@@ -61,17 +86,9 @@ struct DeepSet{T, F, G}
 	agg::F
 end
 
-@functor DeepSet # allows Flux to optimise the parameters
-
-"""
-    DeepSet(ψ, ϕ; aggregation::String = "mean")
-
-Convenient constructor for a `DeepSet` object with `agg` equal to the `"mean"`, `"sum"`, or
-`"logsumexp"` function.
-"""
 DeepSet(ψ, ϕ; aggregation::String = "mean") = DeepSet(ψ, ϕ, _agg(aggregation))
 
-
+@functor DeepSet # allows Flux to optimise the parameters
 
 # Clean printing:
 Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.agg)\nOuter network:  $(D.ϕ)")

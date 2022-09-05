@@ -12,10 +12,10 @@
 
 
 """
-	DeepSetPiecewise(estimators, m_cutoffs)
-Given an arbitrary number of `estimators`, creates a piecewise neural estimator
-based on the sample size cut offs, `m_cutoffs`, which should contain one element
-fewer than the number of estimators.
+	PiecewiseEstimator(estimators, mchange)
+Creates a piecewise estimator from a collection of `estimators`, based on the
+collection of sample-size changepoints, `mchange`, which should contain one
+element fewer than the number of `estimators`.
 
 # Examples
 
@@ -37,45 +37,45 @@ w = 32
 ```
 
 Further suppose that we've trained `θ̂₁` for small sample sizes (e.g., m ≤ 30)
-and `θ̂₂` for moderate-to-large sample sizes (e.g., m > 30). Then we construct a
-piecewise Deep Set object with a cut-off sample size of 30 which dispatches
-θ̂₁ if m ≤ 30 and θ̂₂ if m > 30:
+and `θ̂₂` for moderate-to-large sample sizes (e.g., m > 30). Then we can
+construct a piecewise estimator with a sample-size changepoint of 30, which
+dispatches `θ̂₁` if m ≤ 30 and `θ̂₂` if m > 30:
 
 ```
-θ̂ = DeepSetPiecewise((θ̂₁, θ̂₂), (30,))
+θ̂ = PiecewiseEstimator((θ̂₁, θ̂₂), (30,))
 Z = [rand(Float32, n, 1, m) for m ∈ (10, 50)]
 θ̂(Z)
 ```
 """
-struct DeepSetPiecewise
+struct PiecewiseEstimator
 	estimators
-	m_cutoffs
-	# @assert length(m_cutoffs) == length(estimators) - 1
+	mchange
+	# @assert length(mchange) == length(estimators) - 1
 end
 
-@functor DeepSetPiecewise (estimators,)
+@functor PiecewiseEstimator (estimators,)
 
 
 # Note that this is an inefficient implementation, analogous to the inefficient
 # DeepSet implementation. A more efficient approach would be to subset Z based
-# on m_cutoffs, apply the estimators to each block of Z, then recombine the estimates.
-function (d::DeepSetPiecewise)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+# on mchange, apply the estimators to each block of Z, then recombine the estimates.
+function (d::PiecewiseEstimator)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
 
 	m = size.(Z, N)
 
 	estimators = d.estimators
-	m_cutoffs  = d.m_cutoffs
+	mchange  = d.mchange
 
-	@assert length(m_cutoffs) == length(estimators) - 1
+	@assert length(mchange) == length(estimators) - 1
 
-	m_cutoffs = [m_cutoffs..., Inf]
+	mchange = [mchange..., Inf]
 
 	θ̂ = map(eachindex(Z)) do i
 
 		# find which estimator to use
 		mᵢ = m[i]
-		j = findfirst(mᵢ .<= m_cutoffs)
+		j = findfirst(mᵢ .<= mchange)
 
 		# apply the estimator
 		estimators[j](Z[[i]])

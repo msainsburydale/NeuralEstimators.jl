@@ -5,56 +5,54 @@ This page documents the functions that are central to the workflow of `NeuralEst
 
 ## Storing parameters
 
+Parameters sampled from the prior distribution ``\Omega(\cdot)`` may be stored in two ways. First, and most simply, they can be stored as a $p \times K$ matrix, where $p$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution. Second, they can be stored in a user-defined subtype of the abstract type described below.  
+
 ```@docs
 ParameterConfigurations
 
 subsetparameters
 ```
 
-## Data simulation
+## Simulating data
+
+`NeuralEstimators` facilitates neural estimation for arbitrary statistical models by having the user implicitly define their model either by providing simulated data, or by defining a function for data simulation. If the latter option is chosen, the user must provide a method `simulate(parameters, m)`, which returns simulated data from a set of `parameters`, with `m` the sample size of these simulated data.
+
+Irrespective of their source, the simulated data must be stored as a subtype of `AbstractVector{AbstractArray}`, where each array stores `m` independent replicates simulated from one parameter vector in `parameters`, and these replicates must stored in the final dimension of each array.
 
 ```@docs
 simulate
 ```
 
-## Neural estimator representations
+## Representations for neural estimators
 
-### Deep Set (vanilla)
+Although the user is free to construct their neural estimator however they see fit, `NeuralEstimators` provides several useful representations described below. Note that if the user wishes to use an alternative representation, for compatibility with `NeuralEstimators`, simply ensure that the estimator processes data stored as subtypes of `AbstractVector{AbstractArray}`, as discussed in [`DeepSet`](@ref) (see also its source code).
+
+### Deep Set
 
 ```@docs
 DeepSet
-
-DeepSet(ψ, ϕ; aggregation::String)
 ```
 
-### Deep Set (with expert summary statistics)
+### Piecewise estimators
 
 ```@docs
-DeepSetExpert
-
-DeepSetExpert(deepset::DeepSet, ϕ, S)
-
-DeepSetExpert(ψ, ϕ, S; aggregation::String)
-
-samplesize
-```
-
-### Piecewise neural estimators
-
-```@docs
-DeepSetPiecewise
+PiecewiseEstimator
 ```
 
 
 ## Training
 
-There are two training methods. For both methods, the validation parameters and validation data are held fixed so that the validation risk is interpretable. There are a number of practical considerations to keep in mind: In particular, see [Balancing time and memory complexity during training](@ref).
-
 ```@docs
 train
+
+train(θ̂, P)
+
+train(θ̂, θ_train::P, θ_val::P) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
 ```
 
-## Assessment
+## Assessing a neural estimator
 
 ```@docs
 assess

@@ -58,33 +58,36 @@ function _Assessment(obj, save)
 end
 
 
-
-
-
+# TODO parameters should be either a subtype of AbstractMatrix or ParameterConfigurations.
 """
-	assess(estimators, ξ, parameters::P; <keyword args>) where {P <: ParameterConfigurations}
+	assess(estimators, parameters, Z; <keyword args>)
+	assess(estimators, parameters; <keyword args>)
 
 Using a collection of `estimators`, compute estimates from data simulated from a
-set of `parameters` with invariant information `ξ`.
+set of `parameters`.
 
-Note that `assess()` requires the user to have defined a method `simulate(parameters, ξ, m::Integer)`.
+One may either provide simulated data `Z` as a `Vector{Vector{Array}}`, or
+overload `simulate` with a method `simulate(parameters, m::Integer)` and use the
+keyword argument `m` to specify the sample sizes to use during assessment.
 
 # Keyword arguments
 - `m::Vector{Integer}`: sample sizes to estimate from.
 - `estimator_names::Vector{String}`: names of the estimators (sensible default values provided).
 - `parameter_names::Vector{String}`: names of the parameters (sensible default values provided).
 - `J::Integer = 1`: the number of times to replicate each parameter in `parameters`.
-- `save::Vector{String}`: by default, no objects are saved; however, if `save` is provided, four `DataFrames` respectively containing the true parameters `θ`, estimates `θ̂`, runtimes, and merged `θ` and `θ̂` will be saved in the directory `save[1]` with file *names* (not extensions) suffixed by `save[2]`.
+- `save::Vector{String}`: by default, no objects are saved; however, if `save` is provided, four `DataFrames` respectively containing the true parameters `θ`, estimates `θ̂`, runtimes, and merged `θ` and `θ̂` will be saved in the directory `save[1]` with file names (not extensions) suffixed by `save[2]`.
+- `ξ = nothing`: invariant model information.
 - `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses the invariant model information, `ξ`: If it does, the estimator will be applied as `estimator(Z, ξ)`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
 - `verbose::Bool = true`
 """
 function assess(
-    estimators, ξ, parameters::P;
+    estimators, parameters::P;
 	m::Vector{I}, J::Integer = 1,
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
 	save::Vector{String} = ["", ""],
+	ξ = nothing,
 	use_ξ = false,
 	use_gpu = true,
 	verbose::Bool = true
@@ -94,12 +97,12 @@ function assess(
 
 		# Simulate data
 		verbose && println("	Simulating data...")
-		Z = simulate(parameters, ξ, i, J)
+		Z = simulate(parameters, i, J)
 
 	 	_assess(
-			estimators, ξ, parameters, Z, J = J,
+			estimators, parameters, Z, J = J,
 			estimator_names = estimator_names, parameter_names = parameter_names,
-			use_ξ = use_ξ, use_gpu = use_gpu, verbose = verbose
+			ξ = ξ, use_ξ = use_ξ, use_gpu = use_gpu, verbose = verbose
 		)
 	end
 
@@ -112,12 +115,12 @@ end
 # n = 1
 # K = 4
 # Z = [[rand(n, 1, m) for k in 1:K] for m in (5, 10, 15)]
-# TODO not sure what to do with ξ. Don't need it for simulation but some of the estimators may need it. For now just provide nothing.
 function assess(
-	estimators, ξ, parameters::P, Z; # TODO enforce Z to be a Vector{Vector{Array}}. Also need to document this behaviour. 
+	estimators, parameters::P, Z; # TODO enforce Z to be a Vector{Vector{Array}}
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
 	save::Vector{String} = ["", ""],
+	ξ = nothing,
 	use_ξ = false,
 	use_gpu = true,
 	verbose::Bool = true
@@ -136,14 +139,14 @@ function assess(
 	KJ = KJ[1]
 	@assert KJ % K == 0 "The number of data sets in Z must be a multiple of the number of parameters"
 	J = KJ ÷ K
-	J > 1 && @info "There are more data sets than parameter configurations; this is fine, but ensure that the data sets are repeated in an inner fashion, so that data sets from a given set of parameters are adjacent."
+	J > 1 && @info "There are more simulated data sets than unique parameter vectors; ensure that the data are stored in an 'inner' fashion, so that all simulated data sets from a given parameter vector are adjacent."
 
 	obj = map(Z) do z
 
 		_assess(
-			estimators, ξ, parameters, z, J = J,
+			estimators, parameters, z, J = J,
 			estimator_names = estimator_names, parameter_names = parameter_names,
-			use_ξ = use_ξ, use_gpu = use_gpu, verbose = verbose
+			ξ = ξ, use_ξ = use_ξ, use_gpu = use_gpu, verbose = verbose
 		)
 
 	end
@@ -151,11 +154,11 @@ function assess(
 	return _Assessment(obj, save)
 end
 
-
+#TODO should Z be typed?
 function _assess(
-	estimators, ξ, parameters::P, Z;
+	estimators, parameters::P, Z;
 	estimator_names::Vector{String}, parameter_names::Vector{String},
-	J::Integer, use_ξ, use_gpu, verbose
+	J::Integer, ξ, use_ξ, use_gpu, verbose
 	) where {P <: ParameterConfigurations}
 
 	# Infer m from Z and check that Z is in the correct format
@@ -203,7 +206,7 @@ function _assess(
 	θ̂[!, "replicate"] = repeat(repeat(1:J, inner = K), E)
 
 	# Also provide the true parameters for comparison with the estimates
-	θ = DataFrame(parameters.θ', parameter_names)
+	θ = DataFrame(_extractθ(parameters)', parameter_names)
 
     return (θ = θ, θ̂ = θ̂, runtime = runtime)
 end

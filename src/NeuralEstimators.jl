@@ -27,10 +27,10 @@ include("Parameters.jl")
 
 export DeepSet
 include("DeepSet.jl")
-export DeepSetExpert, samplesize, inversesamplesize
-include("DeepSetExpert.jl")
-export DeepSetPiecewise
-include("DeepSetPiecewise.jl")
+# export DeepSetExpert, samplesize, inversesamplesize
+# include("DeepSetExpert.jl")
+export PiecewiseEstimator
+include("PiecewiseEstimator.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
 export matern, maternchols, Subbotin, scaledlogistic, scaledlogit
@@ -96,4 +96,4 @@ end
 
 
 #  This is redundant for the current simple example, but it is necessary for certain techniques discussed in [Advanced usage](@ref).
-# In `NeuralEstimators`, the parameters are stored in a user-defined subtype of [`ParameterConfigurations`](@ref). 
+# In `NeuralEstimators`, the parameters are stored in a user-defined subtype of [`ParameterConfigurations`](@ref).
