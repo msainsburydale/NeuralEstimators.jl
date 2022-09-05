@@ -28,7 +28,7 @@ end
 
 common_docstring = """
 Given a `path` to a training run containing neural networks saved with names
-'network_epochx.bson' and an object saved as 'loss_per_epoch.bson',
+`"network_epochx.bson"` and an object saved as `"loss_per_epoch.bson"`,
 """
 
 """

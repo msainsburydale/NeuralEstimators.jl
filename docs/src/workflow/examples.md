@@ -1,40 +1,48 @@
 # Examples
 
+We illustrate the workflow for `NeuralEsimators` by way of example. Before proceeding, we load the required packages.
+```
+using NeuralEstimators
+using Flux
+using Distributions
+```
 
 
 ## Univariate Gaussian data
 
-Here, we consider a very simple estimation task, namely, inferring ``\mu`` from ``N(\mu, \sigma)`` data, where ``\sigma`` is known. Specifically, we will develop a neural estimator for ``μ``, where
+Here, we consider a classical estimation task, namely, inferring ``\mu`` and ``\sigma`` from ``N(\mu, \sigma^2)`` data. Specifically, we will develop a neural Bayes estimator for ``\mathbf{\theta} \equiv (\mu, \sigma)'``, where
 
 ```math
-\mu \sim N(0, 0.5), \quad \mathcal{Z} \equiv \{Z_1, \dots, Z_m\}, \; Z_i \sim N(μ, 1).
+ \mathbf{Z} \equiv (Z_1, \dots, Z_m)', \; Z_i \sim N(\mu, \sigma).
 ```
 
-
-Before beginning, we load the required packages.
+First, we define the prior distribution for $\mathbf{\theta}$, which we denote by $\Omega(\cdot)$. We let $\mu \sim N(0, 0.5)$ and $\sigma \sim U(0.1, 1)$, and we assume that the parameters are independent a priori. We also sample parameters from $\Omega(\cdot)$ to form sets of parameters used for training, validating, and testing the estimator. It does not matter how $\Omega(\cdot)$ is stored or how the parameters are sampled; the only requirement is that the sampled parameters are stored as $p \times K$ matrices, where $p$ is the number of parameters in the model and $K$ is the number of sampled parameter vectors.
 ```
-using NeuralEstimators
-using Distributions
-using Flux
+# Store the prior for each parameter as a named tuple
+Ω = (
+	μ = Normal(0, 0.5),
+	σ = Uniform(0.1, 1)
+)
+
+function sample(Ω, K)
+	μ = rand(Ω.μ, K)
+	σ = rand(Ω.σ, K)
+	θ = hcat(μ, σ)'
+	return θ
+end
+
+θ_train = sample(Ω, 10000)
+θ_val   = sample(Ω, 2000)
+θ_test  = sample(Ω, 1000)
 ```
 
-Now we define the prior distribution, $\Omega(\cdot)$, and sample parameters from it to form sets of parameters used for training, validating, and testing the estimator. In `NeuralEstimators`, parameters are stored as $p \times K$ matrices, where $p$ is the number of parameters in the model and $K$ is the number of sampled parameter vectors.
-```
-Ω = Normal(0, 0.5)
-
-p = 1
-θ_train = rand(Ω, p, 10000)
-θ_val   = rand(Ω, p, 2000)  
-θ_test  = rand(Ω, p, 1000)  
-```
-
-Next, we implicitly define the statistical model via simulated data. In the following, we overload the function [`simulate`](@ref), but this is not necessary; one may simulate data however they see fit (e.g., using pre-existing functions, possibly from other programming languages).  Irrespective of its source, the data must be stored as a `Vector` of `Array`s, with each array associated with one parameter vector. The dimension of these array must also be amenable to `Flux` neural networks (e.g., here we simulate 3-dimensional arrays, despite the second dimension being redundant), and one typically stores the data using `Float32` precision for computational efficiency.
+Next, we implicitly define the statistical model via simulated data. In the following, we overload the function [`simulate`](@ref), but this is not necessary; one may simulate data however they see fit (e.g., using pre-existing functions, possibly from other programming languages).  Irrespective of its source, the data must be stored as a `Vector` of `Array`s, with each array associated with one parameter vector. The dimension of these arrays must also be amenable to `Flux` neural networks; here, we simulate 3-dimensional arrays, despite the second dimension being redundant.  
 ```
 import NeuralEstimators: simulate
 
-# m: number of independent replicates simulated for each parameter vector
-function simulate(θ_set, m::Integer)
-	Z = [rand(Normal(θ[1], 1), 1, 1, m) for θ ∈ eachcol(θ_set)]
+# m: number of independent replicates simulated for each parameter vector.
+function simulate(θ_set, m)
+	Z = [rand(Normal(θ[1], θ[2]), 1, 1, m) for θ ∈ eachcol(θ_set)]
 	Z = broadcast.(Float32, Z)
 	return Z
 end
@@ -44,42 +52,42 @@ Z_train = simulate(θ_train, m)
 Z_val   = simulate(θ_val, m)
 ```
 
-
-We then design neural network architectures for use in the Deep Set framework, and we initialise the neural estimator as a [`DeepSet`](@ref) object.
+We then design neural network architectures for use in the Deep Set framework, and we initialise the neural estimator as a [`DeepSet`](@ref) object. Since we have univariate data, it is natural to use a dense neural network.
 ```
-n = 1
-w = 32
-q = 16
-ψ = Chain(Dense(n, w, relu), Dense(w, q, relu))
-ϕ = Chain(Dense(q, w, relu), Dense(w, p), Flux.flatten)
+n = 1    # size of each replicate (univariate data)
+w = 32   # number of neurons in each layer
+p = 2    # number of parameters in the statistical model
+
+ψ = Chain(Dense(n, w, relu), Dense(w, w, relu))
+ϕ = Chain(Dense(w, w, relu), Dense(w, p), Flux.flatten)
 θ̂ = DeepSet(ψ, ϕ)
 ```
 
 Next, we train the neural estimator using [`train`](@ref), here using the default absolute-error loss function.
 ```
-θ̂ = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 15)
+θ̂ = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 30)
 ```
 
-The estimator `θ̂` now approximates the Bayes estimator under the prior distribution $\Omega(\cdot)$ and the absolute-error loss function and, hence, we refer to it as a *neural Bayes estimator*. To assess the performance of the estimator, one may use [`assess`](@ref). Below, we assess the performance over a range of sample sizes.
+The estimator `θ̂` now approximates the Bayes estimator under the prior distribution $\Omega(\cdot)$ and the absolute-error loss function and, hence, we refer to it as a *neural Bayes estimator*.
+
+To test that the estimator does indeed provide reasonable estimates, we use the function [`assess`](@ref). This function can be used to assess the performance of the estimator (or multiple estimators) over a range of sample sizes:
 ```
 Z_test     = [simulate(θ_test, m) for m ∈ (5, 10, 15, 20, 30)]
 assessment = assess([θ̂], θ_test, Z_test)
 ```
-The returned object is of type [`Assessment`](@ref), and it contains the true parameters, estimates, and run times.  The true parameters and estimates may be merged into a convenient long-form `DataFrame` via [`merge`](@ref), and this greatly facilitates visualisation and diagnostic computation. Further, `NeuralEstimators` provides several plotting methods.
+The returned object is of type [`Assessment`](@ref), which contains i) the true parameters and their corresponding estimates in a long-form `DataFrame` convenient for visualisation and the computation of diagnostics (e.g., mean-squared error), and ii) the time taken to compute the estimates for each sample size and each estimator. Note that, in this example, we trained the neural estimator using a single value for $m$, and hence the estimator will not necessarily be optimal for all $m$; see [Variable sample sizes](@ref) for strategies towards developing neural estimators that are optimal for a range of $m$. The risk may then be plotted with:
 ```
 plotrisk(assessment)
 ```
 
-Finally, it is often helpful to visualise the empirical joint distribution of an estimator for a particular parameter configuration and a particular sample size.
+In addition to assessing the estimator with respect to many parameter configurations, it is often helpful to visualise the empirical joint distribution of an estimator for a particular parameter configuration. This can be done by providing $J$ data sets simulated from the given parameter configuration.
 ```            
 J = 100
-θ_scenario = rand(Ω, p, 1)
-Z_scenario = [simulate(θ_scenario, m, J)]
-assessment = assess([θ̂], θ_scenario, Z_scenario)  
+θ = sample(Ω, 1)
+Z = [simulate(θ, m, J)]
+assessment = assess([θ̂], θ, Z)  
 ```
 The empirical joint distribution may then visualised as:
 ```
 plotdistribution(assessment)
 ```
-
-The estimator may then be applied to real data, with bootstrapping facilitated with...

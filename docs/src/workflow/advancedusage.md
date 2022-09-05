@@ -1,5 +1,9 @@
 # Advanced usage
 
+## Storing expensive intermediate objects for data simulation
+
+Parameters sampled from the prior distribution $\Omega(\cdot)$ may be stored in two ways. Most simply, they can be stored as a $p \times K$ matrix, where $p$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution; this is the approach taken in the example using univariate Gaussian data. Alternatively, they can be stored in a user-defined subtype of the abstract type [`ParameterConfigurations`](@ref), whose only requirement is a field `θ` that stores the $p \times K$ matrix of parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below. 
+
 ## On-the-fly and just-in-time simulation
 
 When data simulation is (relatively) computationally inexpensive, $\mathcal{Z}_{\rm{train}}$ can be simulated periodically during training, a technique coined "simulation-on-the-fly". Regularly refreshing $\mathcal{Z}_{\rm{train}}$ leads to lower out-of-sample error and to a reduction in overfitting. This strategy therefore facilitates the use of larger, more representationally-powerful networks that are prone to overfitting when $\mathcal{Z}_{\rm{train}}$ is fixed. Refreshing $\mathcal{Z}_{\rm{train}}$ also has an additional computational benefit; data can be simulated "just-in-time", in the sense that they can be simulated from a small batch of $\vartheta_{\rm{train}}$, used to train the neural estimator, and then removed from memory. This can reduce pressure on memory resources when $|\vartheta_{\rm{train}}|$ is very large.

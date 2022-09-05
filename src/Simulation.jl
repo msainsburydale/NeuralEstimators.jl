@@ -1,5 +1,10 @@
 # TODO Finish the documentation for all of the simulateX functions..
 
+"""
+Generic function that the user may provide methods for in order to implicitly
+define their statistical model. 
+"""
+function simulate end
 
 #TODO Why do I need to force m to be an integer?
 """

@@ -91,7 +91,7 @@ function assess(
 	use_ξ = false,
 	use_gpu = true,
 	verbose::Bool = true
-	) where {P <: ParameterConfigurations, I <: Integer}
+	) where {P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
 
 	obj = map(m) do i
 
@@ -124,7 +124,7 @@ function assess(
 	use_ξ = false,
 	use_gpu = true,
 	verbose::Bool = true
-	) where {P <: ParameterConfigurations}
+	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
 
 	# Infer all_m from Z and check that Z is in the correct format
@@ -159,7 +159,7 @@ function _assess(
 	estimators, parameters::P, Z;
 	estimator_names::Vector{String}, parameter_names::Vector{String},
 	J::Integer, ξ, use_ξ, use_gpu, verbose
-	) where {P <: ParameterConfigurations}
+	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
 	# Infer m from Z and check that Z is in the correct format
 	m = unique(broadcast(x -> size(x)[end], Z))

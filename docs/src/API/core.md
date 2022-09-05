@@ -5,7 +5,7 @@ This page documents the functions that are central to the workflow of `NeuralEst
 
 ## Storing parameters
 
-Parameters sampled from the prior distribution ``\Omega(\cdot)`` may be stored in two ways. First, and most simply, they can be stored as a $p \times K$ matrix, where $p$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution. Second, they can be stored in a user-defined subtype of the abstract type described below.  
+Parameters sampled from the prior distribution ``\Omega(\cdot)`` may be stored i) as a $p \times K$ matrix, where $p$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution, or ii) in a user-defined subtype of the abstract type [`ParameterConfigurations`](@ref). See [Storing expensive intermediate objects for data simulation](@ref) for further discussion.   
 
 ```@docs
 ParameterConfigurations
@@ -21,6 +21,8 @@ Irrespective of their source, the simulated data must be stored as a subtype of 
 
 ```@docs
 simulate
+
+simulate(parameters, m::Integer, J::Integer)
 ```
 
 ## Representations for neural estimators
