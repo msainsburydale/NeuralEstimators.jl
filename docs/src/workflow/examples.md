@@ -1,26 +1,23 @@
 # Examples
 
-We illustrate the workflow for `NeuralEsimators` by way of example. Before proceeding, we load the required packages.
+We illustrate the workflow for `NeuralEsimators` by way of example.
+
+## Univariate Gaussian data
+
+Here, we consider a classical estimation task, namely, inferring $\mu$ and $\sigma$ from $N(\mu, \sigma^2)$ data. Specifically, we will develop a neural Bayes estimator for $\mathbf{\theta} \equiv (\mu, \sigma)'$ from independent and identically distributed data, $\mathbf{Z} \equiv (Z_1, \dots, Z_m)'$, where each $Z_i \sim N(\mu, \sigma)$.
+
+Before proceeding, we load the required packages.
 ```
 using NeuralEstimators
 using Flux
 using Distributions
 ```
 
-
-## Univariate Gaussian data
-
-Here, we consider a classical estimation task, namely, inferring ``\mu`` and ``\sigma`` from ``N(\mu, \sigma^2)`` data. Specifically, we will develop a neural Bayes estimator for ``\mathbf{\theta} \equiv (\mu, \sigma)'``, where
-
-```math
- \mathbf{Z} \equiv (Z_1, \dots, Z_m)', \; Z_i \sim N(\mu, \sigma).
-```
-
-First, we define the prior distribution for $\mathbf{\theta}$, which we denote by $\Omega(\cdot)$. We let $\mu \sim N(0, 0.5)$ and $\sigma \sim U(0.1, 1)$, and we assume that the parameters are independent a priori. We also sample parameters from $\Omega(\cdot)$ to form sets of parameters used for training, validating, and testing the estimator. It does not matter how $\Omega(\cdot)$ is stored or how the parameters are sampled; the only requirement is that the sampled parameters are stored as $p \times K$ matrices, where $p$ is the number of parameters in the model and $K$ is the number of sampled parameter vectors.
+Now, the first step of the workflow is to define the prior distribution for $\mathbf{\theta}$, which we denote by $\Omega(\cdot)$. We let $\mu \sim N(0, 1)$ and $\sigma \sim U(0.1, 1)$, and we assume that the parameters are independent a priori. We also sample parameters from $\Omega(\cdot)$ to form sets of parameters used for training, validating, and testing the estimator. It does not matter how $\Omega(\cdot)$ is stored or how the parameters are sampled; the only requirement is that the sampled parameters are stored as $p \times K$ matrices, where $p$ is the number of parameters in the model and $K$ is the number of sampled parameter vectors.
 ```
 # Store the prior for each parameter as a named tuple
 Ω = (
-	μ = Normal(0, 0.5),
+	μ = Normal(0, 1),
 	σ = Uniform(0.1, 1)
 )
 
@@ -36,7 +33,7 @@ end
 θ_test  = sample(Ω, 1000)
 ```
 
-Next, we implicitly define the statistical model via simulated data. In the following, we overload the function [`simulate`](@ref), but this is not necessary; one may simulate data however they see fit (e.g., using pre-existing functions, possibly from other programming languages).  Irrespective of its source, the data must be stored as a `Vector` of `Array`s, with each array associated with one parameter vector. The dimension of these arrays must also be amenable to `Flux` neural networks; here, we simulate 3-dimensional arrays, despite the second dimension being redundant.  
+Next, we implicitly define the statistical model via simulated data. In the following, we overload the function [`simulate`](@ref), but this is not necessary; one may simulate data however they see fit (e.g., using pre-existing functions, possibly from other programming languages).  Irrespective of its source, the data must be stored as a `Vector` of `Array`s, with each array associated with one parameter vector. The independent replicates are stored in the *last dimension* of the arrays. Further, the dimension of these arrays must be amenable to `Flux` neural networks; here, we simulate 3-dimensional arrays, despite the second dimension being redundant.  
 ```
 import NeuralEstimators: simulate
 
@@ -52,7 +49,8 @@ Z_train = simulate(θ_train, m)
 Z_val   = simulate(θ_val, m)
 ```
 
-We then design neural network architectures for use in the Deep Set framework, and we initialise the neural estimator as a [`DeepSet`](@ref) object. Since we have univariate data, it is natural to use a dense neural network.
+We now design architectures for the inner and outer neural networks, $\mathbf{\psi}(\cdot)$ and $\mathbf{\phi}(\cdot)$ respectively, in the Deep Set framework, and initialise the neural estimator as a [`DeepSet`](@ref) object. Since we have univariate data, it is natural to use a dense neural network.
+
 ```
 n = 1    # size of each replicate (univariate data)
 w = 32   # number of neurons in each layer
@@ -80,7 +78,7 @@ The returned object is of type [`Assessment`](@ref), which contains i) the true 
 plotrisk(assessment)
 ```
 
-In addition to assessing the estimator with respect to many parameter configurations, it is often helpful to visualise the empirical joint distribution of an estimator for a particular parameter configuration. This can be done by providing $J$ data sets simulated from the given parameter configuration.
+In addition to assessing the estimator with respect to many parameter configurations, it is often helpful to visualise the empirical joint distribution of an estimator for a particular parameter configuration and a particular sample size. This can be done by providing $J$ data sets simulated under a single parameter configuration.
 ```            
 J = 100
 θ = sample(Ω, 1)

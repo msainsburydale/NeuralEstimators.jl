@@ -59,7 +59,7 @@ Since the resulting neural estimator minimises (a Monte Carlo approximation of) 
 The neural Bayes estimator is conceptually simple and can be used in a wide range of problems where other approaches, such as maximum-likelihood estimation, are computationally infeasible. The estimator also has marked practical appeal, as the general workflow for its construction is only loosely connected to the statistical or physical model being considered. The workflow is as follows:
   1. Define $\Omega(\cdot)$, the prior distribution for $\mathbf{\theta}$.
   1. Sample parameters from $\Omega(\cdot)$ to form sets of parameters $\vartheta_{\rm{train}}$, $\vartheta_{\rm{val}}$, and $\vartheta_{\rm{test}}$.
-  1.  Simulate data from the model, $\mathcal{P}$, using these sets of parameters, yielding the data sets $\mathcal{Z}_{\rm{train}}$, $\mathcal{Z}_{\rm{val}}$, and $\mathcal{Z}_{\rm{test}}$, respectively. 
+  1.  Simulate data from the model, $\mathcal{P}$, using these sets of parameters, yielding the data sets $\mathcal{Z}_{\rm{train}}$, $\mathcal{Z}_{\rm{val}}$, and $\mathcal{Z}_{\rm{test}}$, respectively.
   1. Choose a loss function $L(\cdot, \cdot)$.
   1. Design neural network architectures for $\mathbf{\phi}(\cdot; \mathbf{\gamma})$ and $\mathbf{\psi}(\cdot; \mathbf{\gamma})$.
   1. Using the training sets $\mathcal{Z}_{\textrm{train}}$ and $\vartheta_{\rm{train}}$, train the neural network under $L(\cdot,\cdot)$ to obtain the neural Bayes estimator, $\hat{\mathbf{\theta}}(\cdot; \mathbf{\gamma}^*)$. During training, continuously monitor progress based on $\mathcal{Z}_{\textrm{val}}$ and $\vartheta_{\rm{val}}$.

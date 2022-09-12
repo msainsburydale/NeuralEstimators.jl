@@ -50,7 +50,7 @@ function _Assessment(obj, save)
 		savename = save[2]
 		CSV.write(joinpath(savepath, "runtime_$savename.csv"), assessment.runtime)
 		CSV.write(joinpath(savepath, "parameters_$savename.csv"), assessment.θ)
-		CSV.write(joinpath(savepath, "estimates_$savename.csv"), estimates.θ̂)
+		CSV.write(joinpath(savepath, "estimates_$savename.csv"), assessment.θ̂)
 		CSV.write(joinpath(savepath, "merged_$savename.csv"), merge(assessment))
 	end
 

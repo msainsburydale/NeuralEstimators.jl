@@ -61,7 +61,7 @@ end
 # - For now, it may be easier to focus NeuralEsimators.R to the method of
 #   train() that keeps the data fixed. Then, R users won't have to worry about
 #   defining a data simulator.
-# - Vignette showing i) pure R treatment using wrappers. 
+# - Vignette showing i) pure R treatment using wrappers.
 
 
 # TODO

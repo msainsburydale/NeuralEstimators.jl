@@ -53,10 +53,7 @@ The neural networks `ψ` and `ϕ` and typically `Flux` neural networks. The
 function `a` must act on an `Array` and, since it aggregates the iid realisations,
 it must aggregate over the last dimension of the array.
 
-When initialising a `DeepSet` object, one may provide their own aggregation function
-by treating `a` via the constructor that has `a` as a positional argument, or
-simply use the convenient constructor that has `a` as a keyword argument, in which
-case `a` may be the elementwise `"mean"`, `"sum"`, or `"logsumexp"` function.
+There are two `DeepSet` constructors. The first constructor treats `a` as a keyword argument of type `String`, which can take values `"mean"` (default), `"sum"`, or `"logsumexp"` function. The second constructor treats `a` as a positional argument of type `Function`, and this constructor allows the user to provide a custom aggregation function. 
 
 # Examples
 ```
