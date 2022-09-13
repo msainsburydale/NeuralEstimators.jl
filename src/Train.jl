@@ -16,7 +16,7 @@ Arguments common to all methods:
 - `epochs::Integer = 100`
 - `batchsize::Integer = 32`
 - `optimiser = ADAM(1e-4)`
-- `savepath::String = "runs/"`: path to save the trained `θ̂` and other information; if savepath is an empty string (i.e., `""`), nothing is saved.
+- `savepath::String = ""`: path to save the trained `θ̂` and other information; if savepath is an empty string (default), nothing is saved.
 - `stopping_epochs::Integer = 10`: cease training if the risk doesn't improve in `stopping_epochs` epochs.
 - `use_gpu::Bool = true`
 - `verbose::Bool = true`
@@ -51,7 +51,7 @@ function train(θ̂, P;
 	optimiser          = ADAM(1e-4),
     batchsize::Integer = 32,
     epochs::Integer    = 100,
-	savepath::String   = "runs/",
+	savepath::String   = "", # "runs/"
 	stopping_epochs::Integer = 10,
     use_gpu::Bool      = true,
 	verbose::Bool      = true,
@@ -158,7 +158,7 @@ function train(θ̂, θ_train::P, θ_val::P;
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
 		optimiser        = ADAM(1e-4),
-		savepath::String = "runs/",
+		savepath::String = "",
 		simulate_just_in_time::Bool = false,
 		stopping_epochs::Integer = 10,
 		use_gpu::Bool    = true,
@@ -292,7 +292,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
 		optimiser        = ADAM(1e-4),
-		savepath::String = "runs/",
+		savepath::String = "",
 		stopping_epochs::Integer = 10,
 		use_gpu::Bool    = true,
 		verbose::Bool    = true
@@ -383,6 +383,78 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 end
 
 
+# ---- Wrapper function for training multiple estimators ----
+
+# TODO add unit tests
+# TODO mention this method in the documentation for PiecewiseEstimator
+"""
+	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M; <keyword args>)
+
+Train several neural estimators, each with the architecture given by `θ̂`, using
+the sample sizes given by the vector of integers, `M`.
+
+Each neural estimator is pre-trained with the neural estimator trained for the
+previous sample size. That is, if `M = [m₁, m₂]`, with `m₂` > `m₁`, the neural
+estimator for sample size `m₂` is pre-trainined with the (trained) neural
+estimator for sample size `m₁`. By pre-training a series of neural estimators with
+progressively larger sample sizes, most of the learning is done with small,
+computationally cheap sample sizes. Hence, this approach can be beneficial even
+if one is only interested in estimation for a single, large sample.
+
+This method is a wrapper for
+`train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T)` and, hence, it
+inherits its keyword arguments. Further, certain keyword arguments can be given
+as vectors. For instance, if we are training two neural estimators, we can use
+a different number of epochs by providing `epochs = [e₁, e₂]`. Other arguments
+that allow vectors are `batchsize`, `stopping_epochs`, and `optimiser`.
+"""
+function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+
+	@assert all(M .> 0)
+	M = sort(M)
+
+	# Create one copy of the estimator θ̂ for each sample size in M
+	estimators = [deepcopy(θ̂ ) for _ ∈ eachindex(M)]
+
+	for i ∈ eachindex(M)
+
+		mᵢ = M[i]
+		@info "training with m=$(mᵢ)"
+
+		# Pre-train if this is not the first estimator
+		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
+		θ̂ᵢ = estimators[i]
+
+		# Modify/check the keyword arguments before passing them onto train().
+		# If savepath has been provided in the keyword arguments, modify it with
+		# information on the training sample size mᵢ. First, we convert the object
+		# args to a named tuple. Then, if savepath was included as an argument,
+		# we use merge() to replace its given value with a modified version that
+		# contains mᵢ. We will pass on this modified version of args to train().
+		kwargs = (;args...)
+		@assert !haskey(kwargs, :m) "`m` should not be provided with this method of `train`"
+		if haskey(kwargs, :savepath)
+			kwargs = merge(kwargs, (savepath = kwargs.savepath * "m$(mᵢ)",))
+		end
+
+		for arg ∈ [:epochs, :batchsize, :stopping_epochs, :optimiser]
+			if haskey(kwargs, arg)
+				field = getfield(kwargs, arg)
+				@assert length(field) ∈ (1, length(M))
+				if length(field) > 1
+					kwargs = merge(kwargs, NamedTuple{(arg,)}(field[i]))
+				end
+			end
+		end
+
+		kwargs = Dict(pairs(kwargs)) # convert to Dictionary so that kwargs can be passed to train()
+
+
+		θ̂ᵢ = train(θ̂ᵢ, θ_train, θ_val, Z_train, indexdata(Z_val, 1:mᵢ); kwargs...)
+	end
+
+	return estimators
+end
 
 
 # ---- Helper functions ----

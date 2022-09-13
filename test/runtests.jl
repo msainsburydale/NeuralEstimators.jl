@@ -240,14 +240,18 @@ verbose = false # verbose used in the NeuralEstimators code
 
 	    use_gpu = device == gpu
 		@testset "train" begin
-			θ̂ = train(θ̂, Parameters, m = 10, epochs = 5, savepath = "", use_gpu = use_gpu, verbose = verbose, ξ = ξ)
-			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "", use_gpu = use_gpu, verbose = verbose)
-			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "", epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
-			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "", epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
+			θ̂ = train(θ̂, Parameters, m = 10, epochs = 5, use_gpu = use_gpu, verbose = verbose, ξ = ξ)
+			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, use_gpu = use_gpu, verbose = verbose)
+			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
+			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
 
 			Z_train = simulate(parameters, 20)
 			Z_val = simulate(parameters, 10)
-			θ̂ = train(θ̂, parameters, parameters, Z_train, Z_val, epochs = 5, savepath = "", use_gpu = use_gpu, verbose = verbose)
+			# θ̂ = train(θ̂, parameters, parameters, Z_train, Z_val, epochs = 5, use_gpu = use_gpu, verbose = verbose)
+
+			M = [1, 2, 5, 10]
+			several_estimators = train(θ̂, parameters, parameters, Z_train, Z_val, M; epochs = [10, 5, 3, 2], use_gpu = use_gpu, verbose = verbose)
+
 
 			# Decided not to test the saving function, because we can't always assume that we have write privledges
 			# θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "dummy123", use_gpu = use_gpu, verbose = verbose)

@@ -2,7 +2,7 @@
 
 ## Storing expensive intermediate objects for data simulation
 
-Parameters sampled from the prior distribution $\Omega(\cdot)$ may be stored in two ways. Most simply, they can be stored as a $p \times K$ matrix, where $p$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution; this is the approach taken in the example using univariate Gaussian data. Alternatively, they can be stored in a user-defined subtype of the abstract type [`ParameterConfigurations`](@ref), whose only requirement is a field `θ` that stores the $p \times K$ matrix of parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below. 
+Parameters sampled from the prior distribution $\Omega(\cdot)$ may be stored in two ways. Most simply, they can be stored as a $p \times K$ matrix, where $p$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution; this is the approach taken in the example using univariate Gaussian data. Alternatively, they can be stored in a user-defined subtype of the abstract type [`ParameterConfigurations`](@ref), whose only requirement is a field `θ` that stores the $p \times K$ matrix of parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below.
 
 ## On-the-fly and just-in-time simulation
 
@@ -87,4 +87,4 @@ As training is by far the most computationally demanding part of the workflow, o
 Flux.loadparams!(θ̂, loadbestweights(path))
 ```
 
-Above, `architecture()` is a user-defined function that returns a neural estimator with the same architecture as the estimator that we wish to load, but with randomly initialised parameters, and the function `Flux.loadparams!` loads the parameters of the best (as determined [`loadbestweights`](@ref)) neural estimator saved in `path`.
+Above, `architecture()` is a user-defined function that returns a neural estimator with the same architecture as the estimator that we wish to load, but with randomly initialised parameters, and the function `Flux.loadparams!` loads the parameters of the best (as determined by [`loadbestweights`](@ref)) neural estimator saved in `path`.
