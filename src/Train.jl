@@ -153,7 +153,7 @@ sets explicitly as `θ_train` and `θ_val`, which are both held fixed during tra
 """
 function train(θ̂, θ_train::P, θ_val::P;
 		m,
-		batchsize::Integer = 256,
+		batchsize::Integer = 32,
 		epochs_per_Z_refresh::Integer = 1,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
@@ -288,7 +288,7 @@ is, the size of the last dimension in each array in `Z_train` should be constant
 and similarly for `Z_val` (although these constants can differ, as discussed above).
 """
 function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
-		batchsize::Integer = 256,
+		batchsize::Integer = 32,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
 		optimiser        = ADAM(1e-4),
@@ -413,7 +413,19 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 	@assert all(M .> 0)
 	M = sort(M)
 
+	kwargs = (;args...)
+	@assert !haskey(kwargs, :m) "`m` should not be provided with this method of `train`"
+
 	# Create one copy of the estimator θ̂ for each sample size in M
+	# If we are using the GPU, we first need to move θ̂ there before creating
+	# the estimator, otherwise
+	if haskey(kwargs, :use_gpu)
+		use_gpu = kwargs.use_gpu
+	else
+		use_gpu = true
+	end
+	device = _checkgpu(use_gpu, verbose = true)
+	θ̂ = θ̂ |> device
 	estimators = [deepcopy(θ̂ ) for _ ∈ eachindex(M)]
 
 	for i ∈ eachindex(M)
@@ -423,7 +435,6 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 
 		# Pre-train if this is not the first estimator
 		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
-		θ̂ᵢ = estimators[i]
 
 		# Modify/check the keyword arguments before passing them onto train().
 		# If savepath has been provided in the keyword arguments, modify it with
@@ -450,7 +461,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 		kwargs = Dict(pairs(kwargs)) # convert to Dictionary so that kwargs can be passed to train()
 
 
-		θ̂ᵢ = train(θ̂ᵢ, θ_train, θ_val, Z_train, indexdata(Z_val, 1:mᵢ); kwargs...)
+		estimators[i] = train(estimators[i], θ_train, θ_val, Z_train, indexdata(Z_val, 1:mᵢ); kwargs...)
 	end
 
 	return estimators

@@ -19,9 +19,6 @@ element fewer than the number of `estimators`.
 
 # Examples
 
-Suppose that we have two neural estimators, `θ̂₁` and `θ̂₂`, taking the following
-arbitrary forms:
-
 ```
 n = 10
 p = 5

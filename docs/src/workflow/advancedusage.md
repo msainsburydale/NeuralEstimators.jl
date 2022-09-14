@@ -34,7 +34,49 @@ If data sets with varying $m$ are envisaged, one could train $l$ neural Bayes es
 where, here, $\mathbf{\gamma}^* \equiv (\mathbf{\gamma}^*_{\tilde{m}_1}, \dots, \mathbf{\gamma}^*_{\tilde{m}_{l-1}})$, and where $\mathbf{\gamma}^*_{\tilde{m}}$ are the neural-network parameters optimised for sample size $\tilde{m}$ chosen so that $\hat{\mathbf{\theta}}(\cdot; \mathbf{\gamma}^*_{\tilde{m}})$ is near-optimal over the range of sample sizes in which it is applied.
 This approach works well in practice, and it is less computationally burdensome than it first appears when used in conjunction with pre-training.
 
-Piecewise neural estimators are implemented with the struct, [`PiecewiseEstimator`](@ref).
+Piecewise neural estimators are implemented with the struct, [`PiecewiseEstimator`](@ref). The method [`train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}`](@ref) is particularly useful for training piecewise neural estimators. Below, we replicate the example of inferring $\mu$ and $\sigma$ from $N(\mu, \sigma^2)$ data, but this time we train three neural estimators with sample sizes $\tilde{m}_l$ equal to 1, 10, and 30, respectively.   
+
+```
+using NeuralEstimators
+import NeuralEstimators: simulate
+using Flux
+using Distributions
+
+Ω = (μ = Normal(0, 1), σ = Uniform(0.1, 1))
+
+function sample(Ω, K)
+	μ = rand(Ω.μ, K)
+	σ = rand(Ω.σ, K)
+	θ = hcat(μ, σ)'
+	return θ
+end
+
+θ_train = sample(Ω, 10000)
+θ_val   = sample(Ω, 2000)
+
+function simulate(θ_set, m)
+	Z = [rand(Normal(θ[1], θ[2]), 1, 1, m) for θ ∈ eachcol(θ_set)]
+	Z = broadcast.(Float32, Z)
+	return Z
+end
+
+M = [1, 10, 30]
+Z_train = simulate(θ_train, maximum(M))
+Z_val   = simulate(θ_val, maximum(M))
+
+n = 1    # size of each replicate (univariate data)
+w = 32   # number of neurons in each layer
+p = 2    # number of parameters in the statistical model
+
+ψ = Chain(Dense(n, w, relu), Dense(w, w, relu))
+ϕ = Chain(Dense(w, w, relu), Dense(w, p), Flux.flatten)
+θ̂ = DeepSet(ψ, ϕ)
+
+estimators = train(θ̂ , θ_train, θ_val, Z_train, Z_val, M, epochs = 10)
+mchanges = [5, 20]
+
+piecewise_estimator = PiecewiseEstimator(estimators, mchanges)
+```
 
 ### Training with a variable sample size
 
