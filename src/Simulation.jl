@@ -2,7 +2,7 @@
 
 """
 Generic function that the user may provide methods for in order to implicitly
-define their statistical model. 
+define their statistical model.
 """
 function simulate end
 
@@ -98,7 +98,7 @@ function simulateschlather(L::AbstractArray{T, 2}; C = 3.5) where T <: Number
 	# help avoid neural network collapse. Note that there is also a theoretical
 	# justification for this transformation; it transforms from the data from
 	# the unit Fréchet scale to the Gumbel scale, which is typically better behaved.
-	Z = log.(Z) # TODO decide if this is what we want to do; can add an arguement transform::Bool = true.
+	Z = log.(Z) # TODO decide if this is what we want to do; can add an arguement transform::Bool = true (or perhaps call this stabilise_variance).
 
 	return Z
 end

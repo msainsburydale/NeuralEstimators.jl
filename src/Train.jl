@@ -385,8 +385,7 @@ end
 
 # ---- Wrapper function for training multiple estimators ----
 
-# TODO add unit tests
-# TODO mention this method in the documentation for PiecewiseEstimator
+
 """
 	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M; <keyword args>)
 

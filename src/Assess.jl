@@ -57,8 +57,11 @@ function _Assessment(obj, save)
 	return assessment
 end
 
-
-# TODO parameters should be either a subtype of AbstractMatrix or ParameterConfigurations.
+# TODO clarify the form of Z
+# data should look like:
+# n = 1
+# K = 4
+# Z = [[rand(n, 1, m) for k in 1:K] for m in (5, 10, 15)]
 """
 	assess(estimators, parameters, Z; <keyword args>)
 	assess(estimators, parameters; <keyword args>)
@@ -110,11 +113,7 @@ function assess(
 end
 
 
-# A version for fixed Z.
-# data should look like:
-# n = 1
-# K = 4
-# Z = [[rand(n, 1, m) for k in 1:K] for m in (5, 10, 15)]
+
 function assess(
 	estimators, parameters::P, Z; # TODO enforce Z to be a Vector{Vector{Array}}
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
@@ -139,7 +138,7 @@ function assess(
 	KJ = KJ[1]
 	@assert KJ % K == 0 "The number of data sets in Z must be a multiple of the number of parameters"
 	J = KJ ÷ K
-	J > 1 && @info "There are more simulated data sets than unique parameter vectors; ensure that the data are stored in an 'inner' fashion, so that all simulated data sets from a given parameter vector are adjacent."
+	J > 1 && @info "There are more simulated data sets than unique parameter vectors; ensure that the data are stored in an 'outer' fashion, so that the parameter vectors run faster than the replicated data sets."
 
 	obj = map(Z) do z
 

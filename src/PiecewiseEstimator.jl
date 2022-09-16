@@ -19,10 +19,15 @@ element fewer than the number of `estimators`.
 
 # Examples
 
+Suppose that we've trained `θ̂₁` for small sample sizes (e.g., m ≤ 30)
+and `θ̂₂` for moderate-to-large sample sizes (e.g., m > 30). Then we can
+construct a piecewise estimator with a sample-size changepoint of 30, which
+dispatches `θ̂₁` if m ≤ 30 and `θ̂₂` if m > 30:
+
 ```
-n = 10
-p = 5
-w = 32
+n = 2
+p = 3
+w = 8
 
 ψ₁ = Chain(Dense(n, w, relu), Dense(w, w, relu));
 ϕ₁ = Chain(Dense(w, w, relu), Dense(w, p));
@@ -31,16 +36,9 @@ w = 32
 ψ₂ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu));
 ϕ₂ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, p));
 θ̂₂ = DeepSet(ψ₂, ϕ₂)
-```
 
-Further suppose that we've trained `θ̂₁` for small sample sizes (e.g., m ≤ 30)
-and `θ̂₂` for moderate-to-large sample sizes (e.g., m > 30). Then we can
-construct a piecewise estimator with a sample-size changepoint of 30, which
-dispatches `θ̂₁` if m ≤ 30 and `θ̂₂` if m > 30:
-
-```
-θ̂ = PiecewiseEstimator((θ̂₁, θ̂₂), (30,))
-Z = [rand(Float32, n, 1, m) for m ∈ (10, 50)]
+θ̂ = PiecewiseEstimator([θ̂₁, θ̂₂], [30])
+Z = [rand(n, 1, m) for m ∈ (10, 50)]
 θ̂(Z)
 ```
 """

@@ -57,20 +57,6 @@ include("UtilityFunctions.jl")
 end
 
 
-# TODO NeuralEstimators.R
-# - For now, it may be easier to focus NeuralEsimators.R to the method of
-#   train() that keeps the data fixed. Then, R users won't have to worry about
-#   defining a data simulator.
-# - Vignette showing i) pure R treatment using wrappers.
-
-
-# TODO
-# - Document the simulation functions. Add stabilise_variance::Bool = false for
-#   the Schlather and conditional extremes models.
-# - train() is actually a mutating function, so we should call it train!()
-
-
-
 # TODO once I've made the repo public:
 # •	Contact TravisCI to tell them that I am developing open-source software to get a free plan.
 # •	code coverage widget should display the percentage.
@@ -89,10 +75,13 @@ end
 # - Include julia versions of plotrisk() and plotjointdistribution(). Then, NeuralEstimators.jl will be self contained. A nice way to do this would be to Julia RCall() to NeuralEstimatorsR.
 
 
-## TODO (save these points for writing the manuscript later)
-# Why Julia?
-# Julia has many [attractive features](https://julialang.org/); in particular, it has been designed to alleviate the so-called two-language problem, so that it is both easily developed and fast in its execution. This means that users can write performant code for data simulation without needing to vectorise (i.e., `for` loops are fine, which is often very helpful). Further, many Julia packages are written entirely in Julia and, hence, their source code is easily understood and extended; this includes `NeuralEstimators` and the deep learning framework on which it is built upon, [Flux](https://fluxml.ai/Flux.jl/stable/).
-
-
-#  This is redundant for the current simple example, but it is necessary for certain techniques discussed in [Advanced usage](@ref).
-# In `NeuralEstimators`, the parameters are stored in a user-defined subtype of [`ParameterConfigurations`](@ref).
+# Some points for writing the manuscript later.
+# Why Julia? Julia has many [attractive features](https://julialang.org/); in
+# particular, it has been designed to alleviate the so-called two-language
+# problem, so that it is both easily developed and fast in its execution. This
+# means that users can write performant code for data simulation without needing
+# to vectorise (i.e., `for` loops are fine, which is often very helpful).
+# Further, many Julia packages are written entirely in Julia and, hence, their
+# source code is easily understood and extended; this includes
+# `NeuralEstimators` and the deep learning framework on which it is built upon,
+# [Flux](https://fluxml.ai/Flux.jl/stable/).
