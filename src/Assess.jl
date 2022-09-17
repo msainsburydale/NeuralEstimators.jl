@@ -1,25 +1,22 @@
-"""
-	Assessment(θ, θ̂, runtime)
 
-A set of true parameters `θ`, corresponding estimates `θ̂`, and the `runtime` to
-obtain `θ̂`, as returned by a call to `assess`.
+# ---- Assessment ----
+
+"""
+	Assessment(θandθ̂, runtime)
+
+An object for storing the result of calling `assess()`, containing a `DataFrame`
+of true parameters `θ` and corresponding estimates `θ̂`, and a `DataFrame`
+containing the `runtime` for each estimator. 
 """
 struct Assessment
-	θ::DataFrame
-	θ̂::DataFrame
+	θandθ̂::DataFrame
 	runtime::DataFrame
 end
 
-"""
-	merge(assessment::Assessment)
 
-Merge `assessment` into a single long-form `DataFrame` containing the true
-parameters and the corresponding estimates.
-"""
-function merge(assessment::Assessment)
-
-	θ = assessment.θ
-	θ̂ = assessment.θ̂
+# Given a set of true parameters θ and corresponding estimates θ̂ resulting
+# from a call to assess(), merge θ and θ̂ into a single long-form DataFrame.
+function _merge(θ, θ̂)
 
 	# Replicate θ to match the number of rows in θ̂. Note that the parameter
 	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
@@ -36,26 +33,22 @@ function merge(assessment::Assessment)
 	return θ̂
 end
 
+
 # Internal constructor for Assessment
-function _Assessment(obj, save)
+function _Assessment(obj)
 
 	θ = obj[1].θ
 	θ̂ = vcat(map(x -> x.θ̂, obj)...)
 	runtime = vcat(map(x -> x.runtime, obj)...)
 
-	assessment = Assessment(θ, θ̂, runtime)
-
-	if save != ["", ""]
-		savepath = save[1]
-		savename = save[2]
-		CSV.write(joinpath(savepath, "runtime_$savename.csv"), assessment.runtime)
-		CSV.write(joinpath(savepath, "parameters_$savename.csv"), assessment.θ)
-		CSV.write(joinpath(savepath, "estimates_$savename.csv"), assessment.θ̂)
-		CSV.write(joinpath(savepath, "merged_$savename.csv"), merge(assessment))
-	end
+	assessment = Assessment(_merge(θ, θ̂), runtime)
 
 	return assessment
 end
+
+
+# ---- assess() ----
+
 
 # TODO clarify the form of Z
 # data should look like:
@@ -78,7 +71,6 @@ keyword argument `m` to specify the sample sizes to use during assessment.
 - `estimator_names::Vector{String}`: names of the estimators (sensible default values provided).
 - `parameter_names::Vector{String}`: names of the parameters (sensible default values provided).
 - `J::Integer = 1`: the number of times to replicate each parameter in `parameters`.
-- `save::Vector{String}`: by default, no objects are saved; however, if `save` is provided, four `DataFrames` respectively containing the true parameters `θ`, estimates `θ̂`, runtimes, and merged `θ` and `θ̂` will be saved in the directory `save[1]` with file names (not extensions) suffixed by `save[2]`.
 - `ξ = nothing`: invariant model information.
 - `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses the invariant model information, `ξ`: If it does, the estimator will be applied as `estimator(Z, ξ)`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
@@ -89,7 +81,6 @@ function assess(
 	m::Vector{I}, J::Integer = 1,
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
-	save::Vector{String} = ["", ""],
 	ξ = nothing,
 	use_ξ = false,
 	use_gpu = true,
@@ -109,7 +100,7 @@ function assess(
 		)
 	end
 
-	return _Assessment(obj, save)
+	return _Assessment(obj)
 end
 
 
@@ -118,7 +109,6 @@ function assess(
 	estimators, parameters::P, Z; # TODO enforce Z to be a Vector{Vector{Array}}
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
-	save::Vector{String} = ["", ""],
 	ξ = nothing,
 	use_ξ = false,
 	use_gpu = true,
@@ -150,7 +140,7 @@ function assess(
 
 	end
 
-	return _Assessment(obj, save)
+	return _Assessment(obj)
 end
 
 #TODO should Z be typed?

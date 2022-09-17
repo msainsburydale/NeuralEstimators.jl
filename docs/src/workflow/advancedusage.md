@@ -73,9 +73,9 @@ p = 2    # number of parameters in the statistical model
 θ̂ = DeepSet(ψ, ϕ)
 
 estimators = train(θ̂ , θ_train, θ_val, Z_train, Z_val, M, epochs = 10)
-mchanges = [5, 20]
+mchange = [5, 20]
 
-piecewise_estimator = PiecewiseEstimator(estimators, mchanges)
+piecewise_estimator = PiecewiseEstimator(estimators, mchange)
 ```
 
 ### Training with a variable sample size

@@ -45,7 +45,6 @@ export train
 include("Train.jl")
 
 export assess, Assessment
-import Base: merge
 include("Assess.jl")
 
 export parametricbootstrap, nonparametricbootstrap
