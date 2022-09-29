@@ -93,7 +93,7 @@ function train(θ̂, P;
 
 	# Save the initial θ̂. This is to prevent bugs in the case that
 	# the initial loss does not improve
-	savebool && _saveweights(θ̂, 0, savepath)
+	savebool && _saveweights(θ̂, savepath, 0)
 
 	# Number of batches of θ to use for each epoch
 	batches = ceil((K / batchsize))
@@ -127,7 +127,7 @@ function train(θ̂, P;
 		# update the minimum validation risk; otherwise, add to the early
 		# stopping counter
 		if current_val_risk <= min_val_risk
-			savebool && _saveweights(θ̂, epoch, savepath)
+			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = current_val_risk
 			early_stopping_counter = 0
 		else
@@ -190,7 +190,7 @@ function train(θ̂, θ_train::P, θ_val::P;
 
 	# Save the initial θ̂. This is to prevent bugs in the case that the initial
 	# risk does not improve
-	savebool && _saveweights(θ̂, 0, savepath)
+	savebool && _saveweights(θ̂, savepath, 0)
 
 	# We may simulate Z_train in its entirety either because (i) we
 	# want to avoid the overhead of simulating continuously or (ii) we are
@@ -252,7 +252,7 @@ function train(θ̂, θ_train::P, θ_val::P;
 		# update the minimum validation risk; otherwise, add to the early
 		# stopping counter
 		if current_val_risk <= min_val_risk
-			savebool && _saveweights(θ̂, epoch, savepath)
+			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = current_val_risk
 			early_stopping_counter = 0
 		else
@@ -335,7 +335,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	loss_per_epoch = [initial_train_risk initial_val_risk;]
 
 	# Save the initial θ̂
-	savebool && _saveweights(θ̂, 0, savepath)
+	savebool && _saveweights(θ̂, savepath, 0)
 
 	# Training data recycles every x epochs
 	x = M ÷ m
@@ -365,7 +365,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		# update the minimum validation risk; otherwise, add to the early
 		# stopping counter
 		if current_val_risk <= min_val_risk
-			savebool && _saveweights(θ̂, epoch, savepath)
+			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = current_val_risk
 			early_stopping_counter = 0
 		else
@@ -446,19 +446,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 		if haskey(kwargs, :savepath)
 			kwargs = merge(kwargs, (savepath = kwargs.savepath * "m$(mᵢ)",))
 		end
-
-		for arg ∈ [:epochs, :batchsize, :stopping_epochs, :optimiser]
-			if haskey(kwargs, arg)
-				field = getfield(kwargs, arg)
-				@assert length(field) ∈ (1, length(M))
-				if length(field) > 1
-					kwargs = merge(kwargs, NamedTuple{(arg,)}(field[i]))
-				end
-			end
-		end
-
-		kwargs = Dict(pairs(kwargs)) # convert to Dictionary so that kwargs can be passed to train()
-
+		kwargs = _modifyargs(kwargs, i, M)
 
 		estimators[i] = train(estimators[i], θ_train, θ_val, Z_train, indexdata(Z_val, 1:mᵢ); kwargs...)
 	end
@@ -467,7 +455,72 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 end
 
 
+# TODO documentation
+function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; ρ, args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+
+	@assert all(M .> 0)
+	M = sort(M)
+
+	@assert all(ρ .> 0)
+	@assert all(ρ .< 1)
+	ρ = sort(ρ, rev=true)
+
+	# Extract the savepath from the keyword arguments, and replace it with an
+	# empty string so that intermediate estimators are not saved
+	kwargs = (;args...)
+	@assert !haskey(kwargs, :loss) "`loss` should not be provided with this method of `train`"
+	if haskey(kwargs, :savepath)
+		save = true
+		savepath = kwargs.savepath
+		kwargs = merge(kwargs, (savepath = "",))
+	else
+		save = false
+	end
+
+	# Under the 0-1 loss, the gradients vanish when the displacement between θ̂
+	# and θ is large. To avoid this issue during the start of training, we first
+	# pre-train the estimators under the absolute-error loss.
+	estimators = train(θ̂, θ_train, θ_val, Z_train, Z_val, M; kwargs...)
+
+	for i ∈ eachindex(M)
+
+		mᵢ = M[i]
+
+		for p ∈ ρ
+			@info "training the MAP estimator with ρ=$p and m=$(mᵢ)"
+			estimators[i] = train(
+				estimators[i], θ_train, θ_val, Z_train, indexdata(Z_val, 1:mᵢ);
+				loss = (ŷ, y) -> zeroone(ŷ, y, ρ = p),
+				_modifyargs(kwargs, i, M)...
+			)
+		end
+
+		if save
+			_saveweights(estimators[i], savepath * "m$(mᵢ)") # TODO
+		end
+	end
+
+	return estimators
+end
+
+
 # ---- Helper functions ----
+
+
+function _modifyargs(kwargs, i, M)
+	for arg ∈ [:epochs, :batchsize, :stopping_epochs, :optimiser]
+		if haskey(kwargs, arg)
+			field = getfield(kwargs, arg)
+			@assert length(field) ∈ (1, length(M))
+			if length(field) > 1
+				kwargs = merge(kwargs, NamedTuple{(arg,)}(field[i]))
+			end
+		end
+	end
+	kwargs = Dict(pairs(kwargs)) # convert to Dictionary so that kwargs can be passed to train()
+	return kwargs
+end
+
 
 
 function indexdata(Z::V, m) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
@@ -502,10 +555,17 @@ end
 
 # helper functions to reduce code repetition and improve clarity
 
-function _saveweights(θ̂, epoch, savepath)
+function _saveweights(θ̂, savepath, epoch)
 	# return to cpu before serialization
 	weights = θ̂ |> cpu |> Flux.params
-	networkpath = joinpath(savepath, "network_epoch$(epoch).bson")
+	networkpath = joinpath(savepath, "network_epoch$epoch.bson")
+	@save networkpath weights
+end
+
+function _saveweights(θ̂, savepath)
+	# return to cpu before serialization
+	weights = θ̂ |> cpu |> Flux.params
+	networkpath = joinpath(savepath, "network.bson")
 	@save networkpath weights
 end
 

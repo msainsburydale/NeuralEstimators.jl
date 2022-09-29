@@ -7,6 +7,7 @@ using Base.GC: gc
 using BSON: @save, load
 using CUDA
 using CSV
+using ChainRulesCore: @non_differentiable
 using DataFrames
 using Distributions
 import Distributions: cdf, logpdf, quantile, minimum, maximum, insupport, var, skewness
@@ -21,6 +22,9 @@ using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum
 import Statistics: mean
 using Zygote
+
+
+
 
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
@@ -41,7 +45,10 @@ include("incgamma.jl")
 export gaussiandensity, schlatherbivariatedensity
 include("densities.jl")
 
-export train
+export zeroone
+include("loss.jl")
+
+export train, trainMAP
 include("Train.jl")
 
 export assess, Assessment

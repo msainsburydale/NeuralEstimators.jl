@@ -250,7 +250,8 @@ verbose = false # verbose used in the NeuralEstimators code
 			# θ̂ = train(θ̂, parameters, parameters, Z_train, Z_val, epochs = 5, use_gpu = use_gpu, verbose = verbose)
 
 			M = [1, 2, 5, 10]
-			several_estimators = train(θ̂, parameters, parameters, Z_train, Z_val, M; epochs = [10, 5, 3, 2], use_gpu = use_gpu, verbose = verbose)
+			several_estimators     = train(θ̂, parameters, parameters, Z_train, Z_val, M; epochs = [10, 5, 3, 2], use_gpu = use_gpu, verbose = verbose)
+			several_MAP_estimators = trainMAP(θ̂, parameters, parameters, Z_train, Z_val, [1, 3, 5]; ρ = [0.9f0, 0.5f0], epochs = [5, 3, 2], use_gpu = use_gpu, verbose = verbose)
 
 
 			# Decided not to test the saving function, because we can't always assume that we have write privledges
@@ -273,17 +274,23 @@ verbose = false # verbose used in the NeuralEstimators code
 
 			# Method that does not require the user to provide data
 			assessment = assess([θ̂], parameters, m = all_m, use_gpu = use_gpu, verbose = verbose)
-			@test typeof(merge(assessment)) == DataFrame
+			@test typeof(assessment)         == Assessment
+			@test typeof(assessment.θandθ̂)   == DataFrame
+			@test typeof(assessment.runtime) == DataFrame
 
 			# Method that require the user to provide data: J == 1
 			Z_test = [simulate(parameters, m) for m ∈ all_m]
 			assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
-			@test typeof(merge(assessment)) == DataFrame
+			@test typeof(assessment)         == Assessment
+			@test typeof(assessment.θandθ̂)   == DataFrame
+			@test typeof(assessment.runtime) == DataFrame
 
 			# Method that require the user to provide data: J == 5 > 1
 			Z_test = [simulate(parameters, m, 5) for m ∈ all_m]
 			assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
-			@test typeof(merge(assessment)) == DataFrame
+			@test typeof(assessment)         == Assessment
+			@test typeof(assessment.θandθ̂)   == DataFrame
+			@test typeof(assessment.runtime) == DataFrame
 
 			# Test that estimators needing invariant model information can be used:
 			assess([MLE], parameters, m = all_m, verbose = verbose)
