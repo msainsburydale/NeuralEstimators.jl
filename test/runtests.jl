@@ -247,11 +247,10 @@ verbose = false # verbose used in the NeuralEstimators code
 
 			Z_train = simulate(parameters, 20)
 			Z_val = simulate(parameters, 10)
-			# θ̂ = train(θ̂, parameters, parameters, Z_train, Z_val, epochs = 5, use_gpu = use_gpu, verbose = verbose)
 
-			M = [1, 2, 5, 10]
-			several_estimators     = train(θ̂, parameters, parameters, Z_train, Z_val, M; epochs = [10, 5, 3, 2], use_gpu = use_gpu, verbose = verbose)
-			several_MAP_estimators = trainMAP(θ̂, parameters, parameters, Z_train, Z_val, [1, 3, 5]; ρ = [0.9f0, 0.5f0], epochs = [5, 3, 2], use_gpu = use_gpu, verbose = verbose)
+			several_estimators     = train(θ̂, parameters, parameters, Z_train, Z_val, [1, 2, 5, 10]; epochs = [10, 5, 3, 2], use_gpu = use_gpu, verbose = verbose)
+			several_MAP_estimators = trainMAP(θ̂, parameters, parameters, Z_train, Z_val, [1, 4, 5]; ρ = [0.9f0, 0.5f0], epochs = [5, 3, 2], use_gpu = use_gpu, verbose = verbose)
+			one_MAP_estimators     = trainMAP(θ̂, parameters, parameters, Z_train, Z_val, [1, 4]; M_MAP = [4], ρ = [0.9f0, 0.5f0], epochs = [5, 3], use_gpu = use_gpu, verbose = verbose)
 
 
 			# Decided not to test the saving function, because we can't always assume that we have write privledges

@@ -438,12 +438,13 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 		# Modify/check the keyword arguments before passing them onto train().
 		# If savepath has been provided in the keyword arguments, modify it with
 		# information on the training sample size mᵢ. First, we convert the object
-		# args to a named tuple. Then, if savepath was included as an argument,
-		# we use merge() to replace its given value with a modified version that
-		# contains mᵢ. We will pass on this modified version of args to train().
+		# args to a named tuple. Then, if savepath was included as an argument
+		# and it is not an empty string, we use merge() to replace its given
+		# value with a modified version that contains mᵢ. We will pass on this
+		# modified version of args to train().
 		kwargs = (;args...)
 		@assert !haskey(kwargs, :m) "`m` should not be provided with this method of `train`"
-		if haskey(kwargs, :savepath)
+		if haskey(kwargs, :savepath) && kwargs.savepath != ""
 			kwargs = merge(kwargs, (savepath = kwargs.savepath * "m$(mᵢ)",))
 		end
 		kwargs = _modifyargs(kwargs, i, M)
@@ -454,12 +455,17 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 	return estimators
 end
 
-
 # TODO documentation
-function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; ρ, args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+# TODO allowing the lengths of M and M_MAP to differ will cause problems. E.g.,
+# we cannot provide a vector of epochs. It might be better to simplify the workflow,
+# possibly do the training for the L1 loss separately (e.g., by the user). 
+function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; ρ, M_MAP::Vector{I} = M, args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
 
 	@assert all(M .> 0)
 	M = sort(M)
+
+	@assert all(M_MAP .> 0)
+	M_MAP = sort(M_MAP)
 
 	@assert all(ρ .> 0)
 	@assert all(ρ .< 1)
@@ -482,10 +488,13 @@ function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{
 	# pre-train the estimators under the absolute-error loss.
 	estimators = train(θ̂, θ_train, θ_val, Z_train, Z_val, M; kwargs...)
 
-	for i ∈ eachindex(M)
+	for i ∈ eachindex(M_MAP)
 
-		mᵢ = M[i]
+		mᵢ = M_MAP[i]
 
+		# TODO there is a flaw in this approach; we always use the
+		# neural-network parameters obtained in the final epoch, irrespective of
+		# whether these parameters minimise the risk function or not.
 		for p ∈ ρ
 			@info "training the MAP estimator with ρ=$p and m=$(mᵢ)"
 			estimators[i] = train(
@@ -495,9 +504,7 @@ function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{
 			)
 		end
 
-		if save
-			_saveweights(estimators[i], savepath * "m$(mᵢ)") # TODO
-		end
+		save && _saveweights(estimators[i], savepath * "m$(mᵢ)")
 	end
 
 	return estimators
@@ -520,7 +527,6 @@ function _modifyargs(kwargs, i, M)
 	kwargs = Dict(pairs(kwargs)) # convert to Dictionary so that kwargs can be passed to train()
 	return kwargs
 end
-
 
 
 function indexdata(Z::V, m) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
@@ -556,6 +562,7 @@ end
 # helper functions to reduce code repetition and improve clarity
 
 function _saveweights(θ̂, savepath, epoch)
+	if !ispath(savepath) mkpath(savepath) end
 	# return to cpu before serialization
 	weights = θ̂ |> cpu |> Flux.params
 	networkpath = joinpath(savepath, "network_epoch$epoch.bson")
@@ -563,6 +570,7 @@ function _saveweights(θ̂, savepath, epoch)
 end
 
 function _saveweights(θ̂, savepath)
+	if !ispath(savepath) mkpath(savepath) end
 	# return to cpu before serialization
 	weights = θ̂ |> cpu |> Flux.params
 	networkpath = joinpath(savepath, "network.bson")
