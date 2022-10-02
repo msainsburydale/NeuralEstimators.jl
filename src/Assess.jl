@@ -6,7 +6,7 @@
 
 An object for storing the result of calling `assess()`, containing a `DataFrame`
 of true parameters `θ` and corresponding estimates `θ̂`, and a `DataFrame`
-containing the `runtime` for each estimator. 
+containing the `runtime` for each estimator.
 """
 struct Assessment
 	θandθ̂::DataFrame
@@ -169,8 +169,8 @@ function _assess(
 	@assert length(use_ξ) == E
 	@assert length(use_gpu) == E
 
-	# Initialise a DataFrame to record the run times
-	runtime = DataFrame(estimator = [], m = [], time = [])
+	# Initialise a DataFrame to record the run times 
+	runtime = DataFrame(estimator = String[], m = Int64[], time = Float64[])
 
 	θ̂ = map(eachindex(estimators)) do i
 
