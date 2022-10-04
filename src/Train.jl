@@ -458,7 +458,7 @@ end
 # TODO documentation
 # TODO allowing the lengths of M and M_MAP to differ will cause problems. E.g.,
 # we cannot provide a vector of epochs. It might be better to simplify the workflow,
-# possibly do the training for the L1 loss separately (e.g., by the user). 
+# possibly do the training for the L1 loss separately (e.g., by the user).
 function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; ρ, M_MAP::Vector{I} = M, args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
 
 	@assert all(M .> 0)
@@ -499,7 +499,7 @@ function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{
 			@info "training the MAP estimator with ρ=$p and m=$(mᵢ)"
 			estimators[i] = train(
 				estimators[i], θ_train, θ_val, Z_train, indexdata(Z_val, 1:mᵢ);
-				loss = (ŷ, y) -> zeroone(ŷ, y, ρ = p),
+				loss = (ŷ, y) -> LPsafe(ŷ, y, ρ = p),
 				_modifyargs(kwargs, i, M)...
 			)
 		end

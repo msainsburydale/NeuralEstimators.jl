@@ -12,6 +12,7 @@ using DataFrames
 using Distributions
 import Distributions: cdf, logpdf, quantile, minimum, maximum, insupport, var, skewness
 using Flux
+using Flux: ofeltype
 using Flux.Data: DataLoader
 using Flux.Optimise: update!
 using Functors: @functor
@@ -22,8 +23,6 @@ using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum
 import Statistics: mean
 using Zygote
-
-
 
 
 export ParameterConfigurations, subsetparameters
@@ -45,7 +44,7 @@ include("incgamma.jl")
 export gaussiandensity, schlatherbivariatedensity
 include("densities.jl")
 
-export zeroone
+export Lρ
 include("loss.jl")
 
 export train, trainMAP
