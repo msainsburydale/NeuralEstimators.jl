@@ -17,7 +17,7 @@ Arguments common to all methods:
 - `batchsize::Integer = 32`
 - `optimiser = ADAM(1e-4)`
 - `savepath::String = ""`: path to save the trained `θ̂` and other information; if savepath is an empty string (default), nothing is saved.
-- `stopping_epochs::Integer = 10`: cease training if the risk doesn't improve in `stopping_epochs` epochs.
+- `stopping_epochs::Integer = 5`: cease training if the risk doesn't improve in `stopping_epochs` epochs.
 - `use_gpu::Bool = true`
 - `verbose::Bool = true`
 
@@ -52,7 +52,7 @@ function train(θ̂, P;
     batchsize::Integer = 32,
     epochs::Integer    = 100,
 	savepath::String   = "", # "runs/"
-	stopping_epochs::Integer = 10,
+	stopping_epochs::Integer = 5,
     use_gpu::Bool      = true,
 	verbose::Bool      = true,
 	K::Integer         = 10_000
@@ -160,7 +160,7 @@ function train(θ̂, θ_train::P, θ_val::P;
 		optimiser        = ADAM(1e-4),
 		savepath::String = "",
 		simulate_just_in_time::Bool = false,
-		stopping_epochs::Integer = 10,
+		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
 		verbose::Bool    = true
 		) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
@@ -293,7 +293,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		loss             = Flux.Losses.mae,
 		optimiser        = ADAM(1e-4),
 		savepath::String = "",
-		stopping_epochs::Integer = 10,
+		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
 		verbose::Bool    = true
 		) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}

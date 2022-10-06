@@ -38,7 +38,12 @@ $common_docstring finds the epoch of the best network (measured by validation lo
 """
 function _findbestweights(path::String)
 	loss_per_epoch = load(joinpath(path, "loss_per_epoch.bson"), @__MODULE__)[:loss_per_epoch]
-	best_epoch     = argmin(loss_per_epoch[1:end, 2]) 
+
+	# The first row is the risk evaluated for the initial neural network, that
+	# is, the network at epoch 0. Since Julia starts indexing from 1, we hence
+	# subtract 1 from argmin().
+	best_epoch = argmin(loss_per_epoch[:, 2]) -1
+	
 	return best_epoch
 end
 
