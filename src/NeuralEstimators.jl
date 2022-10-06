@@ -21,7 +21,7 @@ using Random: randexp
 using RecursiveArrayTools: VectorOfArray, convert
 using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum
-import Statistics: mean
+import Statistics: mean, quantile
 using Zygote
 
 
@@ -44,7 +44,7 @@ include("incgamma.jl")
 export gaussiandensity, schlatherbivariatedensity
 include("densities.jl")
 
-export Lρ
+export LP, LPsafe, LPsafeII
 include("loss.jl")
 
 export train, trainMAP
@@ -53,7 +53,7 @@ include("Train.jl")
 export assess, Assessment
 include("Assess.jl")
 
-export parametricbootstrap, nonparametricbootstrap
+export parametricbootstrap, nonparametricbootstrap, coverage
 include("Bootstrap.jl")
 
 export stackarrays, expandgrid, loadbestweights

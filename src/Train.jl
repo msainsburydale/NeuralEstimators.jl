@@ -455,11 +455,8 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 	return estimators
 end
 
-# TODO documentation
-# TODO allowing the lengths of M and M_MAP to differ will cause problems. E.g.,
-# we cannot provide a vector of epochs. It might be better to simplify the workflow,
-# possibly do the training for the L1 loss separately (e.g., by the user).
-function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; ρ, M_MAP::Vector{I} = M, args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+
+function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ρ, M_MAP::Vector{I} = M, args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
 
 	@assert all(M .> 0)
 	M = sort(M)
@@ -499,7 +496,7 @@ function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{
 			@info "training the MAP estimator with ρ=$p and m=$(mᵢ)"
 			estimators[i] = train(
 				estimators[i], θ_train, θ_val, Z_train, indexdata(Z_val, 1:mᵢ);
-				loss = (ŷ, y) -> LPsafe(ŷ, y, ρ = p),
+				loss = (ŷ, y) -> LPsafe(ŷ, y, P = p),
 				_modifyargs(kwargs, i, M)...
 			)
 		end
@@ -509,6 +506,64 @@ function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{
 
 	return estimators
 end
+
+
+# TODO documentation
+# TODO allowing the lengths of M and M_MAP to differ will cause problems. E.g.,
+# we cannot provide a vector of epochs. It might be better to simplify the workflow,
+# possibly do the training for the L1 loss separately (e.g., by the user).
+# function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; ρ, M_MAP::Vector{I} = M, args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+#
+# 	@assert all(M .> 0)
+# 	M = sort(M)
+#
+# 	@assert all(M_MAP .> 0)
+# 	M_MAP = sort(M_MAP)
+#
+# 	@assert all(ρ .> 0)
+# 	@assert all(ρ .< 1)
+# 	ρ = sort(ρ, rev=true)
+#
+# 	# Extract the savepath from the keyword arguments, and replace it with an
+# 	# empty string so that intermediate estimators are not saved
+# 	kwargs = (;args...)
+# 	@assert !haskey(kwargs, :loss) "`loss` should not be provided with this method of `train`"
+# 	if haskey(kwargs, :savepath)
+# 		save = true
+# 		savepath = kwargs.savepath
+# 		kwargs = merge(kwargs, (savepath = "",))
+# 	else
+# 		save = false
+# 	end
+#
+# 	# Under the 0-1 loss, the gradients vanish when the displacement between θ̂
+# 	# and θ is large. To avoid this issue during the start of training, we first
+# 	# pre-train the estimators under the absolute-error loss.
+# 	estimators = train(θ̂, θ_train, θ_val, Z_train, Z_val, M; kwargs...)
+#
+# 	for i ∈ eachindex(M_MAP)
+#
+# 		mᵢ = M_MAP[i]
+#
+# 		# TODO there is a flaw in this approach; we always use the
+# 		# neural-network parameters obtained in the final epoch, irrespective of
+# 		# whether these parameters minimise the risk function or not.
+# 		for p ∈ ρ
+# 			@info "training the MAP estimator with ρ=$p and m=$(mᵢ)"
+# 			estimators[i] = train(
+# 				estimators[i], θ_train, θ_val, Z_train, indexdata(Z_val, 1:mᵢ);
+# 				loss = (ŷ, y) -> LPsafe(ŷ, y, ρ = p),
+# 				_modifyargs(kwargs, i, M)...
+# 			)
+# 		end
+#
+# 		save && _saveweights(estimators[i], savepath * "m$(mᵢ)")
+# 	end
+#
+# 	return estimators
+# end
+
+
 
 
 # ---- Helper functions ----

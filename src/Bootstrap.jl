@@ -11,7 +11,7 @@ data sets of size `m` simulated parameter configurations, `parameters`.
 
 This function requires the user to have defined a method `simulate(parameters, m::Integer`).
 """
-function parametricbootstrap(θ̂, parameters, m::Integer; B::Integer = 100, use_gpu::Bool = true)
+function parametricbootstrap(θ̂, parameters, m::Integer; B::Integer = 400, use_gpu::Bool = true)
 
 	K = size(parameters, 2)
 	@assert K == 1 "parametric bootstrap is defined for a single parameter configuration only"
@@ -39,13 +39,13 @@ remaining replicates corresponding to block 2, then `blocks` should be
 of a similar size to the original data, but this can only be achieved exactly if
 the blocks are the same length.
 """
-function nonparametricbootstrap(θ̂, Z::A; B::Integer = 100, use_gpu::Bool = true) where {A <: AbstractArray{T, N}} where {T, N}
+function nonparametricbootstrap(θ̂, Z::A; B::Integer = 400, use_gpu::Bool = true) where {A <: AbstractArray{T, N}} where {T, N}
 	Z̃ = _resample(Z, B)
 	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃) #TODO Need to add _checkgpu() calls instead of just use_gpu
 	return θ̃
 end
 
-function nonparametricbootstrap(θ̂, Z::A, blocks; B::Integer = 100, use_gpu::Bool = true) where {A <: AbstractArray{T, N}} where {T, N}
+function nonparametricbootstrap(θ̂, Z::A, blocks; B::Integer = 400, use_gpu::Bool = true) where {A <: AbstractArray{T, N}} where {T, N}
 	Z̃ = _resample(Z, B, blocks)
 	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃) #TODO Need to add _checkgpu() calls instead of just use_gpu
 	return θ̃
@@ -111,4 +111,36 @@ function _resample(Z::A, B) where {A <: AbstractArray{T, N}} where {T, N}
 	colons = ntuple(_ -> (:), ndims(Z) - 1)
 	Z̃ = [Z[colons..., rand(1:n, n)] for _ in 1:B]
 	return Z̃
+end
+
+
+# ---- coverage ----
+
+# for now, α is a fixed value, but it could be allowed to be a vector
+# TODO documentation
+function coverage(θ̂, Z::V, θ, α; kwargs...) where  {V <: AbstractArray{A}} where {A <: AbstractArray{T, N}} where {T, N}
+
+    p = length(θ)
+
+	# for each data set contained in Z, compute a bootstrap-confidence interval
+	# and determine if the true parameters, θ, are within this interval.
+	within = map(Z) do z
+
+		# compute a bootstrap sample of parameters
+		θ̃ = nonparametricbootstrap(θ̂, z; kwargs...)
+
+		# Determined if the central confidence intervals with nominal coverage α
+		# contain the true parameter. The result is an indicator vector
+		# specificying which parameters are contained in the interval
+		[quantile(θ̃[i, :], α/2) < θ[i] < quantile(θ̃[i, :], 1 - α/2) for i ∈ 1:p]
+	end
+
+	# combine the counts into a single matrix with p rows and one column for
+	# each data set in Z
+	within = hcat(within...)
+
+	# compute the empirical coverage
+	cvg = mean(within, dims = 2)
+
+	return cvg
 end

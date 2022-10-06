@@ -13,25 +13,35 @@ _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
 
 # ---- P-th power loss ----
 
-# The P-th power absolute distance loss. It is Lipschitz continuous iff ρ == 1,
-# convex if and only if ρ >= 1, and strictly convex iff ρ > 1.
+# The P-th power absolute distance loss. It is Lipschitz continuous iff P == 1,
+# convex if and only if P >= 1, and strictly convex iff P > 1.
 
-function LP(ŷ, y; agg = mean, ρ = ofeltype(ŷ, 0.5))
+function LP(ŷ, y; agg = mean, P = ofeltype(ŷ, 0.9))
   _check_sizes(ŷ, y)
-  d = abs.(ŷ .- y)
-  L = d.^ρ
-  agg(L)
+  agg(abs.(ŷ .- y).^P)
 end
 
-function LPsafe(ŷ, y; agg = mean, ρ = ofeltype(ŷ, 0.5), ϵ = ofeltype(ŷ, 0.1))
+# First attempt at modifying LP() to avoid pathologies around the origin,
+# following @mcabbott's suggestion to move slightly away from the origin.
+function LPsafe(ŷ, y; agg = mean, P = ofeltype(ŷ, 0.9))
+   _check_sizes(ŷ, y)
+   agg((abs.(ŷ .- y) .+ 1f-6).^P)
+end
+
+# Second attempt at modifying LP() to avoid pathologies around the origin.
+# The idea is to make a piecewise loss function that is equal to LP() if
+# |ŷ - y| > ϵ and equal to a "safe" loss function within the ϵ-interval
+# surrounding the origin. Here, we choose the safe function to be linear,
+# so that the piecewise loss behaves similarly to the L₁ loss near the origin.
+function LPsafeII(ŷ, y; agg = mean, P = ofeltype(ŷ, 0.9), ϵ = ofeltype(ŷ, 0.3))
    _check_sizes(ŷ, y)
    d = abs.(ŷ .- y)
    b = Zygote.dropgrad(d .<  ϵ) #TODO: remove dropgrad when Zygote can handle this function with CuArrays
-   L = (d .^ ρ) .* b .+ safefunction.(d, ρ, ϵ) .* (1 .- b)
+   L = (d .^ P) .* b .+ safefunction.(d, P, ϵ) .* (1 .- b)
    return agg(L)
 end
 
-function safefunction(d, ρ, ϵ)
+function safefunction(d, P, ϵ)
   @assert d >= 0
-  return ϵ^(ρ - 1) * d
+  ϵ^(P - 1) * d
 end
