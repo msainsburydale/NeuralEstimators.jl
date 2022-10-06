@@ -24,7 +24,7 @@ end
 # First attempt at modifying LP() to avoid pathologies around the origin,
 # following @mcabbott's suggestion to move slightly away from the origin.
 function LPsafe(ŷ, y; agg = mean, P = ofeltype(ŷ, 0.9))
-   _check_sizes(ŷ, y)
+   # _check_sizes(ŷ, y)
    agg((abs.(ŷ .- y) .+ 1f-6).^P)
 end
 

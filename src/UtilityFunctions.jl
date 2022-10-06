@@ -38,9 +38,10 @@ $common_docstring finds the epoch of the best network (measured by validation lo
 """
 function _findbestweights(path::String)
 	loss_per_epoch = load(joinpath(path, "loss_per_epoch.bson"), @__MODULE__)[:loss_per_epoch]
-	best_epoch     = argmin(loss_per_epoch[2:end, 2]) # Exclude the first row, which is the initial model
+	best_epoch     = argmin(loss_per_epoch[1:end, 2]) 
 	return best_epoch
 end
+
 
 """
 	_savebestweights(path::String)
