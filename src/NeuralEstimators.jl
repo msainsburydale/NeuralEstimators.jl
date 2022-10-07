@@ -44,7 +44,7 @@ include("incgamma.jl")
 export gaussiandensity, schlatherbivariatedensity
 include("densities.jl")
 
-export LP, LPsafe, LPsafeII
+export LP, LPsafe
 include("loss.jl")
 
 export train, trainMAP
