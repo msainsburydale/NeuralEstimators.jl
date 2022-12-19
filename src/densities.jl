@@ -37,7 +37,7 @@ once only.
 function gaussiandensity(y::A, L; logdensity::Bool = true) where {A <: AbstractArray{T, 1}} where T
 	n = length(y)
 	x = L \ y # solution to Lx = y. If we need non-zero μ in the future, use x = L \ (y - μ)
-	l = -0.5n*log(2π) -logdet(L) -0.5x'x
+	l = -0.5n*log(2π) -logdet(L) -0.5dot(x, x)
     return logdensity ? l : exp(l)
 end
 

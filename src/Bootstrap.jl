@@ -1,5 +1,3 @@
-# TODO Document that these functions are designed for a single parameter configuration only
-
 # ---- Parameteric bootstrap ----
 
 """
@@ -7,7 +5,7 @@
 
 Returns `B` parameteric bootstrap samples of an estimator `θ̂` as a p × `B`
 matrix, where p is the number of parameters in the statistical model, based on
-data sets of size `m` simulated parameter configurations, `parameters`.
+data sets of size `m` simulated from parameter configurations, `parameters`.
 
 This function requires the user to have defined a method `simulate(parameters, m::Integer`).
 """
@@ -17,7 +15,7 @@ function parametricbootstrap(θ̂, parameters, m::Integer; B::Integer = 400, use
 	@assert K == 1 "parametric bootstrap is defined for a single parameter configuration only"
 
 	Z̃ = simulate(parameters, m, B)
-	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃)  #TODO Need to add _checkgpu() calls instead of just use_gpu
+	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃)
 	return θ̃
 end
 
@@ -41,13 +39,13 @@ the blocks are the same length.
 """
 function nonparametricbootstrap(θ̂, Z::A; B::Integer = 400, use_gpu::Bool = true) where {A <: AbstractArray{T, N}} where {T, N}
 	Z̃ = _resample(Z, B)
-	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃) #TODO Need to add _checkgpu() calls instead of just use_gpu
+	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃)
 	return θ̃
 end
 
 function nonparametricbootstrap(θ̂, Z::A, blocks; B::Integer = 400, use_gpu::Bool = true) where {A <: AbstractArray{T, N}} where {T, N}
 	Z̃ = _resample(Z, B, blocks)
-	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃) #TODO Need to add _checkgpu() calls instead of just use_gpu
+	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃)
 	return θ̃
 end
 
@@ -116,13 +114,19 @@ end
 
 # ---- coverage ----
 
-# for now, α is a fixed value, but it could be allowed to be a vector
-# TODO documentation
-function coverage(θ̂, Z::V, θ, α; kwargs...) where  {V <: AbstractArray{A}} where {A <: AbstractArray{T, N}} where {T, N}
+"""
+	coverage(θ̂, Z::V, θ, α; kwargs...) where  {V <: AbstractArray{A}} where A
+
+For each data set contained in `Z`, compute a non-parametric bootstrap confidence
+interval with nominal coverage `α`, and determine if the true parameters, `θ`, are
+contained within this interval. The overall empirical coverage is then returned
+by averaging the resulting 0-1 matrix over all data sets.
+"""
+function coverage(θ̂, Z::V, θ, α; kwargs...) where  {V <: AbstractArray{A}} where A
 
     p = length(θ)
 
-	# for each data set contained in Z, compute a bootstrap-confidence interval
+	# for each data set contained in Z, compute a bootstrap confidence interval
 	# and determine if the true parameters, θ, are within this interval.
 	within = map(Z) do z
 
@@ -131,7 +135,7 @@ function coverage(θ̂, Z::V, θ, α; kwargs...) where  {V <: AbstractArray{A}} 
 
 		# Determined if the central confidence intervals with nominal coverage α
 		# contain the true parameter. The result is an indicator vector
-		# specificying which parameters are contained in the interval
+		# specifying which parameters are contained in the interval
 		[quantile(θ̃[i, :], α/2) < θ[i] < quantile(θ̃[i, :], 1 - α/2) for i ∈ 1:p]
 	end
 

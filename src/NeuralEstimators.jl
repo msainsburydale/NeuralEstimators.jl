@@ -16,6 +16,8 @@ using Flux: ofeltype
 using Flux.Data: DataLoader
 using Flux.Optimise: update!
 using Functors: @functor
+using GraphNeuralNetworks
+using Graphs
 using LinearAlgebra
 using Random: randexp
 using RecursiveArrayTools: VectorOfArray, convert
@@ -35,6 +37,9 @@ include("DeepSet.jl")
 export PiecewiseEstimator
 include("PiecewiseEstimator.jl")
 
+export GNNEstimator
+include("GNNEstimator.jl")
+
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
 export matern, maternchols, Subbotin, scaledlogistic, scaledlogit
 include("Simulation.jl")
@@ -44,7 +49,8 @@ include("incgamma.jl")
 export gaussiandensity, schlatherbivariatedensity
 include("densities.jl")
 
-export LP, LPsafe
+
+export kpowerloss
 include("loss.jl")
 
 export train, trainMAP
@@ -62,7 +68,7 @@ include("UtilityFunctions.jl")
 end
 
 
-# TODO once I've made the repo public:
+# ---- once I've made the repo public:
 # •	Contact TravisCI to tell them that I am developing open-source software to get a free plan.
 # •	code coverage widget should display the percentage.
 # •	Get documentation online through Github pages:
@@ -70,7 +76,7 @@ end
 #   Get it working by manually deploying first, then get it working automatically by deploying with TravisCI.
 #   Once documentation is online, add a widget in the README linking to the documentation.
 
-# TODO long term:
+# ---- long term:
 # - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. It seems very easy, just need to add precompile(f, (arg_types…)) to whatever methods I want to precompile.
 # - Get DeepSetExpert working optimally on the GPU (leaving this for now as we don't need it for the paper).
 # - See if DeepSet.jl is something that the Flux people would like to include. (They may also improve the code.)
@@ -80,7 +86,7 @@ end
 # - Include julia versions of plotrisk() and plotjointdistribution(). Then, NeuralEstimators.jl will be self contained. A nice way to do this would be to Julia RCall() to NeuralEstimatorsR.
 
 
-# Some points for writing the manuscript later.
+# ---- Some points for writing the manuscript later.
 # Why Julia? Julia has many [attractive features](https://julialang.org/); in
 # particular, it has been designed to alleviate the so-called two-language
 # problem, so that it is both easily developed and fast in its execution. This

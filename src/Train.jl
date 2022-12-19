@@ -589,6 +589,10 @@ function indexdata(Z::V, m) where {V <: AbstractVector{A}} where {A <: AbstractA
 	broadcast(z -> z[colons..., m], Z)
 end
 
+function indexdata(Z::V, m) where {V <: AbstractVector{G}} where {G <: AbstractGraph}
+	broadcast(z -> getgraph(z, m), Z)
+end
+
 function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh, simulate_just_in_time)
 	@assert batchsize > 0
 	@assert epochs > 0

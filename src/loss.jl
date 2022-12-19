@@ -1,3 +1,44 @@
+"""
+    kpowerloss(θ̂, y; k = ofeltype(θ̂, 0.5), agg = mean, safeorigin::Bool = true, ϵ = ofeltype(θ̂, 0.1))
+
+The k-th power absolute distance loss,
+
+```math
+L(θ̂, θ) = (|θ̂ - θ|)^κ;   κ ∈ (0, ∞).
+```
+
+It is Lipschitz continuous iff κ = 1, convex iff κ ≥ 1, and strictly convex
+iff κ > 1. It is quasiconvex for all κ > 0.
+
+If `safeorigin = true`, the loss function is modified to avoid pathologies
+around the origin, so that the resulting loss function behaves similarly to the
+L₁ loss in the `ϵ`-interval surrounding the origin.
+"""
+function kpowerloss(θ̂, θ; safeorigin::Bool = true, agg = mean, k = ofeltype(θ̂, 0.5), ϵ = ofeltype(θ̂, 0.1))
+
+   _check_sizes(θ̂, θ)
+
+   if safeorigin
+     d = abs.(θ̂ .- θ)
+     b = d .>  ϵ
+     L = vcat(d[b] .^ k, _safefunction.(d[.!b], k, ϵ))
+   else
+     L = abs.(θ̂ .- θ).^k
+   end
+
+   return agg(L)
+end
+
+function _safefunction(d, k, ϵ)
+  @assert d >= 0
+  ϵ^(k - 1) * d
+end
+
+
+
+# ---- Helper functions ----
+
+
 # This is an internal function used in Flux to check that the size of the
 # arguments passed to a loss function
 function _check_sizes(ŷ::AbstractArray, y::AbstractArray)
@@ -9,59 +50,3 @@ function _check_sizes(ŷ::AbstractArray, y::AbstractArray)
 end
 _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
 @non_differentiable _check_sizes(ŷ::Any, y::Any)
-
-
-# ---- P-th power loss ----
-
-#TODO add these functions to the documentation
-
-"""
-The P-th power absolute distance loss. It is Lipschitz continuous iff P == 1,
-convex iff P >= 1, and strictly convex iff P > 1. It is quasiconvex for all P > 0.
-"""
-function LP(ŷ, y; agg = mean, P = ofeltype(ŷ, 0.9))
-  _check_sizes(ŷ, y)
-  agg(abs.(ŷ .- y).^P)
-end
-
-
-"""
-A "safe" version of the loss function `LP()`, designed to avoid pathologies
-caused by infinite gradients around the origin.
-
-It is a piecewise loss function equal to `LP()` if
-`|ŷ - y| > ϵ` and equal to a "safe" function within the `ϵ`-interval
-surrounding the origin. The safe function is chosen to be linear,
-so that `LPsafe()` behaves similarly to the L₁ loss near the origin.
-"""
-function LPsafe(ŷ, y; agg = mean, P = ofeltype(ŷ, 0.9), ϵ = ofeltype(ŷ, 0.3))
-
-   _check_sizes(ŷ, y)
-   d = abs.(ŷ .- y)
-   b = d .>  ϵ
-
-   L = vcat(d[b] .^ P, safefunction.(d[.!b], P, ϵ))
-   # The following code is how another piecewise loss function, huber_loss(), is
-   # written; however, it computes d .^ P for all instances, so I have chosen to
-   # use the above code instead.
-   # L = (d .^ P) .* b .+ safefunction.(d, P, ϵ) .* (1 .- b)
-
-   return agg(L)
-end
-
-
-function safefunction(d, P, ϵ)
-  @assert d >= 0
-  ϵ^(P - 1) * d
-end
-
-
-# Another attempt at modifying LP() to avoid pathologies around the origin,
-# following @mcabbott's suggestion to move slightly away from the origin.
-# This function successfully avoids causing NAs in the neural network weights,
-# but the loss continuously increases during training. Also, the loss is no
-# longer zero when ŷ = y.
-# function LPsafe(ŷ, y; agg = mean, P = ofeltype(ŷ, 0.9))
-#    _check_sizes(ŷ, y)
-#    agg((abs.(ŷ .- y) .+ 1f-6).^P)
-# end

@@ -171,6 +171,75 @@ using NeuralEstimators: fₛ, Fₛ, Fₛ⁻¹
 
 end
 
+using GraphNeuralNetworks
+using Flux, Graphs, Statistics
+using Flux.Data: DataLoader
+
+@testset "GNNEstimator" begin
+	n₁, n₂ = 11, 27
+	m₁, m₂ = 30, 50
+	d = 1
+	g₁ = rand_graph(n₁, m₁, ndata=rand(Float32, d, n₁))
+	g₂ = rand_graph(n₂, m₂, ndata=rand(Float32, d, n₂))
+	g = Flux.batch([g₁, g₂])
+
+	# g is a single large GNNGraph containing the subgraphs
+	@test g.num_graphs == 2
+	@test g.num_nodes == n₁ + n₂
+	@test g.num_edges == m₁ + m₂
+
+	# Greate a mini-batch from g (use integer range to extract multiple graphs)
+	@test getgraph(g, 1) == g₁
+
+	# We can pass a single GNNGraph to Flux's DataLoader, and this will iterate over
+	# the subgraphs in the expected manner.
+	train_loader = DataLoader(g, batchsize=1, shuffle=true)
+	for g in train_loader
+	    @test g.num_graphs == 1
+	end
+
+	# graph-to-graph propagation module
+	w = 5
+	o = 7
+	graphtograph = GNNChain(GraphConv(d => w), GraphConv(w => w), GraphConv(w => o))
+	@test graphtograph(g) == Flux.batch([graphtograph(g₁), graphtograph(g₂)])
+
+	# global pooling module
+	# We can apply the pooling operation to the whole graph; however, I think this
+	# is mainly possible because the GlobalPool with mean is very simple.
+	# We may need to do something different for general global pooling layers (e.g.,
+	# universal pooling with DeepSets).
+	meanpool = GlobalPool(mean)
+	h  = meanpool(graphtograph(g))
+	h₁ = meanpool(graphtograph(g₁))
+	h₂ = meanpool(graphtograph(g₂))
+	@test graph_features(h) == hcat(graph_features(h₁), graph_features(h₂))
+
+	# Deep Set module
+	w = 32
+	p = 3
+	ψ₂ = Chain(Dense(o, w, relu), Dense(w, w, relu), Dense(w, w, relu))
+	ϕ₂ = Chain(Dense(w, w, relu), Dense(w, p))
+	deepset = DeepSet(ψ₂, ϕ₂)
+
+	# Full estimator
+	est = GNNEstimator(graphtograph, meanpool, deepset)
+
+	# Test on a single graph containing sub-graphs
+	θ̂ = est(g)
+	@test size(θ̂, 1) == p
+	@test size(θ̂, 2) == 1
+
+	# test on a vector of graphs
+	v = [g₁, g₂, Flux.batch([g₁, g₂])]
+	θ̂ = est(v)
+	@test size(θ̂, 1) == p
+	@test size(θ̂, 2) == length(v)
+end
+
+
+
+
 
 # Simple example for testing.
 struct Parameters <: ParameterConfigurations

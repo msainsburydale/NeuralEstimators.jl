@@ -49,12 +49,6 @@ end
 
 # ---- assess() ----
 
-
-# TODO clarify the form of Z
-# data should look like:
-# n = 1
-# K = 4
-# Z = [[rand(n, 1, m) for k in 1:K] for m in (5, 10, 15)]
 """
 	assess(estimators, parameters, Z; <keyword args>)
 	assess(estimators, parameters; <keyword args>)
@@ -62,9 +56,15 @@ end
 Using a collection of `estimators`, compute estimates from data simulated from a
 set of `parameters`.
 
-One may either provide simulated data `Z` as a `Vector{Vector{Array}}`, or
-overload `simulate` with a method `simulate(parameters, m::Integer)` and use the
-keyword argument `m` to specify the sample sizes to use during assessment.
+Testing data can be automatically simulated by overloading `simulate` with a method
+`simulate(parameters, m::Integer)`, and using the keyword argument `m` to specify
+the desired sample sizes to assess. Alternatively, one may provide simulated data
+`Z` as a `Vector{Vector{Array}}`, where each `Vector{Array}` is associated with
+a single sample size (i.e., the size of the final dimension of the arrays should
+be constant). If there are more simulated data sets than unique parameter
+vectors, the data should be stored in an 'outer' fashion, so that the parameter
+vectors run faster than the replicated data.
+
 
 # Keyword arguments
 - `m::Vector{Integer}`: sample sizes to estimate from.
@@ -106,7 +106,7 @@ end
 
 
 function assess(
-	estimators, parameters::P, Z; # TODO enforce Z to be a Vector{Vector{Array}}
+	estimators, parameters::P, Z;
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
 	ξ = nothing,
@@ -115,11 +115,10 @@ function assess(
 	verbose::Bool = true
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
-
 	# Infer all_m from Z and check that Z is in the correct format
-	all_m = broadcast.(x -> size(x)[end], Z)
+	all_m = broadcast.(z -> size(z)[end], Z)
 	all_m = unique.(all_m)
-	@assert length(all_m) == length(Z) "Z should be a Vector{Vector{Array}} where " #TODO finish error message
+	@assert length(all_m) == length(Z) "The simulated data Z should be a `Vector{Vector{Array}}`, where each `Vector{Array}` is associated with a single sample size (i.e., the size of the final dimension of the arrays should be constant)."
 
 	# Check that the number of parameters are consistent with other quantities
 	K = size(parameters, 2)
@@ -128,7 +127,7 @@ function assess(
 	KJ = KJ[1]
 	@assert KJ % K == 0 "The number of data sets in Z must be a multiple of the number of parameters"
 	J = KJ ÷ K
-	J > 1 && @info "There are more simulated data sets than unique parameter vectors; ensure that the data are stored in an 'outer' fashion, so that the parameter vectors run faster than the replicated data sets."
+	J > 1 && @info "There are more simulated data sets than unique parameter vectors; ensure that the data are replicated in an 'outer' fashion, so that the parameter vectors run faster than the replicated data sets."
 
 	obj = map(Z) do z
 
@@ -143,7 +142,7 @@ function assess(
 	return _Assessment(obj)
 end
 
-#TODO should Z be typed?
+
 function _assess(
 	estimators, parameters::P, Z;
 	estimator_names::Vector{String}, parameter_names::Vector{String},
@@ -152,7 +151,7 @@ function _assess(
 
 	# Infer m from Z and check that Z is in the correct format
 	m = unique(broadcast(x -> size(x)[end], Z))
-	@assert length(m) == 1 "Z should be a Vector{Array} where " #TODO finish error message
+	@assert length(m) == 1 "The simulated data Z should be a `Vector{Array}` where the size of the final dimension of the array is constant."
 	m = m[1]
 	verbose && println("Estimating with m = $m...")
 
@@ -169,7 +168,7 @@ function _assess(
 	@assert length(use_ξ) == E
 	@assert length(use_gpu) == E
 
-	# Initialise a DataFrame to record the run times 
+	# Initialise a DataFrame to record the run times
 	runtime = DataFrame(estimator = String[], m = Int64[], time = Float64[])
 
 	θ̂ = map(eachindex(estimators)) do i

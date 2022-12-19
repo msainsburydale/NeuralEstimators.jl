@@ -67,7 +67,7 @@ Simulates from Schlather's max-stable model.
 """
 function simulateschlather(L::AbstractArray{T, 2}; C = 3.5) where T <: Number
 
-	n = size(L, 1)  # number of spatial locations
+	n = size(L, 1)  # number of observations
 
 	Z   = fill(zero(T), n)
 	ζ⁻¹ = randexp(T)
