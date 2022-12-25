@@ -37,8 +37,8 @@ include("DeepSet.jl")
 export PiecewiseEstimator
 include("PiecewiseEstimator.jl")
 
-export GNNEstimator
-include("GNNEstimator.jl")
+# export GNNEstimator
+# include("GNNEstimator.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
 export matern, maternchols, Subbotin, scaledlogistic, scaledlogit
@@ -56,7 +56,7 @@ include("loss.jl")
 export train, trainMAP
 include("Train.jl")
 
-export assess, Assessment
+export assess, Assessment, merge
 include("Assess.jl")
 
 export parametricbootstrap, nonparametricbootstrap, coverage
@@ -67,6 +67,9 @@ include("UtilityFunctions.jl")
 
 end
 
+
+#TODO Need to figure out what to do with indexdata(). I think that it isn't
+# actually that helpful.
 
 # ---- once I've made the repo public:
 # •	Contact TravisCI to tell them that I am developing open-source software to get a free plan.

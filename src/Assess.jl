@@ -143,6 +143,23 @@ function assess(
 end
 
 
+
+"""
+	numberofreplicates(X)
+
+Generic function that returns the number of replicates in a given object.
+"""
+function numberofreplicates end
+
+function numberofreplicates(X)
+	size(X)[end]
+end
+
+function numberofreplicates(X::G) where {G <: GNNGraph}
+	X.num_graphs
+end
+
+
 function _assess(
 	estimators, parameters::P, Z;
 	estimator_names::Vector{String}, parameter_names::Vector{String},
@@ -150,7 +167,7 @@ function _assess(
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
 	# Infer m from Z and check that Z is in the correct format
-	m = unique(broadcast(x -> size(x)[end], Z))
+	m = unique(numberofreplicates.(Z))
 	@assert length(m) == 1 "The simulated data Z should be a `Vector{Array}` where the size of the final dimension of the array is constant."
 	m = m[1]
 	verbose && println("Estimating with m = $m...")
@@ -197,4 +214,16 @@ function _assess(
 	θ = DataFrame(_extractθ(parameters)', parameter_names)
 
     return (θ = θ, θ̂ = θ̂, runtime = runtime)
+end
+
+
+import Base: merge
+function merge(assessment::Assessment, assessments::Assessment...)
+	θandθ̂   = assessment.θandθ̂
+	runtime = assessment.runtime
+	for x in assessments
+		θandθ̂   = vcat(θandθ̂,   x.θandθ̂)
+		runtime = vcat(runtime, x.runtime)
+	end
+	Assessment(θandθ̂, runtime)
 end

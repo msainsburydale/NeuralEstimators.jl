@@ -253,6 +253,7 @@ matern(h, ρ) =  matern(h, ρ, 1.0)
 
 
 # TODO a bit weird that we're forcing σ = 1
+# TODO The code for maternchols can be improved - very bug prone at the moment, and documentation is not very clear. 
 """
     maternchols(D, ρ, ν)
 Given a distance matrix `D`, computes the covariance matrix under the
@@ -260,7 +261,7 @@ Matérn covariance function with range `ρ` and smoothness `ν`, and
 returns the Cholesky factor of this covariance matrix.
 
 Providing vectors for `ρ` and `ν` will yield a three-dimensional array of
-Cholesky factors.
+Cholesky factors. Similarly for a vector of matrices `D`.
 """
 function maternchols(D, ρ, ν)
 	L = [cholesky(Symmetric(matern.(D, ρ[i], ν[i]))).L  for i ∈ eachindex(ρ)]
@@ -268,6 +269,15 @@ function maternchols(D, ρ, ν)
 	L = stackarrays(L, merge = false)
 	return L
 end
+
+function maternchols(D::V, ρ, ν) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+	L = [cholesky(Symmetric(matern.(D[i], ρ[i], ν[i]))).L  for i ∈ eachindex(ρ)]
+	L = convert.(Array, L)
+	L = stackarrays(L, merge = false)
+	return L
+end
+
+
 
 """
     _incgammalowerunregularised(a, x)

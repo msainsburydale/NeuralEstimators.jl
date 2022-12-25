@@ -109,7 +109,7 @@ function train(θ̂, P;
 
 		# For each batch, update θ̂ and compute the training loss
 		train_loss = zero(initial_val_risk)
-		epoch_time_train = @elapsed for _ ∈ 1:batches
+		epoch_time = @elapsed for _ ∈ 1:batches
 			parameters = isnothing(ξ) ? P(batchsize) : P(batchsize, ξ)
 			Z = simulate(parameters, m)
 			θ = _extractθ(parameters)
@@ -117,9 +117,9 @@ function train(θ̂, P;
 		end
 		train_loss = train_loss / (batchsize * batches) # convert to an average
 
-		epoch_time_val = @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
+		epoch_time += @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_loss current_val_risk])
-		verbose && println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
+		verbose && println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
 		# save the loss every epoch in case training is prematurely halted
 		savebool && @save loss_path loss_per_epoch
 
@@ -221,7 +221,7 @@ function train(θ̂, θ_train::P, θ_val::P;
 			end
 
 			# For each batch, update θ̂ and compute the training loss
-			epoch_time_train = @elapsed for (Z, θ) in Z_train
+			epoch_time = @elapsed for (Z, θ) in Z_train
 			   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 			end
 
@@ -229,21 +229,21 @@ function train(θ̂, θ_train::P, θ_val::P;
 
 			# For each batch, update θ̂ and compute the training loss
 			epoch_time_simulate = 0.0
-			epoch_time_train    = 0.0
+			epoch_time    = 0.0
 			for parameters ∈ _ParameterLoader(θ_train, batchsize = batchsize)
 				epoch_time_simulate += @elapsed Z = simulate(parameters, m)
 				θ = _extractθ(parameters)
-				epoch_time_train += @elapsed train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+				epoch_time += @elapsed train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 			end
 			verbose && println("Total time spent simulating data: $(round(epoch_time_simulate, digits = 3)) seconds")
+			epoch_time += epoch_time_simulate
 
 		end
 		train_loss = train_loss / size(θ_train, 2)
 
-
-		epoch_time_val = @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
+		epoch_time += @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_loss current_val_risk])
-		verbose && println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
+		verbose && println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
 
 		# save the loss every epoch in case training is prematurely halted
 		savebool && @save loss_path loss_per_epoch
@@ -349,14 +349,14 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
 		# For each batch update θ̂ and compute the training loss
 		Z_train_current = _quietDataLoader((indexdata(Z_train, replicates[epoch]), _extractθ(θ_train)), batchsize)
-		epoch_time_train = @elapsed for (Z, θ) in Z_train_current
+		epoch_time = @elapsed for (Z, θ) in Z_train_current
 		   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 		end
 		train_loss = train_loss / size(θ_train, 2)
 
-		epoch_time_val = @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
+		epoch_time += @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_loss current_val_risk])
-		verbose && println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time_train + epoch_time_val, digits = 3)) seconds")
+		verbose && println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
 
 		# save the loss every epoch in case training is prematurely halted
 		savebool && @save loss_path loss_per_epoch
@@ -383,7 +383,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 end
 
 
-# ---- Wrapper function for training multiple estimators ----
+# ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 
 
 """
@@ -394,7 +394,7 @@ the sample sizes given by the vector of integers, `M`.
 
 Each neural estimator is pre-trained with the neural estimator trained for the
 previous sample size. That is, if `M = [m₁, m₂]`, with `m₂` > `m₁`, the neural
-estimator for sample size `m₂` is pre-trainined with the (trained) neural
+estimator for sample size `m₂` is pre-trainined with the neural
 estimator for sample size `m₁`. By pre-training a series of neural estimators with
 progressively larger sample sizes, most of the learning is done with small,
 computationally cheap sample sizes. Hence, this approach can be beneficial even
@@ -456,116 +456,6 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 end
 
 
-function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ρ, M_MAP::Vector{I} = M, args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
-
-	@assert all(M .> 0)
-	M = sort(M)
-
-	@assert all(M_MAP .> 0)
-	M_MAP = sort(M_MAP)
-
-	@assert all(ρ .> 0)
-	@assert all(ρ .< 1)
-	ρ = sort(ρ, rev=true)
-
-	# Extract the savepath from the keyword arguments, and replace it with an
-	# empty string so that intermediate estimators are not saved
-	kwargs = (;args...)
-	@assert !haskey(kwargs, :loss) "`loss` should not be provided with this method of `train`"
-	if haskey(kwargs, :savepath)
-		save = true
-		savepath = kwargs.savepath
-		kwargs = merge(kwargs, (savepath = "",))
-	else
-		save = false
-	end
-
-	# Under the 0-1 loss, the gradients vanish when the displacement between θ̂
-	# and θ is large. To avoid this issue during the start of training, we first
-	# pre-train the estimators under the absolute-error loss.
-	estimators = train(θ̂, θ_train, θ_val, Z_train, Z_val, M; kwargs...)
-
-	for i ∈ eachindex(M_MAP)
-
-		mᵢ = M_MAP[i]
-
-		# TODO there is a flaw in this approach; we always use the
-		# neural-network parameters obtained in the final epoch, irrespective of
-		# whether these parameters minimise the risk function or not.
-		for p ∈ ρ
-			@info "training the MAP estimator with ρ=$p and m=$(mᵢ)"
-			estimators[i] = train(
-				estimators[i], θ_train, θ_val, Z_train, indexdata(Z_val, 1:mᵢ);
-				loss = (ŷ, y) -> LPsafe(ŷ, y, P = p),
-				_modifyargs(kwargs, i, M)...
-			)
-		end
-
-		save && _saveweights(estimators[i], savepath * "m$(mᵢ)")
-	end
-
-	return estimators
-end
-
-
-# TODO documentation
-# TODO allowing the lengths of M and M_MAP to differ will cause problems. E.g.,
-# we cannot provide a vector of epochs. It might be better to simplify the workflow,
-# possibly do the training for the L1 loss separately (e.g., by the user).
-# function trainMAP(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; ρ, M_MAP::Vector{I} = M, args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
-#
-# 	@assert all(M .> 0)
-# 	M = sort(M)
-#
-# 	@assert all(M_MAP .> 0)
-# 	M_MAP = sort(M_MAP)
-#
-# 	@assert all(ρ .> 0)
-# 	@assert all(ρ .< 1)
-# 	ρ = sort(ρ, rev=true)
-#
-# 	# Extract the savepath from the keyword arguments, and replace it with an
-# 	# empty string so that intermediate estimators are not saved
-# 	kwargs = (;args...)
-# 	@assert !haskey(kwargs, :loss) "`loss` should not be provided with this method of `train`"
-# 	if haskey(kwargs, :savepath)
-# 		save = true
-# 		savepath = kwargs.savepath
-# 		kwargs = merge(kwargs, (savepath = "",))
-# 	else
-# 		save = false
-# 	end
-#
-# 	# Under the 0-1 loss, the gradients vanish when the displacement between θ̂
-# 	# and θ is large. To avoid this issue during the start of training, we first
-# 	# pre-train the estimators under the absolute-error loss.
-# 	estimators = train(θ̂, θ_train, θ_val, Z_train, Z_val, M; kwargs...)
-#
-# 	for i ∈ eachindex(M_MAP)
-#
-# 		mᵢ = M_MAP[i]
-#
-# 		# TODO there is a flaw in this approach; we always use the
-# 		# neural-network parameters obtained in the final epoch, irrespective of
-# 		# whether these parameters minimise the risk function or not.
-# 		for p ∈ ρ
-# 			@info "training the MAP estimator with ρ=$p and m=$(mᵢ)"
-# 			estimators[i] = train(
-# 				estimators[i], θ_train, θ_val, Z_train, indexdata(Z_val, 1:mᵢ);
-# 				loss = (ŷ, y) -> LPsafe(ŷ, y, ρ = p),
-# 				_modifyargs(kwargs, i, M)...
-# 			)
-# 		end
-#
-# 		save && _saveweights(estimators[i], savepath * "m$(mᵢ)")
-# 	end
-#
-# 	return estimators
-# end
-
-
-
-
 # ---- Helper functions ----
 
 
@@ -598,7 +488,7 @@ function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh, si
 	@assert epochs > 0
 	@assert stopping_epochs > 0
 	@assert epochs_per_Z_refresh > 0
-	if simulate_just_in_time && epochs_per_Z_refresh != 1 @error "We cannot simulate the data just-in-time if we aren't refreshing it every epoch; please either set ` simulate_just_in_time = false` or `epochs_per_Z_refresh = 1`" end
+	if simulate_just_in_time && epochs_per_Z_refresh != 1 @error "We cannot simulate the data just-in-time if we aren't refreshing it every epoch; please either set `simulate_just_in_time = false` or `epochs_per_Z_refresh = 1`" end
 end
 
 

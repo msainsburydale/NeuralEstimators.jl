@@ -9,6 +9,8 @@ the `globalpool` module aggregates the feature graphs (graph-wise); and the
 # Examples
 ```
 using Flux
+using GraphNeuralNetworks
+using Statistics: mean
 n₁, n₂ = 11, 27
 m₁, m₂ = 30, 50
 d = 1
@@ -20,7 +22,6 @@ g = Flux.batch([g₁, g₂])
 w = 5
 o = 7
 graphtograph = GNNChain(GraphConv(d => w), GraphConv(w => w), GraphConv(w => o))
-@test graphtograph(g) == Flux.batch([graphtograph(g₁), graphtograph(g₂)])
 
 # global pooling module
 meanpool = GlobalPool(mean)
@@ -66,13 +67,31 @@ function (est::GNNEstimator)(g::GNNGraph)
 	#	ncols = number of original graphs (i.e., number of independent replicates).
 	h = ḡ.gdata[1]
 
-	# Reshape matrix to three-dimensional arrays for compatibility with Flux
-	o = size(h, 1)
-	h = reshape(h, o, 1, :)
-
 	# Apply the Deep Set module to map to the parameter space.
 	θ̂ = est.deepset(h)
 end
+
+function (est::GNNEstimator)(v::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
+
+	# Apply the graph-to-graph transformation
+	g̃ = est.graphtograph(g)
+
+	# Global pooling
+	ḡ = est.globalpool(g̃)
+
+	# Extract the graph level features (i.e., the pooled features).
+	# h is a matrix with,
+	# 	nrows = number of features graphs in final graphtograph layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
+	#	ncols = total number of original graphs (i.e., total number of independent replicates).
+	h = ḡ.gdata[1]
+
+	# Apply the Deep Set module to map to the parameter space.
+	θ̂ = est.deepset(h) #NB this is not a DeepSet object for now; it's just a MLP
+
+	return θ̂
+end
+
+
 
 function (est::GNNEstimator)(v::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
 
@@ -93,27 +112,91 @@ function (est::GNNEstimator)(v::V) where {V <: AbstractVector{G}} where {G <: GN
 	# Global pooling
 	ḡ = est.globalpool(g̃)
 
-	# Extract the graph level data (i.e., the pooled features).
+	# Extract the graph level features (i.e., the pooled features).
 	# h is a matrix with,
 	# 	nrows = number of features graphs in final graphtograph layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
 	#	ncols = total number of original graphs (i.e., total number of independent replicates).
 	h = ḡ.gdata[1]
 
-	# Split the data based on the original grouping
+	# Split the features based on the original grouping.
 	ng = length(v)
 	cs = cumsum(m)
 	indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
 	h = [h[:, idx] for idx ∈ indices]
-
-	# Reshape matrices to three-dimensional arrays for compatibility with Flux
-	o = size(h[1], 1)
-	h = reshape.(h, o, 1, :)
 
 	# Apply the Deep Set module to map to the parameter space.
 	θ̂ = est.deepset(h)
 
 	return θ̂
 end
+
+
+
+# Functions assuming that the graphtograph and globalpool layers have been wrapped
+# in WithGraph()
+# function (est::GNNEstimator)(a::A) where {A <: AbstractArray{T, N}} where {T, N}
+#
+# 	# Apply the graph-to-graph transformation
+# 	g̃ = est.graphtograph(a)
+#
+# 	# Global pooling
+# 	# h is a matrix with,
+# 	# 	nrows = number of features graphs in final graphtograph layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
+# 	#	ncols = number of original graphs (i.e., number of independent replicates).
+# 	h = est.globalpool(g̃)
+#
+# 	# Reshape matrix to three-dimensional arrays for compatibility with Flux
+# 	o = size(h, 1)
+# 	h = reshape(h, o, 1, :)
+#
+# 	# Apply the Deep Set module to map to the parameter space.
+# 	θ̂ = est.deepset(h)
+# end
+#
+#
+# function (est::GNNEstimator)(v::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+#
+# 	# Simple, less efficient implementation for sanity checking:
+# 	θ̂ = stackarrays(est.(v))
+#
+# 	# # Convert v to a super graph. Since each element of v is itself a super graph
+# 	# # (where each sub graph corresponds to an independent replicate), we need to
+# 	# # count the number of sub-graphs in each element of v for later use.
+# 	# # Specifically, we need to keep track of the indices to determine which
+# 	# # independent replicates are grouped together.
+# 	# m = est.graphtograph.g.num_graphs
+# 	# m = repeat([m], length(v))
+# 	#
+# 	# g = Flux.batch(repeat([est.graphtograph.g], length(v)))
+# 	# g = GNNGraph(g, ndata = (Z = stackarrays(v)))
+# 	#
+# 	# # Apply the graph-to-graph transformation
+# 	# g̃ = est.graphtograph.model(g)
+# 	#
+# 	# # Global pooling
+# 	# ḡ = est.globalpool(g̃)
+# 	#
+# 	# # Extract the graph level data (i.e., the pooled features).
+# 	# # h is a matrix with,
+# 	# # 	nrows = number of features graphs in final graphtograph layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
+# 	# #	ncols = total number of original graphs (i.e., total number of independent replicates).
+# 	# h = ḡ.gdata[1]
+# 	#
+# 	# # Split the data based on the original grouping
+# 	# ng = length(v)
+# 	# cs = cumsum(m)
+# 	# indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:length(v)]
+# 	# h = [h[:, idx] for idx ∈ indices]
+# 	#
+# 	# # Reshape matrices to three-dimensional arrays for compatibility with Flux
+# 	# o = size(h[1], 1)
+# 	# h = reshape.(h, o, 1, :)
+# 	#
+# 	# # Apply the Deep Set module to map to the parameter space.
+# 	# θ̂ = est.deepset(h)
+#
+# 	return θ̂
+# end
 
 
 
