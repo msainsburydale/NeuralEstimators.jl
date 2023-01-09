@@ -37,8 +37,8 @@ include("DeepSet.jl")
 export PiecewiseEstimator
 include("PiecewiseEstimator.jl")
 
-# export GNNEstimator
-# include("GNNEstimator.jl")
+export GNNEstimator
+include("GNNEstimator.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
 export matern, maternchols, Subbotin, scaledlogistic, scaledlogit

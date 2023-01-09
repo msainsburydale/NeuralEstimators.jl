@@ -43,7 +43,7 @@ function _findbestweights(path::String)
 	# is, the network at epoch 0. Since Julia starts indexing from 1, we hence
 	# subtract 1 from argmin().
 	best_epoch = argmin(loss_per_epoch[:, 2]) -1
-	
+
 	return best_epoch
 end
 
