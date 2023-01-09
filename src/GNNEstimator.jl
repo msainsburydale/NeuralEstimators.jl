@@ -102,10 +102,6 @@ function (est::GNNEstimator)(v::V) where {V <: AbstractVector{G}} where {G <: GN
 	return est(g, m)
 end
 
-function _numberreplicates(v::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
-	broadcast(x -> x.num_graphs, v)
-end
-
 function (est::GNNEstimator)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
 
 	# Apply the graph-to-graph transformation

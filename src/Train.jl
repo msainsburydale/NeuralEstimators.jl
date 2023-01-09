@@ -302,13 +302,14 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	@assert epochs > 0
 	@assert stopping_epochs > 0
 
-	m = unique(broadcast(z -> size(z)[end], Z_val))
-	M = unique(broadcast(z -> size(z)[end], Z_train))
+	m = unique(_numberreplicates(Z_val))
+	M = unique(_numberreplicates(Z_train))
 	@assert length(m) == 1 "The elements of `Z_val` should be equally replicated; that is, the size of the last dimension in each array in `Z_val` should be constant."
 	@assert length(M) == 1 "The elements of `Z_train` should be equally replicated; that is, the size of the last dimension in each array in `Z_train` should be constant."
 	M = M[1]
 	m = m[1]
 	@assert M % m == 0 "The number of replicates in the training data, `M`, should be a multiple of the number of replicates in the validation data, `m`."
+	indexbool = m != M  # only index the data if m ≂̸ M
 
 	savebool = savepath != "" # turn off saving if savepath is an empty string
 	if savebool
@@ -327,7 +328,8 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	verbose && println(" Initial validation risk = $initial_val_risk")
 
 	verbose && print("Computing the initial training risk...")
-	tmp = _quietDataLoader((indexdata(Z_train, 1:m), _extractθ(θ_train)), batchsize)
+	tmp = indexbool ? indexdata(Z_train, 1:m) : Z_train
+	tmp = _quietDataLoader((tmp, _extractθ(θ_train)), batchsize)
 	initial_train_risk = _lossdataloader(loss, tmp, θ̂, device)
 	verbose && println(" Initial training risk = $initial_train_risk")
 
@@ -348,7 +350,8 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		train_loss = zero(initial_train_risk)
 
 		# For each batch update θ̂ and compute the training loss
-		Z_train_current = _quietDataLoader((indexdata(Z_train, replicates[epoch]), _extractθ(θ_train)), batchsize)
+		Z_train_current = indexbool ? indexdata(Z_train, replicates[epoch]) : Z_train
+		Z_train_current = _quietDataLoader((Z_train_current, _extractθ(θ_train)), batchsize)
 		epoch_time = @elapsed for (Z, θ) in Z_train_current
 		   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 		end
@@ -458,7 +461,6 @@ end
 
 # ---- Helper functions ----
 
-
 function _modifyargs(kwargs, i, M)
 	for arg ∈ [:epochs, :batchsize, :stopping_epochs, :optimiser]
 		if haskey(kwargs, arg)
@@ -473,12 +475,13 @@ function _modifyargs(kwargs, i, M)
 	return kwargs
 end
 
-
 function indexdata(Z::V, m) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 	colons  = ntuple(_ -> (:), N - 1)
 	broadcast(z -> z[colons..., m], Z)
 end
 
+# TODO indexdata is too slow when we have graph data. Need to figure out how to
+# do it efficiently, or switch it off for graph data (i.e., require m = M).
 function indexdata(Z::V, m) where {V <: AbstractVector{G}} where {G <: AbstractGraph}
 	broadcast(z -> getgraph(z, m), Z)
 end
@@ -490,7 +493,6 @@ function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh, si
 	@assert epochs_per_Z_refresh > 0
 	if simulate_just_in_time && epochs_per_Z_refresh != 1 @error "We cannot simulate the data just-in-time if we aren't refreshing it every epoch; please either set `simulate_just_in_time = false` or `epochs_per_Z_refresh = 1`" end
 end
-
 
 # Computes the loss function in a memory-safe manner
 function _lossdataloader(loss, data_loader::DataLoader, θ̂, device)

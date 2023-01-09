@@ -1,3 +1,12 @@
+function _numberreplicates(Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
+	broadcast(z -> z.num_graphs, Z)
+end
+
+function _numberreplicates(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+	broadcast(z -> size(z)[end], Z)
+end
+
+
 # Note that these arguments differ to DataLoader(), so this function should never be exported.
 function _quietDataLoader(data, batchsize::Integer; shuffle = true, partial = false)
 	oldstd = stdout
