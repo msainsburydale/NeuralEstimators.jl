@@ -560,14 +560,11 @@ function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 	return ls
 end
 
-
 function _updatebatch!(θ̂::GNNEstimator, Z, θ, device, loss, γ, optimiser)
 
 	m = _numberreplicates(Z)
 	Z = Flux.batch(Z)
-	Z = Z |> device
-	θ = θ |> device
-	m = m |> device
+	Z, θ = Z |> device, θ |> device
 
 	# Compute gradients in such a way that the training loss is also saved.
 	# This is equivalent to: gradients = gradient(() -> loss(θ̂(Z), θ), γ)
