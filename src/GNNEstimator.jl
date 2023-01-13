@@ -92,7 +92,7 @@ function (est::GNNEstimator)(v::V) where {V <: AbstractVector{G}} where {G <: GN
 	# count the number of sub-graphs in each element of v for later use.
 	# Specifically, we need to keep track of the indices to determine which
 	# independent replicates are grouped together.
-	m = _numberreplicates(v)
+	m = numberreplicates(v)
 	g = Flux.batch(v)
 	# NB batch() causes array mutation, which means that this method
 	# cannot be used for computing gradients during training. As a work around,
