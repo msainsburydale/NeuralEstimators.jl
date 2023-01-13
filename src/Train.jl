@@ -287,7 +287,8 @@ Note that the elements of `Z_train` and `Z_val` should each be equally replicate
 is, the size of the last dimension in each array in `Z_train` should be constant,
 and similarly for `Z_val` (although these constants can differ, as discussed above).
 """
-function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
+function train(
+		θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
@@ -302,8 +303,8 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	@assert epochs > 0
 	@assert stopping_epochs > 0
 
-	m = unique(_numberreplicates(Z_val))
-	M = unique(_numberreplicates(Z_train))
+	m = unique(numberreplicates(Z_val))
+	M = unique(numberreplicates(Z_train))
 	@assert length(m) == 1 "The elements of `Z_val` should be equally replicated; that is, the size of the last dimension in each array in `Z_val` should be constant."
 	@assert length(M) == 1 "The elements of `Z_train` should be equally replicated; that is, the size of the last dimension in each array in `Z_train` should be constant."
 	M = M[1]
@@ -388,20 +389,28 @@ end
 
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 
-
+# TODO clean up this documentation
 """
 	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M; <keyword args>)
+	train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: AbstractVector{T}}  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
 
-Train several neural estimators, each with the architecture given by `θ̂`, using
-the sample sizes given by the vector of integers, `M`.
+Train several neural estimators, each with the architecture given by `θ̂`, with
+different sample sizes.
 
-Each neural estimator is pre-trained with the neural estimator trained for the
+There are two methods of `train` intended for training multiple estimators.
+The first accepts sample sizes given by a vector of integers, `M`. Each neural
+estimator is pre-trained with the neural estimator trained for the
 previous sample size. That is, if `M = [m₁, m₂]`, with `m₂` > `m₁`, the neural
 estimator for sample size `m₂` is pre-trainined with the neural
 estimator for sample size `m₁`. By pre-training a series of neural estimators with
 progressively larger sample sizes, most of the learning is done with small,
 computationally cheap sample sizes. Hence, this approach can be beneficial even
 if one is only interested in estimation for a single, large sample.
+
+The second method requires the training and validation data to be a `Vector{Vector{T}}`,
+where `T` is arbitrary. In this method, a separate neural estimator is trained
+for each element the training and validation data. This method avoids the use of
+`indexdata()`, which is very slow for graphical data, and hence may be preferred.
 
 This method is a wrapper for
 `train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T)` and, hence, it
@@ -414,23 +423,15 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 
 	@assert all(M .> 0)
 	M = sort(M)
+	E = length(M) # number of estimators
 
 	kwargs = (;args...)
 	@assert !haskey(kwargs, :m) "`m` should not be provided with this method of `train`"
 
-	# Create one copy of the estimator θ̂ for each sample size in M
-	# If we are using the GPU, we first need to move θ̂ there before creating
-	# the estimator, otherwise
-	if haskey(kwargs, :use_gpu)
-		use_gpu = kwargs.use_gpu
-	else
-		use_gpu = true
-	end
-	device = _checkgpu(use_gpu, verbose = true)
-	θ̂ = θ̂ |> device
-	estimators = [deepcopy(θ̂ ) for _ ∈ eachindex(M)]
+	# Create a copy of θ̂ for each sample size
+	estimators = _deepcopyestimator(θ̂, kwargs, E)
 
-	for i ∈ eachindex(M)
+	for i ∈ eachindex(estimators)
 
 		mᵢ = M[i]
 		@info "training with m=$(mᵢ)"
@@ -446,26 +447,89 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 		# value with a modified version that contains mᵢ. We will pass on this
 		# modified version of args to train().
 		kwargs = (;args...)
-		@assert !haskey(kwargs, :m) "`m` should not be provided with this method of `train`"
 		if haskey(kwargs, :savepath) && kwargs.savepath != ""
 			kwargs = merge(kwargs, (savepath = kwargs.savepath * "m$(mᵢ)",))
 		end
-		kwargs = _modifyargs(kwargs, i, M)
+		kwargs = _modifyargs(kwargs, i, E)
 
-		estimators[i] = train(estimators[i], θ_train, θ_val, Z_train, indexdata(Z_val, 1:mᵢ); kwargs...)
+		# Subset the validation data to the current sample size, and then train
+		Z_valᵢ = indexdata(Z_val, 1:mᵢ)
+		estimators[i] = train(estimators[i], θ_train, θ_val, Z_train, Z_valᵢ; kwargs...)
+	end
+
+	return estimators
+end
+
+function train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: AbstractVector{T}}  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+
+	@assert length(Z_train) == length(Z_val)
+	E = length(Z_train) # number of estimators
+
+	kwargs = (;args...)
+	@assert !haskey(kwargs, :m) "`m` should not be provided with this method of `train`"
+
+	# Create a copy of θ̂ for each sample size
+	estimators = _deepcopyestimator(θ̂, kwargs, E)
+
+	for i ∈ eachindex(estimators)
+
+		# Subset the training and validation data to the current sample size
+		Z_trainᵢ = Z_train[i]
+		Z_valᵢ   = Z_val[i]
+
+		mᵢ = extrema(unique(numberreplicates(Z_valᵢ)))
+		if mᵢ[1] == mᵢ[2]
+			mᵢ = mᵢ[1]
+			@info "training with m=$(mᵢ)"
+		else
+			@info "training with m ∈ [$(mᵢ[1]), $(mᵢ[2])]"
+			mᵢ = "$(mᵢ[1])-$(mᵢ[2])"
+		end
+		#TODO It may also be possible to allow this behaviour in the other method of train(). We would just need to sample m
+
+		# Pre-train if this is not the first estimator
+		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
+
+		# Modify/check the keyword arguments before passing them onto train().
+		# If savepath has been provided in the keyword arguments, modify it with
+		# information on the training sample size mᵢ. First, we convert the object
+		# args to a named tuple. Then, if savepath was included as an argument
+		# and it is not an empty string, we use merge() to replace its given
+		# value with a modified version that contains mᵢ. We will pass on this
+		# modified version of args to train().
+		kwargs = (;args...)
+		if haskey(kwargs, :savepath) && kwargs.savepath != ""
+			kwargs = merge(kwargs, (savepath = kwargs.savepath * "m$(mᵢ)",))
+		end
+		kwargs = _modifyargs(kwargs, i, E)
+
+		# train
+		estimators[i] = train(estimators[i], θ_train, θ_val, Z_trainᵢ, Z_valᵢ; kwargs...)
 	end
 
 	return estimators
 end
 
 
+function _deepcopyestimator(θ̂, kwargs, E)
+	# If we are using the GPU, we first need to move θ̂ to the GPU before copying it
+	use_gpu = haskey(kwargs, :use_gpu) ? kwargs.use_gpu : true
+	device  = _checkgpu(use_gpu, verbose = true)
+	θ̂ = θ̂ |> device
+	estimators = [deepcopy(θ̂) for _ ∈ 1:E]
+	return estimators
+end
+
+
+
 # ---- Helper functions ----
 
-function _modifyargs(kwargs, i, M)
+# E = number of estimators
+function _modifyargs(kwargs, i, E)
 	for arg ∈ [:epochs, :batchsize, :stopping_epochs, :optimiser]
 		if haskey(kwargs, arg)
 			field = getfield(kwargs, arg)
-			@assert length(field) ∈ (1, length(M))
+			@assert length(field) ∈ (1, E)
 			if length(field) > 1
 				kwargs = merge(kwargs, NamedTuple{(arg,)}(field[i]))
 			end
@@ -480,10 +544,10 @@ function indexdata(Z::V, m) where {V <: AbstractVector{A}} where {A <: AbstractA
 	broadcast(z -> z[colons..., m], Z)
 end
 
-# TODO indexdata is too slow when we have graph data. Need to figure out how to
-# do it efficiently, or switch it off for graph data (i.e., require m = M).
+
 function indexdata(Z::V, m) where {V <: AbstractVector{G}} where {G <: AbstractGraph}
-	broadcast(z -> getgraph(z, m), Z)
+	 @warn "`indexdata()` is very slow for graphical data. Consider using a method of `train` that does not require the training or validation data to be indexed. Use `numberreplicates()` to check that the training and validation data sets are equally replicated, which prevents the invocation of `indexdata()`."
+	 getgraph.(Z, m)
 end
 
 function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh, simulate_just_in_time)
@@ -562,7 +626,7 @@ end
 
 function _updatebatch!(θ̂::GNNEstimator, Z, θ, device, loss, γ, optimiser)
 
-	m = _numberreplicates(Z)
+	m = numberreplicates(Z)
 	Z = Flux.batch(Z)
 	Z, θ = Z |> device, θ |> device
 

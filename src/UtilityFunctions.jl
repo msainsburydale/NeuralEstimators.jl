@@ -1,8 +1,10 @@
-function _numberreplicates(Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
+
+# TODO documentation
+function numberreplicates(Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
 	broadcast(z -> z.num_graphs, Z)
 end
 
-function _numberreplicates(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+function numberreplicates(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 	broadcast(z -> size(z)[end], Z)
 end
 

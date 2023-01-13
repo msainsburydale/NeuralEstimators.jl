@@ -62,7 +62,7 @@ include("Assess.jl")
 export parametricbootstrap, nonparametricbootstrap, coverage
 include("Bootstrap.jl")
 
-export stackarrays, expandgrid, loadbestweights
+export stackarrays, expandgrid, loadbestweights, numerreplicates
 include("UtilityFunctions.jl")
 
 end
