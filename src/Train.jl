@@ -448,7 +448,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 		# modified version of args to train().
 		kwargs = (;args...)
 		if haskey(kwargs, :savepath) && kwargs.savepath != ""
-			kwargs = merge(kwargs, (savepath = kwargs.savepath * "m$(mᵢ)",))
+			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
 		end
 		kwargs = _modifyargs(kwargs, i, E)
 
@@ -499,7 +499,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) wher
 		# modified version of args to train().
 		kwargs = (;args...)
 		if haskey(kwargs, :savepath) && kwargs.savepath != ""
-			kwargs = merge(kwargs, (savepath = kwargs.savepath * "m$(mᵢ)",))
+			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
 		end
 		kwargs = _modifyargs(kwargs, i, E)
 
@@ -514,7 +514,7 @@ end
 function _deepcopyestimator(θ̂, kwargs, E)
 	# If we are using the GPU, we first need to move θ̂ to the GPU before copying it
 	use_gpu = haskey(kwargs, :use_gpu) ? kwargs.use_gpu : true
-	device  = _checkgpu(use_gpu, verbose = true)
+	device  = _checkgpu(use_gpu, verbose = false)
 	θ̂ = θ̂ |> device
 	estimators = [deepcopy(θ̂) for _ ∈ 1:E]
 	return estimators
