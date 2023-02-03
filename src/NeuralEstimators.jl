@@ -63,8 +63,7 @@ include("UtilityFunctions.jl")
 end
 
 # TODO
-# - Cheat sheet for the native Julia version and the R interface.
-# - Plotting functions, plotrisk and plotdistribution. Should be able to
+#   Plotting functions, plotrisk and plotdistribution. Should be able to
 #   translate most of the code from R, so I'll do this once I've finished the R
 #   interface.
 
