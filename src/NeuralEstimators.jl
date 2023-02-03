@@ -63,8 +63,8 @@ include("UtilityFunctions.jl")
 end
 
 # TODO
-# - Move from TravisCI to GitHub Actions
 # - Remove docs/build/ from the git history
+# - Move from TravisCI to GitHub Actions
 # - Add a documentation widget
 # - Add a code coverage widget
 # - Add a build widget
@@ -79,7 +79,6 @@ end
 # - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
 
 # •	Contact TravisCI to tell them that I am developing open-source software to get a free plan.
-# •	code coverage widget should display the percentage.
 
 # ---- long term:
 # - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. It seems very easy, just need to add precompile(f, (arg_types…)) to whatever methods I want to precompile.
