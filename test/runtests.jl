@@ -138,7 +138,7 @@ end
 
 using GraphNeuralNetworks
 using Flux, Graphs, Statistics
-using Flux.Data: DataLoader
+using Flux: DataLoader
 
 @testset "GNNEstimator" begin
 	n₁, n₂ = 11, 27

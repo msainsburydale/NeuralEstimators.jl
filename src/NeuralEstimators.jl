@@ -13,9 +13,7 @@ using DataFrames
 using Distributions
 import Distributions: cdf, logpdf, quantile, minimum, maximum, insupport, var, skewness
 using Flux
-using Flux: ofeltype, params
-using Flux.Data: DataLoader
-using Flux.Optimise: update!
+using Flux: ofeltype, params, DataLoader, update!
 using Functors: @functor
 using GraphNeuralNetworks
 using Graphs

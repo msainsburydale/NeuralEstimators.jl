@@ -13,10 +13,11 @@ corresponding to independent replicates from the model.
 
 # Examples
 ```
+using NeuralEstimators
 using Flux
+using Flux: batch
 using GraphNeuralNetworks
 using Statistics: mean
-using Flux: batch
 
 # Create some graphs
 d = 1             # dimension of the response variable
@@ -71,7 +72,7 @@ function (est::GNNEstimator)(g::GNNGraph)
 	# h is a matrix with
 	# 	nrows = number of feature graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
 	#	ncols = number of original graphs (i.e., number of independent replicates).
-	h = ḡ.gdata[1]
+	h = ḡ.gdata.u
 
 	# Apply the Deep Set module to map to the parameter space.
 	θ̂ = est.deepset(h)
@@ -115,7 +116,7 @@ function (est::GNNEstimator)(g::GNNGraph, m::AbstractVector{I}) where {I <: Inte
 	# h is a matrix with,
 	# 	nrows = number of features graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
 	#	ncols = total number of original graphs (i.e., total number of independent replicates).
-	h = ḡ.gdata[1]
+	h = ḡ.gdata.u
 
 	# Split the features based on the original grouping.
 	ng = length(m)
@@ -160,7 +161,7 @@ end
 # 	n = [sum(I .== i) for i ∈ 1:ng]
 # 	cs  = cumsum(n)
 # 	indices = [(cs[i] - n[i] + 1):cs[i] for i ∈ 1:ng]
-# 	x̃ = [x̃[:, idx] for idx ∈ indices] # TODO maybe I can do this without creating this vector; see what I do for DeepSets (I don't think so, actually).
+# 	x̃ = [x̃[:, idx] for idx ∈ indices] # NB maybe I can do this without creating this vector; see what I do for DeepSets (I don't think so, actually).
 #
 # 	# Apply an abitrary global pooling function to each feature graph
 # 	# (i.e., each row of x̃). The pooling function should return a vector of length
