@@ -1,1 +1,0 @@
-You may also be interested in the Julia packages [Flux](https://fluxml.ai/Flux.jl/stable/) (the deep learning framework this package is built upon), [Turing](https://turing.ml/stable/) (for general-purpose probabilistic programming), and [Mill](https://ctuavastlab.github.io/Mill.jl/stable/) (for generalised multiple-instance learning models). 

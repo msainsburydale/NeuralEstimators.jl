@@ -136,41 +136,6 @@ end
 	finitedifference_check(3.3, 3.8, 0.9)
 end
 
-using NeuralEstimators: fₛ, Fₛ, Fₛ⁻¹
-@testset "SubbotinDistribution" begin
-
-	# Check that the pdf is consistent with the cdf using finite differences
-	finitedifference(y, μ, τ, δ, ϵ = 0.000001) = (Fₛ(y + ϵ, μ, τ, δ) - Fₛ(y, μ, τ, δ)) / ϵ
-	function finitedifference_check(y, μ, τ, δ)
-		@test abs(finitedifference(y, μ, τ, δ) - fₛ(y, μ, τ, δ)) < 0.0001
-	end
-
-	finitedifference_check(-1, 0.1, 3, 1.2)
-	finitedifference_check(0, 0.1, 3, 1.2)
-	finitedifference_check(0.9, 0.1, 3, 1.2)
-	finitedifference_check(3.3, 0.1, 3, 1.2)
-
-	# Check that f⁻¹(f(y)) ≈ y
-	μ = 0.5; τ = 1.3; δ = 2.4; y = 0.3
-	@test abs(y - Fₛ⁻¹(Fₛ(y, μ, τ, δ), μ, τ, δ)) < 0.0001
-	# @test abs(y - t⁻¹(t(y, μ, τ, δ), μ, τ, δ)) < 0.0001
-
-	d = Subbotin(μ, τ, δ)
-	@test mean(d) == μ
-	@test logpdf(d, y) ≈ log(fₛ(y, μ, τ, δ))
-	@test cdf(d, y) ≈ Fₛ(y, μ, τ, δ)
-	@test quantile(d, cdf(d, y)) ≈ y
-
-	# # Standard Gaussian distribution:
-    # μ = 0.0; τ = sqrt(2); δ = 2.0
-	# d = Subbotin(μ, τ, δ)
-	#
-	# # Standard Laplace distribution:
-	# μ = 0.0; τ = 1.0; δ = 1.0
-	# d = Subbotin(μ, τ, δ)
-
-end
-
 using GraphNeuralNetworks
 using Flux, Graphs, Statistics
 using Flux.Data: DataLoader
@@ -317,9 +282,7 @@ verbose = false # verbose used in the NeuralEstimators code
 			Z_train = simulate(parameters, 20)
 			Z_val = simulate(parameters, 10)
 
-			several_estimators     = train(θ̂, parameters, parameters, Z_train, Z_val, [1, 2, 5, 10]; epochs = [10, 5, 3, 2], use_gpu = use_gpu, verbose = verbose)
-			several_MAP_estimators = trainMAP(θ̂, parameters, parameters, Z_train, Z_val, [1, 4, 5]; ρ = [0.9f0, 0.5f0], epochs = [5, 3, 2], use_gpu = use_gpu, verbose = verbose)
-			one_MAP_estimators     = trainMAP(θ̂, parameters, parameters, Z_train, Z_val, [1, 4]; M_MAP = [4], ρ = [0.9f0, 0.5f0], epochs = [5, 3], use_gpu = use_gpu, verbose = verbose)
+			several_estimators = train(θ̂, parameters, parameters, Z_train, Z_val, [1, 2, 5, 10]; epochs = [10, 5, 3, 2], use_gpu = use_gpu, verbose = verbose)
 
 
 			# Decided not to test the saving function, because we can't always assume that we have write privledges
@@ -366,10 +329,10 @@ verbose = false # verbose used in the NeuralEstimators code
 		end
 
 		@testset "bootstrap" begin
-			parametricbootstrap(θ̂, Parameters(1, ξ), 50; use_gpu = use_gpu)
-			nonparametricbootstrap(θ̂, Z[1]; use_gpu = use_gpu)
+			bootstrap(θ̂, Parameters(1, ξ), 50; use_gpu = use_gpu)
+			bootstrap(θ̂, Z[1]; use_gpu = use_gpu)
 			blocks = rand(1:2, size(Z[1])[end])
-			nonparametricbootstrap(θ̂, Z[1], blocks, use_gpu = use_gpu)
+			bootstrap(θ̂, Z[1], blocks, use_gpu = use_gpu)
 		end
 	end
 end
@@ -389,15 +352,6 @@ end
 	σ = 0.1f0
 	@test eltype(simulategaussianprocess(L₁, σ, m)) == Float32
 	# @code_warntype simulategaussianprocess(L₁, σ, m)
-
-	θ = fill(0.5f0, 8)
-	s₀ = S[1, :]'
-	u = 0.7f0
-	h = map(norm, eachslice(S .- s₀, dims = 1))
-	s₀_idx = findfirst(x -> x == 0.0, h)
-	@test eltype(simulateconditionalextremes(θ, L₁, h, s₀_idx, u, m)) == Float32
-	# using NeuralEstimators: delta, a, b, t, σ̃₀, Φ
-	# @code_warntype simulateconditionalextremes(θ, L₁, h, s₀_idx, u, m)
 end
 
 

@@ -1,17 +1,64 @@
-
 # ---- Assessment ----
 
+# TODO maybe 'replicate' should be replaced with 'j'. This would be consistent
+# with how we've called another column 'k', and it would be consistent with the argument name `J` in `assess()`.
+# If I do this change, I'll just need to adapt the R code accordingly.
 """
-	Assessment(θandθ̂, runtime)
+	Assessment(θandθ̂::DataFrame, runtime::DataFrame)
 
-An object for storing the result of calling `assess()`, containing a `DataFrame`
-of true parameters `θ` and corresponding estimates `θ̂`, and a `DataFrame`
-containing the `runtime` for each estimator.
+An type for storing the output of `assess()`. It contains two fields.
+The field `runtime` contains the total `time` taken for each `estimator` for each sample size `m`.
+The field `θandθ̂` is a long-form `DataFrame` containing the true parameters and corresponding estimates.
+Specifically, its columns are:
+
+- `estimator`: the name of the estimator
+- `parameter`: the name of the parameter
+- `truth`:     the true value of the parameter
+- `estimate`:  the estimated value of the parameter
+- `m`:         the sample size
+- `k`:         the index of the parameter vector in the test set
+- `replicate`: the index of the data set
+
+Multiple `Assessment` objects can be combined with the function `merge`.
 """
 struct Assessment
 	θandθ̂::DataFrame
 	runtime::DataFrame
 end
+
+function merge(assessment::Assessment, assessments::Assessment...)
+	θandθ̂   = assessment.θandθ̂
+	runtime = assessment.runtime
+	for x in assessments
+		θandθ̂   = vcat(θandθ̂,   x.θandθ̂)
+		runtime = vcat(runtime, x.runtime)
+	end
+	Assessment(θandθ̂, runtime)
+end
+
+#TODO add Bool flag to indicate whether we compute the risk over all parameters
+# or split by parameters (default is over all parameters, since that is how
+# the Bayes risk is defined).
+#TODO Add the mathematical description of the Bayes risk.
+"""
+	risk(assessment::Assessment; loss = (x, y) -> abs.(x .- y))
+
+Computes the Bayes risk with respect to the `loss` function for each
+estimator, parameter, and sample size considered in `assessment`.
+
+The argument `loss` should be a binary operator (default absolute-error loss).
+"""
+function risk(assessment::Assessment; loss = (x, y) -> abs.(x .- y))
+
+
+	df = assessment.θandθ̂
+	df = groupby(df, [:estimator, :parameter, :m])
+	df = combine(df, [:estimate, :truth] => loss => :loss, ungroup = false)
+	df = combine(df, :loss => mean => :risk)
+	return df
+end
+
+#TODO add some more methods that dispatch on assessment objects. E.g., plotdistribution().
 
 
 # Given a set of true parameters θ and corresponding estimates θ̂ resulting
@@ -49,6 +96,7 @@ end
 
 # ---- assess() ----
 
+
 """
 	assess(estimators, parameters, Z; <keyword args>)
 	assess(estimators, parameters; <keyword args>)
@@ -58,27 +106,51 @@ set of `parameters`.
 
 Testing data can be automatically simulated by overloading `simulate` with a method
 `simulate(parameters, m::Integer)`, and using the keyword argument `m` to specify
-the desired sample sizes to assess. Alternatively, one may provide simulated data
-`Z` as a `Vector{Vector{Array}}`, where each `Vector{Array}` is associated with
-a single sample size (i.e., the size of the final dimension of the arrays should
-be constant). If there are more simulated data sets than unique parameter
+the desired sample sizes to assess. Alternatively, one may provide testing data
+`Z` as an iterable collection, where each element contains the testing data
+for a given sample size. If there are more simulated data sets than unique parameter
 vectors, the data should be stored in an 'outer' fashion, so that the parameter
 vectors run faster than the replicated data.
 
-
 # Keyword arguments
-- `m::Vector{Integer}`: sample sizes to estimate from.
-- `estimator_names::Vector{String}`: names of the estimators (sensible default values provided).
-- `parameter_names::Vector{String}`: names of the parameters (sensible default values provided).
-- `J::Integer = 1`: the number of times to replicate each parameter in `parameters`.
+
+# Arguments common to both methods
+- `estimator_names::Vector{String}`: names of the estimators (sensible defaults provided).
+- `parameter_names::Vector{String}`: names of the parameters (sensible defaults provided).
 - `ξ = nothing`: invariant model information.
 - `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses the invariant model information, `ξ`: If it does, the estimator will be applied as `estimator(Z, ξ)`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
 - `verbose::Bool = true`
+
+# Arguments unique to `assess(estimators, parameters)`
+- `m::Vector{Integer}`: sample sizes to estimate from.
+- `J::Integer = 1`: the number of times to replicate each parameter in `parameters`.
+
+# Examples
+```
+using NeuralEstimators
+using Flux
+n = 10 # number of observations in each realisation
+p = 4  # number of parameters in the statistical model
+w = 32 # width of each layer
+
+ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
+ϕ = Chain(Flux.flatten, Dense(w, w, relu), Dense(w, p));
+θ̂ = DeepSet(ψ, ϕ)
+
+# Generate some fake parameters and corresponding data for a range of sample sizes:
+K = 100        # number of parameter vectors in the test set
+θ = rand(p, K)
+Z = [[rand(n, 1, m) for _ ∈ 1:K] for m ∈ (1, 10, 20)]
+
+assessment = assess([θ̂], θ, Z)
+risk(assessment)
+```
 """
 function assess(
     estimators, parameters::P;
-	m::Vector{I}, J::Integer = 1,
+	m::Vector{I},
+	J::Integer = 1,
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
 	ξ = nothing,
@@ -102,8 +174,6 @@ function assess(
 
 	return _Assessment(obj)
 end
-
-
 
 function assess(
 	estimators, parameters::P, Z;
@@ -136,27 +206,9 @@ function assess(
 			estimator_names = estimator_names, parameter_names = parameter_names,
 			ξ = ξ, use_ξ = use_ξ, use_gpu = use_gpu, verbose = verbose
 		)
-
 	end
 
 	return _Assessment(obj)
-end
-
-
-
-"""
-	numberofreplicates(X)
-
-Generic function that returns the number of replicates in a given object.
-"""
-function numberofreplicates end
-
-function numberofreplicates(X)
-	size(X)[end]
-end
-
-function numberofreplicates(X::G) where {G <: GNNGraph}
-	X.num_graphs
 end
 
 
@@ -166,9 +218,9 @@ function _assess(
 	J::Integer, ξ, use_ξ, use_gpu, verbose
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
-	# Infer m from Z and check that Z is in the correct format
-	m = unique(numberofreplicates.(Z))
-	@assert length(m) == 1 "The simulated data Z should be a `Vector{Array}` where the size of the final dimension of the array is constant."
+	# Infer m from Z and check that it is constant
+	m = unique(numberreplicates(Z))
+	@assert length(m) == 1 "The simulated data `Z` should contain a fixed number of replicates for each parameter vector in `parameters`"
 	m = m[1]
 	verbose && println("Estimating with m = $m...")
 
@@ -217,13 +269,41 @@ function _assess(
 end
 
 
-import Base: merge
-function merge(assessment::Assessment, assessments::Assessment...)
-	θandθ̂   = assessment.θandθ̂
-	runtime = assessment.runtime
-	for x in assessments
-		θandθ̂   = vcat(θandθ̂,   x.θandθ̂)
-		runtime = vcat(runtime, x.runtime)
+
+
+# ---- coverage ----
+
+"""
+	coverage(θ̂, Z::V, θ, α; kwargs...) where  {V <: AbstractArray{A}} where A
+
+For each data set contained in `Z`, compute a non-parametric bootstrap confidence
+interval with nominal coverage `α`, and determine if the true parameters, `θ`, are
+contained within this interval. The overall empirical coverage is then obtained
+by averaging the resulting 0-1 matrix over all data sets.
+"""
+function coverage(θ̂, Z::V, θ, α; kwargs...) where  {V <: AbstractArray{A}} where A
+
+    p = length(θ)
+
+	# for each data set contained in Z, compute a bootstrap confidence interval
+	# and determine if the true parameters, θ, are within this interval.
+	within = map(Z) do z
+
+		# compute a bootstrap sample of parameters
+		θ̃ = bootstrap(θ̂, z; kwargs...)
+
+		# Determined if the central confidence intervals with nominal coverage α
+		# contain the true parameter. The result is an indicator vector
+		# specifying which parameters are contained in the interval
+		[quantile(θ̃[i, :], α/2) < θ[i] < quantile(θ̃[i, :], 1 - α/2) for i ∈ 1:p]
 	end
-	Assessment(θandθ̂, runtime)
+
+	# combine the counts into a single matrix with p rows and one column for
+	# each data set in Z
+	within = hcat(within...)
+
+	# compute the empirical coverage
+	cvg = mean(within, dims = 2)
+
+	return cvg
 end

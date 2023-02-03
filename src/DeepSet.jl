@@ -35,12 +35,6 @@ where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates from the mo
 `ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant aggregation
 function.
 
-`DeepSet` objects act on `Array`s, with the last dimension the
-replicates dimension. For example, with 2-dimensional arrays, 𝐙[:, 1]
-contains the first replicate, 𝐙[:, 2] contains the second replicate, and so on.
-Multiple sets of replicates (each associated with a different parameter vector)
-can be stored as a `Vector` of `Array`s.
-
 The function `a` must aggregate over the last dimension (i.e., the replicates
 dimension) of an input array. It can be specified as a positional argument of
 type `Function`, or as a keyword argument of type `String` with permissible
@@ -48,6 +42,7 @@ values `"mean"`, `"sum"`, and `"logsumexp"`.
 
 # Examples
 ```
+using NeuralEstimators
 using Flux
 n = 10 # number of observations in each realisation
 p = 4  # number of parameters in the statistical model

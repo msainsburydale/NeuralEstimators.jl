@@ -11,6 +11,19 @@ simulategaussianprocess
 simulateschlather
 ```
 
+## Commonly-used low-level functions
+
+These low-level functions may be of use for various models.
+
+```@docs
+matern
+
+maternchols
+
+incgamma
+```
+
+
 ## Density functions
 
 Density functions are not needed in the workflow of `NeuralEstimators`. However, as part of a series of comparison studies between neural estimators and likelihood-based estimators given in the manuscript, we have developed the following density functions, and we include them in `NeuralEstimators` to cater for the possibility that they may be of use in future comparison studies.
@@ -19,13 +32,4 @@ Density functions are not needed in the workflow of `NeuralEstimators`. However,
 gaussiandensity
 
 schlatherbivariatedensity
-```
-
-## Miscellaneous functions
-```@docs
-matern
-
-maternchols
-
-incgamma
 ```

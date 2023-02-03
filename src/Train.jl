@@ -3,11 +3,8 @@ Generic function for training a neural estimator.
 
 The methods are designed to cater for different forms of "on-the-fly simulation"
 (see the online documentation). In all methods, the validation data are held
-fixed so that the validation risk function, which is used to monitor the
-performance of the estimator during training, is not subject to noise.
-
-Note that `train` is a mutating function, but the suffix `!` is omitted to avoid clashes with the
-`Flux` function, `train!`.
+fixed to reduce noise when evaluating the validation risk function (which is
+used to monitor the performance of the estimator during training).
 
 # Keyword arguments
 
@@ -28,11 +25,11 @@ Arguments common to `train(θ̂, P)` and `train(θ̂, θ_train, θ_val)`:
 
 Arguments unique to `train(θ̂, P)`:
 - `K::Integer = 10_000`: number of parameter vectors in the training set; the size of the validation set is `K ÷ 5`.
-- `epochs_per_θ_refresh::Integer = 1`: how often to refresh the training parameters; this must be a multiple of `epochs_per_Z_refresh`.
 - `ξ = nothing`: invariant model information; if `ξ` is provided, the constructor `P` is called as `P(K, ξ)`.
 """
 function train end
-
+# - `epochs_per_θ_refresh::Integer = 1`: how often to refresh the training parameters; must be a multiple of `epochs_per_Z_refresh`. TODO
+# Note that `train` is a mutating function, but the suffix `!` is omitted to avoid clashes with the `Flux` function, `train!`.
 
 """
 	train(θ̂, P; <keyword args>)
@@ -45,26 +42,23 @@ function train(θ̂, P;
 	m,
 	ξ = nothing,
 	# epochs_per_θ_refresh::Integer = 1, # TODO
-	# epochs_per_Z_refresh::Integer = 1, # TODO
-	# simulate_just_in_time::Bool = false, # TODO
+	epochs_per_Z_refresh::Integer = 1,
+	simulate_just_in_time::Bool = false,
 	loss = Flux.Losses.mae,
 	optimiser          = ADAM(1e-4),
     batchsize::Integer = 32,
     epochs::Integer    = 100,
-	savepath::String   = "", # "runs/"
+	savepath::String   = "",
 	stopping_epochs::Integer = 5,
     use_gpu::Bool      = true,
 	verbose::Bool      = true,
 	K::Integer         = 10_000
 	)
 
-	simulate_just_in_time::Bool = false # TODO
-	epochs_per_Z_refresh = 1 # TODO
 	epochs_per_θ_refresh = 1 # TODO
 
     _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh, simulate_just_in_time)
 
-	# TODO better way to enforce P to be a type and specifically a subtype of ParameterConfigurations?
 	@assert P <: Union{AbstractMatrix, ParameterConfigurations}
 	@assert K > 0
 	@assert epochs_per_θ_refresh % epochs_per_Z_refresh  == 0 "`epochs_per_θ_refresh` must be a multiple of `epochs_per_Z_refresh`"
@@ -149,7 +143,7 @@ end
 	train(θ̂, θ_train::P, θ_val::P; <keyword args>)
 
 Train the neural estimator `θ̂` by providing the training and validation parameter
-sets explicitly as `θ_train` and `θ_val`, which are both held fixed during training.
+sets explicitly as `θ_train` and `θ_val`, both of which are held fixed during training.
 """
 function train(θ̂, θ_train::P, θ_val::P;
 		m,
@@ -277,15 +271,12 @@ Train the neural estimator `θ̂` by providing the training and validation param
 sets, `θ_train` and `θ_val`, and the training and validation data sets,
 `Z_train` and `Z_val`, all of which are held fixed during training.
 
-The sample size argument `m` is inferred from `Z_val`. The training data `Z_train`
-can contain `M` replicates, where `M` is a multiple of `m`; the training data will
-then be recycled to imitate on-the-fly simulation. For example, if `M = 50` and
-`m = 10`, epoch 1 uses the first 10 replicates, epoch 2 uses the next 10
-replicates, and so on, until epoch 6 again uses the first 10 replicates.
-
-Note that the elements of `Z_train` and `Z_val` should each be equally replicated; that
-is, the size of the last dimension in each array in `Z_train` should be constant,
-and similarly for `Z_val` (although these constants can differ, as discussed above).
+If the elements of `Z_train` and `Z_val` are equally replicated, and the number
+of replicates for each element of `Z_train` is a multiple of the number of
+replicates for each element of `Z_val`, then the training data will
+then be recycled throughout training to imitate on-the-fly simulation. Note that
+this requires the data to be subsetted throughout training with the function
+`subsetdata`.
 """
 function train(
 		θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
@@ -303,14 +294,30 @@ function train(
 	@assert epochs > 0
 	@assert stopping_epochs > 0
 
+	# If the elements of Z_train and Z_val are equally replicated, that is, there
+	# is a constant number of replicates associated with each parameter vector in
+	# θ_train, and similarly for θ_val, then the sample size argument m can be
+	# inferred from Z_val. The training data Z_train can contain M replicates,
+	# where M is a multiple of m. The training data will
+	# then be recycled to imitate on-the-fly simulation. For example, if M = 50 and
+	# m = 10, epoch 1 uses the first 10 replicates, epoch 2 uses the next 10
+	# replicates, and so on, until epoch 6 again uses the first 10 replicates.
+	# Note that this requires the data to be subsetted throughout the training
+	# procedure, which is performed using the function subsetdata.
+
+	# Determine if we we need to subset the data.
+	# Start by assuming we will not subset the data:
+	subsetbool = false
 	m = unique(numberreplicates(Z_val))
 	M = unique(numberreplicates(Z_train))
-	@assert length(m) == 1 "The elements of `Z_val` should be equally replicated; that is, the size of the last dimension in each array in `Z_val` should be constant."
-	@assert length(M) == 1 "The elements of `Z_train` should be equally replicated; that is, the size of the last dimension in each array in `Z_train` should be constant."
-	M = M[1]
-	m = m[1]
-	@assert M % m == 0 "The number of replicates in the training data, `M`, should be a multiple of the number of replicates in the validation data, `m`."
-	indexbool = m != M  # only index the data if m ≂̸ M
+	if length(m) == 1 && length(M) == 1 # the data need to be equally replicated in order to subset
+		M = M[1]
+		m = m[1]
+		# The number of replicates in the training data, M, need to be a
+		# multiple of the number of replicates in the validation data, m.
+		# Also, only subset the data if m ≂̸ M (the subsetting is redundant otherwise).
+		subsetbool = M % m == 0 && m != M
+	end
 
 	savebool = savepath != "" # turn off saving if savepath is an empty string
 	if savebool
@@ -329,7 +336,7 @@ function train(
 	verbose && println(" Initial validation risk = $initial_val_risk")
 
 	verbose && print("Computing the initial training risk...")
-	tmp = indexbool ? indexdata(Z_train, 1:m) : Z_train
+	tmp = subsetbool ? subsetdata(Z_train, 1:m) : Z_train
 	tmp = _quietDataLoader((tmp, _extractθ(θ_train)), batchsize)
 	initial_train_risk = _lossdataloader(loss, tmp, θ̂, device)
 	verbose && println(" Initial training risk = $initial_train_risk")
@@ -351,7 +358,7 @@ function train(
 		train_loss = zero(initial_train_risk)
 
 		# For each batch update θ̂ and compute the training loss
-		Z_train_current = indexbool ? indexdata(Z_train, replicates[epoch]) : Z_train
+		Z_train_current = subsetbool ? subsetdata(Z_train, replicates[epoch]) : Z_train
 		Z_train_current = _quietDataLoader((Z_train_current, _extractθ(θ_train)), batchsize)
 		epoch_time = @elapsed for (Z, θ) in Z_train_current
 		   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
@@ -389,32 +396,25 @@ end
 
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 
-# TODO clean up this documentation
 """
 	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M; <keyword args>)
-	train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: AbstractVector{T}}  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+	train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; <keyword args>) where {V <: Vector{Vector{T}}}
 
-Train several neural estimators, each with the architecture given by `θ̂`, with
-different sample sizes.
+Train several neural estimators with the architecture `θ̂` under different sample sizes.
 
-There are two methods of `train` intended for training multiple estimators.
-The first accepts sample sizes given by a vector of integers, `M`. Each neural
-estimator is pre-trained with the neural estimator trained for the
-previous sample size. That is, if `M = [m₁, m₂]`, with `m₂` > `m₁`, the neural
-estimator for sample size `m₂` is pre-trainined with the neural
-estimator for sample size `m₁`. By pre-training a series of neural estimators with
-progressively larger sample sizes, most of the learning is done with small,
-computationally cheap sample sizes. Hence, this approach can be beneficial even
-if one is only interested in estimation for a single, large sample.
+The first method accepts sample sizes as a vector of integers, `M`. Each
+estimator is pre-trained with the estimator trained for the previous sample size.
+For example, if `M = [m₁, m₂]`, with `m₂` > `m₁`, the estimator for sample size
+`m₂` is pre-trained with the estimator for sample size `m₁`.
 
-The second method requires the training and validation data to be a `Vector{Vector{T}}`,
-where `T` is arbitrary. In this method, a separate neural estimator is trained
-for each element the training and validation data. This method avoids the use of
-`indexdata()`, which is very slow for graphical data, and hence may be preferred.
+The second method requires `Z_train` and `Z_val` to be a `Vector{Vector{T}}`,
+where `T` is arbitrary. In this method, a separate estimator is trained
+for each element in `Z_train` and `Z_val` and, importantly, it does not invoke
+`subsetdata()`, which can be slow for graphical data. Again, pre-training is
+used.
 
-This method is a wrapper for
-`train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T)` and, hence, it
-inherits its keyword arguments. Further, certain keyword arguments can be given
+These methods wrap `train(θ̂, θ_train, θ_val, Z_train, Z_val)` and, hence, they
+inherit its keyword arguments. Further, certain keyword arguments can be given
 as vectors. For instance, if we are training two neural estimators, we can use
 a different number of epochs by providing `epochs = [e₁, e₂]`. Other arguments
 that allow vectors are `batchsize`, `stopping_epochs`, and `optimiser`.
@@ -424,6 +424,11 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 	@assert all(M .> 0)
 	M = sort(M)
 	E = length(M) # number of estimators
+
+	m_tmp = unique(numberreplicates(Z_val))
+	M_tmp = unique(numberreplicates(Z_train))
+	@assert length(m_tmp) == 1 "The elements of `Z_val` should be equally replicated: check with `numberreplicates(Z_val)`"
+	@assert length(M_tmp) == 1 "The elements of `Z_train` should be equally replicated: check with `numberreplicates(Z_train)`"
 
 	kwargs = (;args...)
 	@assert !haskey(kwargs, :m) "`m` should not be provided with this method of `train`"
@@ -453,7 +458,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 		kwargs = _modifyargs(kwargs, i, E)
 
 		# Subset the validation data to the current sample size, and then train
-		Z_valᵢ = indexdata(Z_val, 1:mᵢ)
+		Z_valᵢ = subsetdata(Z_val, 1:mᵢ)
 		estimators[i] = train(estimators[i], θ_train, θ_val, Z_train, Z_valᵢ; kwargs...)
 	end
 
@@ -485,7 +490,6 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) wher
 			@info "training with m ∈ [$(mᵢ[1]), $(mᵢ[2])]"
 			mᵢ = "$(mᵢ[1])-$(mᵢ[2])"
 		end
-		#TODO It may also be possible to allow this behaviour in the other method of train(). We would just need to sample m
 
 		# Pre-train if this is not the first estimator
 		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
@@ -511,6 +515,9 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) wher
 end
 
 
+
+# ---- Helper functions ----
+
 function _deepcopyestimator(θ̂, kwargs, E)
 	# If we are using the GPU, we first need to move θ̂ to the GPU before copying it
 	use_gpu = haskey(kwargs, :use_gpu) ? kwargs.use_gpu : true
@@ -519,10 +526,6 @@ function _deepcopyestimator(θ̂, kwargs, E)
 	estimators = [deepcopy(θ̂) for _ ∈ 1:E]
 	return estimators
 end
-
-
-
-# ---- Helper functions ----
 
 # E = number of estimators
 function _modifyargs(kwargs, i, E)
@@ -539,16 +542,6 @@ function _modifyargs(kwargs, i, E)
 	return kwargs
 end
 
-function indexdata(Z::V, m) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-	colons  = ntuple(_ -> (:), N - 1)
-	broadcast(z -> z[colons..., m], Z)
-end
-
-
-function indexdata(Z::V, m) where {V <: AbstractVector{G}} where {G <: AbstractGraph}
-	 @warn "`indexdata()` is very slow for graphical data. Consider using a method of `train` that does not require the training or validation data to be indexed. Use `numberreplicates()` to check that the training and validation data sets are equally replicated, which prevents the invocation of `indexdata()`."
-	 getgraph.(Z, m)
-end
 
 function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh, simulate_just_in_time)
 	@assert batchsize > 0
@@ -573,8 +566,6 @@ function _lossdataloader(loss, data_loader::DataLoader, θ̂, device)
 
     return cpu(ls / num)
 end
-
-# helper functions to reduce code repetition and improve clarity
 
 function _saveweights(θ̂, savepath, epoch)
 	if !ispath(savepath) mkpath(savepath) end
@@ -601,12 +592,10 @@ function _saveinfo(loss_per_epoch, train_time, savepath::String; verbose::Bool =
 	# loss. Slightly better to just use the training loss from the second epoch:
 	loss_per_epoch[1, 1] = loss_per_epoch[2, 1]
 
-	# Save various quantities of interest (in both .bson and .csv format)
-    @save joinpath(savepath, "train_time.bson") train_time
+	# Save quantities of interest
 	@save joinpath(savepath, "loss_per_epoch.bson") loss_per_epoch
-	CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
 	CSV.write(joinpath(savepath, "loss_per_epoch.csv"), Tables.table(loss_per_epoch), header = false)
-
+	CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
 end
 
 function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)

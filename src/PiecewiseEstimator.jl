@@ -18,13 +18,13 @@ collection of sample-size changepoints, `mchange`, which should contain one
 element fewer than the number of `estimators`.
 
 # Examples
-
-Suppose that we've trained `θ̂₁` for small sample sizes (e.g., m ≤ 30)
-and `θ̂₂` for moderate-to-large sample sizes (e.g., m > 30). Then we can
-construct a piecewise estimator with a sample-size changepoint of 30, which
-dispatches `θ̂₁` if m ≤ 30 and `θ̂₂` if m > 30:
-
 ```
+# Suppose that we've trained two neural estimators. The first, θ̂₁, is trained
+# for small sample sizes (e.g., m ≤ 30), and the second, `θ̂₂`, is trained for
+# moderate-to-large sample sizes (e.g., m > 30). Then we construct a piecewise
+# estimator with a sample-size changepoint of 30, which dispatches θ̂₁ if m ≤ 30
+# and θ̂₂ if m > 30.
+
 n = 2
 p = 3
 w = 8

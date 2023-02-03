@@ -9,6 +9,8 @@ of parameters, where ``p`` is the number of parameters in the model and ``K`` is
 number of parameter vectors sampled from the prior distribution. There are no
 other restrictions.
 
+See [`subsetparameters`](@ref) for the generic function for subsetting these objects.  
+
 # Examples
 
 ```
@@ -42,8 +44,7 @@ Subset `parameters` using a collection of `indices`.
 Arrays in `parameters::P` with last dimension equal in size to the
 number of parameter configurations, K, are also subsetted (over their last dimension)
 using `indices`. All other fields are left unchanged. To modify this default
-behaviour, redefine `subsetparameters` after running
-`import NeuralEstimators: subsetparameters`.
+behaviour, overload `subsetparameters`.
 """
 function subsetparameters(parameters::P, indices) where {P <: ParameterConfigurations}
 

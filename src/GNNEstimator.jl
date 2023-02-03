@@ -1,32 +1,34 @@
 """
-    GNNEstimator(graphtograph, globalpool, deepset)
+    GNNEstimator(propagation, globalpool, deepset)
 
-A neural estimator based on a graph neural network (GNN). The `graphtograph`
+A neural estimator based on a graph neural network (GNN). The `propagation`
 module transforms graphical input data into a set of hidden feature graphs;
-the `globalpool` module aggregates the feature graphs (graph-wise); and the
-`deepset` module maps the aggregated feature vectors onto the parameter space.
+the `globalpool` module aggregates the feature graphs (graph-wise) into a single
+hidden feature vector; and the `deepset` module maps the hidden feature vectors
+onto the parameter space.
 
-Data structure: The data should be a `GNNGraph` or `AbstractVector{GNNGraph}`,
-where each graph is associated with a single parameter vector. The graphs may
-contain sub-graphs corresponding to independent replicates of the data
-generating process.
+The data should be a `GNNGraph` or `AbstractVector{GNNGraph}`, where each graph
+is associated with a single parameter vector. The graphs may contain sub-graphs
+corresponding to independent replicates from the model.
 
 # Examples
 ```
 using Flux
 using GraphNeuralNetworks
 using Statistics: mean
-n₁, n₂ = 11, 27
-m₁, m₂ = 30, 50
-d = 1
-g₁ = rand_graph(n₁, m₁, ndata=rand(Float32, d, n₁))
-g₂ = rand_graph(n₂, m₂, ndata=rand(Float32, d, n₂))
-g = Flux.batch([g₁, g₂])
+using Flux: batch
 
-# graph-to-graph propagation module
-w = 5
-o = 7
-graphtograph = GNNChain(GraphConv(d => w), GraphConv(w => w), GraphConv(w => o))
+# Create some graphs
+d = 1             # dimension of the response variable
+n₁, n₂ = 11, 27   # number of nodes
+e₁, e₂ = 30, 50   # number of edges
+g₁ = rand_graph(n₁, e₁, ndata=rand(d, n₁))
+g₂ = rand_graph(n₂, e₂, ndata=rand(d, n₂))
+g  = batch([g₁, g₂])
+
+# propagation module
+w = 5; o = 7
+propagation = GNNChain(GraphConv(d => w), GraphConv(w => w), GraphConv(w => o))
 
 # global pooling module
 meanpool = GlobalPool(mean)
@@ -38,19 +40,18 @@ p = 3
 ϕ₂ = Chain(Dense(w, w, relu), Dense(w, p))
 deepset = DeepSet(ψ₂, ϕ₂)
 
-# Full estimator
-est = GNNEstimator(graphtograph, meanpool, deepset)
+# GNN estimator
+est = GNNEstimator(propagation, meanpool, deepset)
 
-# A single graph containing sub-graphs
+# Apply the estimator to a single graph, a single graph containing sub-graphs,
+# and a vector of graphs:
+θ̂ = est(g₁)
 θ̂ = est(g)
-
-# A vector of graphs
-v = [g₁, g₂, Flux.batch([g₁, g₂])]
-θ̂ = est(v)
+θ̂ = est([g₁, g₂, g])
 ```
 """
 struct GNNEstimator{F, G, H}
-	graphtograph::F     # graph-to-graph propagation module
+	propagation::F      # propagation module
 	globalpool::G       # global pooling module
 	deepset::H          # Deep Set module to map the learned feature vector to the parameter space
 end
@@ -61,14 +62,14 @@ end
 function (est::GNNEstimator)(g::GNNGraph)
 
 	# Apply the graph-to-graph transformation
-	g̃ = est.graphtograph(g)
+	g̃ = est.propagation(g)
 
 	# Global pooling
 	ḡ = est.globalpool(g̃)
 
 	# Extract the graph level data (i.e., the pooled features).
 	# h is a matrix with
-	# 	nrows = number of features graphs in final graphtograph layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
+	# 	nrows = number of feature graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
 	#	ncols = number of original graphs (i.e., number of independent replicates).
 	h = ḡ.gdata[1]
 
@@ -105,14 +106,14 @@ end
 function (est::GNNEstimator)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
 
 	# Apply the graph-to-graph transformation
-	g̃ = est.graphtograph(g)
+	g̃ = est.propagation(g)
 
 	# Global pooling
 	ḡ = est.globalpool(g̃)
 
 	# Extract the graph level features (i.e., the pooled features).
 	# h is a matrix with,
-	# 	nrows = number of features graphs in final graphtograph layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
+	# 	nrows = number of features graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
 	#	ncols = total number of original graphs (i.e., total number of independent replicates).
 	h = ḡ.gdata[1]
 
@@ -147,7 +148,7 @@ end
 # 	# features. This yields a matrix of size (H, N), where H is the number of
 # 	# feature graphs in the final layer and N is the total number of nodes in
 # 	# all graphs.
-# 	x̃ = est.graphtograph(g).ndata[1] # node-level features
+# 	x̃ = est.propagation(g).ndata[1] # node-level features
 # 	H = size(x̃, 1)
 #
 # 	# NB: The following is only necessary for more complicated pooling layers.
@@ -187,7 +188,7 @@ end
 
 
 
-# ---- Functions assuming that the graphtograph and globalpool layers have been wrapped in WithGraph() ----
+# ---- Functions assuming that the propagation and globalpool layers have been wrapped in WithGraph() ----
 
 # NB this is a low priority optimisation that is only useful if we are training
 # with a fixed set of locations.
@@ -195,11 +196,11 @@ end
 # function (est::GNNEstimator)(a::A) where {A <: AbstractArray{T, N}} where {T, N}
 #
 # 	# Apply the graph-to-graph transformation
-# 	g̃ = est.graphtograph(a)
+# 	g̃ = est.propagation(a)
 #
 # 	# Global pooling
 # 	# h is a matrix with,
-# 	# 	nrows = number of features graphs in final graphtograph layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
+# 	# 	nrows = number of features graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
 # 	#	ncols = number of original graphs (i.e., number of independent replicates).
 # 	h = est.globalpool(g̃)
 #
@@ -222,21 +223,21 @@ end
 # 	# # count the number of sub-graphs in each element of v for later use.
 # 	# # Specifically, we need to keep track of the indices to determine which
 # 	# # independent replicates are grouped together.
-# 	# m = est.graphtograph.g.num_graphs
+# 	# m = est.propagation.g.num_graphs
 # 	# m = repeat([m], length(v))
 # 	#
-# 	# g = Flux.batch(repeat([est.graphtograph.g], length(v)))
+# 	# g = Flux.batch(repeat([est.propagation.g], length(v)))
 # 	# g = GNNGraph(g, ndata = (Z = stackarrays(v)))
 # 	#
 # 	# # Apply the graph-to-graph transformation
-# 	# g̃ = est.graphtograph.model(g)
+# 	# g̃ = est.propagation.model(g)
 # 	#
 # 	# # Global pooling
 # 	# ḡ = est.globalpool(g̃)
 # 	#
 # 	# # Extract the graph level data (i.e., the pooled features).
 # 	# # h is a matrix with,
-# 	# # 	nrows = number of features graphs in final graphtograph layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
+# 	# # 	nrows = number of features graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
 # 	# #	ncols = total number of original graphs (i.e., total number of independent replicates).
 # 	# h = ḡ.gdata[1]
 # 	#

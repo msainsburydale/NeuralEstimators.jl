@@ -1,18 +1,17 @@
 module NeuralEstimators
 
-# Note that functions must be explicitly imported to be extended with new
-# methods. Be aware of type piracy, though.
+# Note that functions must be explicitly imported to be extended with new methods. Be aware of type piracy, though.
 using Base: @propagate_inbounds
 using Base.GC: gc
+import Base: merge
 using BSON: @save, load
 using CUDA
 using CSV
-using ChainRulesCore: @non_differentiable
 using DataFrames
 using Distributions
 import Distributions: cdf, logpdf, quantile, minimum, maximum, insupport, var, skewness
 using Flux
-using Flux: ofeltype
+using Flux: ofeltype, params
 using Flux.Data: DataLoader
 using Flux.Optimise: update!
 using Functors: @functor
@@ -23,17 +22,14 @@ using Random: randexp
 using RecursiveArrayTools: VectorOfArray, convert
 using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum
-import Statistics: mean, quantile
 using Zygote
-
 
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
 export DeepSet
 include("DeepSet.jl")
-# export DeepSetExpert, samplesize, inversesamplesize
-# include("DeepSetExpert.jl")
+
 export PiecewiseEstimator
 include("PiecewiseEstimator.jl")
 
@@ -41,7 +37,7 @@ export GNNEstimator
 include("GNNEstimator.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
-export matern, maternchols, Subbotin, scaledlogistic, scaledlogit
+export matern, maternchols, scaledlogistic, scaledlogit
 include("Simulation.jl")
 export incgamma
 include("incgamma.jl")
@@ -49,27 +45,29 @@ include("incgamma.jl")
 export gaussiandensity, schlatherbivariatedensity
 include("densities.jl")
 
-
-export kpowerloss
-include("loss.jl")
-
-export train, trainMAP
+export train, subsetdata
 include("Train.jl")
 
-export assess, Assessment, merge
+export assess, Assessment, merge, risk
 include("Assess.jl")
 
-export parametricbootstrap, nonparametricbootstrap, coverage
+export plotrisk, plotdistribution
+include("plotting.jl")
+
+export bootstrap, coverage
 include("Bootstrap.jl")
 
-export stackarrays, expandgrid, loadbestweights, numerreplicates
+export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams
 include("UtilityFunctions.jl")
 
 end
 
+# TODO
+# - Cheat sheet for the native Julia version and the R interface.
+# - Plotting functions, plotrisk and plotdistribution. Should be able to
+#   translate most of the code from R, so I'll do this once I've finished the R
+#   interface.
 
-#TODO Need to figure out what to do with indexdata(). I think that it isn't
-# actually that helpful.
 
 # ---- once I've made the repo public:
 # •	Contact TravisCI to tell them that I am developing open-source software to get a free plan.
@@ -87,15 +85,3 @@ end
 # - Callback function for plotting during training! See https://www.youtube.com/watch?v=ObYDHi_jJXk&ab_channel=TheJuliaProgrammingLanguage. Also, I know there is a specific module for call backs while training Flux models, so may this is already possible in Julia too. In either case, I think train() should have an additional argument, callback. See also the example at: https://github.com/stefan-m-lenz/JuliaConnectoR.
 # - Frameworks based on Neyman inversion allow for confidence sets with correct conditional coverage.
 # - Include julia versions of plotrisk() and plotjointdistribution(). Then, NeuralEstimators.jl will be self contained. A nice way to do this would be to Julia RCall() to NeuralEstimatorsR.
-
-
-# ---- Some points for writing the manuscript later.
-# Why Julia? Julia has many [attractive features](https://julialang.org/); in
-# particular, it has been designed to alleviate the so-called two-language
-# problem, so that it is both easily developed and fast in its execution. This
-# means that users can write performant code for data simulation without needing
-# to vectorise (i.e., `for` loops are fine, which is often very helpful).
-# Further, many Julia packages are written entirely in Julia and, hence, their
-# source code is easily understood and extended; this includes
-# `NeuralEstimators` and the deep learning framework on which it is built upon,
-# [Flux](https://fluxml.ai/Flux.jl/stable/).

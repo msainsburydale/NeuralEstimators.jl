@@ -1,12 +1,79 @@
+nparams(model) = sum(length, Flux.params(model))
 
-# TODO documentation
-function numberreplicates(Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
-	broadcast(z -> z.num_graphs, Z)
+"""
+	numberofreplicates(Z)
+
+Generic function that returns the number of replicates in a given object.
+Default implementations are provided for commonly used data formats, namely,
+data stored as `Arrays` or `GNNGraph`.
+"""
+function numberreplicates end
+
+function numberreplicates(Z::V) where {V <: AbstractVector{A}} where A
+	numberreplicates.(Z)
 end
 
-function numberreplicates(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-	broadcast(z -> size(z)[end], Z)
+function numberreplicates(Z::A) where {A <: AbstractArray{T, N}} where {T, N}
+	size(Z, N)
 end
+
+function numberreplicates(Z::G) where {G <: GNNGraph}
+	Z.num_graphs
+end
+
+
+"""
+Generic function for subsetting replicates from a data set. Default methods are:
+
+	subsetdata(Z::A, m) where {A <: AbstractArray{T, N}} where {T, N}
+	subsetdata(Z::G, m) where {G <: AbstractGraph}
+
+Note that `subsetdata` is slow for graphical data, and one should consider using
+a method of `train` that does not require the data to be subsetted. Use
+`numberreplicates` to check that the training and validation data sets are
+equally replicated, which prevents the invocation of `subsetdata`. Note also
+that `subsetdata` only applies to vectors of batched graphs.
+
+If the user is working with data that is not covered by the default methods,
+simply overload `subsetdata` with the appropriate type for `Z`.
+
+# Examples
+```
+using NeuralEstimators
+using GraphNeuralNetworks
+using Flux: batch
+
+n = 5  # number of observations in each realisation
+m = 6  # number of replicates for each parameter vector
+d = 1  # dimension of the response variable
+K = 2  # number of parameter vectors
+
+# Array data
+Z = [rand(n, d, m) for k ∈ 1:K]
+subsetdata(Z, 1:3) # extract first 3 replicates for each parameter vector
+
+# Graphical data
+e = 8 # number of edges
+Z = [batch([rand_graph(n, e, ndata = rand(d, n)) for _ ∈ 1:m]) for k ∈ 1:K]
+subsetdata(Z, 1:3) # extract first 3 replicates for each parameter vector
+```
+"""
+function subsetdata end
+
+function subsetdata(Z::V, m) where {V <: AbstractVector{A}} where A
+	subsetdata.(Z, Ref(m))
+end
+
+function subsetdata(Z::A, m) where {A <: AbstractArray{T, N}} where {T, N}
+	colons  = ntuple(_ -> (:), N - 1)
+	Z[colons..., m]
+end
+
+function subsetdata(Z::G, m) where {G <: AbstractGraph}
+	 # @warn "`subsetdata()` is slow for graphical data: consider using a method of `train` that does not require the data data to be subsetted. Use `numberreplicates()` to check that the training and validation data sets are equally replicated, which prevents the invocation of `subsetdata()`."
+	 getgraph(Z, m)
+end
+
 
 
 # Note that these arguments differ to DataLoader(), so this function should never be exported.
@@ -17,7 +84,6 @@ function _quietDataLoader(data, batchsize::Integer; shuffle = true, partial = fa
 	redirect_stderr(oldstd)
 	return data_loader
 end
-
 
 function _checkgpu(use_gpu::Bool; verbose::Bool = true)
 
@@ -32,8 +98,6 @@ function _checkgpu(use_gpu::Bool; verbose::Bool = true)
 
 	return(device)
 end
-
-
 
 # ---- Functions for finding, saving, and loading the best neural network ----
 
@@ -184,7 +248,7 @@ end
 
 Stack a vector of arrays `v` along the last dimension of each array, optionally merging the final dimension of the stacked array.
 
-The arrays must be of the same for the first `N-1` dimensions. However, if
+The arrays must be of the same size for the first `N-1` dimensions. However, if
 `merge = true`, the size of the final dimension can vary between arrays.
 
 # Examples

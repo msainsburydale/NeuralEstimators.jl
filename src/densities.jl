@@ -29,7 +29,7 @@ scaledlogit(f, a, b) = log((f - a) / (b - f))
 Efficiently computes the density function for `y` ~ 𝑁(0, `Σ`), with `L` the
 lower Cholesky factor of the covariance matrix `Σ`.
 
-The method gaussiandensity(y::A, Σ) assumes that the last dimension of `y`
+The method `gaussiandensity(y::A, Σ)` assumes that the last dimension of `y`
 corresponds to the indepdenent-replicates dimension, and it exploits the fact
 that we need to compute the Cholesky factor `L` for these independent replicates
 once only.
@@ -71,92 +71,3 @@ Raphaël Huser's PhD thesis (pg. 231-232) and in the supplementary material of t
 """
 schlatherbivariatedensity(z₁, z₂, ψ; logdensity::Bool = true) = logdensity ? logG₁₂(z₁, z₂, ψ) : G₁₂(z₁, z₂, ψ)
 _schlatherbivariatecdf(z₁, z₂, ψ) = G(z₁, z₂, ψ)
-
-
-# ---- Subbotin (delta-Laplace) distribution ----
-
-# See the following for a guide on extending Distributions:
-# https://github.com/JuliaStats/Distributions.jl/blob/6ab4c1f5bd1b5b6890bbb6afc9d3349dc90cad6a/src/univariate/continuous/normal.jl
-# https://juliastats.org/Distributions.jl/stable/extends/
-
-@doc raw"""
-	Subbotin(µ, τ, δ)
-
-The Subbotin (delta-Laplace) distribution with location parameter `μ`,
-scale parameter `τ>0`, and shape parameter `δ>0` has density, distribution, and
-quantile function,
-
-```math
- f_S(y; \mu, \tau, \delta) = \frac{\delta}{2\tau \Gamma(1/\delta)} \exp{\left(-\left|\frac{y - \mu}{\tau}\right|^\delta\right)},\\
- F_S(y; \mu, \tau, \delta) = \frac{1}{2} + \textrm{sign}(y - \mu) \frac{1}{2 \Gamma(1/\delta)} \gamma\!\left(1/\delta, \left|\frac{y - \mu}{\tau}\right|^\delta\right),\\
- F_S^{-1}(p; \mu, \tau, \delta) = \text{sign}(p - 0.5)G^{-1}\left(2|p - 0.5|; \frac{1}{\delta}, \frac{1}{(k\tau)^\delta}\right)^{1/\delta} + \mu,
-```
-
-where ``\gamma(\cdot)`` is the unnormalised incomplete lower gamma function and ``G^{-1}(\cdot)``  is the quantile function of the Gamma distribution.
-
-# Examples
-```julia
-d = Subbotin(0.7, 2, 2.5)
-
-logpdf(d, 2.0)
-cdf(d, 2.0)
-quantile(d, 0.7)
-
-# Standard Gaussian distribution:
-μ = 0.0; τ = sqrt(2); δ = 2.0
-Subbotin(μ, τ, δ)
-
-# Standard Laplace distribution:
-μ = 0.0; τ = 1.0; δ = 1.0
-Subbotin(μ, τ, δ)
-```
-"""
-struct Subbotin{T <: Real} <: ContinuousUnivariateDistribution
-	μ::T
-	τ::T
-	δ::T
-	Subbotin{T}(µ::T, τ::T, δ::T) where {T <: Real} = new{T}(µ, τ, δ)
-end
-
-# Aliases
-const DeltaLaplace = Subbotin
-const GeneralisedGaussian = Subbotin
-
-# Constructors
-function Subbotin(μ::T, τ::T, δ::T) where {T <: Real}
-	# allow zero incase of numerical underflow
-    @assert τ >= 0
-	@assert δ >= 0
-    return Subbotin{T}(µ, τ, δ)
-end
-Subbotin(μ::Real, τ::Real, δ::Real) = Subbotin(promote(μ, τ, δ)...)
-Subbotin(μ::Integer, τ::Integer, δ::Integer) = Subbotin(float(μ), float(τ), float(δ))
-
-# Methods
-cdf(d::Subbotin, q::Real) = Fₛ(q, d.μ, d.τ, d.δ)
-logpdf(d::Subbotin, x::Real) = log(d.δ)  - (abs((x - d.μ)/d.τ))^d.δ - (log(2) + log(d.τ) + loggamma(1/d.δ))
-quantile(d::Subbotin, p::Real) = Fₛ⁻¹(p, d.μ, d.τ, d.δ)
-minimum(d::Subbotin)  = -Inf
-maximum(d::Subbotin)  = Inf
-insupport(d::Subbotin, x::Real) = true
-mean(d::Subbotin)     = d.μ
-var(d::Subbotin)      = d.τ^2 * gamma((3*one(d.δ))/d.δ) / gamma(one(d.δ)/d.δ)
-mode(d::Subbotin)     = d.μ
-skewness(d::Subbotin) = zero(d.μ)
-
-# Note that I still keep these as separate functions for backwards compatability
-# with code in the paper.
-fₛ(x, μ, τ, δ)   = δ * exp(-(abs((x - μ)/τ))^δ) / (2τ * gamma(1/δ))
-Fₛ(q, μ, τ, δ)   = 0.5 + 0.5 * sign(q - μ) * (1 / gamma(1/δ)) * _incgammalowerunregularised(1/δ, abs((q - μ)/τ)^δ)
-Fₛ⁻¹(p::T, μ::T, τ::T, δ::T) where T <: Real = μ + sign(p - T(0.5)) * (τ^δ * quantile(Gamma(1/δ), 2 * abs(p - T(0.5))))^(1/δ)
-
-# NB Distributions.jl say that we should implement the following methods,
-# but I haven't done so because I haven't need to use them yet.
-# Required:
-# rand(::AbstractRNG, d::UnivariateDistribution)
-# kurtosis(d::Distribution, ::Bool)
-# entropy(d::Subbotin, ::Real)
-# sampler(d::Distribution)
-# Optional:
-# mgf(d::UnivariateDistribution, ::Any)
-# cf(d::UnivariateDistribution, ::Any)
