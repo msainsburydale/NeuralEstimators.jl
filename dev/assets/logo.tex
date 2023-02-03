@@ -1,0 +1,51 @@
+%\documentclass[crop,tikz, border=5bp]{standalone}
+
+\documentclass[crop,tikz, border={10bp 5bp 10bp 1bp}]{standalone} % border={〈length (left)〉 〈length (bottom)〉 〈length (right)〉 〈length (top)〉}
+
+
+\usetikzlibrary{positioning}
+\usetikzlibrary{calc}
+
+\definecolor{mylightred}{RGB}{211,79,73}
+\definecolor{mydarkred}{RGB}{199,44,38}
+\definecolor{mylightgreen}{RGB}{78,153,67}
+\definecolor{mydarkgreen}{RGB}{43,129,33}
+\definecolor{mylightpurple}{RGB}{150,107,178}
+\definecolor{mydarkpurple}{RGB}{126,78,160}
+\definecolor{mylightblue}{RGB}{49,101,205}
+\definecolor{mydarkblue}{RGB}{20,92,205}
+
+\tikzset{
+  juliadot/.style args={#1,#2}{shape=circle,line width=0.03ex,minimum width=0.4ex,fill=#1,draw=#2}
+}
+
+\newcommand\julialetter[1]{{\strut\fontfamily{cmss}\bfseries\selectfont{#1}}}
+
+\DeclareRobustCommand\julia{%
+\begin{tikzpicture}[baseline=0mm, every node/.style={inner sep=0mm, outer sep=0mm}]
+\node[anchor=base]        (j) at (0,0) {\julialetter{\j}};
+\node[anchor=base, right=0ex of j] (u) {\julialetter{u}};
+\node[anchor=base, right=0ex of u] (l) {\julialetter{l}};
+\node[anchor=base, right=0ex of l] (i) {\julialetter{\i}};
+\node[anchor=base, right=0ex of i] (a) {\julialetter{a}};
+\path let \p1 = (j) in node[juliadot={mylightblue,mydarkblue}] (bluedot) at (\x1+0.02ex,1.4ex) {};
+\path let \p1 = (i) in node[juliadot={mylightred,mydarkred}] (reddot) at (\x1,1.4ex) {};
+\path let \p1 = (reddot) in node[juliadot={mylightpurple,mydarkpurple}] (purpledot) at (\x1+0.5ex,\y1) {};
+\path let \p1 = (reddot) in node[juliadot={mylightgreen,mydarkgreen}] (greendot) at (\x1+0.25ex,\y1+0.42ex) {};
+\end{tikzpicture}%
+}
+
+\usepackage{xcolor}
+
+
+% NB: decided that the dark colours look better for both the light and dark theme 
+\DeclareRobustCommand\logo{%
+\begin{tikzpicture}[baseline=0mm, every node/.style={inner sep=0mm, outer sep=0mm}]
+\node[anchor=base] (eqn) at (0,0) {$\color{mydarkgreen}  \textcolor{mydarkpurple}{\hat{\mathbf{\theta}}} : \textcolor{mydarkred}{\mathcal{S}^m} \to \textcolor{mydarkblue}{\Theta}$};
+\end{tikzpicture}%
+}
+
+\begin{document}
+%\Huge {\julia}
+\Huge {\logo}
+\end{document}
