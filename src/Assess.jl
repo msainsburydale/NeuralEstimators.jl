@@ -1,8 +1,5 @@
 # ---- Assessment ----
 
-# TODO maybe 'replicate' should be replaced with 'j'. This would be consistent
-# with how we've called another column 'k', and it would be consistent with the argument name `J` in `assess()`.
-# If I do this change, I'll just need to adapt the R code accordingly.
 """
 	Assessment(θandθ̂::DataFrame, runtime::DataFrame)
 
@@ -17,7 +14,7 @@ Specifically, its columns are:
 - `estimate`:  the estimated value of the parameter
 - `m`:         the sample size
 - `k`:         the index of the parameter vector in the test set
-- `replicate`: the index of the data set
+- `j`: the index of the data set
 
 Multiple `Assessment` objects can be combined with the function `merge`.
 """
@@ -36,29 +33,30 @@ function merge(assessment::Assessment, assessments::Assessment...)
 	Assessment(θandθ̂, runtime)
 end
 
-#TODO add Bool flag to indicate whether we compute the risk over all parameters
-# or split by parameters (default is over all parameters, since that is how
-# the Bayes risk is defined).
-#TODO Add the mathematical description of the Bayes risk.
-"""
-	risk(assessment::Assessment; loss = (x, y) -> abs.(x .- y))
 
-Computes the Bayes risk with respect to the `loss` function for each
+"""
+	risk(assessment::Assessment; loss = (x, y) -> abs.(x .- y), average_over_parameters = true)
+
+Estimates the Bayes risk with respect to the `loss` function for each
 estimator, parameter, and sample size considered in `assessment`.
 
 The argument `loss` should be a binary operator (default absolute-error loss).
+
+If `average_over_parameters = true` (default), the risk is averaged over
+all parameters; otherwise, the risk is evaluated over each parameter separately.
 """
-function risk(assessment::Assessment; loss = (x, y) -> abs.(x .- y))
+function risk(assessment::Assessment; loss = (x, y) -> abs.(x .- y), average_over_parameters::Bool = true)
 
 
 	df = assessment.θandθ̂
-	df = groupby(df, [:estimator, :parameter, :m])
+	grouping_variables = [:estimator, :m]
+	if !average_over_parameters push!(grouping_variables, :parameter) end
+	df = groupby(df, grouping_variables)
 	df = combine(df, [:estimate, :truth] => loss => :loss, ungroup = false)
 	df = combine(df, :loss => mean => :risk)
+
 	return df
 end
-
-#TODO add some more methods that dispatch on assessment objects. E.g., plotdistribution().
 
 
 # Given a set of true parameters θ and corresponding estimates θ̂ resulting
@@ -72,7 +70,7 @@ function _merge(θ, θ̂)
 
 	# Transform θ and θ̂ to long form:
 	θ = stack(θ, variable_name = :parameter, value_name = :truth)
-	θ̂ = stack(θ̂, Not([:estimator, :m, :k, :replicate]), variable_name = :parameter, value_name = :estimate)
+	θ̂ = stack(θ̂, Not([:estimator, :m, :k, :j, :replicate]), variable_name = :parameter, value_name = :estimate)
 
 	# Merge θ and θ̂: All we have to do is add :truth column to θ̂
 	θ̂[!, :truth] = θ[:, :truth]
@@ -130,10 +128,12 @@ vectors run faster than the replicated data.
 ```
 using NeuralEstimators
 using Flux
+
 n = 10 # number of observations in each realisation
 p = 4  # number of parameters in the statistical model
-w = 32 # width of each layer
 
+# Construct the neural estimator
+w = 32 # width of each layer
 ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
 ϕ = Chain(Flux.flatten, Dense(w, w, relu), Dense(w, p));
 θ̂ = DeepSet(ψ, ϕ)
@@ -145,6 +145,7 @@ Z = [[rand(n, 1, m) for _ ∈ 1:K] for m ∈ (1, 10, 20)]
 
 assessment = assess([θ̂], θ, Z)
 risk(assessment)
+risk(assessment, average_over_parameters = false)
 ```
 """
 function assess(
@@ -260,7 +261,8 @@ function _assess(
     θ̂[!, "estimator"] = repeat(estimator_names, inner = nrow(θ̂) ÷ E)
     θ̂[!, "m"] = repeat([m], nrow(θ̂))
 	θ̂[!, "k"] = repeat(1:K, E * J)
-	θ̂[!, "replicate"] = repeat(repeat(1:J, inner = K), E)
+	θ̂[!, "j"] = repeat(repeat(1:J, inner = K), E) # NB "j" used to be "replicate"
+	θ̂[!, "replicate"] = repeat(repeat(1:J, inner = K), E) # for backwards compatability
 
 	# Also provide the true parameters for comparison with the estimates
 	θ = DataFrame(_extractθ(parameters)', parameter_names)

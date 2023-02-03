@@ -5,7 +5,7 @@ nparams(model) = sum(length, Flux.params(model))
 
 Generic function that returns the number of replicates in a given object.
 Default implementations are provided for commonly used data formats, namely,
-data stored as `Arrays` or `GNNGraph`.
+data stored as an `Array` or as a `GNNGraph`.
 """
 function numberreplicates end
 
@@ -244,12 +244,12 @@ function _mergelastdims(X::A) where {A <: AbstractArray{T, N}} where {T, N}
 end
 
 """
-	stackarrays(v::V; merge::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+	stackarrays(v::V; merge = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
 Stack a vector of arrays `v` along the last dimension of each array, optionally merging the final dimension of the stacked array.
 
 The arrays must be of the same size for the first `N-1` dimensions. However, if
-`merge = true`, the size of the final dimension can vary between arrays.
+`merge = true`, the size of the final dimension can vary.
 
 # Examples
 ```

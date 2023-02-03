@@ -308,6 +308,8 @@ verbose = false # verbose used in the NeuralEstimators code
 			@test typeof(assessment)         == Assessment
 			@test typeof(assessment.θandθ̂)   == DataFrame
 			@test typeof(assessment.runtime) == DataFrame
+			risk(assessment)
+			risk(assessment, average_over_parameters = false)
 
 			# Method that require the user to provide data: J == 1
 			Z_test = [simulate(parameters, m) for m ∈ all_m]

@@ -3,7 +3,7 @@
 
 ## Data simulators
 
-The philosophy of `NeuralEstimators` is to cater for arbitrary statistical models by having the user define their statistical model implicitly, either by providing data simulated from the model or by defining a function for data simulation. However, the following functions, which were developed for the main manuscript, have been included as they may be of use to others, and their source code provide an example for how a user could formulate code for their own statistical model. If you've developed similar functions that you think may be of use to others, please get in touch or make a pull request.
+The philosophy of `NeuralEstimators` is to cater for arbitrary statistical models by having the user define their statistical model implicitly through simulated data. However, the following functions have been included as they may be helpful to others, and their source code provide an example for how a user could formulate code for their own model. If you've developed similar functions that you think may be helpful to others, please get in touch or make a pull request.
 
 ```@docs
 simulategaussianprocess

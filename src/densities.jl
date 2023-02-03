@@ -11,8 +11,6 @@ scaledlogit(f, a, b) = log((f - a) / (b - f))
 
 # ---- Efficient gaussianloglikelihood ----
 
-# TODO Add unit tests for these density functions
-
 # The density function is
 # ```math
 # |2\pi\mathbf{\Sigma}|^{-1/2} \exp{-\frac{1}{2}\mathbf{y}^\top \mathbf{\Sigma}^{-1}\mathbf{y}},
@@ -23,18 +21,18 @@ scaledlogit(f, a, b) = log((f - a) / (b - f))
 # ```
 
 @doc raw"""
-    gaussiandensity(y::A, L; logdensity::Bool = true) where {A <: AbstractArray{T, 1}} where T
-	gaussiandensity(y::A, Σ; logdensity::Bool = true) where {A <: AbstractArray{T, N}} where {T, N}
+    gaussiandensity(y::V, L; logdensity = true) where {V <: AbstractVector{T}} where T
+	gaussiandensity(y::A, Σ; logdensity = true) where {A <: AbstractArray{T, N}} where {T, N}
 
 Efficiently computes the density function for `y` ~ 𝑁(0, `Σ`), with `L` the
 lower Cholesky factor of the covariance matrix `Σ`.
 
 The method `gaussiandensity(y::A, Σ)` assumes that the last dimension of `y`
-corresponds to the indepdenent-replicates dimension, and it exploits the fact
+corresponds to the independent-replicates dimension, and it exploits the fact
 that we need to compute the Cholesky factor `L` for these independent replicates
 once only.
 """
-function gaussiandensity(y::A, L; logdensity::Bool = true) where {A <: AbstractArray{T, 1}} where T
+function gaussiandensity(y::V, L; logdensity::Bool = true) where {V <: AbstractVector{T}} where T
 	n = length(y)
 	x = L \ y # solution to Lx = y. If we need non-zero μ in the future, use x = L \ (y - μ)
 	l = -0.5n*log(2π) -logdet(L) -0.5dot(x, x)
@@ -65,9 +63,12 @@ V₂(z₁, z₂, ψ)  = V₁(z₂, z₁, ψ)
 V₁₂(z₁, z₂, ψ) = -0.5(1 - ψ^2) * f(z₁, z₂, ψ)^-1.5
 
 """
-	schlatherbivariatedensity(z₁, z₂, ψ; logdensity::Bool = true)
+	schlatherbivariatedensity(z₁, z₂, ψ; logdensity = true)
 The bivariate density function for Schlather's max-stable model, as given in
-Raphaël Huser's PhD thesis (pg. 231-232) and in the supplementary material of the manuscript.
+Huser (2013, pg. 231--232).
+
+Huser, R. (2013). Statistical Modeling and Inference for Spatio-Temporal Ex-
+tremes. PhD thesis, Swiss Federal Institute of Technology, Lausanne, Switzerland.
 """
 schlatherbivariatedensity(z₁, z₂, ψ; logdensity::Bool = true) = logdensity ? logG₁₂(z₁, z₂, ψ) : G₁₂(z₁, z₂, ψ)
 _schlatherbivariatecdf(z₁, z₂, ψ) = G(z₁, z₂, ψ)

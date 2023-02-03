@@ -2,7 +2,7 @@
 Generic function that may be overloaded to implicitly define a statistical model.
 Specifically, the user should define provide a method `simulate(parameters, m)`
 that returns `m` simulated replicates for each element in the given set of
-`parameters`. 
+`parameters`.
 """
 function simulate end
 
@@ -19,30 +19,24 @@ function simulate(parameters, m, J::Integer)
 	# doesn't get prohibitively large even during bootstrapping. Note also that
 	# I don't want to use stack(), because it only works if the data are stored
 	# as arrays. In theory, I could define another method of stack() that falls
-	# back to vcat(v...) TODO try this latter idea
+	# back to vcat(v...)
 	return v
 end
-
-
-# ---- Helper functions ----
 
 # Wrapper function that returns simulated data and the true parameter values
 _simulate(params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (simulate(params, m), _extractθ(params))
 
-
-# TODO Finish the documentation for all of the simulateX functions..
-
 # ---- Gaussian process ----
 
 """
-	simulategaussianprocess(L::AbstractArray{T, 2}, σ::T, m::Integer)
-	simulategaussianprocess(L::AbstractArray{T, 2})
+	simulategaussianprocess(L, σ, m)
+	simulategaussianprocess(L)
 
 Simulates `m` realisations from a Gau(0, 𝚺 + σ²𝐈) distribution, where 𝚺 ≡ LL'.
 
 If `σ` and `m` are omitted, a single field without nugget variance is returned.
 """
-function simulategaussianprocess(L::AbstractArray{T, 2}, σ::T, m::Integer) where T
+function simulategaussianprocess(L::M, σ::T, m::Integer) where M <: AbstractMatrix{T} where T <: Number
 	n = size(L, 1)
 	y = similar(L, n, m)
 	for h ∈ 1:m
@@ -51,12 +45,12 @@ function simulategaussianprocess(L::AbstractArray{T, 2}, σ::T, m::Integer) wher
 	return y
 end
 
-function simulategaussianprocess(L::AbstractArray{T, 2}, σ::T) where T
+function simulategaussianprocess(L::M, σ::T) where M <: AbstractMatrix{T} where T <: Number
 	n = size(L, 1)
 	return simulategaussianprocess(L) + σ * randn(T, n)
 end
 
-function simulategaussianprocess(L::AbstractArray{T, 2}) where T
+function simulategaussianprocess(L::M) where M <: AbstractMatrix{T} where T <: Number
 	n = size(L, 1)
 	y = randn(T, n)
 	return L * y
@@ -66,12 +60,34 @@ end
 # ---- Schlather's max-stable model ----
 
 """
-	simulateschlather(L::AbstractArray{T, 2}; C = 3.5)
-	simulateschlather(L::AbstractArray{T, 2}, m::Integer; C = 3.5)
+	simulateschlather(L, m; C = 3.5, Gumbel = true)
+	simulateschlather(L;    C = 3.5, Gumbel = true)
 
-Simulates from Schlather's max-stable model.
+Given the lower Cholesky factor `L` associated with a Gaussian process,
+simulates `m` realisations from Schlather's max-stable model using the algorithm
+for approximate simulation given by Schlather (2002). By default, the
+simulated data are log transformed from the unit Fréchet scale to the `Gumbel`
+scale.
+
+The accuracy of the algorithm is controlled with a tuning parameter, `C`, which
+involves a trade-off between computational efficiency (favouring small `C`) and
+accuracy (favouring large `R`). Schlather (2002) recommends the use of `C = 3`;
+conservatively, we set the default to `C = 3.5`.
+
+
+Schlather, M. (2002). Models for stationary max-stable random fields. Extremes, 5:33--44.
 """
-function simulateschlather(L::AbstractArray{T, 2}; C = 3.5) where T <: Number
+function simulateschlather(L::M, m::Integer; C = 3.5, Gumbel::Bool = true) where M <: AbstractMatrix{T} where T <: Number
+	n = size(L, 1)
+	Z = similar(L, n, m)
+	for h ∈ 1:m
+		Z[:, h] = simulateschlather(L, C = C, Gumbel = Gumbel)
+	end
+
+	return Z
+end
+
+function simulateschlather(L::M; C = 3.5, Gumbel::Bool = true) where M <: AbstractMatrix{T} where T <: Number
 
 	n = size(L, 1)  # number of observations
 
@@ -100,21 +116,9 @@ function simulateschlather(L::AbstractArray{T, 2}; C = 3.5) where T <: Number
 		ζ = 1 / ζ⁻¹
 	end
 
-	# Lenzi et al. used the log transform to stablise the variance, and this can
-	# help avoid neural network collapse. Note that there is also a theoretical
-	# justification for this transformation; it transforms from the data from
-	# the unit Fréchet scale to the Gumbel scale, which is typically better behaved.
-	Z = log.(Z) # TODO decide if this is what we want to do; can add an arguement transform::Bool = true (or perhaps call this stabilise_variance).
-
-	return Z
-end
-
-function simulateschlather(L::AbstractArray{T, 2}, m::Integer; C = 3.5) where T <: Number
-	n = size(L, 1)
-	Z = similar(L, n, m)
-	for h ∈ 1:m
-		Z[:, h] = simulateschlather(L, C = C)
-	end
+	# Log transform the data from the unit Fréchet scale to the Gumbel scale,
+	# which stabilises the variance and helps to prevent neural-network collapse.
+	if Gumbel Z = log.(Z) end
 
 	return Z
 end
@@ -126,22 +130,21 @@ end
 
 # ---- Miscellaneous functions ----
 
-#TODO replace besselk with https://github.com/cgeoga/BesselK.jl
+#NB could replace besselk with https://github.com/cgeoga/BesselK.jl, which may allow automatic differentiation
 @doc raw"""
     matern(h, ρ, ν, σ² = 1)
-For two points separated by `h` units, compute the Matérn covariance function
-with range `ρ`, smoothness `ν`, and marginal variance `σ²`.
+For two points separated by `h` units, compute the Matérn covariance function,
+with range parameter `ρ`, smoothness parameter `ν`, and marginal variance parameter `σ²`.
 
 We use the parametrisation
-``C(\mathbf{h}) = \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \left(\frac{\|\mathbf{h}\|}{\rho}\right) K_\nu \left(\frac{\|\mathbf{h}\|}{\rho}\right)``,
+``C(\|\mathbf{h}\|) = \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \left(\frac{\|\mathbf{h}\|}{\rho}\right) K_\nu \left(\frac{\|\mathbf{h}\|}{\rho}\right)``,
 where ``\Gamma(\cdot)`` is the gamma function, and ``K_\nu(\cdot)`` is the modified Bessel
-function of the second kind of order ``\nu``. This parameterisation is the same as used by the `R`
-package `fields`, but differs to the parametrisation given by Wikipedia.
-
-Note that the `Julia` functions for ``\Gamma(\cdot)`` and ``K_\nu(\cdot)``, respectively `gamma()` and
-`besselk()`, do not work on the GPU and, hence, nor does `matern()`.
+function of the second kind of order ``\nu``.
 """
 function matern(h, ρ, ν, σ² = one(typeof(h)))
+
+	# Note that the `Julia` functions for ``\Gamma(\cdot)`` and ``K_\nu(\cdot)``, respectively `gamma()` and
+	# `besselk()`, do not work on the GPU and, hence, nor does `matern()`.
 
 	@assert h >= 0 "h should be non-negative"
 	@assert ρ > 0 "ρ should be positive"
@@ -156,29 +159,31 @@ function matern(h, ρ, ν, σ² = one(typeof(h)))
     return C
 end
 
-matern(h, ρ) =  matern(h, ρ, 1.0)
+matern(h, ρ) =  matern(h, ρ, one(typeof(ρ)))
 
-
-# TODO a bit weird that we're forcing σ = 1
-# TODO The code for maternchols can be improved - very bug prone at the moment, and documentation is not very clear.
 """
-    maternchols(D, ρ, ν)
+    maternchols(D, ρ, ν; σ² = 1)
 Given a distance matrix `D`, computes the covariance matrix under the
-Matérn covariance function with range `ρ` and smoothness `ν`, and
-returns the Cholesky factor of this covariance matrix.
+Matérn covariance function with range parameter `ρ` and smoothness parameter `ν`,
+and returns the Cholesky factor of this covariance matrix.
 
 Providing vectors for `ρ` and `ν` will yield a three-dimensional array of
-Cholesky factors. Similarly for a vector of matrices `D`.
+Cholesky factors (note that the vectors must of the same length).
+Similarly, for a vector of distance matrices `D`. If both `D` and the parameters
+are vectors, they must be of the same length.
 """
-function maternchols(D, ρ, ν)
-	L = [cholesky(Symmetric(matern.(D, ρ[i], ν[i]))).L  for i ∈ eachindex(ρ)]
-	L = convert.(Array, L) # TODO Would be better if stackarrays() could handle other classes. Maybe it would work if I remove the type from stackarrays()
+function maternchols(D, ρ, ν; σ² = one(eltype(D)))
+	@assert length(ρ) == length(ν)
+	L = [cholesky(Symmetric(matern.(D, ρ[i], ν[i], σ²))).L  for i ∈ eachindex(ρ)]
+	L = convert.(Array, L)
 	L = stackarrays(L, merge = false)
 	return L
 end
 
-function maternchols(D::V, ρ, ν) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-	L = [cholesky(Symmetric(matern.(D[i], ρ[i], ν[i]))).L  for i ∈ eachindex(ρ)]
+function maternchols(D::V, ρ, ν; σ² = one(eltype(D))) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+
+	@assert length(D) == length(ρ) == length(ν)
+	L = [cholesky(Symmetric(matern.(D[i], ρ[i], ν[i], σ²))).L  for i ∈ eachindex(ρ)]
 	L = convert.(Array, L)
 	L = stackarrays(L, merge = false)
 	return L
