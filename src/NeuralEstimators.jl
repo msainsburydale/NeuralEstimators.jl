@@ -63,7 +63,10 @@ include("UtilityFunctions.jl")
 end
 
 # TODO
-#   Plotting functions, plotrisk and plotdistribution. Should be able to
+# - Get GitHub actions working to automatically update the gh-pages branch.
+#   See .github/workflows/documentation.yml. Also note that the domain is
+#   https://msainsburydale.github.io/NeuralEstimators.jl/
+# - Plotting functions, plotrisk and plotdistribution. Should be able to
 #   translate most of the code from R, so I'll do this once I've finished the R
 #   interface.
 
