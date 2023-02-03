@@ -21,3 +21,11 @@ makedocs(
            ]
        ]
 )
+
+deploydocs(
+  deps = nothing, make = nothing,
+  repo = "github.com/msainsburydale/NeuralEstimators.jl.git",
+  target = "build",
+  branch = "gh-pages",
+  devbranch = "main"
+)

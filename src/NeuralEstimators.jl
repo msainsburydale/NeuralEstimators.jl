@@ -69,6 +69,7 @@ end
 # - Plotting functions, plotrisk and plotdistribution. Should be able to
 #   translate most of the code from R, so I'll do this once I've finished the R
 #   interface.
+#- Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
 
 
 # ---- once I've made the repo public:
