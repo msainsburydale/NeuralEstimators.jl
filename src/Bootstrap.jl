@@ -1,3 +1,18 @@
+"""
+	confidenceinterval(θ̃; probs = [0.05, 0.95])
+
+Compute a confidence interval using the quantiles of the p × B matrix of
+bootstrap samples, `θ̃`, where p is the number of parameters in the model. The
+quantile levels are controlled with the argument `probs`.
+
+The return type is a p × 2 matrix, whose first and second columns respectively
+contain the lower and upper bounds of the confidence interval.
+"""
+function confidenceinterval(θ̃; probs = [0.05, 0.95])
+
+	mapslices(x -> quantile(x, probs), θ̃, dims = 2)
+end
+
 # ---- Parameteric bootstrap ----
 
 """
@@ -54,6 +69,16 @@ function bootstrap(θ̂, Z; B::Integer = 400, use_gpu::Bool = true)
 	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃)
 
 	return θ̃
+end
+
+# simple wrapper to handle the common case that the user forgot to extract the
+# array from the single-element vector returned by simulate()
+function bootstrap(θ̂, Z::V; args...) where {V <: AbstractVector{A}} where A
+
+	@assert length(Z) == 1
+	Z = Z[1]
+	return bootstrap(θ̂, Z; args...)
+
 end
 
 

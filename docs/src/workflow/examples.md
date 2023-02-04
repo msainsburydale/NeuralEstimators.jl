@@ -2,20 +2,18 @@
 
 ## Univariate Gaussian data
 
-Here, we consider a classical estimation task, namely, inferring $\mu$ and $\sigma$ from $N(\mu, \sigma^2)$ data. Specifically, we will develop a neural Bayes estimator for $\mathbf{\theta} \equiv (\mu, \sigma)'$ from independent and identically distributed data, $\mathbf{Z} \equiv (Z_1, \dots, Z_m)'$, where each $Z_i \sim N(\mu, \sigma)$.
+Here, we develop a neural Bayes estimator for $\mathbf{\theta} \equiv (\mu, \sigma)'$ from data $Z_1, \dots, Z_m$ that are independent and identically distributed according to a $N(\mu, \sigma^2)$ distribution.
 
-Before proceeding, we load the required packages.
+Before proceeding, we load the required packages:
 ```
 using NeuralEstimators
 using Flux
 using Distributions
+import NeuralEstimators: simulate
 ```
 
-Now, the first step of the workflow is to define the prior distribution for $\mathbf{\theta}$, which we denote by $\Omega(\cdot)$. We let $\mu \sim N(0, 1)$ and $\sigma \sim U(0.1, 1)$, and we assume that the parameters are independent a priori. We also sample parameters from $\Omega(\cdot)$ to form sets of parameters used for training, validating, and testing the estimator. It does not matter how $\Omega(\cdot)$ is stored or how the parameters are sampled; the only requirement is that the sampled parameters are stored as $p \times K$ matrices, with $p$ the number of parameters in the model and $K$ the number of sampled parameter vectors.
+First, we sample parameters from the prior $\Omega(\cdot)$ to construct parameter sets used for training, validating, and testing the estimator. Here, we use the priors $\mu \sim N(0, 1)$ and $\sigma \sim U(0.1, 1)$, and we assume that the parameters are independent a priori. The sampled parameters are stored as $p \times K$ matrices, with $p$ the number of parameters in the model and $K$ the number of sampled parameter vectors.
 ```
-# Store the prior for each parameter as a named tuple
-Ω = (μ = Normal(0, 1), σ = Uniform(0.1, 1))
-
 function sample(Ω, K)
 	μ = rand(Ω.μ, K)
 	σ = rand(Ω.σ, K)
@@ -23,74 +21,70 @@ function sample(Ω, K)
 	return θ
 end
 
+Ω = (μ = Normal(0, 1), σ = Uniform(0.1, 1))
 θ_train = sample(Ω, 10000)
 θ_val   = sample(Ω, 2000)
 θ_test  = sample(Ω, 1000)
 ```
 
-Next, we implicitly define the statistical model via simulated data. In the following, we overload the function [`simulate`](@ref), but this is not necessary; one may simulate data however they see fit (e.g., using pre-existing functions, possibly from other programming languages). The data should be stored as a `Vector{A}`, where each element of the vector is associated with one parameter configuration, and where `A` depends on the representation of the neural estimator. Here, since our neural estimator will be based on a dense neural network (DNN), we will store the data as an `Array`, with independent replicates stored in the final dimension.
+Next, we implicitly define the statistical model via simulated data. In general, the data are stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and where `A` depends on the representation of the neural estimator. Since our data is replicated, we will use the Deep Sets framework and, since each replicate is univariate, we will use a dense neural network (DNN) for the inner network. Since the inner network is a DNN, the data should be stored as an `Array`, with independent replicates stored in the final dimension.
 ```
-import NeuralEstimators: simulate
-
-# m: number of independent replicates simulated for each parameter vector.
 function simulate(θ_set, m)
-	Z = [rand(Normal(θ[1], θ[2]), 1, m) for θ ∈ eachcol(θ_set)]
-	Z = broadcast.(Float32, Z)
+	Z = [rand(Normal(θ[1], θ[2]), n, m) for θ ∈ eachcol(θ_set)]
+	Z = broadcast.(Float32, Z) # convert to Float32 for computational efficiency
 	return Z
 end
 
-m = 15
+n = 1  # dimension of each replicate (univariate data)
+m = 15 # number of independent replicates for each parameter vector
+
 Z_train = simulate(θ_train, m)
 Z_val   = simulate(θ_val, m)
 ```
 
-We now design architectures for the inner and outer neural networks, $\mathbf{\psi}(\cdot)$ and $\mathbf{\phi}(\cdot)$ respectively, in the Deep Set framework, and initialise the neural estimator as a [`DeepSet`](@ref) object. Since we have univariate data, it is natural to use a dense neural network.
+We now design architectures for the inner and outer neural networks, $\mathbf{\psi}(\cdot)$ and $\mathbf{\phi}(\cdot)$ respectively, in the Deep Sets framework, and initialise the neural estimator as a [`DeepSet`](@ref) object.
 
 ```
-n = 1    # size of each replicate (univariate data)
-w = 32   # number of neurons in each layer
-p = 2    # number of parameters in the statistical model
+p = length(Ω)   # number of parameters in the statistical model
+w = 32          # number of neurons in each layer
 
 ψ = Chain(Dense(n, w, relu), Dense(w, w, relu))
-ϕ = Chain(Dense(w, w, relu), Dense(w, p), Flux.flatten)
+ϕ = Chain(Dense(w, w, relu), Dense(w, p))
 θ̂ = DeepSet(ψ, ϕ)
 ```
 
-Next, we train the neural estimator using [`train`](@ref), here using the default absolute-error loss function.
+Next, we train the neural estimator using [`train`](@ref), here using the default absolute-error loss.
 ```
 θ̂ = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 30)
 ```
 
-To test the accuracy of the resulting neural Bayes estimator, we use the function [`assess`](@ref). This function can be used to assess the performance of the estimator (or multiple estimators) over a range of sample sizes. Note that, in this example, we trained the neural estimator using a single sample size $m$, and hence the estimator will not necessarily be optimal for all $m$; see [Variable sample sizes](@ref) for strategies towards developing neural estimators that are optimal for a range of $m$.
+To test the accuracy of the resulting neural Bayes estimator, we use the function [`assess`](@ref), which can be used to assess the performance of the estimator (or multiple estimators) over a range of sample sizes. Note that, in this example, we trained the neural estimator using a single sample size, $m = 15$, and hence the estimator will not necessarily be optimal for other sample sizes; see [Variable sample sizes](@ref) for approaches that one could adopt if data sets with varying sample size are envisaged.
 ```
 Z_test     = [simulate(θ_test, m) for m ∈ (5, 10, 15, 20, 30)]
 assessment = assess([θ̂], θ_test, Z_test)
 ```
-The returned object is an object of type [`Assessment`](@ref), which contains the true parameters and their corresponding estimates, and the time taken to compute the estimates for each sample size and each estimator.
 
-The risk function may then be approximated using [`risk`](@ref), and plotted against the sample size with [`plotrisk`](@ref):
+The returned object is an object of type [`Assessment`](@ref), which contains the true parameters and their corresponding estimates, and the time taken to compute the estimates for each sample size and each estimator. The risk function may computed using [`risk`](@ref), and plotted against the sample size with [`plotrisk`](@ref):
 ```
 risk(assessment)
 plotrisk(assessment)
 ```
 
-In addition to assessing the estimator over the entire parameter space via the risk function, it is often helpful to visualise the empirical joint distribution of an estimator for a particular parameter configuration and a particular sample size. This can be done by providing $J$ data sets simulated under a single parameter configuration.
+It is often helpful to visualise the empirical joint distribution of an estimator for a particular parameter configuration and a particular sample size. This can be done by providing [`assess`](@ref) with $J$ data sets simulated under a particular parameter configuration, and then calling [`plotdistribution`](@ref):
 ```            
 J = 100
 θ = sample(Ω, 1)
 Z = [simulate(θ, m, J)]
 assessment = assess([θ̂], θ, Z)  
-```
-The empirical joint distribution may then visualised with [`plotdistribution`](@ref):
-```
 plotdistribution(assessment)
 ```
 
-
-Once the neural Bayes estimator has passed our assessment, it may then be applied to observed data, with bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref):
+Once the neural Bayes estimator has passed our assessment, it may then be applied to observed data, with parametric/non-parametric bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`confidenceinterval`](@ref). Below, we use simulated data as a substitute for observed data:
 ```            
-Z = simulate(θ, m) # pretend that this is observed data
-bootstrap(θ̂, θ̂(Z), m)
+Z = simulate(θ, m)     # pretend that this is observed data!
+θ̂(Z)         				  # point estimates from the observed data
+θ̃ = bootstrap(θ̂, Z)    # non-parametric bootstrap estimates
+confidenceinterval(θ̃)  # confidence interval from the bootstrap estimates
 ```
 
 

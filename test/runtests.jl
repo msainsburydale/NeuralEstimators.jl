@@ -7,14 +7,20 @@ using NeuralEstimators: _getindices, _runondevice, _incgammalowerunregularised
 import NeuralEstimators: simulate
 using CUDA
 using DataFrames
-using LinearAlgebra: norm
 using Distributions: Normal, cdf, logpdf, quantile
 using Flux
+using Flux: DataLoader
+using Graphs
+using GraphNeuralNetworks
+using LinearAlgebra: norm
+using Random: seed!
+using SpecialFunctions: gamma
+using Statistics
 using Statistics: mean, sum
 using Test
 using Zygote
-using Random: seed!
-using SpecialFunctions: gamma
+
+
 
 seed!(1)
 
@@ -27,32 +33,42 @@ else
 	devices = (CPU = cpu,)
 end
 
-@testset "expandgrid" begin
-    @test expandgrid(1:2, 0:3) == [1 0; 2 0; 1 1; 2 1; 1 2; 2 2; 1 3; 2 3]
-    @test expandgrid(1:2, 1:2) == expandgrid(2)
+@testset "UtilityFunctions" begin
+
+	@testset "expandgrid" begin
+	    @test expandgrid(1:2, 0:3) == [1 0; 2 0; 1 1; 2 1; 1 2; 2 2; 1 3; 2 3]
+	    @test expandgrid(1:2, 1:2) == expandgrid(2)
+	end
+
+	@testset "_getindices" begin
+		m = (3, 4, 6)
+		v = [rand(16, 16, 1, mᵢ) for mᵢ ∈ m]
+		@test _getindices(v) == [1:3, 4:7, 8:13]
+	end
+
+	@testset "stackarrays" begin
+		# Vector containing arrays of the same size:
+		A = rand(2, 3, 4); v = [A, A]; N = ndims(A);
+		@test stackarrays(v) == cat(v..., dims = N)
+		@test stackarrays(v, merge = false) == cat(v..., dims = N + 1)
+
+		# Vector containing arrays with differing final dimension size:
+		A₁ = rand(2, 3, 4); A₂ = rand(2, 3, 5); v = [A₁, A₂];
+		@test stackarrays(v) == cat(v..., dims = N)
+	end
+
+	# @testset "samplesize" begin
+	# 	Z = rand(3, 4, 1, 6)
+	#     @test inversesamplesize(Z) ≈ 1/samplesize(Z)
+	# end
+
 end
 
-# @testset "samplesize" begin
-# 	Z = rand(3, 4, 1, 6)
-#     @test inversesamplesize(Z) ≈ 1/samplesize(Z)
-# end
 
-@testset "_getindices" begin
-	m = (3, 4, 6)
-	v = [rand(16, 16, 1, mᵢ) for mᵢ ∈ m]
-	@test _getindices(v) == [1:3, 4:7, 8:13]
-end
 
-@testset "stackarrays" begin
-	# Vector containing arrays of the same size:
-	A = rand(2, 3, 4); v = [A, A]; N = ndims(A);
-	@test stackarrays(v) == cat(v..., dims = N)
-	@test stackarrays(v, merge = false) == cat(v..., dims = N + 1)
 
-	# Vector containing arrays with differing final dimension size:
-	A₁ = rand(2, 3, 4); A₂ = rand(2, 3, 5); v = [A₁, A₂];
-	@test stackarrays(v) == cat(v..., dims = N)
-end
+
+
 
 @testset "incgamma" begin
 
@@ -109,18 +125,18 @@ end
 	@test parameters_subset.v     == parameters.v[indices]
 end
 
-@testset "scaledlogistic" begin
+
+
+@testset "densities" begin
+
+	# "scaledlogistic"
 	@test all(4 .<= scaledlogistic.(-10:10, 4, 5) .<= 5)
 	@test all(scaledlogit.(scaledlogistic.(-10:10, 4, 5), 4, 5) .≈ -10:10)
-
 	Ω = (σ = 1:10, ρ = (2, 7))
 	Ω = [Ω...] # convert to array since broadcasting over dictionaries and NamedTuples is reserved
 	θ = [-10, 15]
 	@test all(minimum.(Ω) .<= scaledlogistic.(θ, Ω) .<= maximum.(Ω))
-end
-
-
-@testset "schlatherbivariatedensity" begin
+	@test all(scaledlogit.(scaledlogistic.(θ, Ω), Ω) .≈ θ)
 
 	# Check that the pdf is consistent with the cdf using finite differences
 	using NeuralEstimators: _schlatherbivariatecdf
@@ -134,11 +150,20 @@ end
 	finitedifference_check(0.3, 0.8, 0.9)
 	finitedifference_check(3.3, 3.8, 0.2)
 	finitedifference_check(3.3, 3.8, 0.9)
+
+	# Other small tests
+	@test schlatherbivariatedensity(3.3, 3.8, 0.9; logdensity = false) ≈ exp(schlatherbivariatedensity(3.3, 3.8, 0.9))
+	y = [0.2, 0.4, 0.3]
+	n = length(y)
+	A = rand(n, n)
+	Σ = A'A
+	@test gaussiandensity(y, Σ, logdensity = false) ≈ exp(gaussiandensity(y, Σ))
 end
 
-using GraphNeuralNetworks
-using Flux, Graphs, Statistics
-using Flux: DataLoader
+
+
+
+
 
 @testset "GNNEstimator" begin
 	n₁, n₂ = 11, 27
@@ -333,8 +358,10 @@ verbose = false # verbose used in the NeuralEstimators code
 		@testset "bootstrap" begin
 			bootstrap(θ̂, Parameters(1, ξ), 50; use_gpu = use_gpu)
 			bootstrap(θ̂, Z[1]; use_gpu = use_gpu)
+			bootstrap(θ̂, Z; use_gpu = use_gpu)
 			blocks = rand(1:2, size(Z[1])[end])
 			bootstrap(θ̂, Z[1], blocks, use_gpu = use_gpu)
+			confidenceinterval(bootstrap(θ̂, Z; use_gpu = use_gpu))
 		end
 	end
 end

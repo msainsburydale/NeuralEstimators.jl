@@ -72,4 +72,6 @@ plotdistribution
 
 ```@docs
 bootstrap
+
+confidenceinterval
 ```

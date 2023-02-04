@@ -45,8 +45,8 @@ function gaussiandensity(y::A, Σ; logdensity::Bool = true) where {A <: Abstract
 	# this can help to alleviate issues caused by rounding, as described at
 	# https://discourse.julialang.org/t/is-this-a-bug-with-cholesky/16970/3.
 	L  = cholesky(Symmetric(Σ)).L
-	ll = mapslices(y -> gaussiandensity(vec(y), L, logdensity = logdensity), y, dims = 1:(N-1))
-	return sum(ll)
+	l = mapslices(y -> gaussiandensity(vec(y), L, logdensity = logdensity), y, dims = 1:(N-1))
+	return logdensity ? sum(l) : prod(l)
 end
 
 

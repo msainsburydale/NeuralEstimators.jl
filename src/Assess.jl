@@ -271,10 +271,6 @@ function _assess(
 end
 
 
-
-
-# ---- coverage ----
-
 """
 	coverage(θ̂, Z::V, θ, α; kwargs...) where  {V <: AbstractArray{A}} where A
 
