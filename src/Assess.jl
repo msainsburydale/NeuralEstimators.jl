@@ -35,7 +35,7 @@ end
 
 
 """
-	risk(assessment::Assessment; loss = (x, y) -> abs.(x .- y), average_over_parameters = true)
+	risk(assessment::Assessment; loss = (x, y) -> abs(x - y), average_over_parameters = true)
 
 Estimates the Bayes risk with respect to the `loss` function for each
 estimator, parameter, and sample size considered in `assessment`.
@@ -45,14 +45,15 @@ The argument `loss` should be a binary operator (default absolute-error loss).
 If `average_over_parameters = true` (default), the risk is averaged over
 all parameters; otherwise, the risk is evaluated over each parameter separately.
 """
-function risk(assessment::Assessment; loss = (x, y) -> abs.(x .- y), average_over_parameters::Bool = true)
+function risk(assessment::Assessment; loss = (x, y) -> abs(x - y), average_over_parameters::Bool = true)
+
 
 
 	df = assessment.θandθ̂
 	grouping_variables = [:estimator, :m]
 	if !average_over_parameters push!(grouping_variables, :parameter) end
 	df = groupby(df, grouping_variables)
-	df = combine(df, [:estimate, :truth] => loss => :loss, ungroup = false)
+	df = combine(df, [:estimate, :truth] => ((x, y) -> loss.(x, y)) => :loss, ungroup = false)
 	df = combine(df, :loss => mean => :risk)
 
 	return df
@@ -290,7 +291,7 @@ function coverage(θ̂, Z::V, θ, α; kwargs...) where  {V <: AbstractArray{A}} 
 		# compute a bootstrap sample of parameters
 		θ̃ = bootstrap(θ̂, z; kwargs...)
 
-		# Determined if the central confidence intervals with nominal coverage α
+		# Determine if the central confidence intervals with nominal coverage α
 		# contain the true parameter. The result is an indicator vector
 		# specifying which parameters are contained in the interval
 		[quantile(θ̃[i, :], α/2) < θ[i] < quantile(θ̃[i, :], 1 - α/2) for i ∈ 1:p]
