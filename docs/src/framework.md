@@ -51,7 +51,7 @@ Under mild conditions, Bayes estimators are invariant to permutations of the con
 
 ```math
 \hat{\mathbf{\theta}}(\mathbf{Z}; \mathbf{\gamma}) = \mathbf{\phi}(\mathbf{T}(\mathbf{Z}; \mathbf{\gamma}); \mathbf{\gamma}), \quad \mathbf{T}(\mathbf{Z}; \mathbf{\gamma})  
-= \mathbf{a}\big(\{\mathbf{\psi}(\mathbf{Z}_i; \mathbf{\gamma}) : i = 1, \dots, m\}\big).
+= \mathbf{a}\big(\{\mathbf{\psi}(\mathbf{Z}_i; \mathbf{\gamma}) : i = 1, \dots, m\}\big), 
 ```
 where $\mathbf{\phi}: \mathbb{R}^{q} \to \mathbb{R}^p$ and $\mathbf{\psi}: \mathbb{R}^{n} \to \mathbb{R}^q$ are neural networks whose parameters are collected in $\mathbf{\gamma}$, and $\mathbf{a}: (\mathbb{R}^q)^m \to \mathbb{R}^q$ is a permutation-invariant set function (typically elementwise addition, average, or maximum).
 
