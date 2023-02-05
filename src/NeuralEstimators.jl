@@ -38,7 +38,7 @@ include("GNNEstimator.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
 export matern, maternchols, scaledlogistic, scaledlogit
-include("Simulation.jl")
+include("simulate.jl")
 export incgamma
 include("incgamma.jl")
 
@@ -46,19 +46,19 @@ export gaussiandensity, schlatherbivariatedensity
 include("densities.jl")
 
 export train, subsetdata
-include("Train.jl")
+include("train.jl")
 
 export assess, Assessment, merge, risk
-include("Assess.jl")
+include("assess.jl")
 
 export plotrisk, plotdistribution
 include("plotting.jl")
 
 export bootstrap, coverage, confidenceinterval
-include("Bootstrap.jl")
+include("bootstrap.jl")
 
 export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams
-include("UtilityFunctions.jl")
+include("utility.jl")
 
 end
 
