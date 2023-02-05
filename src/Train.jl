@@ -29,7 +29,8 @@ Arguments unique to `train(θ̂, P)`:
 """
 function train end
 # - `epochs_per_θ_refresh::Integer = 1`: how often to refresh the training parameters; must be a multiple of `epochs_per_Z_refresh`. TODO
-# Note that `train` is a mutating function, but the suffix `!` is omitted to avoid clashes with the `Flux` function, `train!`.
+# Note that train() is a mutating function, but the suffix ! is omitted to
+# avoid clashes with the Flux function, train!().
 
 """
 	train(θ̂, P; <keyword args>)
