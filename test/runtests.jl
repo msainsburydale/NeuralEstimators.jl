@@ -356,11 +356,13 @@ verbose = false # verbose used in the NeuralEstimators code
 		end
 
 		@testset "bootstrap" begin
+			Z = Z[1] # bootstrap functions are designed for a single data set
 			bootstrap(θ̂, Parameters(1, ξ), 50; use_gpu = use_gpu)
-			bootstrap(θ̂, Z[1]; use_gpu = use_gpu)
 			bootstrap(θ̂, Z; use_gpu = use_gpu)
-			blocks = rand(1:2, size(Z[1])[end])
-			bootstrap(θ̂, Z[1], blocks, use_gpu = use_gpu)
+			bootstrap(θ̂, [Z]; use_gpu = use_gpu)
+			@test_throws Exception bootstrap(θ̂, [Z, Z]; use_gpu = use_gpu)
+			blocks = rand(1:2, size(Z)[end])
+			bootstrap(θ̂, Z, blocks, use_gpu = use_gpu)
 			confidenceinterval(bootstrap(θ̂, Z; use_gpu = use_gpu))
 		end
 	end
