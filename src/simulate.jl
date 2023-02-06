@@ -1,6 +1,6 @@
 """
 Generic function that may be overloaded to implicitly define a statistical model.
-Specifically, the user should define provide a method `simulate(parameters, m)`
+Specifically, the user should provide a method `simulate(parameters, m)`
 that returns `m` simulated replicates for each element in the given set of
 `parameters`.
 """
@@ -34,7 +34,7 @@ _simulate(params::P, m) where {P <: Union{AbstractMatrix, ParameterConfiguration
 
 Simulates `m` realisations from a Gau(0, 𝚺 + σ²𝐈) distribution, where 𝚺 ≡ LL'.
 
-If `σ` and `m` are omitted, a single field without nugget variance is returned.
+If `σ` and `m` are omitted, a single field without the nugget effect is returned.
 """
 function simulategaussianprocess(L::M, σ::T, m::Integer) where M <: AbstractMatrix{T} where T <: Number
 	n = size(L, 1)
@@ -71,7 +71,7 @@ scale.
 
 The accuracy of the algorithm is controlled with a tuning parameter, `C`, which
 involves a trade-off between computational efficiency (favouring small `C`) and
-accuracy (favouring large `R`). Schlather (2002) recommends the use of `C = 3`;
+accuracy (favouring large `C`). Schlather (2002) recommends the use of `C = 3`;
 conservatively, we set the default to `C = 3.5`.
 
 

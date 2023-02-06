@@ -21,6 +21,8 @@ The data should be stored as a `Vector{A}`, where each element of the vector is 
 
 ```@docs
 simulate
+
+simulate(parameters, m, J::Integer)
 ```
 
 ## Neural-estimator representations

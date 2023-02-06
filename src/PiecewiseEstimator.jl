@@ -1,20 +1,7 @@
-
-# Idea:
-# 1. Have some arbitrary number of neural estimators, each of which is intended
-# 	 to be optimal for a specific non-overlapping range of sample sizes.
-# 2. Want to store these neural estmators and the corresponding sample-size
-#	 ranges in struct. The challenge is that we do not know the number of neural
-#	 estimators in advance.
-# 3. We can use a macro to automatically generate a struct with the correct length.
-#	 Alternatively, and more simply, we can store the estimators as a collection
-#    in a single field.
-
-
-
 """
-	PiecewiseEstimator(estimators, mchange)
+	PiecewiseEstimator(estimators, m_breaks)
 Creates a piecewise estimator from a collection of `estimators`, based on the
-collection of sample-size changepoints, `mchange`, which should contain one
+collection of sample-size changepoints, `m_breaks`, which should contain one
 element fewer than the number of `estimators`.
 
 # Examples
@@ -25,9 +12,9 @@ element fewer than the number of `estimators`.
 # estimator with a sample-size changepoint of 30, which dispatches θ̂₁ if m ≤ 30
 # and θ̂₂ if m > 30.
 
-n = 2
-p = 3
-w = 8
+n = 2  # bivariate data
+p = 3  # number of parameters in the model
+w = 8  # width of each layer
 
 ψ₁ = Chain(Dense(n, w, relu), Dense(w, w, relu));
 ϕ₁ = Chain(Dense(w, w, relu), Dense(w, p));
@@ -44,8 +31,8 @@ Z = [rand(n, 1, m) for m ∈ (10, 50)]
 """
 struct PiecewiseEstimator
 	estimators
-	mchange
-	# @assert length(mchange) == length(estimators) - 1
+	m_breaks
+	# @assert length(m_breaks) == length(estimators) - 1
 end
 
 @functor PiecewiseEstimator (estimators,)
@@ -53,24 +40,24 @@ end
 
 # Note that this is an inefficient implementation, analogous to the inefficient
 # DeepSet implementation. A more efficient approach would be to subset Z based
-# on mchange, apply the estimators to each block of Z, then recombine the estimates.
+# on m_breaks, apply the estimators to each block of Z, then recombine the estimates.
 function (d::PiecewiseEstimator)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
 
 	m = size.(Z, N)
 
 	estimators = d.estimators
-	mchange  = d.mchange
+	m_breaks  = d.m_breaks
 
-	@assert length(mchange) == length(estimators) - 1
+	@assert length(m_breaks) == length(estimators) - 1
 
-	mchange = [mchange..., Inf]
+	m_breaks = [m_breaks..., Inf]
 
 	θ̂ = map(eachindex(Z)) do i
 
 		# find which estimator to use
 		mᵢ = m[i]
-		j = findfirst(mᵢ .<= mchange)
+		j = findfirst(mᵢ .<= m_breaks)
 
 		# apply the estimator
 		estimators[j](Z[[i]])

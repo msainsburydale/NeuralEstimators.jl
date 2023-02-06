@@ -21,11 +21,11 @@ Arguments common to all methods:
 Arguments common to `train(θ̂, P)` and `train(θ̂, θ_train, θ_val)`:
 - `m`: sample sizes (either an `Integer` or a collection of `Integers`).
 - `epochs_per_Z_refresh::Integer = 1`: how often to refresh the training data.
-- `simulate_just_in_time::Bool = false`: should we simulate the data "just-in-time"?
+- `simulate_just_in_time::Bool = false`: should we simulate the data "just-in-time"? If `true`, the user must overload the generic function `simulate` with a method `simulate(parameters, m)`.
 
 Arguments unique to `train(θ̂, P)`:
-- `K::Integer = 10_000`: number of parameter vectors in the training set; the size of the validation set is `K ÷ 5`.
-- `ξ = nothing`: invariant model information; if `ξ` is provided, the constructor `P` is called as `P(K, ξ)`.
+- `K::Integer = 10000`: number of parameter vectors in the training set; the size of the validation set is `K ÷ 5`.
+- `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices); if `ξ` is provided, the constructor `P` is called as `P(K, ξ)`.
 """
 function train end
 # - `epochs_per_θ_refresh::Integer = 1`: how often to refresh the training parameters; must be a multiple of `epochs_per_Z_refresh`. TODO
@@ -264,7 +264,10 @@ function train(θ̂, θ_train::P, θ_val::P;
     return θ̂
 end
 
-
+#TODO given an example for the recycling, since it's quite complicated. use this:
+For example, if M = 50 and
+# m = 10, epoch 1 uses the first 10 replicates, epoch 2 uses the next 10
+# replicates, and so on, until epoch 6 again uses the first 10 replicates.
 """
 	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; <keyword args>)
 
@@ -275,8 +278,8 @@ sets, `θ_train` and `θ_val`, and the training and validation data sets,
 If the elements of `Z_train` and `Z_val` are equally replicated, and the number
 of replicates for each element of `Z_train` is a multiple of the number of
 replicates for each element of `Z_val`, then the training data will
-then be recycled throughout training to imitate on-the-fly simulation. Note that
-this requires the data to be subsetted throughout training with the function
+then be recycled throughout training to imitate on-the-fly simulation.
+Note that this requires the data to be subsetted throughout training with the function
 `subsetdata`.
 """
 function train(

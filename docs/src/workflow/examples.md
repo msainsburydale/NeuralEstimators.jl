@@ -30,14 +30,12 @@ end
 Next, we implicitly define the statistical model via simulated data. In general, the data are stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and where `A` depends on the representation of the neural estimator. Since our data is replicated, we will use the Deep Sets framework and, since each replicate is univariate, we will use a dense neural network (DNN) for the inner network. Since the inner network is a DNN, the data should be stored as an `Array`, with independent replicates stored in the final dimension.
 ```
 function simulate(θ_set, m)
-	Z = [rand(Normal(θ[1], θ[2]), n, m) for θ ∈ eachcol(θ_set)]
+	Z = [rand(Normal(θ[1], θ[2]), 1, m) for θ ∈ eachcol(θ_set)]
 	Z = broadcast.(Float32, Z) # convert to Float32 for computational efficiency
 	return Z
 end
 
-n = 1  # dimension of each replicate (univariate data)
-m = 15 # number of independent replicates for each parameter vector
-
+m = 15 # number of independent replicates per parameter vector
 Z_train = simulate(θ_train, m)
 Z_val   = simulate(θ_val, m)
 ```
@@ -48,7 +46,7 @@ We now design architectures for the inner and outer neural networks, $\mathbf{\p
 p = length(Ω)   # number of parameters in the statistical model
 w = 32          # number of neurons in each layer
 
-ψ = Chain(Dense(n, w, relu), Dense(w, w, relu))
+ψ = Chain(Dense(1, w, relu), Dense(w, w, relu))
 ϕ = Chain(Dense(w, w, relu), Dense(w, p))
 θ̂ = DeepSet(ψ, ϕ)
 ```
@@ -64,7 +62,7 @@ Z_test     = [simulate(θ_test, m) for m ∈ (5, 10, 15, 20, 30)]
 assessment = assess([θ̂], θ_test, Z_test)
 ```
 
-The returned object is an object of type [`Assessment`](@ref), which contains the true parameters and their corresponding estimates, and the time taken to compute the estimates for each sample size and each estimator. The risk function may computed using [`risk`](@ref), and plotted against the sample size with [`plotrisk`](@ref):
+The returned object is an object of type [`Assessment`](@ref), which contains the true parameters and their corresponding estimates, and the time taken to compute the estimates for each sample size and each estimator. The risk function may be computed using the function [`risk`](@ref), and plotted against the sample size with [`plotrisk`](@ref):
 ```
 risk(assessment)
 plotrisk(assessment)
@@ -79,16 +77,10 @@ assessment = assess([θ̂], θ, Z)
 plotdistribution(assessment)
 ```
 
-Once the neural Bayes estimator has passed our assessment, it may then be applied to observed data, with parametric/non-parametric bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`confidenceinterval`](@ref). Below, we use simulated data as a substitute for observed data:
+Once the neural Bayes estimator has been assessed, it may then be applied to observed data, with parametric/non-parametric bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`confidenceinterval`](@ref). Below, we use simulated data as a substitute for observed data:
 ```
 Z = simulate(θ, m)     # pretend that this is observed data
 θ̂(Z)                   # point estimates from the observed data
 θ̃ = bootstrap(θ̂, Z)    # non-parametric bootstrap estimates
 confidenceinterval(θ̃)  # confidence interval from the bootstrap estimates
 ```
-
-
-## Time series (AR1)
-
-
-## Irregular spatial data

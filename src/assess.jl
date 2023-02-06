@@ -116,8 +116,8 @@ vectors run faster than the replicated data.
 # Arguments common to both methods
 - `estimator_names::Vector{String}`: names of the estimators (sensible defaults provided).
 - `parameter_names::Vector{String}`: names of the parameters (sensible defaults provided).
-- `ξ = nothing`: invariant model information.
-- `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses the invariant model information, `ξ`: If it does, the estimator will be applied as `estimator(Z, ξ)`.
+- `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices).
+- `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses `ξ`: If it does, the estimator will be applied as `estimator(Z, ξ)`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
 - `verbose::Bool = true`
 

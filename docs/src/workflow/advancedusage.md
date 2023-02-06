@@ -8,7 +8,7 @@ Parameters sampled from the prior distribution $\Omega(\cdot)$ may be stored in 
 
 ## On-the-fly and just-in-time simulation
 
-When data simulation is (relatively) computationally inexpensive, $\mathcal{Z}_{\text{train}}$ can be simulated periodically during training, a technique coined "simulation-on-the-fly". Regularly refreshing $\mathcal{Z}_{\text{train}}$ leads to lower out-of-sample error and to a reduction in overfitting. This strategy therefore facilitates the use of larger, more representationally-powerful networks that are prone to overfitting when $\mathcal{Z}_{\text{train}}$ is fixed. Refreshing $\mathcal{Z}_{\text{train}}$ also has an additional computational benefit; data can be simulated "just-in-time", in the sense that they can be simulated from a small batch of $\vartheta_{\text{train}}$, used to train the neural estimator, and then removed from memory. This can reduce pressure on memory resources when $|\vartheta_{\text{train}}|$ is very large.
+When data simulation is (relatively) computationally inexpensive, $\mathcal{Z}_{\text{train}}$ can be simulated continuously during training, a technique coined "simulation-on-the-fly". Regularly refreshing $\mathcal{Z}_{\text{train}}$ leads to lower out-of-sample error and to a reduction in overfitting. This strategy therefore facilitates the use of larger, more representationally-powerful networks that are prone to overfitting when $\mathcal{Z}_{\text{train}}$ is fixed. Refreshing $\mathcal{Z}_{\text{train}}$ also has an additional computational benefit; data can be simulated "just-in-time", in the sense that they can be simulated from a small batch of $\vartheta_{\text{train}}$, used to train the neural estimator, and then removed from memory. This can reduce pressure on memory resources when $|\vartheta_{\text{train}}|$ is very large.
 
 One may also regularly refresh $\vartheta_{\text{train}}$, and doing so leads to similar benefits. However, fixing $\vartheta_{\text{train}}$ allows computationally expensive terms, such as Cholesky factors when working with Gaussian process models, to be reused throughout training, which can substantially reduce the training time for some models.  
 
@@ -36,15 +36,13 @@ If data sets with varying $m$ are envisaged, one could train $l$ neural Bayes es
 where, here, $\mathbf{\gamma}^* \equiv (\mathbf{\gamma}^*_{\tilde{m}_1}, \dots, \mathbf{\gamma}^*_{\tilde{m}_{l-1}})$, and where $\mathbf{\gamma}^*_{\tilde{m}}$ are the neural-network parameters optimised for sample size $\tilde{m}$ chosen so that $\hat{\mathbf{\theta}}(\cdot; \mathbf{\gamma}^*_{\tilde{m}})$ is near-optimal over the range of sample sizes in which it is applied.
 This approach works well in practice, and it is less computationally burdensome than it first appears when used in conjunction with pre-training.
 
-Piecewise neural estimators are implemented with the struct, [`PiecewiseEstimator`](@ref). The method [`train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}`](@ref) is particularly useful for training piecewise neural estimators. Below, we replicate the example of inferring $\mu$ and $\sigma$ from $N(\mu, \sigma^2)$ data, but this time we train three neural estimators with sample sizes $\tilde{m}_l$ equal to 1, 10, and 30, respectively.   
+Piecewise neural estimators are implemented with the struct, [`PiecewiseEstimator`](@ref), and their construction is facilitated with the method of [`train`](@ref) that takes five positional arguments. Below, we replicate the example of inferring $\mu$ and $\sigma$ from $N(\mu, \sigma^2)$ data, but this time we train three neural estimators with sample sizes $\tilde{m}_l$ equal to 1, 10, and 30, respectively.   
 
 ```
 using NeuralEstimators
 import NeuralEstimators: simulate
 using Flux
 using Distributions
-
-Ω = (μ = Normal(0, 1), σ = Uniform(0.1, 1))
 
 function sample(Ω, K)
 	μ = rand(Ω.μ, K)
@@ -53,31 +51,36 @@ function sample(Ω, K)
 	return θ
 end
 
+Ω = (μ = Normal(0, 1), σ = Uniform(0.1, 1))
 θ_train = sample(Ω, 10000)
 θ_val   = sample(Ω, 2000)
 
 function simulate(θ_set, m)
-	Z = [rand(Normal(θ[1], θ[2]), 1, 1, m) for θ ∈ eachcol(θ_set)]
+	Z = [rand(Normal(θ[1], θ[2]), 1, m) for θ ∈ eachcol(θ_set)]
 	Z = broadcast.(Float32, Z)
 	return Z
 end
 
+## Sample sizes used for training each neural estimator
 M = [1, 10, 30]
+
+## Simulate data; need the maximum sample size that will be used during training
 Z_train = simulate(θ_train, maximum(M))
 Z_val   = simulate(θ_val, maximum(M))
 
-n = 1    # size of each replicate (univariate data)
+## Define the architecture common to each neural estimator
 w = 32   # number of neurons in each layer
 p = 2    # number of parameters in the statistical model
-
-ψ = Chain(Dense(n, w, relu), Dense(w, w, relu))
-ϕ = Chain(Dense(w, w, relu), Dense(w, p), Flux.flatten)
+ψ = Chain(Dense(1, w, relu), Dense(w, w, relu))
+ϕ = Chain(Dense(w, w, relu), Dense(w, p))
 θ̂ = DeepSet(ψ, ϕ)
 
+## Train the neural estimators for each sample size in M
 estimators = train(θ̂ , θ_train, θ_val, Z_train, Z_val, M, epochs = 10)
-mchange = [5, 20]
 
-piecewise_estimator = PiecewiseEstimator(estimators, mchange)
+## Construct a PiecewiseEstimator from the above neural estimators
+m_breaks = [5, 20]
+piecewise_estimator = PiecewiseEstimator(estimators, m_breaks)
 ```
 
 ## Training with variable sample sizes
@@ -87,7 +90,7 @@ Alternatively, one could treat the sample size as a random variable, $M$, with s
 R(\mathbf{\theta}, \hat{\mathbf{\theta}}(\cdot; \mathbf{\gamma}))
 \equiv
 \sum_{m \in \mathcal{M}}
-P(M=m)\left(\int_{\mathcal{S}^m}  L(\mathbf{\theta}, \hat{\mathbf{\theta}}(\mathbf{Z}^{(m)}; \mathbf{\gamma}))p(\mathbf{Z}^{(m)} \mid \mathbf{\theta}) d \mathbf{Z}^{(m)}\right).
+P(M=m)\left(\int_{\mathcal{S}^m}  L(\mathbf{\theta}, \hat{\mathbf{\theta}}(\mathbf{Z}^{(m)}; \mathbf{\gamma}))p(\mathbf{Z}^{(m)} \mid \mathbf{\theta}) {\text{d}} \mathbf{Z}^{(m)}\right).
 ```
  This approach does not materially alter the workflow, except that one must also sample the number of replicates before simulating the data.
 
@@ -96,30 +99,32 @@ P(M=m)\left(\int_{\mathcal{S}^m}  L(\mathbf{\theta}, \hat{\mathbf{\theta}}(\math
 ```
 function simulate(parameters, m::R) where {R <: AbstractRange{I}} where I <: Integer
 
-	# Number of parameter vectors stored in parameters
+	## Number of parameter vectors stored in parameters
 	K = size(parameters, 2)
 
-	# Generate K sample sizes from the prior distribution for M
+	## Generate K sample sizes from the prior distribution for M
 	m̃ = rand(m, K)
 
-	# Pseudocode for data simulation
+	## Pseudocode for data simulation
 	Z = [<simulate m̃[k] iid realisations from the model> for k ∈ 1:K]
 
 	return Z
 end
 ```
 
-Then, setting the argument `m` in [`train`](@ref) to be an integer range will train the neural estimator with the given variable sample sizes.
+Then, setting the argument `m` in [`train`](@ref) to be an integer range (e.g., `1:30`) will train the neural estimator with the given variable sample sizes.
 
 ## Loading previously saved neural estimators
 
 As training is by far the most computationally demanding part of the workflow, one typically trains an estimator and then saves it for later use. More specifically, one usually saves the *parameters* of the neural estimator (e.g., the weights and biases of the neural networks); then, to load the neural estimator at a later time, one initialises an estimator with the same architecture used during training, and then loads the saved parameters into this estimator.
 
-[`train`](@ref) automatically saves the neural estimator's parameters; to load them, one may use the following code, or similar:
+If the argument `savepath` is specified, [`train`](@ref) automatically saves the neural estimator's parameters; to load them, one may use the following code, or similar:
 
 ```
+using Flux: loadparams!
+
 θ̂ = architecture()
-Flux.loadparams!(θ̂, loadbestweights(path))
+loadparams!(θ̂, loadbestweights(savepath))
 ```
 
-Above, `architecture()` is a user-defined function that returns a neural estimator with the same architecture as the estimator that we wish to load, but with randomly initialised parameters, and the function `Flux.loadparams!` loads the parameters of the best (as determined by [`loadbestweights`](@ref)) neural estimator saved in `path`.
+Above, `architecture()` is a user-defined function that returns a neural estimator with the same architecture as the estimator that we wish to load, but with randomly initialised parameters, and the function `loadparams!` loads the parameters of the best (as determined by [`loadbestweights`](@ref)) neural estimator saved in `savepath`.

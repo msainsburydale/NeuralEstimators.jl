@@ -21,6 +21,8 @@ end
 
 # ---- DeepSet Type and constructors ----
 
+#TODO change to boldface and latex code (don't worry about the REPL documentation appearance)
+
 """
     DeepSet(ψ, ϕ, a)
 	DeepSet(ψ, ϕ; a::String = "mean")
@@ -28,14 +30,14 @@ end
 A neural estimator in the `DeepSet` representation,
 
 ```math
-θ̂(𝐙) ≡ a(\\{ϕ(𝐙ᵢ) : i = 1, …, m\\}),
+θ̂(𝐙) ≡ ϕ(𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\})),
 ```
 
 where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates from the model,
 `ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant aggregation
-function.
+function. A schematic of this representation is as follows:
 
-The function `a` must aggregate over the last dimension (i.e., the replicates
+The function `𝐚`(⋅) must aggregate over the last dimension (i.e., the replicates
 dimension) of an input array. It can be specified as a positional argument of
 type `Function`, or as a keyword argument of type `String` with permissible
 values `"mean"`, `"sum"`, and `"logsumexp"`.
@@ -54,15 +56,15 @@ w = 32 # width of each layer
 ϕ = Chain(Dense(w, w, relu), Dense(w, p));
 θ̂ = DeepSet(ψ, ϕ)
 
-# Apply the estimator to a single set of m=3 realisations:
+# Apply the estimator to a single set of 3 realisations:
 Z = rand(n, 3);
 θ̂(Z)
 
-# Apply the estimator to two sets each containing m=3 realisations:
+# Apply the estimator to two sets each containing 3 realisations:
 Z = [rand(n, m) for m ∈ (3, 3)];
 θ̂(Z)
 
-# Apply the estimator to two sets containing m=3 and m=4 realisations, respectively:
+# Apply the estimator to two sets containing 3 and 4 realisations, respectively:
 Z = [rand(n, m) for m ∈ (3, 4)];
 θ̂(Z)
 ```
@@ -72,6 +74,11 @@ struct DeepSet{T, F, G}
 	ϕ::G
 	a::F
 end
+# 𝐙₁ → ψ() \n
+#          ↘ \n
+# ⋮     ⋮     a() → ϕ() \n
+#          ↗ \n
+# 𝐙ₘ → ψ() \n
 
 DeepSet(ψ, ϕ; a::String = "mean") = DeepSet(ψ, ϕ, _agg(a))
 
