@@ -44,24 +44,26 @@ values `"mean"`, `"sum"`, and `"logsumexp"`.
 ```
 using NeuralEstimators
 using Flux
+
 n = 10 # number of observations in each realisation
 p = 4  # number of parameters in the statistical model
-w = 32 # width of each layer
 
+# Construct the neural estimator
+w = 32 # width of each layer
 ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
-ϕ = Chain(Flux.flatten, Dense(w, w, relu), Dense(w, p));
+ϕ = Chain(Dense(w, w, relu), Dense(w, p));
 θ̂ = DeepSet(ψ, ϕ)
 
 # Apply the estimator to a single set of m=3 realisations:
-Z = rand(n, 1, 3);
+Z = rand(n, 3);
 θ̂(Z)
 
 # Apply the estimator to two sets each containing m=3 realisations:
-Z = [rand(n, 1, m) for m ∈ (3, 3)];
+Z = [rand(n, m) for m ∈ (3, 3)];
 θ̂(Z)
 
 # Apply the estimator to two sets containing m=3 and m=4 realisations, respectively:
-Z = [rand(n, 1, m) for m ∈ (3, 4)];
+Z = [rand(n, m) for m ∈ (3, 4)];
 θ̂(Z)
 ```
 """

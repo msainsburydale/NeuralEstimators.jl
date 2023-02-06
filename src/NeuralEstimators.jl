@@ -63,6 +63,8 @@ include("utility.jl")
 end
 
 # TODO
+# - maybe show the schematic of the Deep Sets architecture (could just show this
+#   in the docstring of DeepSet, just a rough version)
 # - plotrisk and plotdistribution (maybe wait until the R interface is finished)
 # - Add plots to univariate Gaussian example
 

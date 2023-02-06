@@ -71,7 +71,7 @@ plotrisk(assessment)
 ```
 
 It is often helpful to visualise the empirical joint distribution of an estimator for a particular parameter configuration and a particular sample size. This can be done by providing [`assess`](@ref) with $J$ data sets simulated under a particular parameter configuration, and then calling [`plotdistribution`](@ref):
-```            
+```
 J = 100
 θ = sample(Ω, 1)
 Z = [simulate(θ, m, J)]
@@ -80,9 +80,9 @@ plotdistribution(assessment)
 ```
 
 Once the neural Bayes estimator has passed our assessment, it may then be applied to observed data, with parametric/non-parametric bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`confidenceinterval`](@ref). Below, we use simulated data as a substitute for observed data:
-```            
-Z = simulate(θ, m)     # pretend that this is observed data!
-θ̂(Z)         				  # point estimates from the observed data
+```
+Z = simulate(θ, m)     # pretend that this is observed data
+θ̂(Z)                   # point estimates from the observed data
 θ̃ = bootstrap(θ̂, Z)    # non-parametric bootstrap estimates
 confidenceinterval(θ̃)  # confidence interval from the bootstrap estimates
 ```

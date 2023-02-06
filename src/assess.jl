@@ -136,13 +136,13 @@ p = 4  # number of parameters in the statistical model
 # Construct the neural estimator
 w = 32 # width of each layer
 ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
-ϕ = Chain(Flux.flatten, Dense(w, w, relu), Dense(w, p));
+ϕ = Chain(Dense(w, w, relu), Dense(w, p));
 θ̂ = DeepSet(ψ, ϕ)
 
-# Generate some fake parameters and corresponding data for a range of sample sizes:
+# Generate fake parameters and corresponding data for a range of sample sizes:
 K = 100        # number of parameter vectors in the test set
 θ = rand(p, K)
-Z = [[rand(n, 1, m) for _ ∈ 1:K] for m ∈ (1, 10, 20)]
+Z = [[rand(n, m) for _ ∈ 1:K] for m ∈ (1, 10, 20)]
 
 assessment = assess([θ̂], θ, Z)
 risk(assessment)

@@ -13,14 +13,14 @@ Consider a non-negative loss function, $L(\mathbf{\theta}, \hat{\mathbf{\theta}}
  The estimator's risk function is the loss averaged over all possible data realisations. Assume, without loss of generality, that our sample space is $\mathcal{S} = \mathbb{R}^n$. Then, the risk function is
 
 ```math
- R(\mathbf{\theta}, \hat{\mathbf{\theta}}(\cdot)) \equiv \int_{\mathcal{S}^m}  L(\mathbf{\theta}, \hat{\mathbf{\theta}}(\mathbf{Z}))p(\mathbf{Z} \mid \mathbf{\theta}) d \mathbf{Z},
+ R(\mathbf{\theta}, \hat{\mathbf{\theta}}(\cdot)) \equiv \int_{\mathcal{S}^m}  L(\mathbf{\theta}, \hat{\mathbf{\theta}}(\mathbf{Z}))p(\mathbf{Z} \mid \mathbf{\theta}) {\text{d}} \mathbf{Z},
 ```
 
 where $p(\mathbf{Z} \mid \mathbf{\theta}) = \prod_{i=1}^mp(\mathbf{Z}_i \mid \mathbf{\theta})$ is the likelihood function. A ubiquitous approach in estimator design is to minimise a weighted summary of the risk function known as the Bayes risk,
 
 ```math
  r_{\Omega}(\hat{\mathbf{\theta}}(\cdot))
- \equiv \int_\Theta R(\mathbf{\theta}, \hat{\mathbf{\theta}}(\cdot)) d\Omega(\mathbf{\theta}),  
+ \equiv \int_\Theta R(\mathbf{\theta}, \hat{\mathbf{\theta}}(\cdot)) {\text{d}}\Omega(\mathbf{\theta}),  
 ```
 
 where $\Omega(\cdot)$ is a prior measure which, for ease of exposition, we will assume admits a density $p(\cdot)$ with respect to Lebesgue measure. A minimiser of the Bayes risk is said to be a *Bayes estimator* with respect to $L(\cdot,\cdot)$ and $\Omega(\cdot)$.
@@ -51,7 +51,7 @@ Under mild conditions, Bayes estimators are invariant to permutations of the con
 
 ```math
 \hat{\mathbf{\theta}}(\mathbf{Z}; \mathbf{\gamma}) = \mathbf{\phi}(\mathbf{T}(\mathbf{Z}; \mathbf{\gamma}); \mathbf{\gamma}), \quad \mathbf{T}(\mathbf{Z}; \mathbf{\gamma})  
-= \mathbf{a}\big(\{\mathbf{\psi}(\mathbf{Z}_i; \mathbf{\gamma}) : i = 1, \dots, m\}\big), 
+= \mathbf{a}\big(\{\mathbf{\psi}(\mathbf{Z}_i; \mathbf{\gamma}) : i = 1, \dots, m\}\big),
 ```
 where $\mathbf{\phi}: \mathbb{R}^{q} \to \mathbb{R}^p$ and $\mathbf{\psi}: \mathbb{R}^{n} \to \mathbb{R}^q$ are neural networks whose parameters are collected in $\mathbf{\gamma}$, and $\mathbf{a}: (\mathbb{R}^q)^m \to \mathbb{R}^q$ is a permutation-invariant set function (typically elementwise addition, average, or maximum).
 
