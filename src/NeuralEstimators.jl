@@ -66,12 +66,12 @@ end
 # - "What about N sims per parameter configuration", and "how does this work, since simulate takes 3 args": There's a default method of simulate for three arguments.
 # - "Type of bootstrap? e.g., 'block'?" There are no blocks here, so it's just a regular bootstrap.
 # - "10_000?". Is the question mark because of the number or the underscore?
-# - "How is the simulator supplied?" By overloading simulate(). This is something that we need to discuss, as I think it may be not be ideal (what if we want a script that trains neural estimators for two different models). 
+# - "How is the simulator supplied?" By overloading simulate(). This is something that we need to discuss, as I think it may be not be ideal (what if we want a script that trains neural estimators for two different models).
 
 #TODO Need to figure out why \mathbf{} is not producing bold greek letters.
 #TODO Andrew suggested a NeuralEstimator object, which encapsulates the prior,
 # loss, simulation/data generation, training operation, and architecture.
-# need to think about this carefully.
+# Need to think about this carefully.
 
 # TODO
 # - maybe show the schematic of the Deep Sets architecture (could just show this

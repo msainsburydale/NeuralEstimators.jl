@@ -264,10 +264,6 @@ function train(θ̂, θ_train::P, θ_val::P;
     return θ̂
 end
 
-#TODO given an example for the recycling, since it's quite complicated. use this:
-For example, if M = 50 and
-# m = 10, epoch 1 uses the first 10 replicates, epoch 2 uses the next 10
-# replicates, and so on, until epoch 6 again uses the first 10 replicates.
 """
 	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; <keyword args>)
 
@@ -279,8 +275,11 @@ If the elements of `Z_train` and `Z_val` are equally replicated, and the number
 of replicates for each element of `Z_train` is a multiple of the number of
 replicates for each element of `Z_val`, then the training data will
 then be recycled throughout training to imitate on-the-fly simulation.
-Note that this requires the data to be subsetted throughout training with the function
-`subsetdata`.
+For example, if each element of `Z_train` consists of 50 replicates, and each
+element of `Z_val` consists of 10 replicates, the first epoch uses the first
+10 replicates in `Z_train`, the second epoch uses the next 10 replicates, and so
+on, until epoch 6 again uses the first 10 replicates. Note that this requires
+the data to be subsetted throughout training with the function `subsetdata`.
 """
 function train(
 		θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
