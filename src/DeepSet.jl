@@ -21,8 +21,7 @@ end
 
 # ---- DeepSet Type and constructors ----
 
-#TODO change to boldface and latex code (don't worry about the REPL documentation appearance)
-
+# we use unicode characters below to preserve readability of REPL help files
 """
     DeepSet(ψ, ϕ, a)
 	DeepSet(ψ, ϕ; a::String = "mean")
@@ -33,12 +32,11 @@ A neural estimator in the `DeepSet` representation,
 θ̂(𝐙) ≡ ϕ(𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\})),
 ```
 
-where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates from the model,
-`ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant aggregation
-function. A schematic of this representation is as follows:
+where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates from the model, `ψ` and `ϕ`
+are neural networks, and `𝐚` is a permutation-invariant aggregation function.
 
-The function `𝐚`(⋅) must aggregate over the last dimension (i.e., the replicates
-dimension) of an input array. It can be specified as a positional argument of
+The function `𝐚` must aggregate over the last dimension  of an array (i.e., the
+replicates dimension). It can be specified as a positional argument of
 type `Function`, or as a keyword argument of type `String` with permissible
 values `"mean"`, `"sum"`, and `"logsumexp"`.
 

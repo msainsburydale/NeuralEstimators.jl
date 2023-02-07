@@ -2,7 +2,7 @@
 
 ## Univariate Gaussian data
 
-Here, we develop a neural Bayes estimator for $\mathbf{\theta} \equiv (\mu, \sigma)'$ from data $Z_1, \dots, Z_m$ that are independent and identically distributed according to a $N(\mu, \sigma^2)$ distribution.
+Here, we develop a neural Bayes estimator for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $Z_1, \dots, Z_m$ that are independent and identically distributed according to a $N(\mu, \sigma^2)$ distribution.
 
 Before proceeding, we load the required packages:
 ```
@@ -40,7 +40,7 @@ Z_train = simulate(θ_train, m)
 Z_val   = simulate(θ_val, m)
 ```
 
-We now design architectures for the inner and outer neural networks, $\mathbf{\psi}(\cdot)$ and $\mathbf{\phi}(\cdot)$ respectively, in the Deep Sets framework, and initialise the neural estimator as a [`DeepSet`](@ref) object.
+We now design architectures for the inner and outer neural networks, $\boldsymbol{\psi}(\cdot)$ and $\boldsymbol{\phi}(\cdot)$ respectively, in the Deep Sets framework, and initialise the neural estimator as a [`DeepSet`](@ref) object.
 
 ```
 p = length(Ω)   # number of parameters in the statistical model

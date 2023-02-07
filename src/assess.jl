@@ -117,7 +117,7 @@ vectors run faster than the replicated data.
 - `estimator_names::Vector{String}`: names of the estimators (sensible defaults provided).
 - `parameter_names::Vector{String}`: names of the parameters (sensible defaults provided).
 - `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices).
-- `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses `ξ`: If it does, the estimator will be applied as `estimator(Z, ξ)`.
+- `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses `ξ`: if it does, the estimator will be applied as `estimator(Z, ξ)`. This argument is useful when multiple `estimators` are provided, only some of which need `ξ`; hence, if only one estimator is provided and `ξ` is not `nothing`, `use_ξ` is automatically set to `true`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
 - `verbose::Bool = true`
 
@@ -232,6 +232,12 @@ function _assess(
 	@assert length(estimator_names) == E
 	@assert length(parameter_names) == p
 
+	# if only one estimator is provided and `ξ` is not `nothing`, `use_ξ` is
+	# automatically set to `true`:
+	if E == 1 && !isnothing(ξ)
+		use_ξ = true
+	end
+
 	@assert eltype(use_ξ) == Bool
 	@assert eltype(use_gpu) == Bool
 	if typeof(use_ξ) == Bool use_ξ = repeat([use_ξ], E) end
@@ -246,6 +252,7 @@ function _assess(
 
 		verbose && println("	Running estimator $(estimator_names[i])...")
 
+		#NB this code does not cater for the possibility that an estimator could use ξ and use the gpu
 		if use_ξ[i]
 			time = @elapsed θ̂ = estimators[i](Z, ξ)
 		else

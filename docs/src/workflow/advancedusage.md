@@ -17,23 +17,23 @@ The above strategies are facilitated with the various methods of [`train`](@ref)
 
 ## Variable sample sizes
 
-A neural estimator in the Deep Set representation can be applied to data sets of arbitrary size. However, even when the neural Bayes estimator approximates the true Bayes estimator arbitrarily well, it is conditional on the number of replicates, $m$, and is not necessarily a Bayes estimator for $m^* \ne m$. Denote a data set comprising $m$ replicates as $\mathbf{Z}^{(m)} \equiv (\mathbf{Z}_1', \dots, \mathbf{Z}_m')'$. There are at least two (non-mutually exclusive) approaches one could adopt if data sets with varying $m$ are envisaged, which we describe below.
+A neural estimator in the Deep Set representation can be applied to data sets of arbitrary size. However, even when the neural Bayes estimator approximates the true Bayes estimator arbitrarily well, it is conditional on the number of replicates, $m$, and is not necessarily a Bayes estimator for $m^* \ne m$. Denote a data set comprising $m$ replicates as $\boldsymbol{Z}^{(m)} \equiv (\boldsymbol{Z}_1', \dots, \boldsymbol{Z}_m')'$. There are at least two (non-mutually exclusive) approaches one could adopt if data sets with varying $m$ are envisaged, which we describe below.
 
 ## Piecewise estimators
 
 If data sets with varying $m$ are envisaged, one could train $l$ neural Bayes estimators for different sample sizes, or groups thereof (e.g., a small-sample estimator and a large-sample estimator).
  Specifically, for sample-size changepoints $m_1$, $m_2$, $\dots$, $m_{l-1}$, one could construct a piecewise neural Bayes estimator,
 ```math
-\hat{\mathbf{\theta}}(\mathbf{Z}^{(m)}; \mathbf{\gamma}^*)
+\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}; \boldsymbol{\gamma}^*)
 =
 \begin{cases}
-\hat{\mathbf{\theta}}(\mathbf{Z}^{(m)}; \mathbf{\gamma}^*_{\tilde{m}_1}) & m \leq m_1,\\
-\hat{\mathbf{\theta}}(\mathbf{Z}^{(m)}; \mathbf{\gamma}^*_{\tilde{m}_2}) & m_1 < m \leq m_2,\\
+\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}; \boldsymbol{\gamma}^*_{\tilde{m}_1}) & m \leq m_1,\\
+\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}; \boldsymbol{\gamma}^*_{\tilde{m}_2}) & m_1 < m \leq m_2,\\
 \quad \vdots \\
-\hat{\mathbf{\theta}}(\mathbf{Z}^{(m)}; \mathbf{\gamma}^*_{\tilde{m}_l}) & m > m_{l-1},
+\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}; \boldsymbol{\gamma}^*_{\tilde{m}_l}) & m > m_{l-1},
 \end{cases}
 ```
-where, here, $\mathbf{\gamma}^* \equiv (\mathbf{\gamma}^*_{\tilde{m}_1}, \dots, \mathbf{\gamma}^*_{\tilde{m}_{l-1}})$, and where $\mathbf{\gamma}^*_{\tilde{m}}$ are the neural-network parameters optimised for sample size $\tilde{m}$ chosen so that $\hat{\mathbf{\theta}}(\cdot; \mathbf{\gamma}^*_{\tilde{m}})$ is near-optimal over the range of sample sizes in which it is applied.
+where, here, $\boldsymbol{\gamma}^* \equiv (\boldsymbol{\gamma}^*_{\tilde{m}_1}, \dots, \boldsymbol{\gamma}^*_{\tilde{m}_{l-1}})$, and where $\boldsymbol{\gamma}^*_{\tilde{m}}$ are the neural-network parameters optimised for sample size $\tilde{m}$ chosen so that $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}^*_{\tilde{m}})$ is near-optimal over the range of sample sizes in which it is applied.
 This approach works well in practice, and it is less computationally burdensome than it first appears when used in conjunction with pre-training.
 
 Piecewise neural estimators are implemented with the struct, [`PiecewiseEstimator`](@ref), and their construction is facilitated with the method of [`train`](@ref) that takes five positional arguments. Below, we replicate the example of inferring $\mu$ and $\sigma$ from $N(\mu, \sigma^2)$ data, but this time we train three neural estimators with sample sizes $\tilde{m}_l$ equal to 1, 10, and 30, respectively.   
@@ -87,10 +87,10 @@ piecewise_estimator = PiecewiseEstimator(estimators, m_breaks)
 
 Alternatively, one could treat the sample size as a random variable, $M$, with support over a set of positive integers, $\mathcal{M}$, in which case, for the neural Bayes estimator, the risk function becomes
 ```math
-R(\mathbf{\theta}, \hat{\mathbf{\theta}}(\cdot; \mathbf{\gamma}))
+R(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}))
 \equiv
 \sum_{m \in \mathcal{M}}
-P(M=m)\left(\int_{\mathcal{S}^m}  L(\mathbf{\theta}, \hat{\mathbf{\theta}}(\mathbf{Z}^{(m)}; \mathbf{\gamma}))p(\mathbf{Z}^{(m)} \mid \mathbf{\theta}) {\text{d}} \mathbf{Z}^{(m)}\right).
+P(M=m)\left(\int_{\mathcal{S}^m}  L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}; \boldsymbol{\gamma}))p(\boldsymbol{Z}^{(m)} \mid \boldsymbol{\theta}) {\text{d}} \boldsymbol{Z}^{(m)}\right).
 ```
  This approach does not materially alter the workflow, except that one must also sample the number of replicates before simulating the data.
 
