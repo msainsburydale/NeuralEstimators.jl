@@ -197,7 +197,7 @@ function maternchols(D::V, ρ, ν, σ² = one(eltype(D))) where {V <: AbstractVe
 		if length(σ²) == 1 σ² = repeat([σ²], n) end
 	end
 	@assert length(D) == n
-	L = [cholesky(Symmetric(matern.(D[i], ρ[i], ν[i], σ²))).L  for i ∈ 1:n]
+	L = [cholesky(Symmetric(matern.(D[i], ρ[i], ν[i], σ²[i]))).L  for i ∈ 1:n]
 	L = convert.(Array, L)
 	L = stackarrays(L, merge = false)
 	return L
