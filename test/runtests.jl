@@ -374,6 +374,8 @@ end
 	ρ = Float32.([0.6, 0.8])
 	ν = Float32.([0.5, 0.7])
 	L = maternchols(D, ρ, ν)
+	σ² = 0.5f0
+	L = maternchols(D, ρ, ν, σ²)
 	L₁ = L[:, :, 1]
 	m = 5
 

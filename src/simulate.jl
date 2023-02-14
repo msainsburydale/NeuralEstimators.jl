@@ -64,10 +64,11 @@ end
 	simulateschlather(L;    C = 3.5, Gumbel = true)
 
 Given the lower Cholesky factor `L` associated with a Gaussian process,
-simulates `m` realisations from Schlather's max-stable model using the algorithm
-for approximate simulation given by Schlather (2002). By default, the
-simulated data are log transformed from the unit Fréchet scale to the `Gumbel`
-scale.
+simulates `m` independent and identically distributed (i.i.d.) realisations from
+Schlather's max-stable model using the algorithm for approximate simulation given by Schlather (2002).
+
+By default, the simulated data are log transformed from the unit Fréchet scale
+to the `Gumbel` scale.
 
 The accuracy of the algorithm is controlled with a tuning parameter, `C`, which
 involves a trade-off between computational efficiency (favouring small `C`) and
@@ -130,14 +131,14 @@ end
 
 # ---- Miscellaneous functions ----
 
-#NB could replace besselk with https://github.com/cgeoga/BesselK.jl, which may allow automatic differentiation
+#TODO could replace besselk with https://github.com/cgeoga/BesselK.jl, which may allow automatic differentiation
 @doc raw"""
     matern(h, ρ, ν, σ² = 1)
 For two points separated by `h` units, compute the Matérn covariance function,
 with range parameter `ρ`, smoothness parameter `ν`, and marginal variance parameter `σ²`.
 
 We use the parametrisation
-``C(\|\mathbf{h}\|) = \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \left(\frac{\|\mathbf{h}\|}{\rho}\right) K_\nu \left(\frac{\|\mathbf{h}\|}{\rho}\right)``,
+``C(\|\mathbf{h}\|) = \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \left(\frac{\|\mathbf{h}\|}{\rho}\right)^\nu K_\nu \left(\frac{\|\mathbf{h}\|}{\rho}\right)``,
 where ``\Gamma(\cdot)`` is the gamma function, and ``K_\nu(\cdot)`` is the modified Bessel
 function of the second kind of order ``\nu``.
 """
@@ -162,28 +163,41 @@ end
 matern(h, ρ) =  matern(h, ρ, one(typeof(ρ)))
 
 """
-    maternchols(D, ρ, ν; σ² = 1)
-Given a distance matrix `D`, computes the covariance matrix under the
-Matérn covariance function with range parameter `ρ` and smoothness parameter `ν`,
-and returns the Cholesky factor of this covariance matrix.
+    maternchols(D, ρ, ν, σ² = 1)
+Given a distance matrix `D`, constructs the Cholesky of the covariance matrix
+under the Matérn covariance function with range parameter `ρ`, smoothness
+parameter `ν`, and marginal variance σ².
 
-Providing vectors for `ρ` and `ν` will yield a three-dimensional array of
-Cholesky factors (note that the vectors must of the same length).
-Similarly, for a vector of distance matrices `D`. If both `D` and the parameters
-are vectors, they must be of the same length.
+Providing vectors of parameters will yield a three-dimensional array of
+Cholesky factors (note that the vectors must of the same length, but a mix of
+vectors and scalars is allowed). A vector of distance matrices `D` may also be
+provided.
 """
-function maternchols(D, ρ, ν; σ² = one(eltype(D)))
-	@assert length(ρ) == length(ν)
-	L = [cholesky(Symmetric(matern.(D, ρ[i], ν[i], σ²))).L  for i ∈ eachindex(ρ)]
+function maternchols(D, ρ, ν, σ² = one(eltype(D)))
+	n = max(length(ρ), length(ν), length(σ²))
+	if n > 1
+		@assert all([length(θ) ∈ (1, n) for θ ∈ (ρ, ν, σ²)])
+		if length(ρ) == 1 ρ  = repeat([ρ], n) end
+		if length(ν) == 1 ν = repeat([ν], n) end
+		if length(σ²) == 1 σ² = repeat([σ²], n) end
+	end
+	L = [cholesky(Symmetric(matern.(D, ρ[i], ν[i], σ²[i]))).L  for i ∈ 1:n]
 	L = convert.(Array, L)
 	L = stackarrays(L, merge = false)
 	return L
 end
 
-function maternchols(D::V, ρ, ν; σ² = one(eltype(D))) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-
-	@assert length(D) == length(ρ) == length(ν)
-	L = [cholesky(Symmetric(matern.(D[i], ρ[i], ν[i], σ²))).L  for i ∈ eachindex(ρ)]
+#TODO reduce code repetition between the two methods
+function maternchols(D::V, ρ, ν, σ² = one(eltype(D))) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+	n = max(length(ρ), length(ν), length(σ²))
+	if n > 1
+		@assert all([length(θ) ∈ (1, n) for θ ∈ (ρ, ν, σ²)])
+		if length(ρ) == 1 ρ  = repeat([ρ], n) end
+		if length(ν) == 1 ν = repeat([ν], n) end
+		if length(σ²) == 1 σ² = repeat([σ²], n) end
+	end
+	@assert length(D) == n
+	L = [cholesky(Symmetric(matern.(D[i], ρ[i], ν[i], σ²))).L  for i ∈ 1:n]
 	L = convert.(Array, L)
 	L = stackarrays(L, merge = false)
 	return L

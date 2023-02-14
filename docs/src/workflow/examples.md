@@ -40,6 +40,8 @@ Z_train = simulate(θ_train, m)
 Z_val   = simulate(θ_val, m)
 ```
 
+Note that [`simulate`](@ref) is a generic function that the user may overload to define their simulator, as we've done above; however, it does not matter how the data are simulated (i.e., one may simulate data using other programming languages, e.g., `R` or `python`).
+
 We now design architectures for the inner and outer neural networks, $\boldsymbol{\psi}(\cdot)$ and $\boldsymbol{\phi}(\cdot)$ respectively, in the Deep Sets framework, and initialise the neural estimator as a [`DeepSet`](@ref) object.
 
 ```
@@ -68,7 +70,7 @@ risk(assessment)
 plotrisk(assessment)
 ```
 
-It is often helpful to visualise the empirical joint distribution of an estimator for a particular parameter configuration and a particular sample size. This can be done by providing [`assess`](@ref) with $J$ data sets simulated under a particular parameter configuration, and then calling [`plotdistribution`](@ref):
+It is often helpful to visualise the empirical joint distribution of an estimator for a particular parameter configuration and a particular sample size. This can be done by providing [`assess`](@ref) with $J$ data sets simulated under a particular parameter configuration (below facilitated with the pre-defined method [`simulate(parameters, m, J::Integer)`](@ref), which wraps the method of `simulate` that we defined earlier), and then calling [`plotdistribution`](@ref):
 ```
 J = 100
 θ = sample(Ω, 1)

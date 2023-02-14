@@ -1,16 +1,18 @@
 """
-	confidenceinterval(θ̃; probs = [0.05, 0.95])
+	confidenceinterval(θ̃; probs = [0.05, 0.95], parameter_names)
 
 Compute a confidence interval using the quantiles of the p × B matrix of
-bootstrap samples, `θ̃`, where p is the number of parameters in the model. The
-quantile levels are controlled with the argument `probs`.
+bootstrap samples, `θ̃`, where p is the number of parameters in the model.
+
+The quantile levels are controlled with the argument `probs`. The rows can be
+named with `parameter_names` (sensible defaults provided), which shold be a vector.
 
 The return type is a p × 2 matrix, whose first and second columns respectively
 contain the lower and upper bounds of the confidence interval.
 """
-function confidenceinterval(θ̃; probs = [0.05, 0.95])
-
-	mapslices(x -> quantile(x, probs), θ̃, dims = 2)
+function confidenceinterval(θ̃; probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 1:size(θ̃, 1)])
+	ci = mapslices(x -> quantile(x, probs), θ̃, dims = 2)
+	NamedArray(ci, (parameter_names, ["lower", "upper"]))
 end
 
 # ---- Parameteric bootstrap ----
