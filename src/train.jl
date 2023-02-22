@@ -28,23 +28,21 @@ Arguments unique to `train(θ̂, P)`:
 - `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices); if `ξ` is provided, the constructor `P` is called as `P(K, ξ)`.
 """
 function train end
-# - `epochs_per_θ_refresh::Integer = 1`: how often to refresh the training parameters; must be a multiple of `epochs_per_Z_refresh`. TODO
-# Note that train() is a mutating function, but the suffix ! is omitted to
-# avoid clashes with the Flux function, train!().
+# Note that train() is a mutating function, but the suffix ! is omitted to avoid clashes with the Flux function, train!().
 
 """
 	train(θ̂, P; <keyword args>)
 
-Train the neural estimator `θ̂` by providing a constructor, `P`, where `P` is
-a subtype of `AbstractMatrix` or `ParameterConfigurations`, to
-automatically sample the sets of training and validation parameters.
+Train the neural estimator `θ̂` by providing a constructor, `P`, where
+`P <: Union{AbstractMatrix, ParameterConfigurations}`, to
+automatically sample training and validation parameter sets at each epoch.
 """
 function train(θ̂, P;
 	m,
 	ξ = nothing,
-	# epochs_per_θ_refresh::Integer = 1, # TODO
+	# epochs_per_θ_refresh::Integer = 1, # how often to refresh the training parameters; must be a multiple of `epochs_per_Z_refresh`.
 	epochs_per_Z_refresh::Integer = 1,
-	simulate_just_in_time::Bool = false,
+	#simulate_just_in_time::Bool = false, # NB not needed now that we don't currently cater for epochs_per_θ_refresh > 1
 	loss = Flux.Losses.mae,
 	optimiser          = ADAM(1e-4),
     batchsize::Integer = 32,
@@ -56,13 +54,11 @@ function train(θ̂, P;
 	K::Integer         = 10_000
 	)
 
-	epochs_per_θ_refresh = 1 # TODO
-
-    _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh, simulate_just_in_time)
+    _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 
 	@assert P <: Union{AbstractMatrix, ParameterConfigurations}
 	@assert K > 0
-	@assert epochs_per_θ_refresh % epochs_per_Z_refresh  == 0 "`epochs_per_θ_refresh` must be a multiple of `epochs_per_Z_refresh`"
+	# @assert epochs_per_θ_refresh % epochs_per_Z_refresh  == 0 "`epochs_per_θ_refresh` must be a multiple of `epochs_per_Z_refresh`"
 
 	savebool = savepath != "" # turn off saving if savepath is an empty string
 	if savebool
@@ -160,7 +156,8 @@ function train(θ̂, θ_train::P, θ_val::P;
 		verbose::Bool    = true
 		) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
-	_checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh, simulate_just_in_time)
+	_checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
+	if simulate_just_in_time && epochs_per_Z_refresh != 1 @error "We cannot simulate the data just-in-time if we aren't refreshing it every epoch; please either set `simulate_just_in_time = false` or `epochs_per_Z_refresh = 1`" end
 
 	savebool = savepath != "" # turn off saving if savepath is an empty string
 	if savebool
@@ -546,12 +543,11 @@ function _modifyargs(kwargs, i, E)
 end
 
 
-function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh, simulate_just_in_time)
+function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 	@assert batchsize > 0
 	@assert epochs > 0
 	@assert stopping_epochs > 0
 	@assert epochs_per_Z_refresh > 0
-	if simulate_just_in_time && epochs_per_Z_refresh != 1 @error "We cannot simulate the data just-in-time if we aren't refreshing it every epoch; please either set `simulate_just_in_time = false` or `epochs_per_Z_refresh = 1`" end
 end
 
 # Computes the loss function in a memory-safe manner
@@ -570,22 +566,14 @@ function _lossdataloader(loss, data_loader::DataLoader, θ̂, device)
     return cpu(ls / num)
 end
 
-function _saveweights(θ̂, savepath, epoch)
+
+function _saveweights(θ̂, savepath, epoch = "")
 	if !ispath(savepath) mkpath(savepath) end
-	# return to cpu before serialization
-	weights = θ̂ |> cpu |> Flux.params
-	networkpath = joinpath(savepath, "network_epoch$epoch.bson")
+	weights = Flux.params(cpu(θ̂)) # return to cpu before serialization
+	filename = epoch == "" ? "network.bson" : "network_epoch$epoch.bson"
+	networkpath = joinpath(savepath, filename)
 	@save networkpath weights
 end
-
-function _saveweights(θ̂, savepath)
-	if !ispath(savepath) mkpath(savepath) end
-	# return to cpu before serialization
-	weights = θ̂ |> cpu |> Flux.params
-	networkpath = joinpath(savepath, "network.bson")
-	@save networkpath weights
-end
-
 
 function _saveinfo(loss_per_epoch, train_time, savepath::String; verbose::Bool = true)
 

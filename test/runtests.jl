@@ -376,6 +376,7 @@ end
 	L = maternchols(D, ρ, ν)
 	σ² = 0.5f0
 	L = maternchols(D, ρ, ν, σ²)
+	@test maternchols(D, ρ, ν, σ²) == maternchols([D, D], ρ, ν, σ²)
 	L₁ = L[:, :, 1]
 	m = 5
 

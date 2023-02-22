@@ -131,7 +131,11 @@ end
 
 # ---- Miscellaneous functions ----
 
-#TODO could replace besselk with https://github.com/cgeoga/BesselK.jl, which may allow automatic differentiation
+#NB Currently, second order optimisation methods cannot be used
+# straightforwardly because besselk() is not differentiable. In the future, we
+# can add an argument to matern() and maternchols(), besselfn = besselk, which
+# allows the user to change the bessel function to use adbesselk(), which
+# allows automatic differentiation: see https://github.com/cgeoga/BesselK.jl.
 @doc raw"""
     matern(h, ρ, ν, σ² = 1)
 For two points separated by `h` units, compute the Matérn covariance function,
@@ -160,7 +164,7 @@ function matern(h, ρ, ν, σ² = one(typeof(h)))
     return C
 end
 
-matern(h, ρ) =  matern(h, ρ, one(typeof(ρ)))
+#matern(h, ρ) =  matern(h, ρ, one(typeof(ρ)))
 
 """
     maternchols(D, ρ, ν, σ² = 1)
@@ -172,6 +176,24 @@ Providing vectors of parameters will yield a three-dimensional array of
 Cholesky factors (note that the vectors must of the same length, but a mix of
 vectors and scalars is allowed). A vector of distance matrices `D` may also be
 provided.
+
+# Examples
+```
+using NeuralEstimators
+using LinearAlgebra: norm
+n  = 10
+S  = rand(n, 2)
+D  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
+ρ  = [0.6, 0.5]
+ν  = [0.7, 1.2]
+σ² = [0.2, 0.4]
+maternchols(D, ρ, ν)
+maternchols(D, ρ, ν, σ²)
+
+S̃  = rand(n, 2)
+D̃  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S̃), sⱼ in eachrow(S̃)]
+maternchols([D, D̃], ρ, ν, σ²)
+```
 """
 function maternchols(D, ρ, ν, σ² = one(eltype(D)))
 	n = max(length(ρ), length(ν), length(σ²))
@@ -187,21 +209,22 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)))
 	return L
 end
 
-#TODO reduce code repetition between the two methods
 function maternchols(D::V, ρ, ν, σ² = one(eltype(D))) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 	n = max(length(ρ), length(ν), length(σ²))
 	if n > 1
 		@assert all([length(θ) ∈ (1, n) for θ ∈ (ρ, ν, σ²)])
-		if length(ρ) == 1 ρ  = repeat([ρ], n) end
-		if length(ν) == 1 ν = repeat([ν], n) end
+		if length(ρ)  == 1 ρ  = repeat([ρ], n) end
+		if length(ν)  == 1 ν  = repeat([ν], n) end
 		if length(σ²) == 1 σ² = repeat([σ²], n) end
 	end
 	@assert length(D) == n
-	L = [cholesky(Symmetric(matern.(D[i], ρ[i], ν[i], σ²[i]))).L  for i ∈ 1:n]
-	L = convert.(Array, L)
-	L = stackarrays(L, merge = false)
+	L = maternchols.(D, ρ, ν, σ²)
+	L = stackarrays(L, merge = true)
 	return L
 end
+
+
+
 
 
 

@@ -2,7 +2,7 @@
 
 ## Bayes estimators
 
-A statistical model is a set of probability distributions $\mathcal{P}$ on a sample space $\mathcal{S}$. A parametric statistical model is one where the probability distributions in $\mathcal{P}$ are parameterised via some $p$-dimensional parameter vector $\boldsymbol{\theta}$, that is, where $\mathcal{P} \equiv \{P_\boldsymbol{\theta} : \boldsymbol{\theta} \in \Theta\}$, where $\Theta$ is the parameter space. Suppose that we have $m$ mutually independent realisations from $P_\boldsymbol{\theta} \in \mathcal{P}$, which we collect in $\boldsymbol{Z} \equiv (\boldsymbol{Z}_1',\dots,\boldsymbol{Z}_m')'$. Then, the goal of parameter point estimation is to infer the unknown $\boldsymbol{\theta}$ from $\boldsymbol{Z}$ using an estimator,
+A statistical model is a set of probability distributions $\mathcal{P}$ on a sample space $\mathcal{S}$. A parametric statistical model is one where the probability distributions in $\mathcal{P}$ are parameterised via some $p$-dimensional parameter vector $\boldsymbol{\theta}$, that is, where $\mathcal{P} \equiv \{P_{\boldsymbol{\theta}} : \boldsymbol{\theta} \in \Theta\}$, where $\Theta$ is the parameter space. Suppose that we have $m$ mutually independent realisations from $P_{\boldsymbol{\theta}} \in \mathcal{P}$, which we collect in $\boldsymbol{Z} \equiv (\boldsymbol{Z}_1',\dots,\boldsymbol{Z}_m')'$. Then, the goal of parameter point estimation is to infer the unknown $\boldsymbol{\theta}$ from $\boldsymbol{Z}$ using an estimator,
 ```math
 \hat{\boldsymbol{\theta}} : \mathcal{S}^m \to \Theta,
 ```
@@ -25,7 +25,16 @@ where $p(\boldsymbol{Z} \mid \boldsymbol{\theta}) = \prod_{i=1}^mp(\boldsymbol{Z
 
 where $\Omega(\cdot)$ is a prior measure which, for ease of exposition, we will assume admits a density $p(\cdot)$ with respect to Lebesgue measure. A minimiser of the Bayes risk is said to be a *Bayes estimator* with respect to $L(\cdot,\cdot)$ and $\Omega(\cdot)$.
 
+## Neural Bayes estimators
 
+ Recently, neural networks have been used to approximate Bayes estimators.
+Denote such a neural network by $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma})$, where $\boldsymbol{\gamma}$ are the neural-network parameters.  
+Then, Bayes estimators may be approximated by $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}^*)$, where
+```math
+\boldsymbol{\gamma}^*
+\equiv
+\underset{\boldsymbol{\gamma}}{\mathrm{arg\,min}} \; r_{\Omega}(\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma})).
+```
 
 The Bayes risk cannot typically be directly evaluated, but it can be approximated using Monte Carlo methods. Specifically, given a set of $K$ parameter vectors sampled from the prior $\Omega(\cdot)$ denoted by $\vartheta$  and, for each $\boldsymbol{\theta} \in \vartheta$, $J$ sets of $m$ mutually independent realisations from $P_{\boldsymbol{\theta}}$ collected in $\mathcal{Z}_{\boldsymbol{\theta}}$,
 
@@ -35,25 +44,18 @@ The Bayes risk cannot typically be directly evaluated, but it can be approximate
 \frac{1}{K} \sum_{\boldsymbol{\theta} \in \vartheta} \frac{1}{J} \sum_{\boldsymbol{Z} \in \mathcal{Z}_{\boldsymbol{\theta}}} L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z})).  
 ```
 
+Therefore, the optimisation problem of finding $\boldsymbol{\gamma}^*$, which is typically performed using stochastic gradient descent, can be approximated using simulation from the model, but does not require evaluation or knowledge of the likelihood function. For sufficiently flexible architectures, the point estimator targets a Bayes estimator with respect to $L(\cdot, \cdot)$ and $\Omega(\cdot)$, and will therefore inherit the associated optimality properties, namely, consistency and asymptotic efficiency. We therefore call the fitted neural estimator a *neural Bayes estimator*.
 
-## Neural Bayes estimators
 
-Neural networks are universal function approximators and, hence, they are natural choices for constructing estimators. Let $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma})$ denote a neural estimator, that is, a neural network parameterised by $\boldsymbol{\gamma}$ that transforms data into parameter estimates. Then, our neural estimator is $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}^*)$, where
-```math
-\boldsymbol{\gamma}^*
-\equiv
-\underset{\boldsymbol{\gamma}}{\mathrm{arg\,min}} \; r_{\Omega}(\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma})),
-```
-with the Bayes risk approximated using Monte Carlo methods.
-Since the resulting neural estimator minimises (a Monte Carlo approximation of) the Bayes risk, we call it a *neural Bayes estimator*.
+## Neural Bayes estimators for replicated data
 
-Under mild conditions, Bayes estimators are invariant to permutations of the conditionally independent data $\boldsymbol{Z}$. Hence, we represent our neural estimators in the Deep Set framework, which is a universal representation for permutation-invariant functions. Specifically, we model our neural estimators as
+Under mild conditions, Bayes estimators are invariant to permutations of the mutually independent data collected in $\boldsymbol{Z} \equiv (\boldsymbol{Z}_1',\dots,\boldsymbol{Z}_m')'$. Hence, in these cases, we represent our neural estimators in the Deep Set framework, which is a universal representation for permutation-invariant functions. Specifically, we model our neural estimators as
 
 ```math
-\hat{\boldsymbol{\theta}}(\boldsymbol{Z}; \boldsymbol{\gamma}) = \boldsymbol{\phi}(\boldsymbol{T}(\boldsymbol{Z}; \boldsymbol{\gamma}); \boldsymbol{\gamma}), \quad \boldsymbol{T}(\boldsymbol{Z}; \boldsymbol{\gamma})  
-= \boldsymbol{a}\big(\{\boldsymbol{\psi}(\boldsymbol{Z}_i; \boldsymbol{\gamma}) : i = 1, \dots, m\}\big),
+\hat{\boldsymbol{\theta}}(\boldsymbol{Z}) = \boldsymbol{\phi}(\boldsymbol{T}(\boldsymbol{Z})), \quad \boldsymbol{T}(\boldsymbol{Z})  
+= \boldsymbol{a}\big(\{\boldsymbol{\psi}(\boldsymbol{Z}_i) : i = 1, \dots, m\}\big),
 ```
-where $\boldsymbol{\phi}: \mathbb{R}^{q} \to \mathbb{R}^p$ and $\boldsymbol{\psi}: \mathbb{R}^{n} \to \mathbb{R}^q$ are neural networks whose parameters are collected in $\boldsymbol{\gamma}$, and $\boldsymbol{a}: (\mathbb{R}^q)^m \to \mathbb{R}^q$ is a permutation-invariant set function (typically elementwise addition, average, or maximum).
+where $\boldsymbol{\phi}: \mathbb{R}^{q} \to \mathbb{R}^p$ and $\boldsymbol{\psi}: \mathbb{R}^{n} \to \mathbb{R}^q$ are neural networks (whose dependence on parameters $\boldsymbol{\gamma}$ is suppressed for notational convenience), and $\boldsymbol{a}: (\mathbb{R}^q)^m \to \mathbb{R}^q$ is a permutation-invariant set function, which is typically elementwise addition, average, or maximum.
 
 
 ## Construction of neural Bayes estimators

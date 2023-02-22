@@ -63,10 +63,9 @@ include("utility.jl")
 
 end
 
-# TODO record the example clip, but while ssh'd into my office computer (with the GPU).
-# TODO Raphael suggested that we show the schematic of the Deep Sets architecture? Upload an image of the tikz figure.
 
 # ---- long term:
+# - record the example clip, but while ssh'd into my office computer (with the GPU).
 # - Improve codecoverage
 # - README.md
 # - plotrisk and plotdistribution (wait until the R interface is finished)
