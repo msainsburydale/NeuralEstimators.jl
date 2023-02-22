@@ -224,10 +224,6 @@ function maternchols(D::V, ρ, ν, σ² = one(eltype(D))) where {V <: AbstractVe
 end
 
 
-
-
-
-
 """
     _incgammalowerunregularised(a, x)
 For positive `a` and `x`, computes the lower unregularised incomplete gamma

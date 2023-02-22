@@ -27,8 +27,7 @@ where $\Omega(\cdot)$ is a prior measure which, for ease of exposition, we will 
 
 ## Neural Bayes estimators
 
- Recently, neural networks have been used to approximate Bayes estimators.
-Denote such a neural network by $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma})$, where $\boldsymbol{\gamma}$ are the neural-network parameters.  
+ Recently, neural networks have been used to approximate Bayes estimators. Denote such a neural network by $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma})$, where $\boldsymbol{\gamma}$ are the neural-network parameters.  
 Then, Bayes estimators may be approximated by $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}^*)$, where
 ```math
 \boldsymbol{\gamma}^*
@@ -61,6 +60,7 @@ where $\boldsymbol{\phi}: \mathbb{R}^{q} \to \mathbb{R}^p$ and $\boldsymbol{\psi
 ## Construction of neural Bayes estimators
 
 The neural Bayes estimator is conceptually simple and can be used in a wide range of problems where other approaches, such as maximum-likelihood estimation, are computationally infeasible. The estimator also has marked practical appeal, as the general workflow for its construction is only loosely connected to the statistical or physical model being considered. The workflow is as follows:
+
   1. Define $\Omega(\cdot)$, the prior distribution for $\boldsymbol{\theta}$.
   1. Sample parameters from $\Omega(\cdot)$ to form sets of parameters $\vartheta_{\text{train}}$, $\vartheta_{\text{val}}$, and $\vartheta_{\text{test}}$.
   1.  Simulate data from the model, $\mathcal{P}$, using these sets of parameters, yielding the data sets $\mathcal{Z}_{\text{train}}$, $\mathcal{Z}_{\text{val}}$, and $\mathcal{Z}_{\text{test}}$, respectively.

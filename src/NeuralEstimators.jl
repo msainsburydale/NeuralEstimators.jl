@@ -64,7 +64,9 @@ include("utility.jl")
 end
 
 
+
 # ---- long term:
+# - Decide if we want a NeuralEstimator class (see src/devel/NeuralEstimator.jl)
 # - record the example clip, but while ssh'd into my office computer (with the GPU).
 # - README.md
 # - plotrisk and plotdistribution (wait until the R interface is finished)

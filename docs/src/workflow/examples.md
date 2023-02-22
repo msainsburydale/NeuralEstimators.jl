@@ -27,7 +27,7 @@ end
 θ_test  = sample(Ω, 1000)
 ```
 
-Next, we implicitly define the statistical model via simulated data. In general, the data are stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and where `A` depends on the representation of the neural estimator. Since our data is replicated, we will use the Deep Sets framework and, since each replicate is univariate, we will use a dense neural network (DNN) for the inner network. Since the inner network is a DNN, the data should be stored as an `Array`, with independent replicates stored in the final dimension.
+Next, we implicitly define the statistical model with simulated data. The data are stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and where `A` depends on the representation of the neural estimator. Since our data is replicated, we will use the Deep Sets framework and, since each replicate is univariate, we will use a dense neural network (DNN) for the inner network. Since the inner network is a DNN, `A` should be a sub-type of `AbstractArray`, with the independent replicates stored in the final dimension.
 ```
 function simulate(θ_set, m)
 	Z = [rand(Normal(θ[1], θ[2]), 1, m) for θ ∈ eachcol(θ_set)]
