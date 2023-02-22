@@ -20,6 +20,7 @@ using Statistics: mean, sum
 using Test
 using Zygote
 
+verbose = false # verbose used in the NeuralEstimators code
 
 
 seed!(1)
@@ -225,6 +226,12 @@ end
 	θ̂ = est(v)
 	@test size(θ̂, 1) == p
 	@test size(θ̂, 2) == length(v)
+
+	# test that is can be trained
+	K = 10
+	Z = [rand_graph(n₁, m₁, ndata=rand(Float32, d, n₁)) for _ in 1:K]
+	θ = rand(p, K)
+	train(est, θ, θ, Z, Z; batchsize = 2, verbose = verbose)
 end
 
 
@@ -271,7 +278,7 @@ end
 
 MLE(Z, ξ) = MLE(Z) # the MLE obviously doesn't need ξ, but we include it for testing
 
-verbose = false # verbose used in the NeuralEstimators code
+
 
 
 @testset verbose = true "$key" for key ∈ keys(estimators)
@@ -314,7 +321,7 @@ verbose = false # verbose used in the NeuralEstimators code
 			Z_val   = [simulate(parameters, m) for m ∈ [1, 2, 5]]
 			train(θ̂, parameters, parameters, Z_train, Z_val; epochs = [10, 5, 3], use_gpu = use_gpu, verbose = verbose)
 
-			# Decided not to test the saving function, because we can't always assume that we have write privledges
+			# Decided not to test the saving functions, because we can't always assume that we have write privledges
 			# θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "dummy123", use_gpu = use_gpu, verbose = verbose)
 			# θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "dummy123", use_gpu = use_gpu, verbose = verbose)
 			# then rm dummy123 folder
