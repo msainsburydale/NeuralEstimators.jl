@@ -66,7 +66,6 @@ end
 
 # ---- long term:
 # - record the example clip, but while ssh'd into my office computer (with the GPU).
-# - Improve codecoverage
 # - README.md
 # - plotrisk and plotdistribution (wait until the R interface is finished)
 # - Add "AR(k) time series" and "Irregular spatial data" examples. (The former will be an example using partially exchangeable neural networks and the latter will be an example using GNNs.)
