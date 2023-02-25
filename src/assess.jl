@@ -115,7 +115,7 @@ vectors run faster than the replicated data.
 
 # Arguments common to both methods
 - `estimator_names::Vector{String}`: names of the estimators (sensible defaults provided).
-- `parameter_names::Vector{String}`: names of the parameters (sensible defaults provided). If `ξ` is provided with a field `parameter_names`, those names will be used. 
+- `parameter_names::Vector{String}`: names of the parameters (sensible defaults provided). If `ξ` is provided with a field `parameter_names`, those names will be used.
 - `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices).
 - `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses `ξ`: if it does, the estimator will be applied as `estimator(Z, ξ)`. This argument is useful when multiple `estimators` are provided, only some of which need `ξ`; hence, if only one estimator is provided and `ξ` is not `nothing`, `use_ξ` is automatically set to `true`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
@@ -199,7 +199,7 @@ function assess(
 	KJ = KJ[1]
 	@assert KJ % K == 0 "The number of data sets in Z must be a multiple of the number of parameters"
 	J = KJ ÷ K
-	J > 1 && @info "There are more simulated data sets than unique parameter vectors; ensure that the data are replicated in an 'outer' fashion, so that the parameter vectors run faster than the replicated data sets."
+	J > 1 && verbose && @info "There are more simulated data sets than unique parameter vectors; ensure that the data are replicated in an 'outer' fashion, so that the parameter vectors run faster than the replicated data sets."
 
 	obj = map(Z) do z
 
@@ -227,7 +227,7 @@ function _assess(
 	verbose && println("Estimating with m = $m...")
 
 	# Extract the parameter names from ξ if it was provided
-	if !isnothing(ξ) && haskey(ξ, "parameter_names")
+	if !isnothing(ξ) && haskey(ξ, :parameter_names)
 		parameter_names = ξ.parameter_names
 	end
 
