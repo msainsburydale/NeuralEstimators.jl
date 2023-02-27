@@ -23,7 +23,7 @@ This software was developed as part of academic research. If you would like to s
 @misc{,
   author = {Sainsbury-Dale, Matthew and Zammit-Mangion, Andrew and Huser, Raphaël},
   year = {2022},
-  title = {Fast Optimal Estimation with Intractable Models using Permutation-Invariant Neural Networks},
+  title = {Neural Bayes Estimators for Fast Optimal Likelihood-Free Inference},
   howpublished = {arXiv:2208.12942}
 }
 ```
