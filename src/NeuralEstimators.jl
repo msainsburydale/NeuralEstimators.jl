@@ -28,8 +28,9 @@ using Zygote
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
-export DeepSet
+export DeepSet, DeepSetExpert
 include("DeepSet.jl")
+include("DeepSetExpert.jl")
 
 export PiecewiseEstimator
 include("PiecewiseEstimator.jl")
@@ -58,7 +59,7 @@ include("plotting.jl")
 export bootstrap, coverage, confidenceinterval
 include("bootstrap.jl")
 
-export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams
+export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams, samplesize
 include("utility.jl")
 
 export Compress

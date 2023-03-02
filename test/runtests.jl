@@ -22,9 +22,6 @@ using Zygote
 
 verbose = false # verbose used in the NeuralEstimators code
 
-
-seed!(1)
-
 if CUDA.functional()
 	@info "Testing on both the CPU and the GPU... "
 	CUDA.allowscalar(false)
@@ -285,10 +282,10 @@ p = 1
 ψ = Chain(Dense(n, w), Dense(w, w))
 ϕ = Chain(Dense(w, w), Dense(w, p), Flux.flatten, x -> exp.(x))
 θ̂_deepset = DeepSet(ψ, ϕ)
-# S = [samplesize]
-# ϕ₂ = Chain(Dense(w + length(S), w), Dense(w, p), Flux.flatten, x -> exp.(x))
-# θ̂_deepsetexpert = DeepSetExpert(θ̂_deepset, ϕ₂, S)
-estimators = (DeepSet = θ̂_deepset, ) #, DeepSetExpert = θ̂_deepsetexpert)
+S = samplesize
+ϕ₂ = Chain(Dense(w + 1, w), Dense(w, p), Flux.flatten, x -> exp.(x))
+θ̂_deepsetexpert = DeepSetExpert(θ̂_deepset, ϕ₂, S)
+estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 
 function MLE(Z) where {T <: Number, N <: Int, A <: AbstractArray{T, N}, V <: AbstractVector{A}}
     mean.(Z)'

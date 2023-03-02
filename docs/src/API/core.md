@@ -33,11 +33,13 @@ Although the user is free to construct their neural estimator however they see f
 ```@docs
 DeepSet
 
+DeepSetExpert
+
 PiecewiseEstimator
 
 GNNEstimator
 
-Logistic
+Compress
 ```
 
 

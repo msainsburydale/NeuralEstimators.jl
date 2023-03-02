@@ -23,10 +23,6 @@ n = 20
 Z = rand(n, K)
 θ̂ = Chain(Dense(n, 15), Dense(15, p), l)
 θ̂(Z)
-
-Z = Z |> gpu
-θ̂ = θ̂ |> gpu
-θ̂(Z)
 ```
 """
 struct Compress{T}

@@ -28,8 +28,9 @@ end
 A neural estimator in the `DeepSet` representation,
 
 ```math
-θ̂(𝐙) ≡ ϕ(𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\})),
+θ̂(𝐙) = ϕ(𝐓(𝐙)),	 	 𝐓(𝐙) = 𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\}),
 ```
+
 
 where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates from the model, `ψ` and `ϕ`
 are neural networks, and `𝐚` is a permutation-invariant aggregation function.
@@ -64,6 +65,8 @@ Z = [rand(n, m) for m ∈ (3, 3)];
 # Apply the estimator to two sets containing 3 and 4 realisations, respectively:
 Z = [rand(n, m) for m ∈ (3, 4)];
 θ̂(Z)
+
+
 ```
 """
 struct DeepSet{T, F, G}
