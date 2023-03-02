@@ -31,7 +31,6 @@ A neural estimator in the `DeepSet` representation,
 θ̂(𝐙) = ϕ(𝐓(𝐙)),	 	 𝐓(𝐙) = 𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\}),
 ```
 
-
 where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates from the model, `ψ` and `ϕ`
 are neural networks, and `𝐚` is a permutation-invariant aggregation function.
 
@@ -55,18 +54,25 @@ w = 32 # width of each layer
 θ̂ = DeepSet(ψ, ϕ)
 
 # Apply the estimator to a single set of 3 realisations:
-Z = rand(n, 3);
-θ̂(Z)
+Z₁ = rand(n, 3);
+θ̂(Z₁)
 
 # Apply the estimator to two sets each containing 3 realisations:
-Z = [rand(n, m) for m ∈ (3, 3)];
-θ̂(Z)
+Z₂ = [rand(n, m) for m ∈ (3, 3)];
+θ̂(Z₂)
 
 # Apply the estimator to two sets containing 3 and 4 realisations, respectively:
-Z = [rand(n, m) for m ∈ (3, 4)];
-θ̂(Z)
+Z₃ = [rand(n, m) for m ∈ (3, 4)];
+θ̂(Z₃)
 
-
+# Repeat the above but with some covariates:
+dₓ = 2
+ϕₓ = Chain(Dense(w + dₓ, w, relu), Dense(w, p));
+θ̂  = DeepSet(ψ, ϕₓ)
+x₁ = rand(dₓ)
+x₂ = [rand(dₓ), rand(dₓ)]
+θ̂((Z₁, x₁))
+θ̂((Z₃, x₂))
 ```
 """
 struct DeepSet{T, F, G}
@@ -80,6 +86,7 @@ end
 #          ↗ \n
 # 𝐙ₘ → ψ() \n
 
+
 DeepSet(ψ, ϕ; a::String = "mean") = DeepSet(ψ, ϕ, _agg(a))
 
 @functor DeepSet # allows Flux to optimise the parameters
@@ -90,6 +97,18 @@ Base.show(io::IO, m::MIME"text/plain", D::DeepSet) = print(io, D)
 
 
 # ---- Methods ----
+
+function (d::DeepSet)(Z::A) where {A <: AbstractArray{T, N}} where {T, N}
+	d.ϕ(d.a(d.ψ(Z)))
+end
+
+function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
+	Z = tup[1]
+	x = tup[2]
+	t = d.a(d.ψ(Z))
+	d.ϕ(vcat(t, x))
+end
+
 
 # Simple, intuitive (although inefficient) implementation using broadcasting:
 
@@ -130,6 +149,35 @@ function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractA
 	return θ̂
 end
 
-function (d::DeepSet)(Z::A) where {A <: AbstractArray{T, N}} where {T, N}
-	d.ϕ(d.a(d.ψ(Z)))
+function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
+
+
+	Z = tup[1]
+	X = tup[2]
+
+	# Convert to a single large Array
+	z = stackarrays(Z)
+
+	# Apply the inner neural network to obtain the neural summary statistics
+	ψa = d.ψ(z)
+
+	# Compute the indices needed for aggregation and construct a tuple of colons
+	# used to subset all but the last dimension of ψa.
+	indices = _getindices(Z)
+	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
+
+	# concatenate the neural summary statistics with X
+	u = map(eachindex(Z)) do i
+		idx = indices[i]
+		t = d.a(ψa[colons..., idx])
+		x = X[i]
+		u = vcat(t, x)
+		u
+	end
+	u = stackarrays(u)
+
+	# Apply the outer network
+	θ̂ = d.ϕ(u)
+
+	return θ̂
 end

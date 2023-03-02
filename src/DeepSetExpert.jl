@@ -76,13 +76,14 @@ Z = [rand(n, m) for m ∈ (3, 4)];
 θ̂(Z)
 ```
 """
-struct DeepSetExpert{F, G, H, K}
+struct DeepSetExpert{F, G, H, K, L}
 	ψ::G
 	ϕ::F
 	S::H
 	a::K
 end
-#TODO make this a superclass of DeepSet?
+#TODO make this a superclass of DeepSet? Would be better to have a single class
+# that dispatches to different methods depending on wether S is present or not.
 
 Flux.@functor DeepSetExpert
 Flux.trainable(d::DeepSetExpert) = (d.ψ, d.ϕ)
@@ -100,6 +101,15 @@ function (d::DeepSetExpert)(Z::A) where {A <: AbstractArray{T, N}} where {T, N}
 	t = d.a(d.ψ(Z))
 	s = d.S(Z)
 	u = vcat(t, s)
+	d.ϕ(u)
+end
+
+function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{A, B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
+	Z = tup[1]
+	x = tup[2]
+	t = d.a(d.ψ(Z))
+	s = d.S(Z)
+	u = vcat(Z, s, x)
 	d.ϕ(u)
 end
 
@@ -129,7 +139,6 @@ function (d::DeepSetExpert)(Z::V) where {V <: AbstractVector{A}} where {A <: Abs
 	u = map(eachindex(Z)) do i
 		idx = indices[i]
 		t = d.a(ψa[colons..., idx])
-		# s = Sfun(Z[i], d.S)
 		s = d.S(Z[i])
 		u = vcat(t, s)
 		u
@@ -137,37 +146,37 @@ function (d::DeepSetExpert)(Z::V) where {V <: AbstractVector{A}} where {A <: Abs
 	u = stackarrays(u)
 
 	# Apply the outer network
-	θ̂ = d.ϕ(u)
-
-	return θ̂
+	d.ϕ(u)
 end
 
-# d = deepcopy(θ̂)
-# d = d |> gpu
-# Z = Z |> gpu
-# d(Z)
-#
-# Z = [rand(n, m) for m ∈ (3, 3)];
-# Z = Z |> gpu
-# d(Z)
-#
-#
-# device = gpu
-#
-# θ̂ = θ̂ |> device
-# Z = Z |> device
-#
-# loss = Flux.Losses.mae    |> device
-# γ    = Flux.params(θ̂)     |> device
-# K = length(Z)
-# θ    = rand(p, K) |> device
-#
-# Z = [randn(n, m) for m ∈ rand(29:30, K)] |> device
-# size(θ̂(Z), 1) == p
-# size(θ̂(Z), 2) == K
-# isa(loss(θ̂(Z), θ), Number)
-#
-# Test that we can use gradient descent to update the θ̂ weights
-# optimiser = ADAM(0.01) |> device
-# gradients = gradient(() -> loss(θ̂(Z), θ), device(γ))
-# Flux.update!(optimiser, γ, gradients)
+function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
+
+
+	Z = tup[1]
+	X = tup[2]
+
+	# Convert to a single large Array
+	z = stackarrays(Z)
+
+	# Apply the inner neural network to obtain the neural summary statistics
+	ψa = d.ψ(z)
+
+	# Compute the indices needed for aggregation and construct a tuple of colons
+	# used to subset all but the last dimension of ψa.
+	indices = _getindices(Z)
+	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
+
+	# concatenate the neural summary statistics with X
+	u = map(eachindex(Z)) do i
+		idx = indices[i]
+		t = d.a(ψa[colons..., idx])
+		s = d.S(Z[i])
+		x = X[i]
+		u = vcat(t, s, x)
+		u
+	end
+	u = stackarrays(u)
+
+	# Apply the outer network
+	d.ϕ(u)
+end
