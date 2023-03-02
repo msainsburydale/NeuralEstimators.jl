@@ -61,6 +61,9 @@ include("bootstrap.jl")
 export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams
 include("utility.jl")
 
+export Compress
+include("Compress.jl")
+
 end
 
 

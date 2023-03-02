@@ -36,6 +36,8 @@ DeepSet
 PiecewiseEstimator
 
 GNNEstimator
+
+Logistic
 ```
 
 

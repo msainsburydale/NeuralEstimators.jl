@@ -127,6 +127,24 @@ end
 end
 
 
+@testset "Compress" begin
+
+	p = 3
+	a = [0.1, 4, 2]
+	b = [0.9, 9, 3]
+	l = Compress(a, b)
+	K = 10
+	θ = rand(p, K)
+	l(θ)
+	@test all([all(a .< x .< b) for x ∈ eachcol(l(θ))])
+
+	n = 20
+	Z = rand(n, K)
+	θ̂ = Chain(Dense(n, 15), Dense(15, p), l)
+	@test all([all(a .< x .< b) for x ∈ eachcol(θ̂(Z))])
+end
+
+
 
 @testset "densities" begin
 

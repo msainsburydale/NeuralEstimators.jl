@@ -1,6 +1,5 @@
 using Functors: @functor
 using RecursiveArrayTools: VectorOfArray, convert
-using Test
 
 # ---- Aggregation (pooling) functions ----
 
@@ -35,7 +34,7 @@ A neural estimator in the `DeepSet` representation,
 where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates from the model, `ψ` and `ϕ`
 are neural networks, and `𝐚` is a permutation-invariant aggregation function.
 
-The function `𝐚` must aggregate over the last dimension  of an array (i.e., the
+The function `𝐚` must aggregate over the last dimension of an array (i.e., the
 replicates dimension). It can be specified as a positional argument of
 type `Function`, or as a keyword argument of type `String` with permissible
 values `"mean"`, `"sum"`, and `"logsumexp"`.
@@ -87,7 +86,7 @@ Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network
 Base.show(io::IO, m::MIME"text/plain", D::DeepSet) = print(io, D)
 
 
-# ---- DeepSet function ----
+# ---- Methods ----
 
 # Simple, intuitive (although inefficient) implementation using broadcasting:
 
@@ -103,10 +102,10 @@ Base.show(io::IO, m::MIME"text/plain", D::DeepSet) = print(io, D)
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
 	# Convert to a single large Array
-	a = stackarrays(Z)
+	z = stackarrays(Z)
 
 	# Apply the inner neural network
-	ψa = d.ψ(a)
+	ψa = d.ψ(z)
 
 	# Compute the indices needed for aggregation and construct a tuple of colons
 	# used to subset all but the last dimension of ψa. Note that constructing
