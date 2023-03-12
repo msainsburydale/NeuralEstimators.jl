@@ -1,3 +1,7 @@
+# TODO should document the parameter-level covariate functionality, and add
+# testing for it. Need to do this for DeepSetExpert too.
+# TODO Test that training works with covariates. 
+
 using Functors: @functor
 using RecursiveArrayTools: VectorOfArray, convert
 

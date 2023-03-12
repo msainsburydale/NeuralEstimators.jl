@@ -47,8 +47,6 @@ all parameters; otherwise, the risk is evaluated over each parameter separately.
 """
 function risk(assessment::Assessment; loss = (x, y) -> abs(x - y), average_over_parameters::Bool = true)
 
-
-
 	df = assessment.θandθ̂
 	grouping_variables = [:estimator, :m]
 	if !average_over_parameters push!(grouping_variables, :parameter) end

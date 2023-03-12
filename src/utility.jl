@@ -9,16 +9,25 @@ data stored as an `Array` or as a `GNNGraph`.
 """
 function numberreplicates end
 
-function numberreplicates(Z::V) where {V <: AbstractVector{A}} where A
-	numberreplicates.(Z)
-end
-
 function numberreplicates(Z::A) where {A <: AbstractArray{T, N}} where {T, N}
 	size(Z, N)
 end
 
 function numberreplicates(Z::G) where {G <: GNNGraph}
 	Z.num_graphs
+end
+
+function numberreplicates(Z::V) where {V <: AbstractVector{A}} where A
+	numberreplicates.(Z)
+end
+
+
+function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
+	Z = tup[1]
+	X = tup[2]
+	@assert length(Z) == length(X)
+
+	numberreplicates(Z)
 end
 
 

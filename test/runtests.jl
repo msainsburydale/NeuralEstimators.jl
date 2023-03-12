@@ -63,11 +63,6 @@ end
 end
 
 
-
-
-
-
-
 @testset "incgamma" begin
 
 	# tests based on the "Special values" section of https://en.wikipedia.org/wiki/Incomplete_gamma_function
@@ -177,10 +172,6 @@ end
 end
 
 
-
-
-
-
 @testset "GNNEstimator" begin
 	n₁, n₂ = 11, 27
 	m₁, m₂ = 30, 50
@@ -250,9 +241,6 @@ end
 end
 
 
-
-
-
 # Simple example for testing.
 struct Parameters <: ParameterConfigurations
 	θ
@@ -272,28 +260,24 @@ function simulate(parameters::Parameters, m::Integer)
 	Z = [rand(Normal(μ, parameters.σ), n, 1, m) for μ ∈ θ]
 end
 parameters = Parameters(5000, ξ)
-# parameters = Parameters(100, ξ) # FIXME the fixed-parameter method for train() gives many warnings when K = 100; think it's _ParameterLoader?
+# parameters = Parameters(100, ξ) # TODO the fixed-parameter method for train() gives many warnings when K = 100; think it's _ParameterLoader?
+
+
+MLE(Z) = mean.(Z)'
+MLE(Z, ξ) = MLE(Z) # the MLE doesn't need ξ, but we include it for testing
 
 n = 1
 K = 100
-
 w = 32
 p = 1
 ψ = Chain(Dense(n, w), Dense(w, w))
-ϕ = Chain(Dense(w, w), Dense(w, p), Flux.flatten, x -> exp.(x))
+ϕ = Chain(Dense(w, w), Dense(w, p))
 θ̂_deepset = DeepSet(ψ, ϕ)
 S = samplesize
-ϕ₂ = Chain(Dense(w + 1, w), Dense(w, p), Flux.flatten, x -> exp.(x))
-θ̂_deepsetexpert = DeepSetExpert(θ̂_deepset, ϕ₂, S)
+ϕₛ = Chain(Dense(w + 1, w), Dense(w, p))
+θ̂_deepsetexpert = DeepSetExpert(ψ, ϕₛ, S)
+dₓ= 2
 estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
-
-function MLE(Z) where {T <: Number, N <: Int, A <: AbstractArray{T, N}, V <: AbstractVector{A}}
-    mean.(Z)'
-end
-
-MLE(Z, ξ) = MLE(Z) # the MLE obviously doesn't need ξ, but we include it for testing
-
-
 
 
 @testset verbose = true "$key" for key ∈ keys(estimators)
@@ -309,7 +293,7 @@ MLE(Z, ξ) = MLE(Z) # the MLE obviously doesn't need ξ, but we include it for t
 		γ    = Flux.params(θ̂)  |> device
 		θ    = rand(p, K)      |> device
 
-		Z = [randn(Float32, n, 1, m) for m ∈ rand(29:30, K)] |> device
+		Z = [randn(Float32, n, m) for m ∈ rand(29:30, K)] |> device
 		@test size(θ̂(Z), 1) == p
 		@test size(θ̂(Z), 2) == K
 		@test isa(loss(θ̂(Z), θ), Number)

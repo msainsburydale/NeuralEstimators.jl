@@ -76,7 +76,7 @@ Z = [rand(n, m) for m ∈ (3, 4)];
 θ̂(Z)
 ```
 """
-struct DeepSetExpert{F, G, H, K, L}
+struct DeepSetExpert{F, G, H, K}
 	ψ::G
 	ϕ::F
 	S::H
@@ -150,7 +150,6 @@ function (d::DeepSetExpert)(Z::V) where {V <: AbstractVector{A}} where {A <: Abs
 end
 
 function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
-
 
 	Z = tup[1]
 	X = tup[2]
