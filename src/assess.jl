@@ -280,39 +280,3 @@ function _assess(
 
     return (θ = θ, θ̂ = θ̂, runtime = runtime)
 end
-
-
-"""
-	coverage(θ̂, Z::V, θ, α; kwargs...) where  {V <: AbstractArray{A}} where A
-
-For each data set contained in `Z`, compute a non-parametric bootstrap confidence
-interval with nominal coverage `α`, and determine if the true parameters, `θ`, are
-contained within this interval. The overall empirical coverage is then obtained
-by averaging the resulting 0-1 matrix over all data sets.
-"""
-function coverage(θ̂, Z::V, θ, α; kwargs...) where  {V <: AbstractArray{A}} where A
-
-    p = length(θ)
-
-	# for each data set contained in Z, compute a bootstrap confidence interval
-	# and determine if the true parameters, θ, are within this interval.
-	within = map(Z) do z
-
-		# compute a bootstrap sample of parameters
-		θ̃ = bootstrap(θ̂, z; kwargs...)
-
-		# Determine if the central confidence intervals with nominal coverage α
-		# contain the true parameter. The result is an indicator vector
-		# specifying which parameters are contained in the interval
-		[quantile(θ̃[i, :], α/2) < θ[i] < quantile(θ̃[i, :], 1 - α/2) for i ∈ 1:p]
-	end
-
-	# combine the counts into a single matrix with p rows and one column for
-	# each data set in Z
-	within = hcat(within...)
-
-	# compute the empirical coverage
-	cvg = mean(within, dims = 2)
-
-	return cvg
-end

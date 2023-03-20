@@ -10,7 +10,7 @@ using Base: @propagate_inbounds
 using Base.GC: gc
 import Base: merge
 using BSON: @save, load
-using ChainRulesCore: @non_differentiable
+using ChainRulesCore: @non_differentiable, @ignore_derivatives
 using CUDA
 using CSV
 using DataFrames
@@ -41,6 +41,9 @@ include("DeepSetExpert.jl")
 
 export PiecewiseEstimator
 include("PiecewiseEstimator.jl")
+
+export CIEstimator
+include("CIEstimator.jl")
 
 export GNNEstimator
 include("GNNEstimator.jl")

@@ -10,6 +10,7 @@ using DataFrames
 using Distributions: Normal, cdf, logpdf, quantile
 using Flux
 using Flux: DataLoader
+using Flux: mae
 using Graphs
 using GraphNeuralNetworks
 using LinearAlgebra: norm
@@ -30,6 +31,18 @@ else
 	@info "The GPU is unavailable so we'll test on the CPU only... "
 	devices = (CPU = cpu,)
 end
+
+
+@testset "loss functions" begin
+
+	p = 3
+	K = 10
+	θ̂ = rand(p, K)
+	θ = rand(p, K)
+	@test quantileloss(θ̂, θ, 0.5) ≈ 0.5 * mae(θ̂, θ)
+end
+
+
 
 @testset "UtilityFunctions" begin
 

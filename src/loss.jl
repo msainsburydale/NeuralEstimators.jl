@@ -57,6 +57,7 @@ end
 
 """
     quantileloss(θ̂, θ, q; agg = mean)
+    quantileloss(θ̂, θ, q::V; agg = mean) where {T, V <: AbstractVector{T}}
 
 The asymmetric loss function whose minimiser is the `q`th posterior quantile; namely,
 ```math
@@ -64,17 +65,74 @@ L(θ̂, θ, q) = (θ̂ - θ)(𝕀(θ̂ - θ > 0) - q),
 ```
 where `q` ∈ (0, 1) and 𝕀(⋅) is the indicator function.
 
-For further discussion, see Equation (7) of Cressie, N. (2022), "Decisions,
-decisions, decisions in an uncertain environment", arXiv:2209.13157.
+The method that takes `q` as a vector is useful for jointly approximating
+several quantiles of the posterior distribution. In this case, the number of
+rows in `θ̂` is assumed to be pr, where p is the number of parameters: then,
+`q` should be an r-vector.
+
+For further discussion on this loss function, see Equation (7) of
+Cressie, N. (2022), "Decisions, decisions, decisions in an uncertain
+environment", arXiv:2209.13157.
+
+# Examples
+```
+p = 1
+K = 10
+θ = rand(p, K)
+θ̂ = rand(p, K)
+quantileloss(θ̂, θ, 0.1)
+
+θ̂ = rand(3p, K)
+quantileloss(θ̂, θ, [0.1, 0.5, 0.9])
+
+p = 2
+θ = rand(p, K)
+θ̂ = rand(p, K)
+quantileloss(θ̂, θ, 0.1)
+
+θ̂ = rand(3p, K)
+quantileloss(θ̂, θ, [0.1, 0.5, 0.9])
+```
 """
 function quantileloss(θ̂, θ, q; agg = mean)
   _check_sizes(θ̂, θ)
   d = θ̂ .- θ
   b = d .> 0
+  b̃ = .!b
   L₁ = d[b] * (1 - q)
-  L₂ = -q * d[.!b]
+  L₂ = -q * d[b̃]
   L = vcat(L₁, L₂)
   agg(L)
+end
+
+
+function quantileloss(θ̂, θ, q::M; agg = mean) where {T, M <: AbstractMatrix{T}}
+
+  d = θ̂ .- θ
+  b = d .> 0
+  b̃ = .!b
+  L₁ = d[b] .* (1 .- q[b])
+  L₂ = -q[b̃] .* d[b̃]
+  L = vcat(L₁, L₂)
+  agg(L)
+end
+
+function quantileloss(θ̂, θ, q::V; agg = mean) where {T, V <: AbstractVector{T}}
+
+  # Check that the sizes match
+  @assert size(θ̂, 2) == size(θ, 2)
+  p, K = size(θ)
+  rp = size(θ̂, 1)
+  @assert rp % p == 0
+  r = rp ÷ p
+  @assert length(q) == r
+
+  # repeat the arrays to facilitate broadcasting and indexing
+  # note that repeat() cannot be differentiated by Zygote
+  @ignore_derivatives q = repeat(q, inner = (p, 1), outer = (1, K))
+  @ignore_derivatives θ = repeat(θ, r)
+
+  quantileloss(θ̂, θ, q; agg = agg)
 end
 
 
@@ -98,12 +156,20 @@ function intervalscore(l, u, θ, α; agg = mean)
 
   b₁ = θ .< l
   b₂ = θ .> u
-  b₀ = .!(b₁ .| b₂)
 
-  S₀ = (u[b₀] - l[b₀])
-  S₁ = (u[b₁] - l[b₁]) + (2 / α) * (l[b₁] .- θ[b₁])
-  S₂ = (u[b₂] - l[b₂]) + (2 / α) * (θ[b₂] .- u[b₂])
+  S = u - l
+  S = S + b₁ .* (2 / α) .* (l .- θ)
+  S = S + b₂ .* (2 / α) .* (θ .- u)
 
-  S = vcat(S₀, S₁, S₂)
   agg(S)
+end
+
+function intervalscore(θ̂, θ, α; agg = mean)
+
+  @assert size(θ̂, 1) % 2 == 0
+  p = size(θ̂, 1) ÷ 2
+  l = θ̂[1:p, :]
+  u = θ̂[(p+1):end, :]
+
+  intervalscore(l, u, θ, α, agg = agg)
 end
