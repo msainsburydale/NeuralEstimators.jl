@@ -2,8 +2,10 @@ module NeuralEstimators
 
 #TODO Need to update subsetdata
 #TODO Need to update number replicates
-
-# Documentation: https://msainsburydale.github.io/NeuralEstimators.jl/
+#TODO maybe add structs for PointEstimator and CIEstimator. Then, DeepSet,
+#     DeepSetExpert, and GNNEstimator can just be a field of these estimators
+#     (also need to rename GNNEstimator to something else).
+#TODO why are my jobs failing?
 
 # Note that functions must be explicitly imported to be extended with new methods. Be aware of type piracy, though.
 using Base: @propagate_inbounds
@@ -35,18 +37,19 @@ include("loss.jl")
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
-export DeepSet, DeepSetExpert
-include("DeepSet.jl")
-include("DeepSetExpert.jl")
+# ---- Estimator types ----
 
-export PiecewiseEstimator
+export CIEstimator, PiecewiseEstimator # TODO PointEstimator. TODO perhaps change PiecewiseEstimator to simply Piecewise
+include("CIEstimator.jl")
 include("PiecewiseEstimator.jl")
 
-export CIEstimator
-include("CIEstimator.jl")
+# ---- Architectures and useful layers ----
 
-export GNNEstimator
+export DeepSet, DeepSetExpert, GNNEstimator, Compress #TODO should change the name of GNNEstimator
+include("DeepSet.jl")
+include("DeepSetExpert.jl")
 include("GNNEstimator.jl")
+include("Compress.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
 export matern, maternchols, scaledlogistic, scaledlogit
@@ -72,8 +75,7 @@ include("bootstrap.jl")
 export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams, samplesize
 include("utility.jl")
 
-export Compress
-include("Compress.jl")
+
 
 end
 

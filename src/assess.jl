@@ -235,8 +235,8 @@ function _assess(
 	@assert length(estimator_names) == E
 	@assert length(parameter_names) == p
 
-	# if only one estimator is provided and `ξ` is not `nothing`, `use_ξ` is
-	# automatically set to `true`:
+	# if only one estimator is provided and ξ is not nothing, use_ξ is
+	# automatically set to true. 
 	if E == 1 && !isnothing(ξ)
 		use_ξ = true
 	end
@@ -255,9 +255,12 @@ function _assess(
 
 		verbose && println("	Running estimator $(estimator_names[i])...")
 
-		#NB this code does not cater for the possibility that an estimator could use ξ and use the gpu
 		if use_ξ[i]
-			time = @elapsed θ̂ = estimators[i](Z, ξ)
+			# pass ξ to the estimator by passing a closure to _runondevice().
+			# This approach allows the estimator to use the gpu, and provides a
+			# consistent format of the estimates regardless of whether or not
+			# ξ is used.
+			time = @elapsed θ̂ = _runondevice(z -> estimators[i](z, ξ), Z, use_gpu[i]) # old code: θ̂ = estimators[i](Z, ξ)
 		else
 			time = @elapsed θ̂ = _runondevice(estimators[i], Z, use_gpu[i])
 		end

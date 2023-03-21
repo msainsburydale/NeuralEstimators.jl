@@ -34,7 +34,6 @@ end
 
 
 @testset "loss functions" begin
-
 	p = 3
 	K = 10
 	θ̂ = rand(p, K)
@@ -259,10 +258,7 @@ struct Parameters <: ParameterConfigurations
 	θ
 	σ
 end
-ξ = (
-	Ω = Normal(0, 0.5),
-	σ = 1
-)
+ξ = (Ω = Normal(0, 0.5), σ = 1)
 function Parameters(K::Integer, ξ)
 	θ = rand(ξ.Ω, 1, K)
 	Parameters(θ, ξ.σ)
@@ -270,11 +266,9 @@ end
 function simulate(parameters::Parameters, m::Integer)
 	n = 1
 	θ = vec(parameters.θ)
-	Z = [rand(Normal(μ, parameters.σ), n, 1, m) for μ ∈ θ]
+	Z = [rand(Normal(μ, parameters.σ), n, m) for μ ∈ θ]
 end
-parameters = Parameters(5000, ξ)
-# parameters = Parameters(100, ξ) # TODO the fixed-parameter method for train() gives many warnings when K = 100; think it's _ParameterLoader?
-
+parameters = Parameters(100, ξ)
 
 MLE(Z) = mean.(Z)'
 MLE(Z, ξ) = MLE(Z) # the MLE doesn't need ξ, but we include it for testing
@@ -283,7 +277,7 @@ n = 1
 K = 100
 w = 32
 p = 1
-ψ = Chain(Dense(n, w), Dense(w, w))
+ψ = Chain(Dense(n, w), Dense(w, w), Flux.flatten)
 ϕ = Chain(Dense(w, w), Dense(w, p))
 θ̂_deepset = DeepSet(ψ, ϕ)
 S = samplesize
@@ -324,13 +318,13 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
 
 			# passing replicated data and cycling over the replicates:
-			Z_train = simulate(parameters, 20)
-			Z_val   = simulate(parameters, 10)
+			Z_train = simulate(parameters, 20);
+			Z_val   = simulate(parameters, 10);
 			train(θ̂, parameters, parameters, Z_train, Z_val, [1, 2, 5]; epochs = [10, 5, 3], use_gpu = use_gpu, verbose = verbose)
 
 			# passing different data sets:
-			Z_train = [simulate(parameters, m) for m ∈ [1, 2, 5]]
-			Z_val   = [simulate(parameters, m) for m ∈ [1, 2, 5]]
+			Z_train = [simulate(parameters, m) for m ∈ [1, 2, 5]];
+			Z_val   = [simulate(parameters, m) for m ∈ [1, 2, 5]];
 			train(θ̂, parameters, parameters, Z_train, Z_val; epochs = [10, 5, 3], use_gpu = use_gpu, verbose = verbose)
 
 			# Decided not to test the saving functions, because we can't always assume that we have write privledges
@@ -375,7 +369,7 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 
 			# Test that estimators needing invariant model information can be used:
 			assess([MLE], parameters, m = all_m, verbose = verbose)
-			# assess([MLE], parameters, m = all_m, verbose = verbose, ξ = ξ, use_ξ = true) #FIXME this causes an error at the end of _asses()
+			assess([MLE], parameters, m = all_m, verbose = verbose, ξ = ξ)
 		end
 
 		@testset "bootstrap" begin
@@ -384,8 +378,7 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 			bootstrap(θ̂, Z; use_gpu = use_gpu)
 			bootstrap(θ̂, [Z]; use_gpu = use_gpu)
 			@test_throws Exception bootstrap(θ̂, [Z, Z]; use_gpu = use_gpu)
-			blocks = rand(1:2, size(Z)[end])
-			bootstrap(θ̂, Z, blocks, use_gpu = use_gpu)
+			bootstrap(θ̂, Z, use_gpu = use_gpu, blocks = rand(1:2, size(Z)[end]))
 			confidenceinterval(bootstrap(θ̂, Z; use_gpu = use_gpu))
 		end
 	end

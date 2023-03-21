@@ -83,8 +83,7 @@ end
 """
 	bootstrap(θ̂, parameters::P, Z̃) where P <: Union{AbstractMatrix, ParameterConfigurations}
 	bootstrap(θ̂, parameters::P, m::Integer; B = 400) where P <: Union{AbstractMatrix, ParameterConfigurations}
-	bootstrap(θ̂, Z; B = 400)
-	bootstrap(θ̂, Z, blocks::Vector{Integer}; B = 400)
+	bootstrap(θ̂, Z; B = 400, blocks = nothing)
 
 Generates `B` bootstrap estimates from an estimator `θ̂`.
 
@@ -95,14 +94,15 @@ implicitly defines `B`. Alternatively, if the user has defined a method
 the simulated data sets.
 
 Non-parametric bootstrapping is facilitated by passing a single data set, `Z`.
-The argument `blocks` caters for block bootstrapping, and it should be an integer
-vector specifying the block for each replicate. For example, with 5 replicates,
+The argument `blocks` caters for block bootstrapping, and it should be a vector
+of integers specifying the block for each replicate. For example, with 5 replicates,
 the first two corresponding to block 1 and the remaining three corresponding to
 block 2, `blocks` should be `[1, 1, 2, 2, 2]`. The resampling algorithm aims to
 produce resampled data sets that are of a similar size to `Z`, but this can only
 be achieved exactly if all blocks are equal in length.
 
-The keyword argument `use_gpu` is a flag determining whether to use the GPU, if it is available (default `true`).
+The keyword argument `use_gpu` is a flag determining whether to use the GPU,
+if it is available (default `true`).
 
 The return type is a p × `B` matrix, where p is the number of parameters in the model.
 """
@@ -110,28 +110,31 @@ function bootstrap(θ̂, parameters::P, m::Integer; B::Integer = 400, use_gpu::B
 	K = size(parameters, 2)
 	@assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
 	Z̃ = simulate(parameters, m, B)
-	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃)
+	θ̃ = _runondevice(θ̂, Z̃, use_gpu)
 	return θ̃
 end
 
 function bootstrap(θ̂, parameters::P, Z; use_gpu::Bool = true) where P <: Union{AbstractMatrix, ParameterConfigurations}
 	K = size(parameters, 2)
 	@assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
-	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃)
+	θ̃ = _runondevice(θ̂, Z̃, use_gpu)
 	return θ̃
 end
 
 
 # ---- Non-parametric bootstrapping ----
 
-function bootstrap(θ̂, Z; B::Integer = 400, use_gpu::Bool = true)
+function bootstrap(θ̂, Z; B::Integer = 400, use_gpu::Bool = true, blocks = nothing)
 
 	# Generate B bootstrap samples of Z
-	m = numberreplicates(Z)
-	Z̃ = [subsetdata(Z, rand(1:m, m)) for _ in 1:B]
-
+	if !isnothing(blocks)
+		Z̃ = _blockresample(Z, B, blocks)
+	else
+		m = numberreplicates(Z)
+		Z̃ = [subsetdata(Z, rand(1:m, m)) for _ in 1:B]
+	end
 	# Estimate the parameters for each bootstrap sample
-	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃)
+	θ̃ = _runondevice(θ̂, Z̃, use_gpu)
 
 	return θ̃
 end
@@ -143,16 +146,7 @@ function bootstrap(θ̂, Z::V; args...) where {V <: AbstractVector{A}} where A
 	@assert length(Z) == 1
 	Z = Z[1]
 	return bootstrap(θ̂, Z; args...)
-
 end
-
-
-function bootstrap(θ̂, Z, blocks::V; B::Integer = 400, use_gpu::Bool = true) where {V <: AbstractVector{I}} where {I <: Integer}
-	Z̃ = _blockresample(Z, B, blocks)
-	θ̃ = use_gpu ? _runondevice(θ̂, Z̃, true) : θ̂(Z̃)
-	return θ̃
-end
-
 
 """
 Generates `B` bootstrap samples by sampling `Z` with replacement, with the

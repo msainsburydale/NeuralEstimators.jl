@@ -439,7 +439,9 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 	for i ∈ eachindex(estimators)
 
 		mᵢ = M[i]
-		@info "training with m=$(mᵢ)"
+		kwargs = (;args...)
+		verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
+		verbose && @info "training with m=$(mᵢ)"
 
 		# Pre-train if this is not the first estimator
 		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
@@ -451,7 +453,6 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I};
 		# and it is not an empty string, we use merge() to replace its given
 		# value with a modified version that contains mᵢ. We will pass on this
 		# modified version of args to train().
-		kwargs = (;args...)
 		if haskey(kwargs, :savepath) && kwargs.savepath != ""
 			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
 		end

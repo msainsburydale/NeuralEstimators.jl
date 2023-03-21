@@ -157,15 +157,15 @@ function loadbestweights(path::String)
 end
 
 
-function _runondevice(network, x, use_gpu::Bool; batchsize = min(length(x), 32))
+function _runondevice(θ̂, x, use_gpu::Bool; batchsize = min(length(x), 32))
 
 	device  = _checkgpu(use_gpu, verbose = false)
-	network = network |> device
+	θ̂ = θ̂ |> device
 
 	# ---- Simple ----
 
 	# 	x = x |> device
-	# 	ŷ = network(x)
+	# 	ŷ = θ̂(x)
 	#   ŷ = ŷ |> cpu
 
 	# ---- Memory sensitive ----
@@ -176,7 +176,7 @@ function _runondevice(network, x, use_gpu::Bool; batchsize = min(length(x), 32))
 
 	ŷ = map(data_loader) do xᵢ
 		xᵢ = xᵢ |> device
-		ŷ = network(xᵢ)
+		ŷ = θ̂(xᵢ)
 		ŷ = ŷ |> cpu
 		ŷ
 	end
@@ -184,6 +184,8 @@ function _runondevice(network, x, use_gpu::Bool; batchsize = min(length(x), 32))
 
 	return ŷ
 end
+
+
 
 # Here, it's important that the same order for the grid is used as was
 # done in R when computing the Cholesky factors. In R, the spatial domain D
