@@ -1,4 +1,4 @@
-using StatsBase: ecdf
+
 """
 	confidenceinterval(θ̃, θ̂ = nothing; type, probs = [0.05, 0.95], parameter_names)
 
@@ -40,7 +40,7 @@ function confidenceinterval(θ̃, θ̂ = nothing; type::String = "percentile", p
 		#TODO
 		# z₀ # bias-correction
 		# a  # acceleration
-		# G = mapslices(ecdf, θ̃, dims = 2)
+		# G = mapslices(StatsBase.ecdf, θ̃, dims = 2)
 	else
 		error("argument `type` not matched: it should be one of 'percentile', 'basic', 'studentised', or 'bca'.")
 	end
