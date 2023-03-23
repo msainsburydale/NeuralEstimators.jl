@@ -150,6 +150,34 @@ end
 
 
 
+@testset "simulation" begin
+	S = rand(Float32, 10, 2)
+	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
+	ρ = Float32.([0.6, 0.8])
+	ν = Float32.([0.5, 0.7])
+	L = maternchols(D, ρ, ν)
+	σ² = 0.5f0
+	L = maternchols(D, ρ, ν, σ²)
+	@test maternchols(D, ρ, ν, σ²) == maternchols([D, D], ρ, ν, σ²)
+	L₁ = L[:, :, 1]
+	m = 5
+
+	@test eltype(simulateschlather(L₁, m)) == Float32
+	# @code_warntype simulateschlather(L₁, m)
+
+	@test eltype(simulategaussianprocess(L₁, m)) == Float32
+	# @code_warntype simulategaussianprocess(L₁, σ, m)
+
+	# #TODO
+	# using GaussianRandomFields
+	# cov = CovarianceFunction(2, Matern(ρ, ν))
+	# grf = GaussianRandomField(cov, Cholesky(), S)
+	# simulategaussianprocess(grf)
+	# simulategaussianprocess(grf, 5)
+end
+
+
+
 @testset "densities" begin
 
 	# "scaledlogistic"
@@ -383,27 +411,6 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 		end
 	end
 end
-
-@testset "simulation" begin
-	S = rand(Float32, 10, 2)
-	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
-	ρ = Float32.([0.6, 0.8])
-	ν = Float32.([0.5, 0.7])
-	L = maternchols(D, ρ, ν)
-	σ² = 0.5f0
-	L = maternchols(D, ρ, ν, σ²)
-	@test maternchols(D, ρ, ν, σ²) == maternchols([D, D], ρ, ν, σ²)
-	L₁ = L[:, :, 1]
-	m = 5
-
-	@test eltype(simulateschlather(L₁, m)) == Float32
-	# @code_warntype simulateschlather(L₁, m)
-
-	σ = 0.1f0
-	@test eltype(simulategaussianprocess(L₁, σ, m)) == Float32
-	# @code_warntype simulategaussianprocess(L₁, σ, m)
-end
-
 
 @testset "PiecewiseEstimator" begin
 	θ̂_piecewise = PiecewiseEstimator((θ̂_deepset, MLE), (30))

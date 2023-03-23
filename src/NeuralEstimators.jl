@@ -2,15 +2,15 @@ module NeuralEstimators
 
 #TODO Need to update subsetdata
 #TODO Need to update number replicates
-#TODO maybe add structs for PointEstimator and CIEstimator. Then, DeepSet,
+#TODO maybe add structs for PointEstimator and CIEstimator, QuantileEstimator. Then, DeepSet,
 #     DeepSetExpert, and GNNEstimator can just be a field of these estimators
 #     (also need to rename GNNEstimator to something else).
-#TODO why are my jobs failing?
 
 # Note that functions must be explicitly imported to be extended with new methods. Be aware of type piracy, though.
 using Base: @propagate_inbounds
 using Base.GC: gc
 import Base: merge
+import Base: size
 using BSON: @save, load
 using ChainRulesCore: @non_differentiable, @ignore_derivatives
 using CUDA
@@ -22,6 +22,7 @@ using Flux
 using Flux: ofeltype, params, DataLoader, update!
 using Functors: @functor
 using GraphNeuralNetworks
+using GaussianRandomFields
 using Graphs
 using LinearAlgebra
 using NamedArrays
@@ -39,7 +40,7 @@ include("Parameters.jl")
 
 # ---- Estimator types ----
 
-export CIEstimator, PiecewiseEstimator # TODO PointEstimator. TODO perhaps change PiecewiseEstimator to simply Piecewise
+export CIEstimator, PiecewiseEstimator # TODO PointEstimator, QuantileEstimator
 include("CIEstimator.jl")
 include("PiecewiseEstimator.jl")
 

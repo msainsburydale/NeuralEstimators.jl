@@ -1,3 +1,5 @@
+# TODO documentation
+
 """
 Generic function that may be overloaded to implicitly define a statistical model.
 Specifically, the user should provide a method `simulate(parameters, m)`
@@ -28,75 +30,125 @@ _simulate(params::P, m) where {P <: Union{AbstractMatrix, ParameterConfiguration
 
 # ---- Gaussian process ----
 
-"""
-	simulategaussianprocess(L, σ, m)
-	simulategaussianprocess(L)
+# returns the number of locations in the field
+size(grf::GaussianRandomField) = prod(size(grf.mean))
+size(grf::GaussianRandomField, d::Integer) = size(grf)
 
-Simulates `m` realisations from a Gau(0, 𝚺 + σ²𝐈) distribution, where 𝚺 ≡ LL'.
-
-If `σ` and `m` are omitted, a single field without the nugget effect is returned.
 """
-function simulategaussianprocess(L::M, σ::T, m::Integer) where M <: AbstractMatrix{T} where T <: Number
-	n = size(L, 1)
-	y = similar(L, n, m)
-	for h ∈ 1:m
-		y[:, h] = simulategaussianprocess(L, σ)
-	end
+	simulategaussianprocess(L::Matrix, m = 1)
+	simulategaussianprocess(grf::GaussianRandomField, m = 1)
+
+Simulates `m` independent and identically distributed (i.i.d.) realisations from
+a mean-zero Gaussian process.
+
+Accepts either the lower Cholesky factor `L` associated with a Gaussian process
+or a `GaussianRandomField` object `grf`.
+
+# Examples
+```
+using NeuralEstimators
+
+n  = 500
+S  = rand(n, 2)
+ρ  = 0.6
+ν  = 1.0
+
+# Passing GaussianRandomField object:
+using GaussianRandomFields
+cov = CovarianceFunction(2, Matern(ρ, ν))
+grf = GaussianRandomField(cov, Cholesky(), S)
+simulategaussianprocess(grf)
+simulategaussianprocess(grf, 5)
+
+# Passing Cholesky factors directly as matrices:
+L = grf.data
+simulategaussianprocess(L)
+
+# Circulant embedding (fast, but only on grids):
+pts = 1.0:50.0
+grf = GaussianRandomField(cov, CirculantEmbedding(), pts, pts, minpadding = 100)
+simulategaussianprocess(grf)
+simulategaussianprocess(grf, 5)
+```
+"""
+function simulategaussianprocess(obj::M, m::Integer) where M <: Union{AbstractMatrix{T}, GaussianRandomField} where T <: Number
+	y = [simulategaussianprocess(obj) for _ ∈ 1:m]
+	y = stackarrays(y, merge = false)
 	return y
 end
 
-function simulategaussianprocess(L::M, σ::T) where M <: AbstractMatrix{T} where T <: Number
-	n = size(L, 1)
-	return simulategaussianprocess(L) + σ * randn(T, n)
+function simulategaussianprocess(L::M) where M <: AbstractMatrix{T} where T <: Number
+	L * randn(T, size(L, 1))
 end
 
-function simulategaussianprocess(L::M) where M <: AbstractMatrix{T} where T <: Number
-	n = size(L, 1)
-	y = randn(T, n)
-	return L * y
+function simulategaussianprocess(grf::GaussianRandomField)
+	vec(GaussianRandomFields.sample(grf))
 end
 
 
 # ---- Schlather's max-stable model ----
 
 """
-	simulateschlather(L, m; C = 3.5, Gumbel = true)
-	simulateschlather(L;    C = 3.5, Gumbel = true)
+	simulateschlather(L::Matrix, m = 1)
+	simulateschlather(grf::GaussianRandomField, m = 1)
 
-Given the lower Cholesky factor `L` associated with a Gaussian process,
-simulates `m` independent and identically distributed (i.i.d.) realisations from
-Schlather's max-stable model using the algorithm for approximate simulation given by Schlather (2002).
+Simulates `m` independent and identically distributed (i.i.d.) realisations from
+Schlather's max-stable model using the algorithm for approximate simulation given
+by Schlather (2002), "Models for stationary max-stable random fields", Extremes,
+5:33-44.
 
-By default, the simulated data are log transformed from the unit Fréchet scale
-to the `Gumbel` scale.
+Accepts either the lower Cholesky factor `L` associated with a Gaussian process
+or a `GaussianRandomField` object `grf`.
 
-The accuracy of the algorithm is controlled with a tuning parameter, `C`, which
-involves a trade-off between computational efficiency (favouring small `C`) and
-accuracy (favouring large `C`). Schlather (2002) recommends the use of `C = 3`;
-conservatively, we set the default to `C = 3.5`.
+# Keyword arguments
+- `C = 3.5`: a tuning parameter that controls the accuracy of the algorith: small `C` favours computational efficiency, while large `C` favours accuracy. Schlather (2002) recommends the use of `C = 3`.
+- `Gumbel = true`: flag indicating whether the data should be log-transformed from the unit Fréchet scale to the `Gumbel` scale.
 
+# Examples
+```
+using NeuralEstimators
 
-Schlather, M. (2002). Models for stationary max-stable random fields. Extremes, 5:33--44.
+n  = 500
+S  = rand(n, 2)
+ρ  = 0.6
+ν  = 1.0
+
+# Passing GaussianRandomField object:
+using GaussianRandomFields
+cov = CovarianceFunction(2, Matern(ρ, ν))
+grf = GaussianRandomField(cov, Cholesky(), S)
+simulateschlather(grf)
+simulateschlather(grf, 5)
+
+# Passing Cholesky factors directly as matrices:
+L = grf.data
+simulateschlather(L)
+simulateschlather(L, 5)
+
+# Circulant embedding (fast, but only on grids):
+pts = 1.0:50.0
+grf = GaussianRandomField(cov, CirculantEmbedding(), pts, pts, minpadding = 100)
+simulateschlather(grf)
+simulateschlather(grf, 5)
+```
 """
-function simulateschlather(L::M, m::Integer; C = 3.5, Gumbel::Bool = true) where M <: AbstractMatrix{T} where T <: Number
-	n = size(L, 1)
-	Z = similar(L, n, m)
-	for h ∈ 1:m
-		Z[:, h] = simulateschlather(L, C = C, Gumbel = Gumbel)
-	end
-
-	return Z
+function simulateschlather(obj::M, m::Integer; C = 3.5, Gumbel::Bool = true) where M <: Union{AbstractMatrix{T}, GaussianRandomField} where T <: Number
+	y = [simulateschlather(obj, C = C, Gumbel = Gumbel) for _ ∈ 1:m]
+	y = stackarrays(y, merge = false)
+	return y
 end
 
-function simulateschlather(L::M; C = 3.5, Gumbel::Bool = true) where M <: AbstractMatrix{T} where T <: Number
+function simulateschlather(obj::M; C = 3.5, Gumbel::Bool = true) where M <: Union{AbstractMatrix{T}, GaussianRandomField} where T <: Number
 
-	n = size(L, 1)  # number of observations
+	# small hack to get the right eltype
+	if typeof(obj) <: GaussianRandomField G = eltype(obj.cov) else G = T end
 
-	Z   = fill(zero(T), n)
-	ζ⁻¹ = randexp(T)
+	n   = size(obj, 1)  # number of observations
+	Z   = fill(zero(G), n)
+	ζ⁻¹ = randexp(G)
 	ζ   = 1 / ζ⁻¹
 
-	# A property of the model that must be enforced is E(max{0, Yᵢ}) = 1. It can
+	# We must enforce E(max{0, Yᵢ}) = 1. It can
 	# be shown that this condition is satisfied if the marginal variance of Y(⋅)
 	# is equal to 2π. Now, our simulation design embeds a marginal variance of 1
 	# into fields generated from the cholesky factors, and hence
@@ -108,11 +160,12 @@ function simulateschlather(L::M; C = 3.5, Gumbel::Bool = true) where M <: Abstra
 	# some simplifications have been made to the code below. This is because
 	# max{Z(s), ζW(s)} ≡ max{Z(s), max{0, ζY(s)}} = max{Z(s), ζY(s)}, since
 	# Z(s) is initialised to 0 and increases during simulation.
+
 	while (ζ * C) > minimum(Z)
-		Y = simulategaussianprocess(L)
-		Y = √(2π)Y
+		Y = simulategaussianprocess(obj)
+		Y = √(G(2π)) * Y
 		Z = max.(Z, ζ * Y)
-		E = randexp(T)
+		E = randexp(G)
 		ζ⁻¹ += E
 		ζ = 1 / ζ⁻¹
 	end
@@ -123,9 +176,6 @@ function simulateschlather(L::M; C = 3.5, Gumbel::Bool = true) where M <: Abstra
 
 	return Z
 end
-
-
-
 
 
 
@@ -166,16 +216,17 @@ end
 
 #matern(h, ρ) =  matern(h, ρ, one(typeof(ρ)))
 
+
+
 """
     maternchols(D, ρ, ν, σ² = 1)
-Given a distance matrix `D`, constructs the Cholesky of the covariance matrix
+Given a distance matrix `D`, constructs the Cholesky factor of the covariance matrix
 under the Matérn covariance function with range parameter `ρ`, smoothness
 parameter `ν`, and marginal variance σ².
 
-Providing vectors of parameters will yield a three-dimensional array of
-Cholesky factors (note that the vectors must of the same length, but a mix of
-vectors and scalars is allowed). A vector of distance matrices `D` may also be
-provided.
+Providing vectors of parameters will yield a three-dimensional array of Cholesky factors (note
+that the vectors must of the same length, but a mix of vectors and scalars is
+allowed). A vector of distance matrices `D` may also be provided.
 
 # Examples
 ```
@@ -183,7 +234,7 @@ using NeuralEstimators
 using LinearAlgebra: norm
 n  = 10
 S  = rand(n, 2)
-D  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
+D  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ ∈ eachrow(S)]
 ρ  = [0.6, 0.5]
 ν  = [0.7, 1.2]
 σ² = [0.2, 0.4]
@@ -191,7 +242,7 @@ maternchols(D, ρ, ν)
 maternchols(D, ρ, ν, σ²)
 
 S̃  = rand(n, 2)
-D̃  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S̃), sⱼ in eachrow(S̃)]
+D̃  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S̃), sⱼ ∈ eachrow(S̃)]
 maternchols([D, D̃], ρ, ν, σ²)
 ```
 """
@@ -203,7 +254,13 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)))
 		if length(ν) == 1 ν = repeat([ν], n) end
 		if length(σ²) == 1 σ² = repeat([σ²], n) end
 	end
-	L = [cholesky(Symmetric(matern.(D, ρ[i], ν[i], σ²[i]))).L  for i ∈ 1:n]
+
+	# compute Cholesky factorization
+	L = map(1:n) do i
+		# Exploit symmetry of D to minimise the number of computations
+		C = matern.(UpperTriangular(D), ρ[i], ν[i], σ²[i])
+		cholesky(Symmetric(C)).L
+	end
 	L = convert.(Array, L)
 	L = stackarrays(L, merge = false)
 	return L
@@ -222,7 +279,6 @@ function maternchols(D::V, ρ, ν, σ² = one(eltype(D))) where {V <: AbstractVe
 	L = stackarrays(L, merge = true)
 	return L
 end
-
 
 """
     _incgammalowerunregularised(a, x)

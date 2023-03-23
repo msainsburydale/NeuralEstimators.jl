@@ -11,7 +11,7 @@ simulategaussianprocess
 simulateschlather
 ```
 
-## Commonly-used low-level functions
+## Low-level functions
 
 These low-level functions may be of use for various models.
 

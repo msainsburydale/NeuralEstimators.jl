@@ -9,7 +9,7 @@ of parameters, where ``p`` is the number of parameters in the model and ``K`` is
 number of parameter vectors sampled from the prior distribution. There are no
 other restrictions.
 
-See [`subsetparameters`](@ref) for the generic function for subsetting these objects.  
+See [`subsetparameters`](@ref) for the generic function for subsetting these objects.
 
 # Examples
 
@@ -28,7 +28,6 @@ Base.show(io::IO, parameters::P) where {P <: ParameterConfigurations} = print(io
 # this is used to show values in the REPL and when using IJulia
 Base.show(io::IO, m::MIME"text/plain", parameters::P) where {P <: ParameterConfigurations} = print(io, parameters)
 
-import Base: size
 size(parameters::P) where {P <: ParameterConfigurations} = size(_extractθ(parameters))
 size(parameters::P, d::Integer) where {P <: ParameterConfigurations} = size(_extractθ(parameters), d)
 
