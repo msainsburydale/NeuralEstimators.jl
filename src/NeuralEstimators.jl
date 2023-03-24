@@ -1,5 +1,6 @@
 module NeuralEstimators
 
+#TODO Why aren't the docs deploying properly?
 #TODO Need to update subsetdata
 #TODO Need to update number replicates
 #TODO maybe add structs for PointEstimator and CIEstimator, QuantileEstimator. Then, DeepSet,

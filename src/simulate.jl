@@ -1,5 +1,3 @@
-# TODO documentation
-
 """
 Generic function that may be overloaded to implicitly define a statistical model.
 Specifically, the user should provide a method `simulate(parameters, m)`
@@ -58,17 +56,15 @@ using GaussianRandomFields
 cov = CovarianceFunction(2, Matern(ρ, ν))
 grf = GaussianRandomField(cov, Cholesky(), S)
 simulategaussianprocess(grf)
-simulategaussianprocess(grf, 5)
 
 # Passing Cholesky factors directly as matrices:
 L = grf.data
 simulategaussianprocess(L)
 
-# Circulant embedding (fast, but only on grids):
+# Circulant embedding, which is fast but can on only be used on grids:
 pts = 1.0:50.0
 grf = GaussianRandomField(cov, CirculantEmbedding(), pts, pts, minpadding = 100)
 simulategaussianprocess(grf)
-simulategaussianprocess(grf, 5)
 ```
 """
 function simulategaussianprocess(obj::M, m::Integer) where M <: Union{AbstractMatrix{T}, GaussianRandomField} where T <: Number
@@ -118,18 +114,15 @@ using GaussianRandomFields
 cov = CovarianceFunction(2, Matern(ρ, ν))
 grf = GaussianRandomField(cov, Cholesky(), S)
 simulateschlather(grf)
-simulateschlather(grf, 5)
 
 # Passing Cholesky factors directly as matrices:
 L = grf.data
 simulateschlather(L)
-simulateschlather(L, 5)
 
-# Circulant embedding (fast, but only on grids):
+# Circulant embedding, which is fast but can on only be used on grids:
 pts = 1.0:50.0
 grf = GaussianRandomField(cov, CirculantEmbedding(), pts, pts, minpadding = 100)
 simulateschlather(grf)
-simulateschlather(grf, 5)
 ```
 """
 function simulateschlather(obj::M, m::Integer; C = 3.5, Gumbel::Bool = true) where M <: Union{AbstractMatrix{T}, GaussianRandomField} where T <: Number
