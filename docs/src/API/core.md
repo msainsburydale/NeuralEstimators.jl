@@ -58,16 +58,12 @@ intervalscore
 
 ## Training
 
+The function `train` is used to train a single neural estimator, while the wrapper function `trainx` is useful for training multiple neural estimators over a range of sample sizes, making using of the technique known as pre-training. 
+
 ```@docs
 train
 
-train(θ̂, P)
-
-train(θ̂, θ_train::P, θ_val::P) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-
-train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
-
-train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+trainx
 ```
 
 

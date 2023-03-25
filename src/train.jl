@@ -1,10 +1,32 @@
 """
-Generic function for training a neural estimator.
+	train(θ̂, P, simulator::Function; ...)
+	train(θ̂, θ_train::P, θ_val::P, simulator::Function; ...)
+	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...)
 
-The methods are designed to cater for different forms of "on-the-fly simulation"
-(see the online documentation). In all methods, the validation data are held
-fixed to reduce noise when evaluating the validation risk function (which is
-used to monitor the performance of the estimator during training).
+Train a neural estimator with architecture `θ̂`.
+
+The methods cater for different forms of on-the-fly simulation. The method that
+takes a constructor
+`P <: Union{AbstractMatrix, ParameterConfigurations}` and a function `simulator`
+for sampling parameters and simulating data, respectively, allows for
+both the parameters and the data to be simulated on-the-fly. Note that
+`simulator` is called as `simulator(θ, m)`, where `θ` is a set of parameters
+and `m` is the sample size (see keyword arguments below).
+If provided with specific instances of parameters (`θ_train` and `θ_val`) or
+data (`Z_train` and `Z_val`), they will be held fixed during training.
+
+In all methods, the validation set is held fixed to reduce noise when
+evaluating the validation risk function, which is used to monitor the
+performance of the estimator during training.
+
+If the number of replicates in `Z_train` is a multiple of the
+number of replicates for each element of `Z_val`, the training data will be
+recycled throughout training. For example, if each
+element of `Z_train` consists of 50 replicates, and each
+element of `Z_val` consists of 10 replicates, the first epoch uses the first
+10 replicates in `Z_train`, the second epoch uses the next 10 replicates, and so
+on, until the sixth epoch again uses the first 10 replicates. Note that this
+requires the data to be subsettable with the function `subsetdata`.
 
 # Keyword arguments
 
@@ -13,30 +35,28 @@ Arguments common to all methods:
 - `epochs::Integer = 100`
 - `batchsize::Integer = 32`
 - `optimiser = ADAM(1e-4)`
-- `savepath::String = ""`: path to save the trained `θ̂` and other information; if savepath is an empty string (default), nothing is saved.
-- `stopping_epochs::Integer = 5`: cease training if the risk doesn't improve in `stopping_epochs` epochs.
+- `savepath::String = ""`: path to save the trained estimator and other information; if savepath is an empty string (default), nothing is saved.
+- `stopping_epochs::Integer = 5`: cease training if the risk doesn't improve in this number of epochs.
 - `use_gpu::Bool = true`
 - `verbose::Bool = true`
 
 Arguments common to `train(θ̂, P, simulator)` and `train(θ̂, θ_train, θ_val, simulator)`:
 - `m`: sample sizes (either an `Integer` or a collection of `Integers`).
 - `epochs_per_Z_refresh::Integer = 1`: how often to refresh the training data.
-- `simulate_just_in_time::Bool = false`: should we simulate the data "just-in-time"? If `true`, the user must overload the generic function `simulate` with a method `simulate(parameters, m)`.
+- `simulate_just_in_time::Bool = false`: flag indicating whether we should simulate just-in-time, in the sense that only a `batchsize` number of parameter vectors and corresponding data are in memory at a given time.
 
-Arguments unique to `train(θ̂, P)`:
+Arguments unique to `train(θ̂, P, simulator)`:
 - `K::Integer = 10000`: number of parameter vectors in the training set; the size of the validation set is `K ÷ 5`.
 - `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices); if `ξ` is provided, the constructor `P` is called as `P(K, ξ)`.
+
+# Examples
+```
+#TODO
+```
 """
 function train end
 
 
-"""
-	train(θ̂, P, simulator::Function; <keyword args>)
-
-Train the neural estimator `θ̂` by providing a constructor, `P`, where
-`P <: Union{AbstractMatrix, ParameterConfigurations}`, to
-automatically sample training and validation parameter sets at each epoch.
-"""
 function train(θ̂, P, simulator::Function;
 	m,
 	ξ = nothing,
@@ -135,12 +155,7 @@ function train(θ̂, P, simulator::Function;
     return θ̂
 end
 
-"""
-	train(θ̂, θ_train::P, θ_val::P, simulator::Function; <keyword args>)
 
-Train the neural estimator `θ̂` by providing the training and validation parameter
-sets explicitly as `θ_train` and `θ_val`, both of which are held fixed during training.
-"""
 function train(θ̂, θ_train::P, θ_val::P, simulator::Function;
 		m,
 		batchsize::Integer = 32,
@@ -260,25 +275,8 @@ function train(θ̂, θ_train::P, θ_val::P, simulator::Function;
     return θ̂
 end
 
-"""
-	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; <keyword args>)
 
-Train the neural estimator `θ̂` by providing the training and validation parameter
-sets, `θ_train` and `θ_val`, and the training and validation data sets,
-`Z_train` and `Z_val`, all of which are held fixed during training.
-
-If the elements of `Z_train` and `Z_val` are equally replicated, and the number
-of replicates for each element of `Z_train` is a multiple of the number of
-replicates for each element of `Z_val`, then the training data will
-then be recycled throughout training to imitate on-the-fly simulation.
-For example, if each element of `Z_train` consists of 50 replicates, and each
-element of `Z_val` consists of 10 replicates, the first epoch uses the first
-10 replicates in `Z_train`, the second epoch uses the next 10 replicates, and so
-on, until epoch 6 again uses the first 10 replicates. Note that this requires
-the data to be subsetted throughout training with the function `subsetdata`.
-"""
-function train(
-		θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
+function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
@@ -292,17 +290,6 @@ function train(
 	@assert batchsize > 0
 	@assert epochs > 0
 	@assert stopping_epochs > 0
-
-	# If the elements of Z_train and Z_val are equally replicated, that is, there
-	# is a constant number of replicates associated with each parameter vector in
-	# θ_train, and similarly for θ_val, then the sample size argument m can be
-	# inferred from Z_val. The training data Z_train can contain M replicates,
-	# where M is a multiple of m. The training data will
-	# then be recycled to imitate on-the-fly simulation. For example, if M = 50 and
-	# m = 10, epoch 1 uses the first 10 replicates, epoch 2 uses the next 10
-	# replicates, and so on, until epoch 6 again uses the first 10 replicates.
-	# Note that this requires the data to be subsetted throughout the training
-	# procedure, which is performed using the function subsetdata.
 
 	# Determine if we we need to subset the data.
 	# Start by assuming we will not subset the data:
@@ -393,88 +380,119 @@ function train(
 end
 
 
-# ---- Wrapper function for training multiple estimators over a range of sample sizes ----
+# ---- Wrapper functions for training multiple estimators over a range of sample sizes ----
 
+#TODO not ideal that M is a capital letter, which is usually reserved for types.
 """
-	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M; <keyword args>)
-	train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; <keyword args>) where {V <: Vector{Vector{T}}}
+	trainx(θ̂, P, simulator, M; ...)
+	trainx(θ̂, θ_train, θ_val, simulator, M; ...)
+	trainx(θ̂, θ_train, θ_val, Z_train::T, Z_val::T, M; ...)
+	trainx(θ̂, θ_train, θ_val, Z_train::V, Z_val::V; ...) where {V <: AbstractVector{AbstractVector{Any}}}
 
-Train several neural estimators with the architecture `θ̂` under different sample sizes.
+A wrapper around `train` to construct neural estimators for different sample sizes.
 
-The first method accepts sample sizes as a vector of integers, `M`. Each
-estimator is pre-trained with the estimator trained for the previous sample size.
-For example, if `M = [m₁, m₂]`, with `m₂` > `m₁`, the estimator for sample size
-`m₂` is pre-trained with the estimator for sample size `m₁`.
+The collection `M` specifies the desired sample sizes.
+Each estimator is pre-trained with the estimator for the previous sample size.
+For example, if `M = [m₁, m₂]`, the estimator for sample size `m₂` is
+pre-trained with the estimator for sample size `m₁`. The method for `Z_train::T`
+and `Z_val::T` subsets the data using `subsetdata(Z, 1:mᵢ)` for each `mᵢ ∈ M`.
 
-The second method requires `Z_train` and `Z_val` to be a `Vector{Vector{T}}`,
-where `T` is arbitrary. In this method, a separate estimator is trained
-for each element in `Z_train` and `Z_val` and, importantly, it does not invoke
-`subsetdata()`, which can be slow for graphical data. Again, pre-training is
-used.
+The method for `Z_train::V` and `Z_val::V` trains an estimator for each
+element of `Z_train` and `Z_val`; hence, it does not need to invoke `subsetdata`,
+which can be slow or difficult to define in some cases (e.g., for graphical data).
 
-These methods wrap `train(θ̂, θ_train, θ_val, Z_train, Z_val)` and, hence, they
-inherit its keyword arguments. Further, certain keyword arguments can be given
-as vectors. For instance, if we are training two neural estimators, we can use
-a different number of epochs by providing `epochs = [e₁, e₂]`. Other arguments
-that allow vectors are `batchsize`, `stopping_epochs`, and `optimiser`.
+The keyword arguments inherit from `train`, and certain keyword arguments
+can be given as vectors. For example, if we are training two estimators, we can
+use a different number of epochs by providing `epochs = [e₁, e₂]`. Other
+arguments that allow vectors are `batchsize`, `stopping_epochs`, and `optimiser`.
+
+# Examples
+```
+#TODO
+```
 """
-function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+function trainx end
+
+
+function trainx(θ̂, P, simulator::Function, M; args...)
+
+	kwargs = (;args...)
+	verbose = _checkargs_trainx(kwargs)
 
 	@assert all(M .> 0)
 	M = sort(M)
-	E = length(M) # number of estimators
+	E = length(M)
 
-	m_tmp = unique(numberreplicates(Z_val))
-	M_tmp = unique(numberreplicates(Z_train))
-	@assert length(m_tmp) == 1 "The elements of `Z_val` should be equally replicated: check with `numberreplicates(Z_val)`"
-	@assert length(M_tmp) == 1 "The elements of `Z_train` should be equally replicated: check with `numberreplicates(Z_train)`"
-
-	kwargs = (;args...)
-	@assert !haskey(kwargs, :m) "`m` should not be provided with this method of `train`"
-
-	# Create a copy of θ̂ for each sample size
+	# Create a copy of θ̂ each sample size
 	estimators = _deepcopyestimator(θ̂, kwargs, E)
 
 	for i ∈ eachindex(estimators)
 
 		mᵢ = M[i]
-		kwargs = (;args...)
-		verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
 		verbose && @info "training with m=$(mᵢ)"
 
 		# Pre-train if this is not the first estimator
 		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
 
-		# Modify/check the keyword arguments before passing them onto train().
-		# If savepath has been provided in the keyword arguments, modify it with
-		# information on the training sample size mᵢ. First, we convert the object
-		# args to a named tuple. Then, if savepath was included as an argument
-		# and it is not an empty string, we use merge() to replace its given
-		# value with a modified version that contains mᵢ. We will pass on this
-		# modified version of args to train().
+		# Modify/check the keyword arguments before passing them onto train
+		kwargs = (;args...)
 		if haskey(kwargs, :savepath) && kwargs.savepath != ""
 			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
 		end
 		kwargs = _modifyargs(kwargs, i, E)
 
-		# Subset the validation data to the current sample size, and then train
-		Z_valᵢ = subsetdata(Z_val, 1:mᵢ)
-		estimators[i] = train(estimators[i], θ_train, θ_val, Z_train, Z_valᵢ; kwargs...)
+		# train
+		estimators[i] = train(estimators[i], P, simulator; m = mᵢ, kwargs...)
 	end
 
 	return estimators
 end
 
-function train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: AbstractVector{T}}  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+
+function trainx(θ̂, θ_train::P, θ_val::P, simulator::Function, M; args...)  where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+	kwargs = (;args...)
+	verbose = _checkargs_trainx(kwargs)
+
+	@assert all(M .> 0)
+	M = sort(M)
+	E = length(M) # number of estimators
+
+	# Create a copy of θ̂ each sample size
+	estimators = _deepcopyestimator(θ̂, kwargs, E)
+
+	for i ∈ eachindex(estimators)
+
+		mᵢ = M[i]
+		verbose && @info "training with m=$(mᵢ)"
+
+		# Pre-train if this is not the first estimator
+		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
+
+		# Modify/check the keyword arguments before passing them onto train
+		kwargs = (;args...)
+		if haskey(kwargs, :savepath) && kwargs.savepath != ""
+			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
+		end
+		kwargs = _modifyargs(kwargs, i, E)
+
+		# train
+		estimators[i] = train(estimators[i], θ_train, θ_val, simulator; m = mᵢ, kwargs...)
+	end
+
+	return estimators
+end
+
+
+function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: AbstractVector{T}}  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
 
 	@assert length(Z_train) == length(Z_val)
 	E = length(Z_train) # number of estimators
 
 	kwargs = (;args...)
-	@assert !haskey(kwargs, :m) "`m` should not be provided with this method of `train`"
-	verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
+	verbose = _checkargs_trainx(kwargs)
 
-	# Create a copy of θ̂ for each sample size
+	# Create a copy of θ̂ each sample size
 	estimators = _deepcopyestimator(θ̂, kwargs, E)
 
 	for i ∈ eachindex(estimators)
@@ -495,13 +513,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) wher
 		# Pre-train if this is not the first estimator
 		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
 
-		# Modify/check the keyword arguments before passing them onto train().
-		# If savepath has been provided in the keyword arguments, modify it with
-		# information on the training sample size mᵢ. First, we convert the object
-		# args to a named tuple. Then, if savepath was included as an argument
-		# and it is not an empty string, we use merge() to replace its given
-		# value with a modified version that contains mᵢ. We will pass on this
-		# modified version of args to train().
+		# Modify/check the keyword arguments before passing them onto train
 		kwargs = (;args...)
 		if haskey(kwargs, :savepath) && kwargs.savepath != ""
 			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
@@ -510,6 +522,45 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) wher
 
 		# train
 		estimators[i] = train(estimators[i], θ_train, θ_val, Z_trainᵢ, Z_valᵢ; kwargs...)
+	end
+
+	return estimators
+end
+
+
+function trainx(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+
+	@assert length(unique(numberreplicates(Z_val))) == 1 "The elements of `Z_val` should be equally replicated: check with `numberreplicates(Z_val)`"
+	@assert length(unique(numberreplicates(Z_train))) == 1 "The elements of `Z_train` should be equally replicated: check with `numberreplicates(Z_train)`"
+
+	kwargs = (;args...)
+	verbose = _checkargs_trainx(kwargs)
+
+	@assert all(M .> 0)
+	M = sort(M)
+	E = length(M) # number of estimators
+
+	# Create a copy of θ̂ each sample size
+	estimators = _deepcopyestimator(θ̂, kwargs, E)
+
+	for i ∈ eachindex(estimators)
+
+		mᵢ = M[i]
+		verbose && @info "training with m=$(mᵢ)"
+
+		# Pre-train if this is not the first estimator
+		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
+
+		# Modify/check the keyword arguments before passing them onto train
+		kwargs = (;args...)
+		if haskey(kwargs, :savepath) && kwargs.savepath != ""
+			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
+		end
+		kwargs = _modifyargs(kwargs, i, E)
+
+		# Subset the validation data to the current sample size, and then train
+		Z_valᵢ = subsetdata(Z_val, 1:mᵢ)
+		estimators[i] = train(estimators[i], θ_train, θ_val, Z_train, Z_valᵢ; kwargs...)
 	end
 
 	return estimators
@@ -549,6 +600,13 @@ function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 	@assert epochs > 0
 	@assert stopping_epochs > 0
 	@assert epochs_per_Z_refresh > 0
+end
+
+
+function _checkargs_trainx(kwargs)
+	@assert !haskey(kwargs, :m) "`m` should not be provided; use the positional argument `M`"
+	verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
+	return verbose
 end
 
 # Computes the loss function in a memory-safe manner
