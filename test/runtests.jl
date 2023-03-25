@@ -1,7 +1,3 @@
-# TODO Remove all calls to rand(); need to remove randomness for consistency..
-# this is very important, as errors can occur for some values, but not others,
-# so we need to make sure that the same numbers are being crunched every time.
-
 using NeuralEstimators
 using NeuralEstimators: _getindices, _runondevice, _incgammalowerunregularised
 import NeuralEstimators: simulate
@@ -13,13 +9,14 @@ using Flux: DataLoader
 using Flux: mae
 using Graphs
 using GraphNeuralNetworks
-using LinearAlgebra: norm
+using LinearAlgebra
 using Random: seed!
 using SpecialFunctions: gamma
 using Statistics
 using Statistics: mean, sum
 using Test
 using Zygote
+array(size...; T = Float64) = T.(reshape(1:prod(size), size...) ./ prod(size))
 
 verbose = false # verbose used in the NeuralEstimators code
 
@@ -32,16 +29,13 @@ else
 	devices = (CPU = cpu,)
 end
 
-
 @testset "loss functions" begin
 	p = 3
 	K = 10
-	θ̂ = rand(p, K)
-	θ = rand(p, K)
+	θ̂ = array(p, K)
+	θ = array(p, K)
 	@test quantileloss(θ̂, θ, 0.5) ≈ 0.5 * mae(θ̂, θ)
 end
-
-
 
 @testset "UtilityFunctions" begin
 
@@ -52,23 +46,23 @@ end
 
 	@testset "_getindices" begin
 		m = (3, 4, 6)
-		v = [rand(16, 16, 1, mᵢ) for mᵢ ∈ m]
+		v = [array(16, 16, 1, mᵢ) for mᵢ ∈ m]
 		@test _getindices(v) == [1:3, 4:7, 8:13]
 	end
 
 	@testset "stackarrays" begin
 		# Vector containing arrays of the same size:
-		A = rand(2, 3, 4); v = [A, A]; N = ndims(A);
+		A = array(2, 3, 4); v = [A, A]; N = ndims(A);
 		@test stackarrays(v) == cat(v..., dims = N)
 		@test stackarrays(v, merge = false) == cat(v..., dims = N + 1)
 
 		# Vector containing arrays with differing final dimension size:
-		A₁ = rand(2, 3, 4); A₂ = rand(2, 3, 5); v = [A₁, A₂];
+		A₁ = array(2, 3, 4); A₂ = array(2, 3, 5); v = [A₁, A₂];
 		@test stackarrays(v) == cat(v..., dims = N)
 	end
 
 	# @testset "samplesize" begin
-	# 	Z = rand(3, 4, 1, 6)
+	# 	Z = array(3, 4, 1, 6)
 	#     @test inversesamplesize(Z) ≈ 1/samplesize(Z)
 	# end
 
@@ -122,7 +116,7 @@ end
 	end
 
 	K = 4
-	parameters = TestParameters(rand(K), rand(3, K), rand(2, 2, K))
+	parameters = TestParameters(array(K), array(3, K), array(2, 2, K))
 	indices = 2:3
 	parameters_subset = subsetparameters(parameters, indices)
 	@test parameters_subset.θ     == parameters.θ[:, indices]
@@ -138,20 +132,19 @@ end
 	b = [0.9, 9, 3]
 	l = Compress(a, b)
 	K = 10
-	θ = rand(p, K)
+	θ = array(p, K)
 	l(θ)
 	@test all([all(a .< x .< b) for x ∈ eachcol(l(θ))])
 
 	n = 20
-	Z = rand(n, K)
+	Z = array(n, K)
 	θ̂ = Chain(Dense(n, 15), Dense(15, p), l)
 	@test all([all(a .< x .< b) for x ∈ eachcol(θ̂(Z))])
 end
 
 
-
 @testset "simulation" begin
-	S = rand(Float32, 10, 2)
+	S = array(10, 2, T = Float32)
 	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
 	ρ = Float32.([0.6, 0.8])
 	ν = Float32.([0.5, 0.7])
@@ -167,15 +160,7 @@ end
 
 	@test eltype(simulategaussianprocess(L₁, m)) == Float32
 	# @code_warntype simulategaussianprocess(L₁, σ, m)
-
-	# #TODO
-	# using GaussianRandomFields
-	# cov = CovarianceFunction(2, Matern(ρ, ν))
-	# grf = GaussianRandomField(cov, Cholesky(), S)
-	# simulategaussianprocess(grf)
-	# simulategaussianprocess(grf, 5)
 end
-
 
 
 @testset "densities" begin
@@ -206,8 +191,9 @@ end
 	@test schlatherbivariatedensity(3.3, 3.8, 0.9; logdensity = false) ≈ exp(schlatherbivariatedensity(3.3, 3.8, 0.9))
 	y = [0.2, 0.4, 0.3]
 	n = length(y)
-	A = rand(n, n)
-	Σ = A'A
+	# construct a diagonally dominant covariance matrix (pos. def. guaranteed via Gershgorins Theorem)
+	Σ = array(n, n)
+	Σ[diagind(Σ)] .= diag(Σ) + sum(Σ, dims = 2)
 	@test gaussiandensity(y, Σ, logdensity = false) ≈ exp(gaussiandensity(y, Σ))
 end
 
@@ -216,8 +202,8 @@ end
 	n₁, n₂ = 11, 27
 	m₁, m₂ = 30, 50
 	d = 1
-	g₁ = rand_graph(n₁, m₁, ndata=rand(Float32, d, n₁))
-	g₂ = rand_graph(n₂, m₂, ndata=rand(Float32, d, n₂))
+	g₁ = rand_graph(n₁, m₁, ndata = array(d, n₁, T = Float32))
+	g₂ = rand_graph(n₂, m₂, ndata = array(d, n₂, T = Float32))
 	g = Flux.batch([g₁, g₂])
 
 	# g is a single large GNNGraph containing the subgraphs
@@ -275,8 +261,8 @@ end
 
 	# test that is can be trained
 	K = 10
-	Z = [rand_graph(n₁, m₁, ndata=rand(Float32, d, n₁)) for _ in 1:K]
-	θ = rand(p, K)
+	Z = [rand_graph(n₁, m₁, ndata = array(d, n₁, T = Float32)) for _ in 1:K]
+	θ = array(p, K)
 	train(est, θ, θ, Z, Z; batchsize = 2, verbose = verbose)
 end
 
@@ -287,10 +273,7 @@ struct Parameters <: ParameterConfigurations
 	σ
 end
 ξ = (Ω = Normal(0, 0.5), σ = 1)
-function Parameters(K::Integer, ξ)
-	θ = rand(ξ.Ω, 1, K)
-	Parameters(θ, ξ.σ)
-end
+Parameters(K::Integer, ξ) = Parameters(rand(ξ.Ω, 1, K), ξ.σ)
 function simulate(parameters::Parameters, m::Integer)
 	n = 1
 	θ = vec(parameters.θ)
@@ -326,9 +309,9 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 
 		loss = Flux.Losses.mae |> device
 		γ    = Flux.params(θ̂)  |> device
-		θ    = rand(p, K)      |> device
+		θ    = array(p, K)      |> device
 
-		Z = [randn(Float32, n, m) for m ∈ rand(29:30, K)] |> device
+		Z = [array(n, m, T = Float32) for m ∈ rand(29:30, K)] |> device
 		@test size(θ̂(Z), 1) == p
 		@test size(θ̂(Z), 2) == K
 		@test isa(loss(θ̂(Z), θ), Number)
@@ -340,10 +323,10 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 
 	    use_gpu = device == gpu
 		@testset "train" begin
-			θ̂ = train(θ̂, Parameters, m = 10, epochs = 5, use_gpu = use_gpu, verbose = verbose, ξ = ξ)
-			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, use_gpu = use_gpu, verbose = verbose)
-			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
-			θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
+			θ̂ = train(θ̂, Parameters, simulate, m = 10, epochs = 5, use_gpu = use_gpu, verbose = verbose, ξ = ξ)
+			θ̂ = train(θ̂, parameters, parameters, simulate, m = 10, epochs = 5, use_gpu = use_gpu, verbose = verbose)
+			θ̂ = train(θ̂, parameters, parameters, simulate, m = 10, epochs = 5, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
+			θ̂ = train(θ̂, parameters, parameters, simulate, m = 10, epochs = 5, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
 
 			# passing replicated data and cycling over the replicates:
 			Z_train = simulate(parameters, 20);
@@ -374,12 +357,12 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 			all_m = [10, 20, 30]
 
 			# Method that does not require the user to provide data
-			assessment = assess([θ̂], parameters, m = all_m, use_gpu = use_gpu, verbose = verbose)
-			@test typeof(assessment)         == Assessment
-			@test typeof(assessment.θandθ̂)   == DataFrame
-			@test typeof(assessment.runtime) == DataFrame
-			risk(assessment)
-			risk(assessment, average_over_parameters = false)
+			# assessment = assess([θ̂], parameters, m = all_m, use_gpu = use_gpu, verbose = verbose)
+			# @test typeof(assessment)         == Assessment
+			# @test typeof(assessment.θandθ̂)   == DataFrame
+			# @test typeof(assessment.runtime) == DataFrame
+			# risk(assessment)
+			# risk(assessment, average_over_parameters = false)
 
 			# Method that require the user to provide data: J == 1
 			Z_test = [simulate(parameters, m) for m ∈ all_m]
@@ -396,8 +379,8 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 			@test typeof(assessment.runtime) == DataFrame
 
 			# Test that estimators needing invariant model information can be used:
-			assess([MLE], parameters, m = all_m, verbose = verbose)
-			assess([MLE], parameters, m = all_m, verbose = verbose, ξ = ξ)
+			assess([MLE], parameters, Z_test, verbose = verbose)
+			assess([MLE], parameters, Z_test, verbose = verbose, ξ = ξ)
 		end
 
 		@testset "bootstrap" begin
@@ -414,7 +397,7 @@ end
 
 @testset "PiecewiseEstimator" begin
 	θ̂_piecewise = PiecewiseEstimator((θ̂_deepset, MLE), (30))
-	Z = [randn(Float32, n, 1, 10),  randn(Float32, n, 1, 50)]
+	Z = [array(n, 1, 10, T = Float32), array(n, 1, 50, T = Float32)]
 	θ̂₁ = hcat(θ̂_deepset(Z[[1]]), MLE(Z[[2]]))
 	θ̂₂ = θ̂_piecewise(Z)
 	@test θ̂₁ ≈ θ̂₂

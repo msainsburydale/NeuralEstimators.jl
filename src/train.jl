@@ -18,7 +18,7 @@ Arguments common to all methods:
 - `use_gpu::Bool = true`
 - `verbose::Bool = true`
 
-Arguments common to `train(θ̂, P)` and `train(θ̂, θ_train, θ_val)`:
+Arguments common to `train(θ̂, P, simulator)` and `train(θ̂, θ_train, θ_val, simulator)`:
 - `m`: sample sizes (either an `Integer` or a collection of `Integers`).
 - `epochs_per_Z_refresh::Integer = 1`: how often to refresh the training data.
 - `simulate_just_in_time::Bool = false`: should we simulate the data "just-in-time"? If `true`, the user must overload the generic function `simulate` with a method `simulate(parameters, m)`.
@@ -28,16 +28,16 @@ Arguments unique to `train(θ̂, P)`:
 - `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices); if `ξ` is provided, the constructor `P` is called as `P(K, ξ)`.
 """
 function train end
-# Note that train() is a mutating function, but the suffix ! is omitted to avoid clashes with the Flux function, train!().
+
 
 """
-	train(θ̂, P; <keyword args>)
+	train(θ̂, P, simulator::Function; <keyword args>)
 
 Train the neural estimator `θ̂` by providing a constructor, `P`, where
 `P <: Union{AbstractMatrix, ParameterConfigurations}`, to
 automatically sample training and validation parameter sets at each epoch.
 """
-function train(θ̂, P;
+function train(θ̂, P, simulator::Function;
 	m,
 	ξ = nothing,
 	# epochs_per_θ_refresh::Integer = 1, # how often to refresh the training parameters; must be a multiple of `epochs_per_Z_refresh`.
@@ -73,7 +73,7 @@ function train(θ̂, P;
 
 	verbose && println("Simulating validation parameters and validation data...")
 	θ_val = isnothing(ξ) ? P(K ÷ 5 + 1) : P(K ÷ 5 + 1, ξ)
-	Z_val = _simulate(θ_val, m)
+	Z_val = _simulate(simulator, θ_val, m)
 	Z_val = _quietDataLoader(Z_val, batchsize)
 
 	# Initialise the loss per epoch matrix.
@@ -123,7 +123,7 @@ function train(θ̂, P;
 			early_stopping_counter = 0
 		else
 			early_stopping_counter += 1
-			early_stopping_counter > stopping_epochs && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
+			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
 		end
 
     end
@@ -135,14 +135,13 @@ function train(θ̂, P;
     return θ̂
 end
 
-
 """
-	train(θ̂, θ_train::P, θ_val::P; <keyword args>)
+	train(θ̂, θ_train::P, θ_val::P, simulator::Function; <keyword args>)
 
 Train the neural estimator `θ̂` by providing the training and validation parameter
 sets explicitly as `θ_train` and `θ_val`, both of which are held fixed during training.
 """
-function train(θ̂, θ_train::P, θ_val::P;
+function train(θ̂, θ_train::P, θ_val::P, simulator::Function;
 		m,
 		batchsize::Integer = 32,
 		epochs_per_Z_refresh::Integer = 1,
@@ -171,7 +170,7 @@ function train(θ̂, θ_train::P, θ_val::P;
     γ = Flux.params(θ̂)
 
 	verbose && println("Simulating validation data...")
-	Z_val = _simulate(θ_val, m)
+	Z_val = _simulate(simulator, θ_val, m)
 	Z_val = _quietDataLoader(Z_val, batchsize)
 	verbose && print("Computing the initial validation risk...")
 	initial_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
@@ -207,7 +206,7 @@ function train(θ̂, θ_train::P, θ_val::P;
 				verbose && print("Simulating training data...")
 				Z_train = nothing
 				@sync gc()
-				t = @elapsed Z_train = _simulate(θ_train, m)
+				t = @elapsed Z_train = _simulate(simulator, θ_train, m)
 				Z_train = _quietDataLoader(Z_train, batchsize)
 				verbose && println(" Finished in $(round(t, digits = 3)) seconds")
 			end
@@ -249,7 +248,7 @@ function train(θ̂, θ_train::P, θ_val::P;
 			early_stopping_counter = 0
 		else
 			early_stopping_counter += 1
-			early_stopping_counter > stopping_epochs && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
+			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
 		end
 
     end
@@ -381,7 +380,7 @@ function train(
 			early_stopping_counter = 0
 		else
 			early_stopping_counter += 1
-			early_stopping_counter > stopping_epochs && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
+			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
 		end
 
     end
@@ -473,6 +472,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) wher
 
 	kwargs = (;args...)
 	@assert !haskey(kwargs, :m) "`m` should not be provided with this method of `train`"
+	verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
 
 	# Create a copy of θ̂ for each sample size
 	estimators = _deepcopyestimator(θ̂, kwargs, E)
@@ -486,9 +486,9 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) wher
 		mᵢ = extrema(unique(numberreplicates(Z_valᵢ)))
 		if mᵢ[1] == mᵢ[2]
 			mᵢ = mᵢ[1]
-			@info "training with m=$(mᵢ)"
+			verbose && @info "training with m=$(mᵢ)"
 		else
-			@info "training with m ∈ [$(mᵢ[1]), $(mᵢ[2])]"
+			verbose && @info "training with m ∈ [$(mᵢ[1]), $(mᵢ[2])]"
 			mᵢ = "$(mᵢ[1])-$(mᵢ[2])"
 		end
 
@@ -621,3 +621,7 @@ function _updatebatch!(θ̂::GNNEstimator, Z, θ, device, loss, γ, optimiser)
 	ls = ls * size(θ)[end]
 	return ls
 end
+
+
+# Wrapper function that returns simulated data and the true parameter values
+_simulate(simulator::Function, params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (simulator(params, m), _extractθ(params))

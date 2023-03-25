@@ -3,7 +3,7 @@
 """
 	Assessment(θandθ̂::DataFrame, runtime::DataFrame)
 
-An type for storing the output of `assess()`. It contains two fields.
+A type for storing the output of `assess()`. It contains two fields.
 The field `runtime` contains the total `time` taken for each `estimator` for each sample size `m`.
 The field `θandθ̂` is a long-form `DataFrame` containing the true parameters and corresponding estimates.
 Specifically, its columns are:
@@ -58,39 +58,6 @@ function risk(assessment::Assessment; loss = (x, y) -> abs(x - y), average_over_
 end
 
 
-# Given a set of true parameters θ and corresponding estimates θ̂ resulting
-# from a call to assess(), merge θ and θ̂ into a single long-form DataFrame.
-function _merge(θ, θ̂)
-
-	# Replicate θ to match the number of rows in θ̂. Note that the parameter
-	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
-	# in an outer fashion.
-	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
-
-	# Transform θ and θ̂ to long form:
-	θ = stack(θ, variable_name = :parameter, value_name = :truth)
-	θ̂ = stack(θ̂, Not([:estimator, :m, :k, :j, :replicate]), variable_name = :parameter, value_name = :estimate)
-
-	# Merge θ and θ̂: All we have to do is add :truth column to θ̂
-	θ̂[!, :truth] = θ[:, :truth]
-
-	return θ̂
-end
-
-
-# Internal constructor for Assessment
-function _Assessment(obj)
-
-	θ = obj[1].θ
-	θ̂ = vcat(map(x -> x.θ̂, obj)...)
-	runtime = vcat(map(x -> x.runtime, obj)...)
-
-	assessment = Assessment(_merge(θ, θ̂), runtime)
-
-	return assessment
-end
-
-
 # ---- assess() ----
 
 
@@ -98,30 +65,21 @@ end
 	assess(estimators, parameters, Z; <keyword args>)
 	assess(estimators, parameters; <keyword args>)
 
-Using a collection of `estimators`, compute estimates from data simulated from a
-set of `parameters`.
+Using a collection of `estimators`, compute estimates from data `Z` simulated
+from a set of `parameters`.
 
-Testing data can be automatically simulated by overloading `simulate` with a method
-`simulate(parameters, m::Integer)`, and using the keyword argument `m` to specify
-the desired sample sizes to assess. Alternatively, one may provide testing data
-`Z` as an iterable collection, where each element contains the testing data
-for a given sample size. If there are more simulated data sets than unique parameter
-vectors, the data should be stored in an 'outer' fashion, so that the parameter
-vectors run faster than the replicated data.
+The data `Z` should be an iterable collection, where each element contains
+testing data for a single sample size. If there are more simulated data sets
+than unique parameter vectors, the data should be stored in an 'outer' fashion,
+so that the parameter vectors run faster than the replicated data.
 
 # Keyword arguments
-
-# Arguments common to both methods
 - `estimator_names::Vector{String}`: names of the estimators (sensible defaults provided).
 - `parameter_names::Vector{String}`: names of the parameters (sensible defaults provided). If `ξ` is provided with a field `parameter_names`, those names will be used.
 - `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices).
 - `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses `ξ`: if it does, the estimator will be applied as `estimator(Z, ξ)`. This argument is useful when multiple `estimators` are provided, only some of which need `ξ`; hence, if only one estimator is provided and `ξ` is not `nothing`, `use_ξ` is automatically set to `true`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
 - `verbose::Bool = true`
-
-# Arguments unique to `assess(estimators, parameters)`
-- `m::Vector{Integer}`: sample sizes to estimate from.
-- `J::Integer = 1`: the number of times to replicate each parameter in `parameters`.
 
 # Examples
 ```
@@ -138,7 +96,7 @@ w = 32 # width of each layer
 θ̂ = DeepSet(ψ, ϕ)
 
 # Generate fake parameters and corresponding data for a range of sample sizes:
-K = 100        # number of parameter vectors in the test set
+K = 100
 θ = rand(p, K)
 Z = [[rand(n, m) for _ ∈ 1:K] for m ∈ (1, 10, 20)]
 
@@ -147,34 +105,6 @@ risk(assessment)
 risk(assessment, average_over_parameters = false)
 ```
 """
-function assess(
-    estimators, parameters::P;
-	m::Vector{I},
-	J::Integer = 1,
-	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
-	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
-	ξ = nothing,
-	use_ξ = false,
-	use_gpu = true,
-	verbose::Bool = true
-	) where {P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
-
-	obj = map(m) do i
-
-		# Simulate data
-		verbose && println("	Simulating data...")
-		Z = simulate(parameters, i, J)
-
-	 	_assess(
-			estimators, parameters, Z, J = J,
-			estimator_names = estimator_names, parameter_names = parameter_names,
-			ξ = ξ, use_ξ = use_ξ, use_gpu = use_gpu, verbose = verbose
-		)
-	end
-
-	return _Assessment(obj)
-end
-
 function assess(
 	estimators, parameters::P, Z;
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
@@ -199,8 +129,7 @@ function assess(
 	J = KJ ÷ K
 	J > 1 && verbose && @info "There are more simulated data sets than unique parameter vectors; ensure that the data are replicated in an 'outer' fashion, so that the parameter vectors run faster than the replicated data sets."
 
-	obj = map(Z) do z
-
+	assessments = map(Z) do z
 		_assess(
 			estimators, parameters, z, J = J,
 			estimator_names = estimator_names, parameter_names = parameter_names,
@@ -208,13 +137,15 @@ function assess(
 		)
 	end
 
-	return _Assessment(obj)
+	return merge(assessments...)
 end
 
-
+# NB this chould be an exported method; only reason it's not is because
+# I can't distinguish by Z. Also would need
 function _assess(
 	estimators, parameters::P, Z;
-	estimator_names::Vector{String}, parameter_names::Vector{String},
+	estimator_names::Vector{String},
+	parameter_names::Vector{String},
 	J::Integer, ξ, use_ξ, use_gpu, verbose
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
@@ -235,8 +166,8 @@ function _assess(
 	@assert length(estimator_names) == E
 	@assert length(parameter_names) == p
 
-	# if only one estimator is provided and ξ is not nothing, use_ξ is
-	# automatically set to true. 
+	# If only one estimator is provided and ξ is not nothing, use_ξ is
+	# automatically set to true.
 	if E == 1 && !isnothing(ξ)
 		use_ξ = true
 	end
@@ -281,5 +212,24 @@ function _assess(
 	# Also provide the true parameters for comparison with the estimates
 	θ = DataFrame(_extractθ(parameters)', parameter_names)
 
-    return (θ = θ, θ̂ = θ̂, runtime = runtime)
+	return Assessment(_merge(θ, θ̂), runtime)
+end
+
+# Given a set of true parameters θ and corresponding estimates θ̂ resulting
+# from a call to assess(), merge θ and θ̂ into a single long-form DataFrame.
+function _merge(θ, θ̂)
+
+	# Replicate θ to match the number of rows in θ̂. Note that the parameter
+	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
+	# in an outer fashion.
+	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
+
+	# Transform θ and θ̂ to long form:
+	θ = stack(θ, variable_name = :parameter, value_name = :truth)
+	θ̂ = stack(θ̂, Not([:estimator, :m, :k, :j, :replicate]), variable_name = :parameter, value_name = :estimate)
+
+	# Merge θ and θ̂: All we have to do is add :truth column to θ̂
+	θ̂[!, :truth] = θ[:, :truth]
+
+	return θ̂
 end

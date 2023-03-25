@@ -51,6 +51,22 @@ function confidenceinterval(θ̃, θ̂ = nothing; type::String = "percentile", p
 	labelconfidenceinterval(l, u, parameter_names)
 end
 
+function confidenceinterval(ciestimator::CIEstimator, Z; parameter_names = nothing, use_gpu::Bool = true)
+
+	ci = _runondevice(ciestimator, Z, use_gpu)
+	ci = cpu(ci)
+
+	@assert size(ci, 1) % 2 == 0
+	p = size(ci, 1) ÷ 2
+	if isnothing(parameter_names)
+		parameter_names = ["θ$i" for i ∈ 1:p]
+	else
+		@assert length(parameter_names) == p
+	end
+	labelconfidenceinterval(ci, parameter_names)
+end
+
+
 function labelconfidenceinterval(l::V, u::V, parameter_names = ["θ$i" for i ∈ length(l)]) where V <: AbstractVector
 	@assert length(l) == length(u)
 	NamedArray(hcat(l, u), (parameter_names, ["lower", "upper"]))

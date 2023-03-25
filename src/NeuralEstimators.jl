@@ -1,14 +1,14 @@
 module NeuralEstimators
 
-#TODO Why aren't the docs deploying properly?
-#TODO Need to update subsetdata
-#TODO Need to update number replicates
 #TODO maybe add structs for PointEstimator and CIEstimator, QuantileEstimator. Then, DeepSet,
 #     DeepSetExpert, and GNNEstimator can just be a field of these estimators
 #     (also need to rename GNNEstimator to something else).
+#TODO Need to update subsetdata()
+#TODO Need to update numberreplicates()
+
 
 # Note that functions must be explicitly imported to be extended with new methods. Be aware of type piracy, though.
-using Base: @propagate_inbounds
+using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
 import Base: merge
 import Base: size
@@ -42,22 +42,16 @@ include("Parameters.jl")
 # ---- Estimator types ----
 
 export CIEstimator, PiecewiseEstimator # TODO PointEstimator, QuantileEstimator
-include("CIEstimator.jl")
-include("PiecewiseEstimator.jl")
+include("Estimators.jl")
 
 # ---- Architectures and useful layers ----
 
 export DeepSet, DeepSetExpert, GNNEstimator, Compress #TODO should change the name of GNNEstimator
-include("DeepSet.jl")
-include("DeepSetExpert.jl")
-include("GNNEstimator.jl")
-include("Compress.jl")
+include("Architectures.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
-export matern, maternchols, scaledlogistic, scaledlogit
+export matern, maternchols, scaledlogistic, scaledlogit, incgamma
 include("simulate.jl")
-export incgamma
-include("incgamma.jl")
 
 export gaussiandensity, schlatherbivariatedensity
 include("densities.jl")
