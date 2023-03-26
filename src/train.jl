@@ -1,19 +1,18 @@
 """
-	train(θ̂, P, simulator::Function; ...)
-	train(θ̂, θ_train::P, θ_val::P, simulator::Function; ...)
-	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...)
+	train(θ̂, sampler::Function, simulator::Function; )
+	train(θ̂, θ_train::P, θ_val::P, simulator::Function; )
+	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; )
 
 Train a neural estimator with architecture `θ̂`.
 
 The methods cater for different forms of on-the-fly simulation. The method that
-takes a constructor
-`P <: Union{AbstractMatrix, ParameterConfigurations}` and a function `simulator`
-for sampling parameters and simulating data, respectively, allows for
-both the parameters and the data to be simulated on-the-fly. Note that
-`simulator` is called as `simulator(θ, m)`, where `θ` is a set of parameters
-and `m` is the sample size (see keyword arguments below).
-If provided with specific instances of parameters (`θ_train` and `θ_val`) or
-data (`Z_train` and `Z_val`), they will be held fixed during training.
+takes functions `sampler` and `simulator`for sampling parameters and simulating
+data, respectively, allows for both the parameters and the data to be
+simulated on-the-fly. Note that `simulator` is called as `simulator(θ, m)`,
+where `θ` is a set of parameters and `m` is the sample size
+(see keyword arguments below). If provided with specific instances of
+parameters (`θ_train` and `θ_val`) or data (`Z_train` and `Z_val`), they will be
+held fixed during training.
 
 In all methods, the validation set is held fixed to reduce noise when
 evaluating the validation risk function, which is used to monitor the
@@ -47,22 +46,69 @@ Arguments common to `train(θ̂, P, simulator)` and `train(θ̂, θ_train, θ_va
 
 Arguments unique to `train(θ̂, P, simulator)`:
 - `K::Integer = 10000`: number of parameter vectors in the training set; the size of the validation set is `K ÷ 5`.
-- `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices); if `ξ` is provided, the constructor `P` is called as `P(K, ξ)`.
+- `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices); if `ξ` is provided, the parameter sampler is called as `sampler(K, ξ)`.
+- `epochs_per_θ_refresh::Integer = 1`: how often to refresh the training parameters. Must be a multiple of `epochs_per_Z_refresh`.
 
 # Examples
 ```
-#TODO
+using NeuralEstimators
+using Flux
+using Distributions
+import NeuralEstimators: simulate
+
+# data simulator
+m = 15
+function simulate(θ_set, m)
+	[Float32.(rand(Normal(θ[1], θ[2]), 1, m)) for θ ∈ eachcol(θ_set)]
+end
+
+# parameter sampler
+K = 10000
+Ω = (μ = Normal(0, 1), σ = Uniform(0.1, 1)) # prior
+struct sampler
+	μ
+	σ
+end
+function (s::sampler)(K)
+	μ = rand(s.μ, K)
+	σ = rand(s.σ, K)
+	θ = hcat(μ, σ)'
+	return θ
+end
+smplr = sampler(Ω.μ, Ω.σ)
+
+# architecture
+p = length(Ω)   # number of parameters in the statistical model
+w = 32          # width of each layer
+ψ = Chain(Dense(1, w, relu), Dense(w, w, relu))
+ϕ = Chain(Dense(w, w, relu), Dense(w, p))
+θ̂ = DeepSet(ψ, ϕ)
+
+# training: full simulation on-the-fly
+θ̂ = train(θ̂, smplr, simulate, m = m, K = K, epochs = 5)
+θ̂ = train(θ̂, smplr,  simulate, m = m, K = K, epochs = 5)
+θ̂ = train(θ̂, smplr,  simulate, m = m, K = K, epochs = 10, epochs_per_θ_refresh = 4, epochs_per_Z_refresh = 2)
+
+# training: fixed parameters
+θ_train = smplr(K)
+θ_val   = smplr(K ÷ 5)
+θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 5)
+θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 5, epochs_per_Z_refresh = 2)
+
+# training: fixed parameters and fixed data
+Z_train = simulate(θ_train, m)
+Z_val   = simulate(θ_val, m)
+θ̂ = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 5)
 ```
 """
 function train end
 
-
-function train(θ̂, P, simulator::Function;
+function train(θ̂, sampler, simulator;
 	m,
 	ξ = nothing,
-	# epochs_per_θ_refresh::Integer = 1, # how often to refresh the training parameters; must be a multiple of `epochs_per_Z_refresh`.
+	epochs_per_θ_refresh::Integer = 1,
 	epochs_per_Z_refresh::Integer = 1,
-	#simulate_just_in_time::Bool = false, # NB not needed now that we don't currently cater for epochs_per_θ_refresh > 1
+	simulate_just_in_time::Bool = false,
 	loss = Flux.Losses.mae,
 	optimiser          = ADAM(1e-4),
     batchsize::Integer = 32,
@@ -76,9 +122,9 @@ function train(θ̂, P, simulator::Function;
 
     _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 
-	@assert P <: Union{AbstractMatrix, ParameterConfigurations}
 	@assert K > 0
-	# @assert epochs_per_θ_refresh % epochs_per_Z_refresh  == 0 "`epochs_per_θ_refresh` must be a multiple of `epochs_per_Z_refresh`"
+	@assert epochs_per_θ_refresh > 0
+	@assert epochs_per_θ_refresh % epochs_per_Z_refresh  == 0 "`epochs_per_θ_refresh` must be a multiple of `epochs_per_Z_refresh`"
 
 	savebool = savepath != "" # turn off saving if savepath is an empty string
 	if savebool
@@ -91,47 +137,80 @@ function train(θ̂, P, simulator::Function;
     θ̂ = θ̂ |> device
     γ = Flux.params(θ̂)
 
-	verbose && println("Simulating validation parameters and validation data...")
-	θ_val = isnothing(ξ) ? P(K ÷ 5 + 1) : P(K ÷ 5 + 1, ξ)
-	Z_val = _simulate(simulator, θ_val, m)
-	Z_val = _quietDataLoader(Z_val, batchsize)
+	verbose && println("Sampling the validation set...")
+	θ_val   = isnothing(ξ) ? sampler(K ÷ 5 + 1) : sampler(K ÷ 5 + 1, ξ)
+	Z_val   = simulator(θ_val, m)
+	val_set = _quietDataLoader((Z_val, _extractθ(θ_val)), batchsize)
 
 	# Initialise the loss per epoch matrix.
 	verbose && print("Computing the initial validation risk...")
-	initial_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
+	initial_val_risk = _lossdataloader(loss, val_set, θ̂, device)
 	loss_per_epoch   = [initial_val_risk initial_val_risk;]
 	verbose && println(" Initial validation risk = $initial_val_risk")
 
-	# Save the initial θ̂. This is to prevent bugs in the case that
-	# the initial loss does not improve
+	# Save initial θ̂ (prevents bugs in the case that the risk does not improve)
 	savebool && _saveweights(θ̂, savepath, 0)
 
-	# Number of batches of θ to use for each epoch
+	# Number of batches of θ in each epoch
 	batches = ceil((K / batchsize))
-	@assert batches > 0
 
-	# For loop creates a new scope for the variables that are not present in the
+	store_entire_train_set = epochs_per_Z_refresh > 1 || !simulate_just_in_time
+
+	# For loops create a new scope for the variables that are not present in the
 	# enclosing scope, and such variables get a new binding in each iteration of
 	# the loop; circumvent this by declaring local variables.
-
-	local min_val_risk = initial_val_risk # minimum validation loss; monitor this for early stopping
+	local θ_train
+	local train_set
+	local min_val_risk = initial_val_risk # minimum validation loss, monitored for early stopping
 	local early_stopping_counter = 0
 	train_time = @elapsed for epoch ∈ 1:epochs
 
-		# For each batch, update θ̂ and compute the training loss
+		# Initialise the current training loss to zero
 		train_loss = zero(initial_val_risk)
-		epoch_time = @elapsed for _ ∈ 1:batches
-			parameters = isnothing(ξ) ? P(batchsize) : P(batchsize, ξ)
-			Z = simulate(parameters, m)
-			θ = _extractθ(parameters)
-			train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
-		end
-		train_loss = train_loss / (batchsize * batches) # convert to an average
 
-		epoch_time += @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
+		if store_entire_train_set
+
+			# Simulate new training data if needed
+			if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
+
+				# Possibly also refresh the parameter set
+				if epoch == 1 || (epoch % epochs_per_θ_refresh) == 0
+					verbose && print("Refreshing the training parameters...")
+					θ_train = nothing
+					@sync gc()
+					t = @elapsed θ_train = isnothing(ξ) ? sampler(K) : sampler(K, ξ)
+					verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+				end
+
+				verbose && print("Refreshing the training data...")
+				train_set = nothing
+				@sync gc()
+				t = @elapsed train_set = _constructset(simulator, θ_train, m, batchsize)
+				verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+			end
+
+			# For each batch, update θ̂ and compute the training loss
+			epoch_time = @elapsed for (Z, θ) in train_set
+			   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+			end
+
+		else
+
+			# Full simulation on the fly and just-in-time sampling:
+			epoch_time = @elapsed for _ ∈ 1:batches
+				parameters = isnothing(ξ) ? sampler(batchsize) : sampler(batchsize, ξ)
+				Z = simulate(parameters, m)
+				θ = _extractθ(parameters)
+				train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+			end
+		end
+
+		# Convert training loss to an average
+		train_loss = train_loss / (batchsize * batches)
+
+		epoch_time += @elapsed current_val_risk = _lossdataloader(loss, val_set, θ̂, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_loss current_val_risk])
 		verbose && println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
-		# save the loss every epoch in case training is prematurely halted
 		savebool && @save loss_path loss_per_epoch
 
 		# If the current loss is better than the previous best, save θ̂ and
@@ -156,7 +235,7 @@ function train(θ̂, P, simulator::Function;
 end
 
 
-function train(θ̂, θ_train::P, θ_val::P, simulator::Function;
+function train(θ̂, θ_train::P, θ_val::P, simulator;
 		m,
 		batchsize::Integer = 32,
 		epochs_per_Z_refresh::Integer = 1,
@@ -185,10 +264,9 @@ function train(θ̂, θ_train::P, θ_val::P, simulator::Function;
     γ = Flux.params(θ̂)
 
 	verbose && println("Simulating validation data...")
-	Z_val = _simulate(simulator, θ_val, m)
-	Z_val = _quietDataLoader(Z_val, batchsize)
+	val_set = _constructset(simulator, θ_val, m, batchsize)
 	verbose && print("Computing the initial validation risk...")
-	initial_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
+	initial_val_risk = _lossdataloader(loss, val_set, θ̂, device)
 	verbose && println(" Initial validation risk = $initial_val_risk")
 
 	# Initialise the loss per epoch matrix (NB just using validation for both for now)
@@ -202,32 +280,28 @@ function train(θ̂, θ_train::P, θ_val::P, simulator::Function;
 	# want to avoid the overhead of simulating continuously or (ii) we are
 	# not refreshing Z_train every epoch so we need it for subsequent epochs.
 	# Either way, store this decision in a variable.
-	store_entire_Z_train = !simulate_just_in_time || epochs_per_Z_refresh != 1
+	store_entire_train_set = !simulate_just_in_time || epochs_per_Z_refresh != 1
 
-	# for loops create a new scope for the variables that are not present in the
-	# enclosing scope, and such variables get a new binding in each iteration of
-	# the loop; circumvent this by declaring local variables.
-	local Z_train
-	local min_val_risk = initial_val_risk # minimum validation loss; monitor this for early stopping
+	local train_set
+	local min_val_risk = initial_val_risk
 	local early_stopping_counter = 0
 	train_time = @elapsed for epoch in 1:epochs
 
 		train_loss = zero(initial_val_risk)
 
-		if store_entire_Z_train
+		if store_entire_train_set
 
 			# Simulate new training data if needed
 			if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
 				verbose && print("Simulating training data...")
-				Z_train = nothing
+				train_set = nothing
 				@sync gc()
-				t = @elapsed Z_train = _simulate(simulator, θ_train, m)
-				Z_train = _quietDataLoader(Z_train, batchsize)
+				t = @elapsed train_set = _constructset(simulator, θ_train, m, batchsize)
 				verbose && println(" Finished in $(round(t, digits = 3)) seconds")
 			end
 
 			# For each batch, update θ̂ and compute the training loss
-			epoch_time = @elapsed for (Z, θ) in Z_train
+			epoch_time = @elapsed for (Z, θ) in train_set
 			   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 			end
 
@@ -247,7 +321,7 @@ function train(θ̂, θ_train::P, θ_val::P, simulator::Function;
 		end
 		train_loss = train_loss / size(θ_train, 2)
 
-		epoch_time += @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
+		epoch_time += @elapsed current_val_risk = _lossdataloader(loss, val_set, θ̂, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_loss current_val_risk])
 		verbose && println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
 
@@ -317,8 +391,8 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     γ = Flux.params(θ̂)
 
 	verbose && print("Computing the initial validation risk...")
-	Z_val = _quietDataLoader((Z_val, _extractθ(θ_val)), batchsize)
-	initial_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
+	val_set = _quietDataLoader((Z_val, _extractθ(θ_val)), batchsize)
+	initial_val_risk = _lossdataloader(loss, val_set, θ̂, device)
 	verbose && println(" Initial validation risk = $initial_val_risk")
 
 	verbose && print("Computing the initial training risk...")
@@ -345,13 +419,13 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
 		# For each batch update θ̂ and compute the training loss
 		Z_train_current = subsetbool ? subsetdata(Z_train, replicates[epoch]) : Z_train
-		Z_train_current = _quietDataLoader((Z_train_current, _extractθ(θ_train)), batchsize)
-		epoch_time = @elapsed for (Z, θ) in Z_train_current
+		train_set_current = _quietDataLoader((Z_train_current, _extractθ(θ_train)), batchsize)
+		epoch_time = @elapsed for (Z, θ) in train_set_current
 		   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 		end
 		train_loss = train_loss / size(θ_train, 2)
 
-		epoch_time += @elapsed current_val_risk = _lossdataloader(loss, Z_val, θ̂, device)
+		epoch_time += @elapsed current_val_risk = _lossdataloader(loss, val_set, θ̂, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_loss current_val_risk])
 		verbose && println("Epoch: $epoch  Training risk: $(round(train_loss, digits = 3))  Validation risk: $(round(current_val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
 
@@ -382,12 +456,13 @@ end
 
 # ---- Wrapper functions for training multiple estimators over a range of sample sizes ----
 
+#TODO reduce code repetition
 #TODO not ideal that M is a capital letter, which is usually reserved for types.
 """
-	trainx(θ̂, P, simulator, M; ...)
-	trainx(θ̂, θ_train, θ_val, simulator, M; ...)
-	trainx(θ̂, θ_train, θ_val, Z_train::T, Z_val::T, M; ...)
-	trainx(θ̂, θ_train, θ_val, Z_train::V, Z_val::V; ...) where {V <: AbstractVector{AbstractVector{Any}}}
+	trainx(θ̂, P, simulator, M; )
+	trainx(θ̂, θ_train, θ_val, simulator, M; )
+	trainx(θ̂, θ_train, θ_val, Z_train::T, Z_val::T, M; )
+	trainx(θ̂, θ_train, θ_val, Z_train::V, Z_val::V; ) where {V <: AbstractVector{AbstractVector{Any}}}
 
 A wrapper around `train` to construct neural estimators for different sample sizes.
 
@@ -683,3 +758,4 @@ end
 
 # Wrapper function that returns simulated data and the true parameter values
 _simulate(simulator::Function, params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (simulator(params, m), _extractθ(params))
+_constructset(simulator::Function, params::P, m, batchsize)  where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _quietDataLoader(_simulate(simulator, params, m), batchsize)

@@ -139,9 +139,9 @@ $common_docstring saves the weights of the best network (measured by validation 
 """
 function _savebestweights(path::String)
 	best_epoch = _findbestweights(path)
-	loadpath   = joinpath(path, "network_epoch$(best_epoch).bson")
-	savepath   = joinpath(path, "best_network.bson")
-	cp(loadpath, savepath, force = true)
+	load_path   = joinpath(path, "network_epoch$(best_epoch).bson")
+	save_path   = joinpath(path, "best_network.bson")
+	cp(load_path, save_path, force = true)
 	return nothing
 end
 
@@ -151,8 +151,8 @@ end
 $common_docstring returns the weights of the best network (measured by validation loss).
 """
 function loadbestweights(path::String)
-	loadpath     = joinpath(path, "best_network.bson")
-	best_weights = load(loadpath, @__MODULE__)[:weights]
+	load_path     = joinpath(path, "best_network.bson")
+	best_weights = load(load_path, @__MODULE__)[:weights]
 	return best_weights
 end
 
