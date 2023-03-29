@@ -1,6 +1,5 @@
-
 """
-	confidenceinterval(θ̃, θ̂ = nothing; type, probs = [0.05, 0.95], parameter_names)
+	interval(θ̃, θ̂ = nothing; type, probs = [0.05, 0.95], parameter_names)
 
 Compute a confidence interval using the quantiles of the p × B matrix of
 bootstrap samples, `θ̃`, where p is the number of parameters in the model.
@@ -18,11 +17,11 @@ p = 3
 B = 50
 θ̃ = rand(p, B)
 θ̂ = rand(p)
-confidenceinterval(θ̃)
-confidenceinterval(θ̃, θ̂, type = "basic")
+interval(θ̃)
+interval(θ̃, θ̂, type = "basic")
 ```
 """
-function confidenceinterval(θ̃, θ̂ = nothing; type::String = "percentile", probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 1:size(θ̃, 1)])
+function interval(θ̃, θ̂ = nothing; type::String = "percentile", probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 1:size(θ̃, 1)])
 
 	#TODO add assertions and add type on θ̃
 	p, B = size(θ̃)
@@ -48,10 +47,10 @@ function confidenceinterval(θ̃, θ̂ = nothing; type::String = "percentile", p
 	# Add labels to the confidence intervals
 	l = ci[:, 1]
 	u = ci[:, 2]
-	labelconfidenceinterval(l, u, parameter_names)
+	labelinterval(l, u, parameter_names)
 end
 
-function confidenceinterval(ciestimator::CIEstimator, Z; parameter_names = nothing, use_gpu::Bool = true)
+function interval(ciestimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu::Bool = true)
 
 	ci = _runondevice(ciestimator, Z, use_gpu)
 	ci = cpu(ci)
@@ -63,25 +62,25 @@ function confidenceinterval(ciestimator::CIEstimator, Z; parameter_names = nothi
 	else
 		@assert length(parameter_names) == p
 	end
-	labelconfidenceinterval(ci, parameter_names)
+	labelinterval(ci, parameter_names)
 end
 
 
-function labelconfidenceinterval(l::V, u::V, parameter_names = ["θ$i" for i ∈ length(l)]) where V <: AbstractVector
+function labelinterval(l::V, u::V, parameter_names = ["θ$i" for i ∈ length(l)]) where V <: AbstractVector
 	@assert length(l) == length(u)
 	NamedArray(hcat(l, u), (parameter_names, ["lower", "upper"]))
 end
 
-function labelconfidenceinterval(ci::V, parameter_names = ["θ$i" for i ∈ (length(ci) ÷ 2)]) where V <: AbstractVector
+function labelinterval(ci::V, parameter_names = ["θ$i" for i ∈ (length(ci) ÷ 2)]) where V <: AbstractVector
 
 	@assert length(ci) % 2 == 0
 	p = length(ci) ÷ 2
 	l = ci[1:p]
 	u = ci[(p+1):end]
-	labelconfidenceinterval(l, u, parameter_names)
+	labelinterval(l, u, parameter_names)
 end
 
-function labelconfidenceinterval(ci::M, parameter_names = ["θ$i" for i ∈ (size(ci, 1) ÷ 2)]) where M <: AbstractMatrix
+function labelinterval(ci::M, parameter_names = ["θ$i" for i ∈ (size(ci, 1) ÷ 2)]) where M <: AbstractMatrix
 
 	@assert size(ci, 1) % 2 == 0
 	p = size(ci, 1) ÷ 2
@@ -90,7 +89,7 @@ function labelconfidenceinterval(ci::M, parameter_names = ["θ$i" for i ∈ (siz
 	map(1:K) do k
 		lₖ = ci[1:p, k]
 		uₖ = ci[(p+1):end, k]
-		labelconfidenceinterval(lₖ, uₖ, parameter_names)
+		labelinterval(lₖ, uₖ, parameter_names)
 	end
 end
 

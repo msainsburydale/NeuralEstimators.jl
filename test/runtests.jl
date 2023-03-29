@@ -198,7 +198,7 @@ end
 end
 
 
-@testset "GNNEstimator" begin
+@testset "GNN" begin
 	n₁, n₂ = 11, 27
 	m₁, m₂ = 30, 50
 	d = 1
@@ -246,7 +246,7 @@ end
 	deepset = DeepSet(ψ₂, ϕ₂)
 
 	# Full estimator
-	est = GNNEstimator(graphtograph, meanpool, deepset)
+	est = GNN(graphtograph, meanpool, deepset)
 
 	# Test on a single graph containing sub-graphs
 	θ̂ = est(g)
@@ -337,7 +337,7 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 			train(θ̂, parameters, parameters, Z_train, Z_val; epochs = 5, use_gpu = use_gpu, verbose = verbose)
 
 			# trainx: Multiple estimators
-			trainx(θ̂, Parameters, simulate, [1, 2, 5]; ξ = ξ, epochs = [10, 5, 3], use_gpu = use_gpu, verbose = verbose) 
+			trainx(θ̂, Parameters, simulate, [1, 2, 5]; ξ = ξ, epochs = [10, 5, 3], use_gpu = use_gpu, verbose = verbose)
 			trainx(θ̂, parameters, parameters, simulate, [1, 2, 5]; epochs = [10, 5, 3], use_gpu = use_gpu, verbose = verbose)
 			trainx(θ̂, parameters, parameters, Z_train, Z_val, [1, 2, 5]; epochs = [10, 5, 3], use_gpu = use_gpu, verbose = verbose)
 			Z_train = [simulate(parameters, m) for m ∈ [1, 2, 5]];
@@ -396,9 +396,39 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 			bootstrap(θ̂, [Z]; use_gpu = use_gpu)
 			@test_throws Exception bootstrap(θ̂, [Z, Z]; use_gpu = use_gpu)
 			bootstrap(θ̂, Z, use_gpu = use_gpu, blocks = rand(1:2, size(Z)[end]))
-			confidenceinterval(bootstrap(θ̂, Z; use_gpu = use_gpu))
+			interval(bootstrap(θ̂, Z; use_gpu = use_gpu))
 		end
 	end
+end
+
+
+@testset "set-level covariates" begin
+	n = 10
+	p = 4
+
+	w = 32 # width of each layer
+	ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
+
+	Z₁ = rand(n, 3);                  # single set of 3 realisations
+	Z₂ = [rand(n, m) for m ∈ (3, 3)]; # two sets each containing 3 realisations
+	Z₃ = [rand(n, m) for m ∈ (3, 4)]; # two sets containing 3 and 4 realisations
+	θ = rand(p, 2)
+
+	dₓ = 2
+	x₁ = rand(dₓ)
+	x₂ = [rand(dₓ) for _ ∈ eachindex(Z₂)]
+
+	# regular deepset
+	ϕ = Chain(Dense(w + dₓ, w, relu), Dense(w, p));
+	θ̂ = DeepSet(ψ, ϕ)
+	θ̂((Z₁, x₁))
+	θ̂((Z₂, x₂))
+	θ̂((Z₃, x₂))
+
+	# Test that training works:
+	train(θ̂, θ, θ, (Z₂, x₂), (Z₂, x₂), epochs = 3, batchsize = 2, verbose = verbose)
+	train(θ̂, θ, θ, (broadcast(z -> hcat(z, z), Z₂), x₂), (Z₂, x₂), epochs = 3, batchsize = 2, verbose = verbose)
+	train(θ̂, θ, θ, (Z₃, x₂), (Z₃, x₂), epochs = 3, batchsize = 2, verbose = verbose)
 end
 
 @testset "PiecewiseEstimator" begin

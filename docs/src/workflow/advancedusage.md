@@ -12,14 +12,14 @@ When data simulation is (relatively) computationally inexpensive, $\mathcal{Z}_{
 
 One may also regularly refresh $\vartheta_{\text{train}}$, and doing so leads to similar benefits. However, fixing $\vartheta_{\text{train}}$ allows computationally expensive terms, such as Cholesky factors when working with Gaussian process models, to be reused throughout training, which can substantially reduce the training time for some models.  
 
-The above strategies are facilitated with the various methods of [`train`](@ref).
+The above strategies are facilitated with various methods of [`train`](@ref).
 
 
 ## Variable sample sizes
 
 A neural estimator in the Deep Set representation can be applied to data sets of arbitrary size. However, even when the neural Bayes estimator approximates the true Bayes estimator arbitrarily well, it is conditional on the number of replicates, $m$, and is not necessarily a Bayes estimator for $m^* \ne m$. Denote a data set comprising $m$ replicates as $\boldsymbol{Z}^{(m)} \equiv (\boldsymbol{Z}_1', \dots, \boldsymbol{Z}_m')'$. There are at least two (non-mutually exclusive) approaches one could adopt if data sets with varying $m$ are envisaged, which we describe below.
 
-## Piecewise estimators
+### Piecewise estimators
 
 If data sets with varying $m$ are envisaged, one could train $l$ neural Bayes estimators for different sample sizes, or groups thereof (e.g., a small-sample estimator and a large-sample estimator).
  Specifically, for sample-size changepoints $m_1$, $m_2$, $\dots$, $m_{l-1}$, one could construct a piecewise neural Bayes estimator,
@@ -36,54 +36,9 @@ If data sets with varying $m$ are envisaged, one could train $l$ neural Bayes es
 where, here, $\boldsymbol{\gamma}^* \equiv (\boldsymbol{\gamma}^*_{\tilde{m}_1}, \dots, \boldsymbol{\gamma}^*_{\tilde{m}_{l-1}})$, and where $\boldsymbol{\gamma}^*_{\tilde{m}}$ are the neural-network parameters optimised for sample size $\tilde{m}$ chosen so that $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}^*_{\tilde{m}})$ is near-optimal over the range of sample sizes in which it is applied.
 This approach works well in practice, and it is less computationally burdensome than it first appears when used in conjunction with pre-training.
 
-Piecewise neural estimators are implemented with the struct, [`PiecewiseEstimator`](@ref), and their construction is facilitated with the method of [`train`](@ref) that takes five positional arguments. Below, we replicate the example of inferring $\mu$ and $\sigma$ from $N(\mu, \sigma^2)$ data, but this time we train three neural estimators with sample sizes $\tilde{m}_l$ equal to 1, 10, and 30, respectively.   
+Piecewise neural estimators are implemented with the struct, [`PiecewiseEstimator`](@ref), and their construction is facilitated with [`trainx`](@ref).  
 
-```
-using NeuralEstimators
-import NeuralEstimators: simulate
-using Flux
-using Distributions
-
-function sample(Ω, K)
-	μ = rand(Ω.μ, K)
-	σ = rand(Ω.σ, K)
-	θ = hcat(μ, σ)'
-	return θ
-end
-
-Ω = (μ = Normal(0, 1), σ = Uniform(0.1, 1))
-θ_train = sample(Ω, 10000)
-θ_val   = sample(Ω, 2000)
-
-function simulate(θ_set, m)
-	Z = [rand(Normal(θ[1], θ[2]), 1, m) for θ ∈ eachcol(θ_set)]
-	Z = broadcast.(Float32, Z)
-	return Z
-end
-
-## Sample sizes used for training each neural estimator
-M = [1, 10, 30]
-
-## Simulate data; need the maximum sample size that will be used during training
-Z_train = simulate(θ_train, maximum(M))
-Z_val   = simulate(θ_val, maximum(M))
-
-## Define the architecture common to each neural estimator
-w = 32   # number of neurons in each layer
-p = 2    # number of parameters in the statistical model
-ψ = Chain(Dense(1, w, relu), Dense(w, w, relu))
-ϕ = Chain(Dense(w, w, relu), Dense(w, p))
-θ̂ = DeepSet(ψ, ϕ)
-
-## Train the neural estimators for each sample size in M
-estimators = train(θ̂ , θ_train, θ_val, Z_train, Z_val, M, epochs = 10)
-
-## Construct a PiecewiseEstimator from the above neural estimators
-m_breaks = [5, 20]
-piecewise_estimator = PiecewiseEstimator(estimators, m_breaks)
-```
-
-## Training with variable sample sizes
+### Training with variable sample sizes
 
 Alternatively, one could treat the sample size as a random variable, $M$, with support over a set of positive integers, $\mathcal{M}$, in which case, for the neural Bayes estimator, the risk function becomes
 ```math
@@ -113,6 +68,10 @@ end
 ```
 
 Then, setting the argument `m` in [`train`](@ref) to be an integer range (e.g., `1:30`) will train the neural estimator with the given variable sample sizes.
+
+## Combining neural and expert summary statistics
+
+See [`DeepSetExpert`](@ref).
 
 ## Loading previously saved neural estimators
 

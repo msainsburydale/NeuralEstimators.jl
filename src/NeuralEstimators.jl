@@ -1,12 +1,5 @@
 module NeuralEstimators
 
-#TODO maybe add structs for PointEstimator and CIEstimator, QuantileEstimator. Then, DeepSet,
-#     DeepSetExpert, and GNNEstimator can just be a field of these estimators
-#     (also need to rename GNNEstimator to something else).
-#TODO Need to update subsetdata()
-#TODO Need to update numberreplicates()
-
-
 # Note that functions must be explicitly imported to be extended with new methods. Be aware of type piracy, though.
 using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
@@ -41,13 +34,15 @@ include("Parameters.jl")
 
 # ---- Estimator types ----
 
-export CIEstimator, PiecewiseEstimator # TODO PointEstimator, QuantileEstimator
+export NeuralEstimator, PointEstimator, IntervalEstimator, QuantileEstimator, PiecewiseEstimator
 include("Estimators.jl")
 
-# ---- Architectures and useful layers ----
+# ---- Architectures and layers ----
 
-export DeepSet, DeepSetExpert, GNNEstimator, Compress #TODO should change the name of GNNEstimator
+export DeepSet, DeepSetExpert, GNN, Compress
 include("Architectures.jl")
+
+# ---- Other ---
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
 export matern, maternchols, scaledlogistic, scaledlogit, incgamma
@@ -65,7 +60,7 @@ include("assess.jl")
 export plotrisk, plotdistribution
 include("plotting.jl")
 
-export bootstrap, coverage, confidenceinterval
+export bootstrap, coverage, interval
 include("bootstrap.jl")
 
 export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams, samplesize

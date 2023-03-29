@@ -1,9 +1,19 @@
 using Functors: @functor
 
+"""
+	NeuralEstimator
+
+An abstract supertype for neural estimators.
+"""
 abstract type NeuralEstimator end
 
 # ---- PointEstimator  ----
 
+"""
+    PointEstimator(arch)
+
+TODO
+"""
 struct PointEstimator{F} <: NeuralEstimator
 	arch::F
 end
@@ -12,63 +22,92 @@ end
 
 
 
-# ---- CIEstimator: credible intervals  ----
+# ---- IntervalEstimator: credible intervals  ----
 
 """
-    CIEstimator(lower, upper)
+	IntervalEstimator(arch_lower, arch_upper)
+	IntervalEstimator(arch)
+A neural estimator that produces credible intervals constructed as,
+
+```math
+[l(Z), l(Z) + \\mathrm{exp}(u(Z))],
+```
+
+where ``l(⋅)`` and ``u(⋅)`` are the neural networks `arch_lower` and
+`arch_upper`, both of which should transform data into ``p``-dimensional vectors,
+where ``p`` is the number of parameters in the model. If only a single neural
+network architecture `arch` is provided, it will be used for both `arch_lower`
+and `arch_upper`.
+
+Internally, the output from `arch_lower` and `arch_upper` are concatenated, so
+that `IntervalEstimator` objects transform data into ``2p``-dimensional vectors.
 
 # Examples
 ```
 using NeuralEstimators
 using Flux
 
+# Generate some toy data
 n = 2  # bivariate data
-p = 3  # number of parameters in the model
+m = 10 # number of independent replicates
+Z = rand(n, m)
+
+# Create an architecture
+p = 3  # parameters in the model
 w = 8  # width of each layer
+ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
+ϕ = Chain(Dense(w, w, relu), Dense(w, p));
+architecture = DeepSet(ψ, ϕ)
 
-ψ₁ = Chain(Dense(n, w, relu), Dense(w, w, relu));
-ϕ₁ = Chain(Dense(w, w, relu), Dense(w, p));
-l = DeepSet(ψ₁, ϕ₁)
+# Initialise the interval estimator
+estimator = IntervalEstimator(architecture)
 
-ψ₂ = Chain(Dense(n, w, relu), Dense(w, w, relu));
-ϕ₂ = Chain(Dense(w, w, relu), Dense(w, p));
-u = DeepSet(ψ₂, ϕ₂)
-
-ciestimator = CIEstimator(l, u)
-
-m = 10
-Z = [rand(n, m) for _ in 1:4]
-ciestimator(Z)
-confidenceinterval(ciestimator, Z, parameter_names = ["ρ", "σ", "τ"])
+# Apply the interval estimator
+estimator(Z)
+interval(estimator, Z, parameter_names = ["ρ", "σ", "τ"])
 ```
 """
-struct CIEstimator{F, G} <: NeuralEstimator
+struct IntervalEstimator{F, G} <: NeuralEstimator
 	l::F
 	u::G
 end
-@functor CIEstimator
-(c::CIEstimator)(Z) = vcat(c.l(Z), c.l(Z) .+ exp.(c.u(Z)))
+IntervalEstimator(l) = IntervalEstimator(l, deepcopy(l))
+@functor IntervalEstimator
+(c::IntervalEstimator)(Z) = vcat(c.l(Z), c.l(Z) .+ exp.(c.u(Z)))
 
 
 
 # ---- QuantileEstimator: estimating arbitrary quantiles of the posterior distribution ----
 
-# struct QuantileEstimator <: NeuralEstimator
-# 	l::F
-# 	u::G
-# end
-# @functor QuantileEstimator
-# (c::CIEstimator)(Z) = vcat(c.l(Z), c.l(Z) .+ exp.(c.u(Z)))
+
+# TODO Follow up with this point from Gnieting's paper:
+# 9.2 Quantile Estimation
+# Koenker and Bassett (1978) proposed quantile regression using an optimum score estimator based on the proper scoring rule (41).
+
+"""
+    QuantileEstimator()
+
+TODO
+"""
+struct QuantileEstimator{F, G} <: NeuralEstimator
+	l::F
+	u::G
+end
+@functor QuantileEstimator
+(c::QuantileEstimator)(Z) = vcat(c.l(Z), c.l(Z) .+ exp.(c.u(Z)))
 
 
 # ---- PiecewiseEstimator: variable sample sizes ----
-
 
 """
 	PiecewiseEstimator(estimators, breaks)
 Creates a piecewise estimator from a collection of `estimators`, based on the
 collection of sample-size changepoints, `breaks`, which should contain one
 element fewer than the number of `estimators`.
+
+Any estimator can be included in `estimators`, including any of the subtypes of
+`NeuralEstimator` exported with the package (e.g., `PointEstimator`,
+`IntervalEstimator`, etc.).
 
 # Examples
 ```

@@ -16,16 +16,14 @@ See [`subsetparameters`](@ref) for the generic function for subsetting these obj
 ```
 struct P <: ParameterConfigurations
 	θ
-	# ...
+	# other expensive intermediate objects...
 end
 ```
 """
 abstract type ParameterConfigurations end
 
 import Base: show
-# this is used to handle a call to `print`
 Base.show(io::IO, parameters::P) where {P <: ParameterConfigurations} = print(io, "\nA subtype of `ParameterConfigurations` with K = $(size(parameters, 2)) instances of the $(size(parameters, 1))-dimensional parameter vector θ.")
-# this is used to show values in the REPL and when using IJulia
 Base.show(io::IO, m::MIME"text/plain", parameters::P) where {P <: ParameterConfigurations} = print(io, parameters)
 
 size(parameters::P) where {P <: ParameterConfigurations} = size(_extractθ(parameters))

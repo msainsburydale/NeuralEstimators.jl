@@ -18,6 +18,8 @@ subsetdata
 ## Miscellaneous
 
 ```@docs
+Compress
+
 loadbestweights
 
 stackarrays

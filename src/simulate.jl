@@ -1,16 +1,33 @@
-"""
-Generic function that may be overloaded to implicitly define a statistical model.
-Specifically, the user should provide a method `simulate(parameters, m)`
-that returns `m` simulated replicates for each element in the given set of
-`parameters`.
-"""
+# """
+# Generic function that may be overloaded to implicitly define a statistical model.
+# Specifically, the user should provide a method `simulate(parameters, m)`
+# that returns `m` simulated replicates for each element in the given set of
+# `parameters`.
+# """
 function simulate end
 
 """
 	simulate(parameters, m, J::Integer)
 
 Simulates `J` sets of `m` independent replicates for each parameter vector in
-`parameters` by calling `simulate(parameters, m)` a total of `J` times.
+`parameters` by calling `simulate(parameters, m)` a total of `J` times,
+where the method `simulate(parameters, m)` is provided by the user via function
+overloading.
+
+# Examples
+```
+import NeuralEstimators: simulate
+
+p = 2
+K = 10
+m = 15
+parameters = rand(p, K)
+
+# Univariate Gaussian model with unknown mean and standard deviation
+simulate(parameters, m) = [θ[1] .+ θ[2] .* randn(1, m) for θ ∈ eachcol(parameters)]
+simulate(parameters, m)
+simulate(parameters, m, 2)
+```
 """
 function simulate(parameters, m, J::Integer)
 	v = [simulate(parameters, m) for i ∈ 1:J]

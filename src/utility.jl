@@ -21,13 +21,12 @@ function numberreplicates(Z::V) where {V <: AbstractVector{A}} where A
 	numberreplicates.(Z)
 end
 
-
-function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
+function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
 	Z = tup[1]
 	X = tup[2]
 	@assert length(Z) == length(X)
 
-	numberreplicates(Z)
+	numberreplicates.(Z)
 end
 
 
@@ -71,6 +70,14 @@ function subsetdata end
 
 function subsetdata(Z::V, m) where {V <: AbstractVector{A}} where A
 	subsetdata.(Z, Ref(m))
+end
+
+function subsetdata(tup::Tup, m) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
+	Z = tup[1]
+	X = tup[2]
+	@assert length(Z) == length(X)
+
+	(subsetdata(Z, m), X) # NB X is not subsetted because it is set-level information
 end
 
 function subsetdata(Z::A, m) where {A <: AbstractArray{T, N}} where {T, N}
@@ -156,8 +163,13 @@ function loadbestweights(path::String)
 	return best_weights
 end
 
+function _runondevice(θ̂, x, use_gpu::Bool; batchsize::Integer = 32)
 
-function _runondevice(θ̂, x, use_gpu::Bool; batchsize = min(length(x), 32))
+	if typeof(x) <: AbstractVector
+		batchsize = min(length(x), batchsize)
+	else
+		batchsize = min(numberreplicates(x), batchsize)
+	end
 
 	device  = _checkgpu(use_gpu, verbose = false)
 	θ̂ = θ̂ |> device

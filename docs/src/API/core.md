@@ -15,19 +15,32 @@ ParameterConfigurations
 
 ## Simulating data
 
-`NeuralEstimators` facilitates neural estimation for arbitrary statistical models by having the user implicitly define the model via simulated data. The user may provide simulated data directly, or provide a function that simulates data from the model (by overloading the generic function `simulate`).
+`NeuralEstimators` facilitates neural estimation for arbitrary statistical models by having the user implicitly define the model via simulated data. The user may provide simulated data directly, or provide a function that simulates data from the model.
 
-The data should be stored as a `Vector{A}`, where each element of the vector is associated with one parameter configuration, and where `A` depends on the representation of the neural estimator. For example, if the neural estimator is a [`DeepSet`](@ref) object, the data should be stored as a `Vector{Array}`, where each array may store independent replicates in its final dimension. Similarly, if the neural estimator is a [`GNNEstimator`](@ref), the data should be stored as a `Vector{GNNGraph}`, where each graph may store independent replicates in sub-graphs.
+The data should be stored as a `Vector{A}`, where each element of the vector is associated with one parameter configuration, and where `A` depends on the architecture of the neural estimator. For example, if the neural estimator is based on a [`DeepSet`](@ref), the data should be stored as a `Vector{Array}`, where each array may store independent replicates in its final dimension. If the neural estimator is based on a [`GNN`](@ref), the data should be stored as a `Vector{GNNGraph}`, where each graph may store independent replicates in sub-graphs.
+
 
 ```@docs
-simulate
-
 simulate(parameters, m, J::Integer)
 ```
 
-## Neural-estimator representations
+## Types of estimators
 
-Although the user is free to construct their neural estimator however they see fit, `NeuralEstimators` provides several useful representations described below.
+```@docs
+NeuralEstimator
+
+PointEstimator
+
+IntervalEstimator
+
+QuantileEstimator
+
+PiecewiseEstimator
+```
+
+## Architectures
+
+Although the user is free to construct their neural estimator however they see fit, `NeuralEstimators` provides several useful architectures described below.
 
 
 ```@docs
@@ -35,11 +48,7 @@ DeepSet
 
 DeepSetExpert
 
-PiecewiseEstimator
-
-GNNEstimator
-
-Compress
+GNN
 ```
 
 ## Loss functions
@@ -58,7 +67,7 @@ intervalscore
 
 ## Training
 
-The function `train` is used to train a single neural estimator, while the wrapper function `trainx` is useful for training multiple neural estimators over a range of sample sizes, making using of the technique known as pre-training. 
+The function `train` is used to train a single neural estimator, while the wrapper function `trainx` is useful for training multiple neural estimators over a range of sample sizes, making using of the technique known as pre-training.
 
 ```@docs
 train
@@ -88,5 +97,5 @@ plotdistribution
 ```@docs
 bootstrap
 
-confidenceinterval
+interval
 ```

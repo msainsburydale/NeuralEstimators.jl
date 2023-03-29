@@ -1,7 +1,7 @@
 """
-	train(θ̂, sampler::Function, simulator::Function; )
-	train(θ̂, θ_train::P, θ_val::P, simulator::Function; )
-	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; )
+	train(θ̂, sampler, simulator; )
+	train(θ̂, θ_train::P, θ_val::P, simulator; ) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
 
 Train a neural estimator with architecture `θ̂`.
 
@@ -139,8 +139,7 @@ function train(θ̂, sampler, simulator;
 
 	verbose && println("Sampling the validation set...")
 	θ_val   = isnothing(ξ) ? sampler(K ÷ 5 + 1) : sampler(K ÷ 5 + 1, ξ)
-	Z_val   = simulator(θ_val, m)
-	val_set = _quietDataLoader((Z_val, _extractθ(θ_val)), batchsize)
+	val_set = _quietDataLoader((simulator(θ_val, m), _extractθ(θ_val)), batchsize)
 
 	# Initialise the loss per epoch matrix.
 	verbose && print("Computing the initial validation risk...")
@@ -377,6 +376,12 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		# multiple of the number of replicates in the validation data, m.
 		# Also, only subset the data if m ≂̸ M (the subsetting is redundant otherwise).
 		subsetbool = M % m == 0 && m != M
+
+		# Training data recycles every x epochs
+		if subsetbool
+			x = M ÷ m
+			replicates = repeat([(1:m) .+ i*m for i ∈ 0:(x - 1)], outer = ceil(Integer, epochs/x))
+		end
 	end
 
 	savebool = savepath != "" # turn off saving if savepath is an empty string
@@ -401,15 +406,9 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	initial_train_risk = _lossdataloader(loss, tmp, θ̂, device)
 	verbose && println(" Initial training risk = $initial_train_risk")
 
-	# Initialise the loss per epoch matrix
+	# Initialise the loss per epoch matrix and save the initial estimator
 	loss_per_epoch = [initial_train_risk initial_val_risk;]
-
-	# Save the initial θ̂
 	savebool && _saveweights(θ̂, savepath, 0)
-
-	# Training data recycles every x epochs
-	x = M ÷ m
-	replicates = repeat([(1:m) .+ i*m for i ∈ 0:(x - 1)], outer = ceil(Integer, epochs/x))
 
 	local min_val_risk = initial_val_risk
 	local early_stopping_counter = 0
@@ -418,9 +417,9 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		train_loss = zero(initial_train_risk)
 
 		# For each batch update θ̂ and compute the training loss
-		Z_train_current = subsetbool ? subsetdata(Z_train, replicates[epoch]) : Z_train
-		train_set_current = _quietDataLoader((Z_train_current, _extractθ(θ_train)), batchsize)
-		epoch_time = @elapsed for (Z, θ) in train_set_current
+		train_set = subsetbool ? subsetdata(Z_train, replicates[epoch]) : Z_train
+		train_set = _quietDataLoader((train_set, _extractθ(θ_train)), batchsize)
+		epoch_time = @elapsed for (Z, θ) in train_set
 		   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 		end
 		train_loss = train_loss / size(θ_train, 2)
@@ -480,16 +479,11 @@ The keyword arguments inherit from `train`, and certain keyword arguments
 can be given as vectors. For example, if we are training two estimators, we can
 use a different number of epochs by providing `epochs = [e₁, e₂]`. Other
 arguments that allow vectors are `batchsize`, `stopping_epochs`, and `optimiser`.
-
-# Examples
-```
-#TODO
-```
 """
 function trainx end
 
 
-function trainx(θ̂, P, simulator::Function, M; args...)
+function trainx(θ̂, P, simulator, M; args...)
 
 	kwargs = (;args...)
 	verbose = _checkargs_trainx(kwargs)
@@ -524,7 +518,7 @@ function trainx(θ̂, P, simulator::Function, M; args...)
 end
 
 
-function trainx(θ̂, θ_train::P, θ_val::P, simulator::Function, M; args...)  where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+function trainx(θ̂, θ_train::P, θ_val::P, simulator, M; args...)  where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
 	kwargs = (;args...)
 	verbose = _checkargs_trainx(kwargs)
@@ -738,7 +732,7 @@ function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 	return ls
 end
 
-function _updatebatch!(θ̂::GNNEstimator, Z, θ, device, loss, γ, optimiser)
+function _updatebatch!(θ̂::GNN, Z, θ, device, loss, γ, optimiser)
 
 	m = numberreplicates(Z)
 	Z = Flux.batch(Z)
@@ -757,5 +751,5 @@ end
 
 
 # Wrapper function that returns simulated data and the true parameter values
-_simulate(simulator::Function, params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (simulator(params, m), _extractθ(params))
-_constructset(simulator::Function, params::P, m, batchsize)  where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _quietDataLoader(_simulate(simulator, params, m), batchsize)
+_simulate(simulator, params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (simulator(params, m), _extractθ(params))
+_constructset(simulator, params::P, m, batchsize)  where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _quietDataLoader(_simulate(simulator, params, m), batchsize)
