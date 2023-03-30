@@ -191,7 +191,12 @@ function _assess(
 			# This approach allows the estimator to use the gpu, and provides a
 			# consistent format of the estimates regardless of whether or not
 			# ξ is used.
-			time = @elapsed θ̂ = _runondevice(z -> estimators[i](z, ξ), Z, use_gpu[i]) # old code: θ̂ = estimators[i](Z, ξ)
+			# NB this doesn't work because some elements of ξ may need to
+			# be subsetted when batching... So, at the moment, we cannot use
+			# ξ and the gpu, unless we are willing to move the entire data
+			# set and ξ to the gpu :(
+			# time = @elapsed θ̂ = _runondevice(z -> estimators[i](z, ξ), Z, use_gpu[i])
+			θ̂ = estimators[i](Z, ξ)
 		else
 			time = @elapsed θ̂ = _runondevice(estimators[i], Z, use_gpu[i])
 		end
