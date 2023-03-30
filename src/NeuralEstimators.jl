@@ -39,7 +39,7 @@ include("Estimators.jl")
 
 # ---- Architectures and layers ----
 
-export DeepSet, DeepSetExpert, GNN, Compress
+export DeepSet, DeepSetExpert, GraphPropagatePool, Compress
 include("Architectures.jl")
 
 # ---- Other ---

@@ -1,5 +1,3 @@
-#TODO Should DeepSetExpert be a superclass of DeepSet? Would be better to have a single class that dispatches to different methods depending on wether S is present or not.
-
 using Functors: @functor
 using RecursiveArrayTools: VectorOfArray, convert
 
@@ -34,12 +32,6 @@ samplesize(Z::V) where V <: AbstractVector = samplesize.(Z)
 
 # ---- DeepSet ----
 
-
-#TODO can I just have expert level summary statistics with this method (that are
-# still efficient?). No, because we can only act on the large array when using
-# the efficient method, which means that we lose the information on the sample
-# size... The regular DeepSet method only works if ψ(⋅) can be applied over all
-# replicates.
 """
     DeepSet(ψ, ϕ, a)
 	DeepSet(ψ, ϕ; a::String = "mean")
@@ -67,6 +59,12 @@ usually the 'batch' dimension, but batching with `DeepSets` is done at the set
 level, i.e., sets of replicates are batched together.) For example, with
 gridded spatial data and `ψ` a CNN, `A` should be
 a 4-dimensional array, with the replicates stored in the 4ᵗʰ dimension.
+
+Note that, internally, data stored as `Vector{Arrays}` are first
+concatenated along the replicates dimension before being passed into the inner
+neural network `ψ`; this means that `ψ` is applied to a single large array
+rather than many small arrays, which can substantially improve computational
+efficiency, particularly on the GPU.
 
 Set-level information, ``𝐱``, that is not a function of the data can be passed
 directly into the outer network `ϕ` in the following manner,
@@ -102,11 +100,11 @@ Z₃ = [rand(n, m) for m ∈ (3, 4)]; # two sets containing 3 and 4 realisations
 θ̂(Z₃)
 
 # Repeat the above but with set-level information:
-dₓ = 2
-ϕ  = Chain(Dense(w + dₓ, w, relu), Dense(w, p));
+qₓ = 2
+ϕ  = Chain(Dense(w + qₓ, w, relu), Dense(w, p));
 θ̂  = DeepSet(ψ, ϕ)
-x₁ = rand(dₓ)
-x₂ = [rand(dₓ) for _ ∈ eachindex(Z₂)]
+x₁ = rand(qₓ)
+x₂ = [rand(qₓ) for _ ∈ eachindex(Z₂)]
 θ̂((Z₁, x₁))
 θ̂((Z₂, x₂))
 θ̂((Z₃, x₂))
@@ -129,7 +127,7 @@ function (d::DeepSet)(Z::A) where A
 end
 
 # Single data set with set-level covariates
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B}
+function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractVector{T}} where T
 	Z = tup[1]
 	x = tup[2]
 	t = d.a(d.ψ(Z))
@@ -137,14 +135,11 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B}
 end
 
 # Multiple data sets: simple fallback method using broadcasting
-function (d::DeepSet)(v::V) where {V <: AbstractVector{A}} where A
+function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where A
   	stackarrays(d.(Z))
 end
 
 # Multiple data sets: optimised version for array data.
-# This approach ensures that the neural networks ψ and ϕ are
-# applied to arrays that are as large as possible, improving efficiency compared
-# with the broadcasting method above (particularly on the GPU)
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
 	# Convert to a single large Array
@@ -171,6 +166,15 @@ function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractA
 	θ̂ = d.ϕ(t)
 
 	return θ̂
+end
+
+# Multiple data sets with set-level covariates
+function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
+	Z = tup[1]
+	x = tup[2]
+	t = d.a.(d.ψ.(Z))
+	u = vcat.(t, x)
+	stackarrays(d.ϕ.(u))
 end
 
 # Multiple data sets: optimised version for array data + vector set-level covariates.
@@ -202,13 +206,17 @@ end
 
 
 
+
+
+
 # ---- DeepSetExpert: DeepSet with expert summary statistics ----
 
-#TODO discuss why we need this method (efficient method when working with arrays
-# means that its difficult to define, e.g., the sample size)
+# Note that this struct is necessary because the Vector{Array} method of
+# `DeepSet` concatenates the arrays into a single large array before passing
+# the data into ψ.
 """
 	DeepSetExpert(ψ, ϕ, S, a)
-	DeepSetExpert(ψ, ϕ, S; a::String)
+	DeepSetExpert(ψ, ϕ, S; a::String = "mean")
 	DeepSetExpert(deepset::DeepSet, ϕ, S)
 
 Identical to `DeepSet`, but with additional expert summary statistics,
@@ -222,13 +230,12 @@ where `S` is a function that returns a vector of expert summary statistics.
 The constructor `DeepSetExpert(deepset::DeepSet, ϕ, S)` inherits `ψ` and `a`
 from `deepset`.
 
-Similarly to `DeepSet`, set-level information can be incorporated by passed a
+Similarly to `DeepSet`, set-level information can be incorporated by passing a
 `Tuple`, in which case we have
 
 ```math
 θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)', 𝐱')'),	 	 𝐓(𝐙) = 𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\}).
 ```
-
 
 # Examples
 ```
@@ -248,12 +255,10 @@ w = 16
 θ̂ = DeepSetExpert(ψ, ϕ, S)
 
 # Apply the estimator
-Z₁ = rand(n, 3);                  # single set of 3 realisations
-Z₂ = [rand(n, m) for m ∈ (3, 3)]; # two sets each containing 3 realisations
-Z₃ = [rand(n, m) for m ∈ (3, 4)]; # two sets containing 3 and 4 realisations
+Z₁ = rand(n, 3);                  # single set
+Z₂ = [rand(n, m) for m ∈ (3, 4)]; # two sets
 θ̂(Z₁)
 θ̂(Z₂)
-θ̂(Z₃)
 
 # Repeat the above but with set-level information:
 qₓ = 2
@@ -263,11 +268,6 @@ x₁ = rand(qₓ)
 x₂ = [rand(qₓ) for _ ∈ eachindex(Z₂)]
 θ̂((Z₁, x₁))
 θ̂((Z₂, x₂))
-θ̂((Z₃, x₂))
-
-# Test that training works:
-θ = rand(p, 2)
-θ̂ = train(θ̂, θ, θ, (Z₃, x₂), (Z₃, x₂), epochs = 3)
 ```
 """
 struct DeepSetExpert{F, G, H, K}
@@ -283,7 +283,7 @@ DeepSetExpert(deepset::DeepSet, ϕ, S) = DeepSetExpert(deepset.ψ, ϕ, S, deepse
 Base.show(io::IO, D::DeepSetExpert) = print(io, "\nDeepSetExpert object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)")
 Base.show(io::IO, m::MIME"text/plain", D::DeepSetExpert) = print(io, D)
 
-#TODO need to fix these methods θ̂((Z₁, x₁))
+# Single data set
 function (d::DeepSetExpert)(Z::A) where {A <: AbstractArray{T, N}} where {T, N}
 	t = d.a(d.ψ(Z))
 	s = d.S(Z)
@@ -291,7 +291,8 @@ function (d::DeepSetExpert)(Z::A) where {A <: AbstractArray{T, N}} where {T, N}
 	d.ϕ(u)
 end
 
-function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{A, B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
+# Single data set with set-level covariates
+function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractVector{T}} where T
 	Z = tup[1]
 	x = tup[2]
 	t = d.a(d.ψ(Z))
@@ -300,15 +301,13 @@ function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{A, B}} where {A <: Abs
 	d.ϕ(u)
 end
 
-# Simple, intuitive (although inefficient) implementation using broadcasting:
-function (d::DeepSetExpert)(v::V) where {V <: AbstractVector{A}} where A
-  stackarrays(d.(Z))
+# Multiple data sets: simple fallback method using broadcasting
+function (d::DeepSetExpert)(Z::V) where {V <: AbstractVector{A}} where A
+  	stackarrays(d.(Z))
 end
 
-# Optimised version. This approach ensures that the neural networks ϕ and ρ are
-# applied to arrays that are as large as possible, improving efficiency compared
-# with the intuitive method above (particularly on the GPU):
-# Note I can't take the gradient of this function... Might have to open an issue with Zygote.
+
+# Multiple data sets: optimised version for array data.
 function (d::DeepSetExpert)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
 	# Convert to a single large Array
@@ -336,6 +335,18 @@ function (d::DeepSetExpert)(Z::V) where {V <: AbstractVector{A}} where {A <: Abs
 	d.ϕ(u)
 end
 
+# Multiple data sets with set-level covariates
+function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
+	Z = tup[1]
+	x = tup[2]
+	t = d.a.(d.ψ.(Z))
+	s = d.S.(Z)
+	u = vcat.(t, s, x)
+	stackarrays(d.ϕ.(u))
+end
+
+
+# Multiple data sets with set-level covariates: optimised version for array data.
 function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
 
 	Z = tup[1]
@@ -367,19 +378,22 @@ function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V�
 	d.ϕ(u)
 end
 
-# ---- GNN ----
 
-# TODO show that the deepset module can either be used to map to parameter
-# estimates (by taking the dimension to equal p) or to a summary statistic.
+
+
+# ---- GraphPropagatePool ----
 
 """
-    GNN(propagation, globalpool, deepset)
+    GraphPropagatePool(propagation, globalpool)
 
-A graph neural network ideal for parameter estimation. The `propagation`
-module transforms graphical input data into a set of hidden feature graphs;
-the `globalpool` module aggregates the feature graphs (graph-wise) into a single
-hidden feature vector; and the `deepset` module maps the hidden feature vectors
-onto the output space.
+A graph neural network (GNN) module designed to act as the inner network `ψ` in
+the `DeepSet`/`DeepSetExpert` architecture.
+
+The `propagation` module transforms graphical input
+data into a set of hidden feature graphs; the `globalpool` module aggregates
+the feature graphs (graph-wise) into a single hidden-feature vector.
+Critically, this hidden-feature vector is of fixed length irrespective of the
+size and shape of the graph.
 
 The data should be a `GNNGraph` or `AbstractVector{GNNGraph}`, where each graph
 is associated with a single parameter vector. The graphs may contain sub-graphs
@@ -397,67 +411,75 @@ using Statistics: mean
 d = 1             # dimension of the response variable
 n₁, n₂ = 11, 27   # number of nodes
 e₁, e₂ = 30, 50   # number of edges
-g₁ = rand_graph(n₁, e₁, ndata=rand(d, n₁))
-g₂ = rand_graph(n₂, e₂, ndata=rand(d, n₂))
+g₁ = rand_graph(n₁, e₁, ndata = rand(d, n₁))
+g₂ = rand_graph(n₂, e₂, ndata = rand(d, n₂))
 g  = batch([g₁, g₂])
 
-# propagation module
-w = 5; o = 7
+# propagation module and global pooling module
+w = 5
+o = 7
 propagation = GNNChain(GraphConv(d => w), GraphConv(w => w), GraphConv(w => o))
-
-# global pooling module
 meanpool = GlobalPool(mean)
 
-# Deep Set module
+# DeepSet-based estimator with GNN for the inner network ψ
 w = 32
 p = 3
-ψ₂ = Chain(Dense(o, w, relu), Dense(w, w, relu), Dense(w, w, relu))
-ϕ₂ = Chain(Dense(w, w, relu), Dense(w, p))
-deepset = DeepSet(ψ₂, ϕ₂)
+ψ = GraphPropagatePool(propagation, meanpool)
+ϕ = Chain(Dense(o, w, relu), Dense(w, p))
+θ̂ = DeepSet(ψ, ϕ)
 
-# GNN estimator
-est = GNN(propagation, meanpool, deepset)
+# Apply the estimator
+θ̂(g₁)           # single graph with a single replicate
+θ̂(g)            # single graph with sub-graphs (i.e., with replicates)
+θ̂([g₁, g₂, g])  # vector of graphs (each element is a different data set)
 
-# Apply the estimator to a single graph, a single graph containing sub-graphs,
-# and a vector of graphs:
-θ̂ = est(g₁)
-θ̂ = est(g)
-θ̂ = est([g₁, g₂, g])
+# Repeat the above but with set-level information:
+qₓ = 2
+ϕ = Chain(Dense(o + qₓ, w, relu), Dense(w, p))
+θ̂ = DeepSet(ψ, ϕ)
+x₁ = rand(qₓ)
+x₂ = [rand(qₓ) for _ ∈ eachindex([g₁, g₂, g])]
+θ̂((g₁, x₁))
+θ̂((g, x₁))
+θ̂(([g₁, g₂, g], x₂))
+
+# Repeat the above but with set-level information and expert statistics:
+S = samplesize
+qₛ = 1
+ϕ = Chain(Dense(o + qₓ + qₛ, w, relu), Dense(w, p))
+θ̂ = DeepSetExpert(ψ, ϕ, S)
+θ̂((g₁, x₁))
+θ̂((g, x₁))
+θ̂(([g₁, g₂, g], x₂))
 ```
 """
-struct GNN{F, G, H}
+struct GraphPropagatePool{F, G}
 	propagation::F      # propagation module
 	globalpool::G       # global pooling module
-	deepset::H          # Deep Set module to map the learned feature vector to the parameter space
 end
-@functor GNN
+@functor GraphPropagatePool
 
 
-# The replicates in g are associated with a single parameter.
-function (est::GNN)(g::GNNGraph)
+# Single data set
+function (est::GraphPropagatePool)(g::GNNGraph)
 
-	# Apply the graph-to-graph transformation
-	g̃ = est.propagation(g)
+	# Apply the graph-to-graph transformation and global pooling
+	ḡ = est.globalpool(est.propagation(g))
 
-	# Global pooling
-	ḡ = est.globalpool(g̃)
-
-	# Extract the graph level data (i.e., the pooled features).
-	# h is a matrix with
+	# Extract the graph level data (i.e., pooled features), a matrix with:
 	# 	nrows = number of feature graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
 	#	ncols = number of original graphs (i.e., number of independent replicates).
 	h = ḡ.gdata.u
 
-	# Apply the Deep Set module to map to the parameter space.
-	θ̂ = est.deepset(h)
+	return h
 end
 
-
+# Multiple data sets
 # Internally, we combine the graphs when doing mini-batching, to
 # fully exploit GPU parallelism. What is slightly different here is that,
 # contrary to most applications, we have a multiple graphs associated with each
 # label (usually, each graph is associated with a label).
-function (est::GNN)(v::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
+function (est::GraphPropagatePool)(v::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
 
 	# Simple, inefficient implementation for sanity checking. Note that this is
 	# much slower than the efficient approach below.
@@ -477,17 +499,12 @@ function (est::GNN)(v::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
 
 	return est(g, m)
 end
+function (est::GraphPropagatePool)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
 
-function (est::GNN)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
+	# Apply the graph-to-graph transformation and global pooling
+	ḡ = est.globalpool(est.propagation(g))
 
-	# Apply the graph-to-graph transformation
-	g̃ = est.propagation(g)
-
-	# Global pooling
-	ḡ = est.globalpool(g̃)
-
-	# Extract the graph level features (i.e., the pooled features).
-	# h is a matrix with,
+	# Extract the graph level features (i.e., pooled features), a matrix with:
 	# 	nrows = number of features graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
 	#	ncols = total number of original graphs (i.e., total number of independent replicates).
 	h = ḡ.gdata.u
@@ -498,10 +515,7 @@ function (est::GNN)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
 	indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
 	h̃ = [h[:, idx] for idx ∈ indices]
 
-	# Apply the Deep Set module to map to the parameter space.
-	θ̂ = est.deepset(h̃)
-
-	return θ̂
+	return h̃
 end
 
 
@@ -521,7 +535,7 @@ end
 # ϕ₁ = Chain(Dense(w, w, relu), Dense(w, R))
 # deepsetpool = DeepSet(ψ₁, ϕ₁)
 #
-# function (est::GNN)(g::GNNGraph)
+# function (est::GraphPropagatePool)(g::GNNGraph)
 #
 # 	# Apply the graph-to-graph transformation, and then extract the node-level
 # 	# features. This yields a matrix of size (H, N), where H is the number of
@@ -572,7 +586,7 @@ end
 # NB this is a low priority optimisation that is only useful if we are training
 # with a fixed set of locations.
 
-# function (est::GNN)(a::A) where {A <: AbstractArray{T, N}} where {T, N}
+# function (est::GraphPropagatePool)(a::A) where {A <: AbstractArray{T, N}} where {T, N}
 #
 # 	# Apply the graph-to-graph transformation
 # 	g̃ = est.propagation(a)
@@ -592,7 +606,7 @@ end
 # end
 #
 #
-# function (est::GNN)(v::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+# function (est::GraphPropagatePool)(v::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 #
 # 	# Simple, less efficient implementation for sanity checking:
 # 	θ̂ = stackarrays(est.(v))
@@ -636,7 +650,7 @@ end
 # 	return θ̂
 # end
 
-
+# ---- Compress ----
 
 
 """

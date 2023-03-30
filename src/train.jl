@@ -732,7 +732,7 @@ function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 	return ls
 end
 
-function _updatebatch!(θ̂::GNN, Z, θ, device, loss, γ, optimiser)
+function _updatebatch!(θ̂::GraphPropagatePool, Z, θ, device, loss, γ, optimiser)
 
 	m = numberreplicates(Z)
 	Z = Flux.batch(Z)

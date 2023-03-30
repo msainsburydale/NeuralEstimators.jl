@@ -17,7 +17,7 @@ ParameterConfigurations
 
 `NeuralEstimators` facilitates neural estimation for arbitrary statistical models by having the user implicitly define the model via simulated data. The user may provide simulated data directly, or provide a function that simulates data from the model.
 
-The data should be stored as a `Vector{A}`, where each element of the vector is associated with one parameter configuration, and where `A` depends on the architecture of the neural estimator. For example, if the neural estimator is based on a [`DeepSet`](@ref), the data should be stored as a `Vector{Array}`, where each array may store independent replicates in its final dimension. If the neural estimator is based on a [`GNN`](@ref), the data should be stored as a `Vector{GNNGraph}`, where each graph may store independent replicates in sub-graphs.
+The data should be stored as a `Vector{A}`, where each element of the vector is associated with one parameter configuration, and where `A` depends on the architecture of the neural estimator.
 
 
 ```@docs
@@ -48,7 +48,7 @@ DeepSet
 
 DeepSetExpert
 
-GNN
+GraphPropagatePool
 ```
 
 ## Loss functions

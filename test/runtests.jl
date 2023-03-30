@@ -198,7 +198,7 @@ end
 end
 
 
-@testset "GNN" begin
+@testset "GraphPropagatePool" begin
 	n₁, n₂ = 11, 27
 	m₁, m₂ = 30, 50
 	d = 1
@@ -238,15 +238,12 @@ end
 	h₂ = meanpool(graphtograph(g₂))
 	@test graph_features(h) == hcat(graph_features(h₁), graph_features(h₂))
 
-	# Deep Set module
+	# Full estimator
 	w = 32
 	p = 3
-	ψ₂ = Chain(Dense(o, w, relu), Dense(w, w, relu), Dense(w, w, relu))
-	ϕ₂ = Chain(Dense(w, w, relu), Dense(w, p))
-	deepset = DeepSet(ψ₂, ϕ₂)
-
-	# Full estimator
-	est = GNN(graphtograph, meanpool, deepset)
+	ψ = GraphPropagatePool(graphtograph, meanpool)
+	ϕ = Chain(Dense(o, w, relu), Dense(w, p))
+	est = DeepSet(ψ, ϕ)
 
 	# Test on a single graph containing sub-graphs
 	θ̂ = est(g)
