@@ -196,7 +196,7 @@ function _assess(
 			# ξ and the gpu, unless we are willing to move the entire data
 			# set and ξ to the gpu :(
 			# time = @elapsed θ̂ = _runondevice(z -> estimators[i](z, ξ), Z, use_gpu[i])
-			θ̂ = estimators[i](Z, ξ)
+			time = @elapsed θ̂ = estimators[i](Z, ξ)
 		else
 			time = @elapsed θ̂ = _runondevice(estimators[i], Z, use_gpu[i])
 		end
