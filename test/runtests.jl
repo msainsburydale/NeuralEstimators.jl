@@ -357,28 +357,20 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 
 		@testset "assess" begin
 
-			all_m = [10, 20, 30]
+			m = 20
 
-			# Method that does not require the user to provide data
-			# assessment = assess([θ̂], parameters, m = all_m, use_gpu = use_gpu, verbose = verbose)
-			# @test typeof(assessment)         == Assessment
-			# @test typeof(assessment.θandθ̂)   == DataFrame
-			# @test typeof(assessment.runtime) == DataFrame
-			# risk(assessment)
-			# risk(assessment, average_over_parameters = false)
-
-			# Method that require the user to provide data: J == 1
-			Z_test = [simulate(parameters, m) for m ∈ all_m]
+			# J == 1
+			Z_test = simulate(parameters, m)
 			assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
 			@test typeof(assessment)         == Assessment
-			@test typeof(assessment.θandθ̂)   == DataFrame
+			@test typeof(assessment.df)      == DataFrame
 			@test typeof(assessment.runtime) == DataFrame
 
-			# Method that require the user to provide data: J == 5 > 1
-			Z_test = [simulate(parameters, m, 5) for m ∈ all_m]
+			# J == 5 > 1
+			Z_test = simulate(parameters, m, 5)
 			assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
 			@test typeof(assessment)         == Assessment
-			@test typeof(assessment.θandθ̂)   == DataFrame
+			@test typeof(assessment.df)      == DataFrame
 			@test typeof(assessment.runtime) == DataFrame
 
 			# Test that estimators needing invariant model information can be used:

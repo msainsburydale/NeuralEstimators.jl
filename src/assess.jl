@@ -1,55 +1,67 @@
 # ---- Assessment ----
 
 """
-	Assessment(θandθ̂::DataFrame, runtime::DataFrame)
+	Assessment(df::DataFrame, runtime::DataFrame)
 
-A type for storing the output of `assess()`. It contains two fields.
-The field `runtime` contains the total `time` taken for each `estimator` for each sample size `m`.
-The field `θandθ̂` is a long-form `DataFrame` containing the true parameters and corresponding estimates.
-Specifically, its columns are:
+A type for storing the output of `assess()`. The field `runtime` contains the
+total time taken for each estimator. The field `df` is a long-form `DataFrame`
+with columns:
 
 - `estimator`: the name of the estimator
 - `parameter`: the name of the parameter
 - `truth`:     the true value of the parameter
 - `estimate`:  the estimated value of the parameter
-- `m`:         the sample size
+- `m`:         the sample size (number of iid replicates)
 - `k`:         the index of the parameter vector in the test set
-- `j`: the index of the data set
+- `j`:         the index of the data set
 
-Multiple `Assessment` objects can be combined with the function `merge`.
+Multiple `Assessment` objects can be combined with `merge()`.
 """
 struct Assessment
-	θandθ̂::DataFrame
+	df::DataFrame
 	runtime::DataFrame
 end
 
 function merge(assessment::Assessment, assessments::Assessment...)
-	θandθ̂   = assessment.θandθ̂
+	df   = assessment.df
 	runtime = assessment.runtime
 	for x in assessments
-		θandθ̂   = vcat(θandθ̂,   x.θandθ̂)
+		df   = vcat(df,   x.df)
 		runtime = vcat(runtime, x.runtime)
 	end
-	Assessment(θandθ̂, runtime)
+	Assessment(df, runtime)
 end
 
-
-"""
+@doc raw"""
 	risk(assessment::Assessment; loss = (x, y) -> abs(x - y), average_over_parameters = true)
 
-Estimates the Bayes risk with respect to the `loss` function for each
-estimator, parameter, and sample size considered in `assessment`.
+Computes a Monte Carlo approximation of the Bayes risk,
 
-The argument `loss` should be a binary operator (default absolute-error loss).
+```math
+r_{\Omega}(\hat{\boldsymbol{\theta}}(\cdot))
+\approx
+\frac{1}{K} \sum_{\boldsymbol{\theta} \in \vartheta} \frac{1}{J} \sum_{\boldsymbol{Z} \in \mathcal{Z}_{\boldsymbol{\theta}}} L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z})).
+```
 
-If `average_over_parameters = true` (default), the risk is averaged over
-all parameters; otherwise, the risk is evaluated over each parameter separately.
+where ``\vartheta`` denotes a set of ``K`` parameter vectors sampled from the
+prior ``\Omega(\cdot)`` and, for each ``\boldsymbol{\theta} \in \vartheta``, we
+have ``J`` sets of ``m`` mutually independent realisations from the model
+collected in ``\mathcal{Z}_{\boldsymbol{\theta}}``.
+
+# Keyword arguments
+- `loss = (x, y) -> abs(x - y)`: a binary operator (default absolute-error loss).
+- `average_over_parameters::Bool = true`: if true (default), the loss is averaged over all parameters; otherwise, the loss is averaged over each parameter separately.
+- `average_over_sample_sizes::Bool = true`: if true (default), the loss is averaged over all sample sizes ``m``; otherwise, the loss is averaged over each sample size separately.
 """
-function risk(assessment::Assessment; loss = (x, y) -> abs(x - y), average_over_parameters::Bool = true)
+function risk(assessment::Assessment;
+			  loss = (x, y) -> abs(x - y),
+			  average_over_parameters::Bool = true,
+			  average_over_sample_sizes::Bool = true)
 
-	df = assessment.θandθ̂
-	grouping_variables = [:estimator, :m]
+	df = assessment.df
+	grouping_variables = [:estimator]
 	if !average_over_parameters push!(grouping_variables, :parameter) end
+	if !average_over_sample_sizes push!(grouping_variables, :m) end
 	df = groupby(df, grouping_variables)
 	df = combine(df, [:estimate, :truth] => ((x, y) -> loss.(x, y)) => :loss, ungroup = false)
 	df = combine(df, :loss => mean => :risk)
@@ -60,18 +72,16 @@ end
 
 # ---- assess() ----
 
-
 """
-	assess(estimators, parameters, Z; <keyword args>)
-	assess(estimators, parameters; <keyword args>)
+	assess(estimators, θ, Z; <keyword args>)
 
 Using a collection of `estimators`, compute estimates from data `Z` simulated
-from a set of `parameters`.
+based on true parameter vectors stored in `θ`.
 
-The data `Z` should be an iterable collection, where each element contains
-testing data for a single sample size. If there are more simulated data sets
-than unique parameter vectors, the data should be stored in an 'outer' fashion,
-so that the parameter vectors run faster than the replicated data.
+If `Z` contains more data sets than parameter vectors, the parameter matrix will
+be recycled by horizontal concatenation.
+
+The output is of type `Assessment`; see `?Assessment` for details.
 
 # Keyword arguments
 - `estimator_names::Vector{String}`: names of the estimators (sensible defaults provided).
@@ -95,65 +105,52 @@ w = 32 # width of each layer
 ϕ = Chain(Dense(w, w, relu), Dense(w, p));
 θ̂ = DeepSet(ψ, ϕ)
 
-# Generate fake parameters and corresponding data for a range of sample sizes:
+# Generate testing parameters
 K = 100
 θ = rand(p, K)
-Z = [[rand(n, m) for _ ∈ 1:K] for m ∈ (1, 10, 20)]
 
-assessment = assess([θ̂], θ, Z)
+# Data for a single sample size
+m = 30
+Z = [rand(n, m) for _ ∈ 1:K];
+assessment = assess([θ̂], θ, Z);
 risk(assessment)
-risk(assessment, average_over_parameters = false)
+
+# Multiple data sets for each parameter vector
+J = 5
+Z = repeat(Z, J);
+assessment = assess([θ̂], θ, Z);
+risk(assessment)
+
+# With set-level information
+qₓ = 2
+ϕ  = Chain(Dense(w + qₓ, w, relu), Dense(w, p));
+θ̂ = DeepSet(ψ, ϕ)
+x = [rand(qₓ) for _ ∈ eachindex(Z)]
+assessment = assess([θ̂], θ, (Z, x));
+risk(assessment)
 ```
 """
 function assess(
-	estimators, parameters::P, Z;
+	estimators, θ::P, Z;
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
-	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(parameters, 1)],
+	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
 	ξ = nothing,
 	use_ξ = false,
 	use_gpu = true,
 	verbose::Bool = true
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
-	# Infer all_m from Z and check that Z is in the correct format
-	all_m = broadcast.(z -> size(z)[end], Z)
-	all_m = unique.(all_m)
-	@assert length(all_m) == length(Z) "The simulated data Z should be a `Vector{Vector{Array}}`, where each `Vector{Array}` is associated with a single sample size (i.e., the size of the final dimension of the arrays should be constant)."
+	θ = _extractθ(θ)
 
-	# Check that the number of parameters are consistent with other quantities
-	K = size(parameters, 2)
-	KJ = unique(length.(Z))
-	@assert length(KJ) == 1
-	KJ = KJ[1]
-	@assert KJ % K == 0 "The number of data sets in Z must be a multiple of the number of parameters"
+	p, K = size(θ)
+	m = numberreplicates(Z)
+	KJ = length(m)
+	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors in `θ`"
 	J = KJ ÷ K
-	J > 1 && verbose && @info "There are more simulated data sets than unique parameter vectors; ensure that the data are replicated in an 'outer' fashion, so that the parameter vectors run faster than the replicated data sets."
-
-	assessments = map(Z) do z
-		_assess(
-			estimators, parameters, z, J = J,
-			estimator_names = estimator_names, parameter_names = parameter_names,
-			ξ = ξ, use_ξ = use_ξ, use_gpu = use_gpu, verbose = verbose
-		)
+	if J > 1
+		verbose && @info "There are more simulated data sets than unique parameter vectors: the parameter matrix will be recycled by horizontal concatenation."
+		θ = repeat(θ, outer = (1, J))
 	end
-
-	return merge(assessments...)
-end
-
-# NB this chould be an exported method; only reason it's not is because
-# I can't distinguish by Z. Also would need
-function _assess(
-	estimators, parameters::P, Z;
-	estimator_names::Vector{String},
-	parameter_names::Vector{String},
-	J::Integer, ξ, use_ξ, use_gpu, verbose
-	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-
-	# Infer m from Z and check that it is constant
-	m = unique(numberreplicates(Z))
-	@assert length(m) == 1 "The simulated data `Z` should contain a fixed number of replicates for each parameter vector in `parameters`"
-	m = m[1]
-	verbose && println("Estimating with m = $m...")
 
 	# Extract the parameter names from ξ if it was provided
 	if !isnothing(ξ) && haskey(ξ, :parameter_names)
@@ -161,13 +158,10 @@ function _assess(
 	end
 
 	E = length(estimators)
-	p = size(parameters, 1)
-	K = size(parameters, 2)
 	@assert length(estimator_names) == E
 	@assert length(parameter_names) == p
 
-	# If only one estimator is provided and ξ is not nothing, use_ξ is
-	# automatically set to true.
+	# Use ξ if it was provided alongside only a single estimator
 	if E == 1 && !isnothing(ξ)
 		use_ξ = true
 	end
@@ -180,7 +174,7 @@ function _assess(
 	@assert length(use_gpu) == E
 
 	# Initialise a DataFrame to record the run times
-	runtime = DataFrame(estimator = String[], m = Int64[], time = Float64[])
+	runtime = DataFrame(estimator = String[], time = Float64[])
 
 	θ̂ = map(eachindex(estimators)) do i
 
@@ -200,25 +194,27 @@ function _assess(
 		else
 			time = @elapsed θ̂ = _runondevice(estimators[i], Z, use_gpu[i])
 		end
+		θ̂ = convert(Matrix, θ̂) # sometimes estimators return vectors rather than matrices, which can mess things up
 
-		push!(runtime, [estimator_names[i], m, time])
+		push!(runtime, [estimator_names[i], time])
 		θ̂
 	end
 
-    # Convert to DataFrame and add estimator information
-    θ̂ = hcat(θ̂...)
-    θ̂ = DataFrame(θ̂', parameter_names)
-    θ̂[!, "estimator"] = repeat(estimator_names, inner = nrow(θ̂) ÷ E)
-    θ̂[!, "m"] = repeat([m], nrow(θ̂))
+	# Convert to DataFrame and add estimator information
+	θ̂ = hcat(θ̂...)
+	θ̂ = DataFrame(θ̂', parameter_names)
+	θ̂[!, "estimator"] = repeat(estimator_names, inner = nrow(θ̂) ÷ E)
+	θ̂[!, "m"] = repeat(m, E)
 	θ̂[!, "k"] = repeat(1:K, E * J)
 	θ̂[!, "j"] = repeat(repeat(1:J, inner = K), E) # NB "j" used to be "replicate"
-	θ̂[!, "replicate"] = repeat(repeat(1:J, inner = K), E) # for backwards compatability
+	θ̂[!, "replicate"] = repeat(repeat(1:J, inner = K), E) # NB "replicate" included for backwards compatability; I will remove it eventually
 
-	# Also provide the true parameters for comparison with the estimates
-	θ = DataFrame(_extractθ(parameters)', parameter_names)
+	# Also provide the true θ for comparison with the estimates
+	assessment = Assessment(_merge(DataFrame(θ', parameter_names), θ̂), runtime)
 
-	return Assessment(_merge(θ, θ̂), runtime)
+	return assessment
 end
+
 
 # Given a set of true parameters θ and corresponding estimates θ̂ resulting
 # from a call to assess(), merge θ and θ̂ into a single long-form DataFrame.

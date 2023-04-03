@@ -167,8 +167,8 @@ function _runondevice(θ̂, x, use_gpu::Bool; batchsize::Integer = 32)
 
 	if typeof(x) <: AbstractVector
 		batchsize = min(length(x), batchsize)
-	else
-		batchsize = min(numberreplicates(x), batchsize)
+	elseif typeof(x) <: Tuple
+		batchsize = min(length(x[1]), batchsize)
 	end
 
 	device  = _checkgpu(use_gpu, verbose = false)
