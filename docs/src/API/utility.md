@@ -1,4 +1,4 @@
-# Utility functions
+# Miscellaneous
 
 
 ## Core
@@ -14,11 +14,23 @@ numberreplicates
 subsetdata
 ```
 
+## Architecture layers
 
-## Miscellaneous
+These layers can be used at the end of an architecture to ensure that the
+neural estimator provides valid parameters.
 
 ```@docs
 Compress
+
+CholeskyParameters
+
+CovarianceMatrixParameters
+```
+
+## Utility functions
+
+```@docs
+vectotri
 
 loadbestweights
 

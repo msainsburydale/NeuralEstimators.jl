@@ -40,6 +40,9 @@ include("Estimators.jl")
 # ---- Architectures and layers ----
 
 export DeepSet, DeepSetExpert, GraphPropagatePool, Compress
+export CholeskyParameters, CholeskyParametersConstrained
+export vectotri
+export CovarianceMatrixParameters, CovarianceMatrixParametersConstrained
 include("Architectures.jl")
 
 # ---- Other ---

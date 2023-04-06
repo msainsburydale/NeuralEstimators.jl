@@ -691,3 +691,190 @@ Compress(a, b) = Compress(a, b, (b + a) / 2)
 
 Flux.@functor Compress
 Flux.trainable(l::Compress) =  ()
+
+
+# ---- CholeskyParameters and CovarianceMatrixParameters ----
+
+
+"""
+	vectotri(v, uplo = :L)
+Converts a vector `v` of length ``d(d+1)/2`` into a ``d``-dimensional triangular
+matrix.
+
+# Examples
+```
+d = 4
+n = d*(d+1)÷2
+v = range(1, n)
+vectotri(v)
+vectotri(v, :U)
+```
+"""
+function vectotri(v, uplo = :L)
+	n = length(v)
+	d = (-1 + isqrt(1 + 8n)) ÷ 2
+	k = 0
+	L = [ i >= j ? (k+=1; v[k]) : 0 for i=1:d, j=1:d ]
+	L = LowerTriangular(L)
+	uplo == :L ? L : L'
+end
+
+
+"""
+    CholeskyParameters(d)
+	CholeskyParametersConstrained(d, determinant = 1f0)
+Layer for constructing the parameters of a Cholesky factor for a `d`-dimensional
+random vector.
+
+This layer transforms an `Matrix` with `d`(`d`+1)÷2 rows (the number of
+non-zero elements in a Cholesky factor) into an `Matrix` of the same
+dimension, but with `d` rows constrained to be positive (corresponding to
+the diagonal elements of the Cholesky factor) and the remaining rows
+unconstrained.
+
+`CholeskyParametersConstrained` constrains the `determinant` of the Cholesky
+factor. This is achieved by setting the final diagonal element equal to
+`determinant`/(Π Lᵢᵢ), where the product is over ``i < d``.
+
+# Examples
+```
+using NeuralEstimators
+using LinearAlgebra
+using Test
+
+d = 4
+l = CholeskyParameters(d)
+K = 10
+n = d*(d+1)÷2
+x = randn(n, K)
+l(x)                                  # returns a matrix (used for Flux networks)
+[vectotri(y) for y ∈ eachcol(l(x))]   # convert matrix to Cholesky factors
+
+l = CholeskyParametersConstrained(d)
+L = [vectotri(y) for y ∈ eachcol(l(x))]
+@test all(det.(L) .≈ 1)
+
+l = CholeskyParametersConstrained(d, 4.0f0)
+L = [vectotri(y) for y ∈ eachcol(l(x))]
+@test all(det.(L) .≈ 4)
+```
+"""
+struct CholeskyParameters{T <: Integer, G}
+  d::T
+  diag_idx::G
+end
+function CholeskyParameters(d::Integer)
+	diag_idx = [1]
+	for i ∈ 1:(d-1)
+		push!(diag_idx, diag_idx[i] + d-i+1)
+	end
+	CholeskyParameters(d, diag_idx)
+end
+function (l::CholeskyParameters)(x)
+	y = [i ∈ l.diag_idx ? exp.(x[i, :]) : x[i, :] for i ∈ 1:size(x, 1)]
+	stackarrays(y, merge = false)
+end
+Flux.@functor CholeskyParameters
+Flux.trainable(l::CholeskyParameters) = ()
+
+
+struct CholeskyParametersConstrained{T <: Integer, G}
+  d::T
+  determinant::G
+  choleskyparameters::CholeskyParameters
+end
+function CholeskyParametersConstrained(d, determinant = 1f0)
+	CholeskyParametersConstrained(d, determinant, CholeskyParameters(d))
+end
+function (l::CholeskyParametersConstrained)(x)
+	y = l.choleskyparameters(x)
+	u = y[l.choleskyparameters.diag_idx[1:end-1], :]
+	v = l.determinant ./ prod(u, dims = 1)
+	vcat(y[1:end-1, :], v)
+end
+Flux.@functor CholeskyParametersConstrained
+Flux.trainable(l::CholeskyParametersConstrained) =  ()
+
+
+
+"""
+    CovarianceMatrixParameters(d)
+	CovarianceMatrixParametersConstrained(d, determinant = 1f0)
+
+Layer for constructing the parameters of a covariance matrix for a
+`d`-dimensional random vector.
+
+Due to symmetry, there are `d`(`d` + 1)/2 free parameters in a covariance
+matrix, so this layer transforms a `Matrix` with `d`(`d` + 1)/2 rows into a
+`Matrix` of the same dimension but with `d` rows constrained to be positive
+(corresponding to the diagonal elements, i.e., the variance parameters) and the
+remaining rows unconstrained.
+
+`CovarianceMatrixParametersConstrained` constrains the `determinant` of the
+covariance matrix.
+
+# Examples
+```
+using NeuralEstimators
+using LinearAlgebra
+using Test
+
+d = 4
+l = CovarianceMatrixParameters(d)
+K = 10
+n = d*(d+1)÷2
+x = randn(n, K)
+
+l(x)
+Σ = [Symmetric(vectotri(y), :L) for y ∈ eachcol(l(x))]
+Σ = convert.(Matrix, Σ)
+@test all(isposdef.(Σ))
+
+l = CovarianceMatrixParametersConstrained(d)
+Σ = [Symmetric(vectotri(y), :L) for y ∈ eachcol(l(x))]
+Σ = convert.(Matrix, Σ)
+@test all(det.(Σ) .≈ 1)
+
+l = CovarianceMatrixParametersConstrained(d, 4.0f0)
+Σ = [Symmetric(vectotri(y), :L) for y ∈ eachcol(l(x))]
+Σ = convert.(Matrix, Σ)
+@test all(det.(Σ) .≈ 4)
+```
+"""
+struct CovarianceMatrixParameters{T <: Integer, G}
+  d::T
+  idx::G
+  choleskyparameters::CholeskyParameters
+end
+Flux.@functor CovarianceMatrixParameters
+Flux.trainable(l::CovarianceMatrixParameters) = ()
+function CovarianceMatrixParameters(d::Integer)
+	idx = tril(trues(d, d))
+	idx = findall(vec(idx)) # convert to scalar indices
+	return CovarianceMatrixParameters(d, idx, CholeskyParameters(d))
+end
+function (l::CovarianceMatrixParameters)(x)
+	L = [vectotri(y) for y ∈ eachcol(l.choleskyparameters(x))]
+	Σ = broadcast(x -> x*x', L)
+	θ = broadcast(x -> x[l.idx], Σ)
+	return hcat(θ...)
+end
+
+struct CovarianceMatrixParametersConstrained{T <: Integer, G}
+  d::T
+  idx::G
+  choleskyparameters::CholeskyParametersConstrained
+end
+Flux.@functor CovarianceMatrixParametersConstrained
+Flux.trainable(l::CovarianceMatrixParametersConstrained) = ()
+function CovarianceMatrixParametersConstrained(d::Integer, determinant = 1f0)
+	idx = tril(trues(d, d))
+	idx = findall(vec(idx)) # convert to scalar indices
+	return CovarianceMatrixParametersConstrained(d, idx, CholeskyParametersConstrained(d, sqrt(determinant)))
+end
+function (l::CovarianceMatrixParametersConstrained)(x)
+	L = [vectotri(y) for y ∈ eachcol(l.choleskyparameters(x))]
+	Σ = broadcast(x -> x*x', L)
+	θ = broadcast(x -> x[l.idx], Σ)
+	return hcat(θ...)
+end

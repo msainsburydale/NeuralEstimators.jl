@@ -40,7 +40,9 @@ PiecewiseEstimator
 
 ## Architectures
 
-Although the user is free to construct their neural estimator however they see fit, `NeuralEstimators` provides several useful architectures described below.
+Although the user is free to construct their neural estimator however they see fit, `NeuralEstimators` provides several useful architectures described below. See
+also [Architecture layers](@ref) for some useful layers that can be used to
+ensure that the neural estimator provides valid parameters. 
 
 
 ```@docs
