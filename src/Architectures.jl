@@ -878,3 +878,45 @@ function (l::CovarianceMatrixParametersConstrained)(x)
 	θ = broadcast(x -> x[l.idx], Σ)
 	return hcat(θ...)
 end
+
+
+
+"""
+	SplitApply(layers, indices)
+Splits an array into multiple sub-arrays by subsetting the rows using
+the collection of `indices`, and then applies each layer in `layers` to the
+corresponding sub-array.
+
+Specifically, for each `i` = 1, …, ``n``, with ``n`` the number of `layers`,
+`SplitApply(x)` performs `layers[i](x[indices[i], :])`, and then vertically
+concatenates the resulting transformed arrays.
+
+# Examples
+```
+using NeuralEstimators
+
+d = 4
+K = 10
+p₁ = 2          # number of non-covariance matrix parameters
+p₂ = d*(d+1)÷2  # number of covariance matrix parameters
+p = p₁ + p₂
+
+a = [0.1, 4]
+b = [0.9, 9]
+l₁ = Compress(a, b)
+l₂ = CovarianceMatrixParameters(d)
+l = Split([l₁, l₂], [1:p₁, p₁+1:p])
+
+θ = randn(p, K)
+l(θ)
+```
+"""
+struct SplitApply{T,G}
+  layers::T
+  indices::G
+end
+Flux.@functor SplitApply
+Flux.trainable(l::SplitApply) = ()
+function (l::SplitApply)(x::AbstractArray)
+	vcat([layer(x[idx, :]) for (layer, idx) in zip(l.layers, l.indices)]...)
+end

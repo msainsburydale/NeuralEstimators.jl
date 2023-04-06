@@ -43,6 +43,7 @@ export DeepSet, DeepSetExpert, GraphPropagatePool, Compress
 export CholeskyParameters, CholeskyParametersConstrained
 export vectotri
 export CovarianceMatrixParameters, CovarianceMatrixParametersConstrained
+export SplitApply
 include("Architectures.jl")
 
 # ---- Other ---

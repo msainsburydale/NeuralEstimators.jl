@@ -25,6 +25,8 @@ Compress
 CholeskyParameters
 
 CovarianceMatrixParameters
+
+SplitApply
 ```
 
 ## Utility functions
