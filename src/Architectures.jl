@@ -744,9 +744,9 @@ using Test
 
 d = 4
 l = CholeskyParameters(d)
-K = 10
-n = d*(d+1)÷2
-x = randn(n, K)
+K = 50
+p = d*(d+1)÷2
+x = randn(p, K)
 l(x)                                  # returns a matrix (used for Flux networks)
 [vectotri(y) for y ∈ eachcol(l(x))]   # convert matrix to Cholesky factors
 
@@ -772,7 +772,7 @@ function CholeskyParameters(d::Integer)
 end
 function (l::CholeskyParameters)(x)
 	y = [i ∈ l.diag_idx ? exp.(x[i, :]) : x[i, :] for i ∈ 1:size(x, 1)]
-	stackarrays(y, merge = false)
+	stackarrays(y, merge = false)'
 end
 Flux.@functor CholeskyParameters
 Flux.trainable(l::CholeskyParameters) = ()
@@ -821,9 +821,9 @@ using Test
 
 d = 4
 l = CovarianceMatrixParameters(d)
-K = 10
-n = d*(d+1)÷2
-x = randn(n, K)
+K = 50
+p = d*(d+1)÷2
+x = randn(p, K)
 
 l(x)
 Σ = [Symmetric(vectotri(y), :L) for y ∈ eachcol(l(x))]
@@ -896,7 +896,7 @@ concatenates the resulting transformed arrays.
 using NeuralEstimators
 
 d = 4
-K = 10
+K = 50
 p₁ = 2          # number of non-covariance matrix parameters
 p₂ = d*(d+1)÷2  # number of covariance matrix parameters
 p = p₁ + p₂
@@ -905,7 +905,7 @@ a = [0.1, 4]
 b = [0.9, 9]
 l₁ = Compress(a, b)
 l₂ = CovarianceMatrixParameters(d)
-l = Split([l₁, l₂], [1:p₁, p₁+1:p])
+l = SplitApply([l₁, l₂], [1:p₁, p₁+1:p])
 
 θ = randn(p, K)
 l(θ)
