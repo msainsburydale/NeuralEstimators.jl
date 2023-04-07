@@ -695,10 +695,18 @@ Flux.trainable(l::Compress) =  ()
 
 # ---- CholeskyParameters and CovarianceMatrixParameters ----
 
+# #TODO Ask why this happens
+# using CUDA
+# CUDA.allowscalar(false)
+# x = gpu(rand(3, 3))
+# x[1:2, :]
+# y = x'
+# y[1:2, :]
+
 
 """
 	vectotri(v, uplo = :L)
-Converts a vector `v` of length ``d(d+1)/2`` into a ``d``-dimensional triangular
+Converts a vector `v` of length ``d(d+1)÷2`` into a ``d``-dimensional triangular
 matrix.
 
 # Examples
@@ -720,21 +728,38 @@ function vectotri(v, uplo = :L)
 end
 
 
-"""
+@doc raw"""
     CholeskyParameters(d)
 	CholeskyParametersConstrained(d, determinant = 1f0)
 Layer for constructing the parameters of a Cholesky factor for a `d`-dimensional
 random vector.
 
 This layer transforms an `Matrix` with `d`(`d`+1)÷2 rows (the number of
-non-zero elements in a Cholesky factor) into an `Matrix` of the same
+non-zero elements in a Cholesky factor) into a `Matrix` of the same
 dimension, but with `d` rows constrained to be positive (corresponding to
 the diagonal elements of the Cholesky factor) and the remaining rows
 unconstrained.
 
+The ordering of the transformed array aligns with Julia's column-major ordering,
+so that a Cholesky factor with `d` = 3,
+
+```math
+\begin{bmatrix}
+L₁₁ &  &  \\
+L₂₁ & L₂₂ &  \\
+L₃₁ & L₃₂ & L₃₃ \\
+\end{bmatrix},
+```
+
+will follow the ordering ``[L₁₁, L₂₁, L₃₁, L₂₂, L₃₂, L₃₃]'``. Since
+the diagonal elements must be positive, in this example rows 1, 4, and 6 of the
+transformed array will be constrained to be positive.
+
 `CholeskyParametersConstrained` constrains the `determinant` of the Cholesky
-factor. This is achieved by setting the final diagonal element equal to
-`determinant`/(Π Lᵢᵢ), where the product is over ``i < d``.
+factor. Since the determinant of a triangular matrix is equal to the product of
+its diagonal elements, the determinant is constrained by setting the final
+diagonal element equal to `determinant`/``(Π Lᵢᵢ)`` where the product is over
+``i < d``.
 
 # Examples
 ```
@@ -754,9 +779,9 @@ l = CholeskyParametersConstrained(d)
 L = [vectotri(y) for y ∈ eachcol(l(x))]
 @test all(det.(L) .≈ 1)
 
-l = CholeskyParametersConstrained(d, 4.0f0)
+l = CholeskyParametersConstrained(d, 2f0)
 L = [vectotri(y) for y ∈ eachcol(l(x))]
-@test all(det.(L) .≈ 4)
+@test all(det.(L) .≈ 2)
 ```
 """
 struct CholeskyParameters{T <: Integer, G}
@@ -774,8 +799,7 @@ function (l::CholeskyParameters)(x)
 	y = [i ∈ l.diag_idx ? exp.(x[i, :]) : x[i, :] for i ∈ 1:size(x, 1)]
 	stackarrays(y, merge = false)'
 end
-Flux.@functor CholeskyParameters
-Flux.trainable(l::CholeskyParameters) = ()
+
 
 
 struct CholeskyParametersConstrained{T <: Integer, G}
@@ -788,13 +812,11 @@ function CholeskyParametersConstrained(d, determinant = 1f0)
 end
 function (l::CholeskyParametersConstrained)(x)
 	y = l.choleskyparameters(x)
+	y = copy(y) # convert y from adjoint{CuArray} to CuArray (the former does not allow indexing)
 	u = y[l.choleskyparameters.diag_idx[1:end-1], :]
 	v = l.determinant ./ prod(u, dims = 1)
 	vcat(y[1:end-1, :], v)
 end
-Flux.@functor CholeskyParametersConstrained
-Flux.trainable(l::CholeskyParametersConstrained) =  ()
-
 
 
 """
@@ -806,12 +828,27 @@ Layer for constructing the parameters of a covariance matrix for a
 
 Due to symmetry, there are `d`(`d` + 1)/2 free parameters in a covariance
 matrix, so this layer transforms a `Matrix` with `d`(`d` + 1)/2 rows into a
-`Matrix` of the same dimension but with `d` rows constrained to be positive
-(corresponding to the diagonal elements, i.e., the variance parameters) and the
-remaining rows unconstrained.
+`Matrix` of the same dimension. Internally, it uses a `CholeskyParameters` layer
+to construct a valid Cholesky factor, from which a positive-definite covariance
+matrix Σ can be computed.
+
+The ordering of the transformed array aligns with Julia's column-major ordering,
+so that a covariance matrix with `d` = 3,
+
+```math
+\begin{bmatrix}
+Σ₁₁ & Σ₁₂ & Σ₁₃ \\
+Σ₂₁ & Σ₂₂ & Σ₂₃ \\
+Σ₃₁ & Σ₃₂ & Σ₃₃ \\
+\end{bmatrix},
+```
+
+will follow the ordering ``[Σ₁₁, Σ₂₁, Σ₃₁, Σ₂₂, Σ₃₂, Σ₃₃]'``. Only
+the lower triangle of the matrix is returned because covariance matrices are
+symmetric.
 
 `CovarianceMatrixParametersConstrained` constrains the `determinant` of the
-covariance matrix.
+covariance matrix to `determinant`.
 
 # Examples
 ```
@@ -835,7 +872,7 @@ l = CovarianceMatrixParametersConstrained(d)
 Σ = convert.(Matrix, Σ)
 @test all(det.(Σ) .≈ 1)
 
-l = CovarianceMatrixParametersConstrained(d, 4.0f0)
+l = CovarianceMatrixParametersConstrained(d, 4f0)
 Σ = [Symmetric(vectotri(y), :L) for y ∈ eachcol(l(x))]
 Σ = convert.(Matrix, Σ)
 @test all(det.(Σ) .≈ 4)
@@ -846,15 +883,13 @@ struct CovarianceMatrixParameters{T <: Integer, G}
   idx::G
   choleskyparameters::CholeskyParameters
 end
-Flux.@functor CovarianceMatrixParameters
-Flux.trainable(l::CovarianceMatrixParameters) = ()
 function CovarianceMatrixParameters(d::Integer)
 	idx = tril(trues(d, d))
 	idx = findall(vec(idx)) # convert to scalar indices
 	return CovarianceMatrixParameters(d, idx, CholeskyParameters(d))
 end
 function (l::CovarianceMatrixParameters)(x)
-	L = [vectotri(y) for y ∈ eachcol(l.choleskyparameters(x))]
+	L = [vectotri(cpu(y)) for y ∈ eachcol(l.choleskyparameters(x))]
 	Σ = broadcast(x -> x*x', L)
 	θ = broadcast(x -> x[l.idx], Σ)
 	return hcat(θ...)
@@ -865,20 +900,17 @@ struct CovarianceMatrixParametersConstrained{T <: Integer, G}
   idx::G
   choleskyparameters::CholeskyParametersConstrained
 end
-Flux.@functor CovarianceMatrixParametersConstrained
-Flux.trainable(l::CovarianceMatrixParametersConstrained) = ()
 function CovarianceMatrixParametersConstrained(d::Integer, determinant = 1f0)
 	idx = tril(trues(d, d))
 	idx = findall(vec(idx)) # convert to scalar indices
 	return CovarianceMatrixParametersConstrained(d, idx, CholeskyParametersConstrained(d, sqrt(determinant)))
 end
 function (l::CovarianceMatrixParametersConstrained)(x)
-	L = [vectotri(y) for y ∈ eachcol(l.choleskyparameters(x))]
+	L = [vectotri(cpu(y)) for y ∈ eachcol(l.choleskyparameters(x))]
 	Σ = broadcast(x -> x*x', L)
 	θ = broadcast(x -> x[l.idx], Σ)
 	return hcat(θ...)
 end
-
 
 
 """
@@ -915,7 +947,7 @@ struct SplitApply{T,G}
   layers::T
   indices::G
 end
-Flux.@functor SplitApply
+Flux.@functor SplitApply (layers, )
 Flux.trainable(l::SplitApply) = ()
 function (l::SplitApply)(x::AbstractArray)
 	vcat([layer(x[idx, :]) for (layer, idx) in zip(l.layers, l.indices)]...)
