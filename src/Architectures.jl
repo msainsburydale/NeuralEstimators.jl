@@ -695,14 +695,6 @@ Flux.trainable(l::Compress) =  ()
 
 # ---- CholeskyParameters and CovarianceMatrixParameters ----
 
-# #TODO Ask why this happens
-# using CUDA
-# CUDA.allowscalar(false)
-# x = gpu(rand(3, 3))
-# x[1:2, :]
-# y = x'
-# y[1:2, :]
-
 
 """
 	vectotri(v, uplo = :L)
@@ -819,7 +811,7 @@ function (l::CholeskyParametersConstrained)(x)
 end
 
 
-"""
+@doc raw"""
     CovarianceMatrixParameters(d)
 	CovarianceMatrixParametersConstrained(d, determinant = 1f0)
 
@@ -842,6 +834,8 @@ so that a covariance matrix with `d` = 3,
 Σ₃₁ & Σ₃₂ & Σ₃₃ \\
 \end{bmatrix},
 ```
+
+
 
 will follow the ordering ``[Σ₁₁, Σ₂₁, Σ₃₁, Σ₂₂, Σ₃₂, Σ₃₃]'``. Only
 the lower triangle of the matrix is returned because covariance matrices are
