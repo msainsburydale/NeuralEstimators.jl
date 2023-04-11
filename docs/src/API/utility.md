@@ -34,6 +34,8 @@ SplitApply
 ```@docs
 vectotri
 
+containertype
+
 loadbestweights
 
 stackarrays

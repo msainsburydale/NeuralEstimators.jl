@@ -695,28 +695,52 @@ Flux.trainable(l::Compress) =  ()
 
 # ---- CholeskyParameters and CovarianceMatrixParameters ----
 
-
+# Original discussion: https://groups.google.com/g/julia-users/c/UARlZBCNlng
 """
-	vectotri(v, uplo = :L)
-Converts a vector `v` of length ``d(d+1)÷2`` into a ``d``-dimensional triangular
-matrix.
+	vectotril(v)
+	vectotriu(v)
+Converts a vector `v` of length ``d(d+1)÷2`` into a ``d``-dimensional lower
+or upper triangular matrix.
+
+Note that the triangular matrix is constructed on the CPU, but the returned
+matrix will be a GPU array if `v` is a GPU array. Note also that the
+return type is not of type `Triangular` matrix (i.e., the zeros are
+materialised) since `Traingular` matrices are not always compatible with other
+GPU operations.
 
 # Examples
 ```
 d = 4
 n = d*(d+1)÷2
-v = range(1, n)
-vectotri(v)
-vectotri(v, :U)
+v = collect(range(1, n))
+vectotril(v)
+vectotriu(v)
 ```
 """
-function vectotri(v, uplo = :L)
+function vectotril(v) where V
+	ArrayType = containertype(v)
+	T = eltype(v)
+	v = cpu(v)
 	n = length(v)
 	d = (-1 + isqrt(1 + 8n)) ÷ 2
+	d*(d+1)÷2 == n || error("vectotril: length of vector is not triangular")
+
+	#TODO  get rid of k like I do in vectotriu(), for simpler code and one less allocation (k)
 	k = 0
-	L = [ i >= j ? (k+=1; v[k]) : 0 for i=1:d, j=1:d ]
-	L = LowerTriangular(L)
-	uplo == :L ? L : L'
+	L = [ i >= j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
+	# L = [ i>=j ? v[i*(i-1)÷2+j] : zero(T) for i=1:d, j=1:d ]
+	convert(ArrayType, L)
+end
+
+function vectotriu(v) where V
+	ArrayType = containertype(v)
+	T = eltype(v)
+	v = cpu(v)
+	n = length(v)
+	d = (-1 + isqrt(1 + 8n)) ÷ 2
+	d*(d+1)÷2 == n || error("vectotriu: length of vector is not triangular")
+	U = [ i<=j ? v[j*(j-1)÷2+i] : zero(T) for i=1:d, j=1:d ]
+	convert(ArrayType, U)
 end
 
 
@@ -756,24 +780,13 @@ diagonal element equal to `determinant`/``(Π Lᵢᵢ)`` where the product is ov
 # Examples
 ```
 using NeuralEstimators
-using LinearAlgebra
-using Test
 
 d = 4
-l = CholeskyParameters(d)
-K = 50
 p = d*(d+1)÷2
-x = randn(p, K)
-l(x)                                  # returns a matrix (used for Flux networks)
-[vectotri(y) for y ∈ eachcol(l(x))]   # convert matrix to Cholesky factors
-
-l = CholeskyParametersConstrained(d)
-L = [vectotri(y) for y ∈ eachcol(l(x))]
-@test all(det.(L) .≈ 1)
-
-l = CholeskyParametersConstrained(d, 2f0)
-L = [vectotri(y) for y ∈ eachcol(l(x))]
-@test all(det.(L) .≈ 2)
+θ = randn(p, 50)
+l = CholeskyParameters(d)
+l(θ)                                       # returns matrix (used for Flux networks)
+L = [vectotril(y) for y ∈ eachcol(l(θ))]   # convert matrix to Cholesky factors
 ```
 """
 struct CholeskyParameters{T <: Integer, G}
@@ -789,8 +802,10 @@ function CholeskyParameters(d::Integer)
 end
 function (l::CholeskyParameters)(x)
 	y = [i ∈ l.diag_idx ? exp.(x[i, :]) : x[i, :] for i ∈ 1:size(x, 1)]
-	stackarrays(y, merge = false)'
+	y = stackarrays(y, merge = false)'
+	y = copy(y) # convert y from adjoint{CuArray} to CuArray (the former does not allow indexing)
 end
+
 
 
 
@@ -804,7 +819,6 @@ function CholeskyParametersConstrained(d, determinant = 1f0)
 end
 function (l::CholeskyParametersConstrained)(x)
 	y = l.choleskyparameters(x)
-	y = copy(y) # convert y from adjoint{CuArray} to CuArray (the former does not allow indexing)
 	u = y[l.choleskyparameters.diag_idx[1:end-1], :]
 	v = l.determinant ./ prod(u, dims = 1)
 	vcat(y[1:end-1, :], v)
@@ -835,8 +849,6 @@ so that a covariance matrix with `d` = 3,
 \end{bmatrix},
 ```
 
-
-
 will follow the ordering ``[Σ₁₁, Σ₂₁, Σ₃₁, Σ₂₂, Σ₃₂, Σ₃₃]'``. Only
 the lower triangle of the matrix is returned because covariance matrices are
 symmetric.
@@ -848,28 +860,17 @@ covariance matrix to `determinant`.
 ```
 using NeuralEstimators
 using LinearAlgebra
-using Test
 
 d = 4
-l = CovarianceMatrixParameters(d)
-K = 50
 p = d*(d+1)÷2
-x = randn(p, K)
+l = CovarianceMatrixParameters(d)
+θ = randn(p, 50)
 
-l(x)
-Σ = [Symmetric(vectotri(y), :L) for y ∈ eachcol(l(x))]
-Σ = convert.(Matrix, Σ)
-@test all(isposdef.(Σ))
+# returns matrix (used for Flux networks)
+l(θ)
 
-l = CovarianceMatrixParametersConstrained(d)
-Σ = [Symmetric(vectotri(y), :L) for y ∈ eachcol(l(x))]
-Σ = convert.(Matrix, Σ)
-@test all(det.(Σ) .≈ 1)
-
-l = CovarianceMatrixParametersConstrained(d, 4f0)
-Σ = [Symmetric(vectotri(y), :L) for y ∈ eachcol(l(x))]
-Σ = convert.(Matrix, Σ)
-@test all(det.(Σ) .≈ 4)
+# convert matrix to Cholesky factors
+[Symmetric(vectotril(y), :L) for y ∈ eachcol(l(θ))]
 ```
 """
 struct CovarianceMatrixParameters{T <: Integer, G}
@@ -883,7 +884,7 @@ function CovarianceMatrixParameters(d::Integer)
 	return CovarianceMatrixParameters(d, idx, CholeskyParameters(d))
 end
 function (l::CovarianceMatrixParameters)(x)
-	L = [vectotri(cpu(y)) for y ∈ eachcol(l.choleskyparameters(x))]
+	L = [vectotril(y) for y ∈ eachcol(l.choleskyparameters(x))]
 	Σ = broadcast(x -> x*x', L)
 	θ = broadcast(x -> x[l.idx], Σ)
 	return hcat(θ...)
@@ -900,7 +901,7 @@ function CovarianceMatrixParametersConstrained(d::Integer, determinant = 1f0)
 	return CovarianceMatrixParametersConstrained(d, idx, CholeskyParametersConstrained(d, sqrt(determinant)))
 end
 function (l::CovarianceMatrixParametersConstrained)(x)
-	L = [vectotri(cpu(y)) for y ∈ eachcol(l.choleskyparameters(x))]
+	L = [vectotril(y) for y ∈ eachcol(l.choleskyparameters(x))]
 	Σ = broadcast(x -> x*x', L)
 	θ = broadcast(x -> x[l.idx], Σ)
 	return hcat(θ...)

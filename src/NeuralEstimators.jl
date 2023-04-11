@@ -41,7 +41,7 @@ include("Estimators.jl")
 
 export DeepSet, DeepSetExpert, GraphPropagatePool, Compress
 export CholeskyParameters, CholeskyParametersConstrained
-export vectotri
+export vectotril, vectotriu
 export CovarianceMatrixParameters, CovarianceMatrixParametersConstrained
 export SplitApply
 include("Architectures.jl")
@@ -49,7 +49,7 @@ include("Architectures.jl")
 # ---- Other ---
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
-export matern, maternchols, scaledlogistic, scaledlogit, incgamma
+export matern, maternchols, scaledlogistic, scaledlogit
 include("simulate.jl")
 
 export gaussiandensity, schlatherbivariatedensity
@@ -67,7 +67,7 @@ include("plotting.jl")
 export bootstrap, coverage, interval
 include("bootstrap.jl")
 
-export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams, samplesize
+export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams, samplesize, drop, containertype
 include("utility.jl")
 
 

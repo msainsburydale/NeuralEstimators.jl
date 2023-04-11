@@ -1,4 +1,27 @@
+#TODO document these functions (and add to online docs)
+
 nparams(model) = sum(length, Flux.params(model))
+
+# Drop fields from NamedTuple: https://discourse.julialang.org/t/filtering-keys-out-of-named-tuples/73564/8
+drop(nt::NamedTuple, key::Symbol) =  Base.structdiff(nt, NamedTuple{(key,)})
+drop(nt::NamedTuple, keys::NTuple{N,Symbol}) where {N} = Base.structdiff(nt, NamedTuple{keys})
+
+# Get the non-parametrized type name: https://stackoverflow.com/a/55977768/16776594
+"""
+	containertype(A::Type)
+	containertype(a::A) where A
+Gets the container type of its argument.
+
+# Examples
+```
+a = rand(3, 4)
+containertype(a)
+containertype(typeof(a))
+```
+"""
+containertype(A::Type) = Base.typename(A).wrapper
+containertype(a::A) where A = containertype(A)
+
 
 """
 	numberofreplicates(Z)
@@ -296,8 +319,7 @@ function stackarrays(v::V; merge::Bool = true) where {V <: AbstractVector{A}} wh
 		# than cat(v...) when length(v) is large. However, this requires mᵢ = mⱼ ∀ i, j,
 		# where mᵢ denotes the size of the last dimension of the array vᵢ.
 		v = VectorOfArray(v)
-		ArrayType = Base.typename(A).wrapper # get the non-parametrized type name: See https://stackoverflow.com/a/55977768/16776594
-		a = convert(ArrayType, v)            # (N + 1)-dimensional array
+		a = convert(containertype(A), v)            # (N + 1)-dimensional array
 		if merge a = _mergelastdims(a) end  # N-dimensional array
 
 	else

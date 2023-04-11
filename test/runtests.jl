@@ -1,5 +1,7 @@
+# NB train() breaks when updated from Flux@v0.13.9 to Flux@v0.13.11
+
 using NeuralEstimators
-using NeuralEstimators: _getindices, _runondevice, _incgammalowerunregularised
+using NeuralEstimators: _getindices, _runondevice
 import NeuralEstimators: simulate
 using CUDA
 using DataFrames
@@ -17,7 +19,10 @@ using Statistics: mean, sum
 using Test
 using Zygote
 array(size...; T = Float64) = T.(reshape(1:prod(size), size...) ./ prod(size))
-
+function arrayn(size...; T = Float64)
+	x = array(size..., T = T)
+	x .- mean(x)
+end
 verbose = false # verbose used in the NeuralEstimators code
 
 if CUDA.functional()
@@ -29,27 +34,22 @@ else
 	devices = (CPU = cpu,)
 end
 
-@testset "loss functions" begin
-	p = 3
-	K = 10
-	θ̂ = array(p, K)
-	θ = array(p, K)
-	@test quantileloss(θ̂, θ, 0.5) ≈ 0.5 * mae(θ̂, θ)
-end
 
+# ---- Stand-alone functions ----
+
+	#TODO drop(), containertype()
+# Start testing with low-level functions, which form the base of the
+# dependency tree.
 @testset "UtilityFunctions" begin
-
 	@testset "expandgrid" begin
-	    @test expandgrid(1:2, 0:3) == [1 0; 2 0; 1 1; 2 1; 1 2; 2 2; 1 3; 2 3]
-	    @test expandgrid(1:2, 1:2) == expandgrid(2)
+		@test expandgrid(1:2, 0:3) == [1 0; 2 0; 1 1; 2 1; 1 2; 2 2; 1 3; 2 3]
+		@test expandgrid(1:2, 1:2) == expandgrid(2)
 	end
-
 	@testset "_getindices" begin
 		m = (3, 4, 6)
 		v = [array(16, 16, 1, mᵢ) for mᵢ ∈ m]
 		@test _getindices(v) == [1:3, 4:7, 8:13]
 	end
-
 	@testset "stackarrays" begin
 		# Vector containing arrays of the same size:
 		A = array(2, 3, 4); v = [A, A]; N = ndims(A);
@@ -60,90 +60,43 @@ end
 		A₁ = array(2, 3, 4); A₂ = array(2, 3, 5); v = [A₁, A₂];
 		@test stackarrays(v) == cat(v..., dims = N)
 	end
+	@testset "subsetparameters" begin
 
-	# @testset "samplesize" begin
-	# 	Z = array(3, 4, 1, 6)
-	#     @test inversesamplesize(Z) ≈ 1/samplesize(Z)
-	# end
+		struct TestParameters <: ParameterConfigurations
+			v
+			θ
+			chols
+		end
 
+		K = 4
+		parameters = TestParameters(array(K), array(3, K), array(2, 2, K))
+		indices = 2:3
+		parameters_subset = subsetparameters(parameters, indices)
+		@test parameters_subset.θ     == parameters.θ[:, indices]
+		@test parameters_subset.chols == parameters.chols[:, :, indices]
+		@test parameters_subset.v     == parameters.v[indices]
+	end
 end
 
 
-@testset "incgamma" begin
-
-	# tests based on the "Special values" section of https://en.wikipedia.org/wiki/Incomplete_gamma_function
-
-	@testset "unregularised" begin
-
-		reg = false
-		a = 1.0
-
-		x = a + 0.5 # x < (a + 1)
-		@test incgamma(a, x, upper = true, reg = reg) ≈ exp(-x)
-		@test incgamma(a, x, upper = false, reg = reg) ≈ 1 - exp(-x)
-		@test _incgammalowerunregularised(a, x) ≈ incgamma(a, x, upper = false, reg = reg)
-
-		x = a + 1.5 # x > (a + 1)
-		@test incgamma(a, x, upper = true, reg = reg) ≈ exp(-x)
-		@test incgamma(a, x, upper = false, reg = reg) ≈ 1 - exp(-x)
-		@test _incgammalowerunregularised(a, x) ≈ incgamma(a, x, upper = false, reg = reg)
-
-	end
-
-	@testset "regularised" begin
-
-		reg = true
-		a = 1.0
-
-		x = a + 0.5 # x < (a + 1)
-		@test incgamma(a, x, upper = false, reg = true) ≈ incgamma(a, x, upper = false, reg = false)  / gamma(a)
-		@test incgamma(a, x, upper = true, reg = true) ≈ incgamma(a, x, upper = true, reg = false)  / gamma(a)
-
-		x = a + 1.5 # x > (a + 1)
-		@test incgamma(a, x, upper = false, reg = true) ≈ incgamma(a, x, upper = false, reg = false)  / gamma(a)
-		@test incgamma(a, x, upper = true, reg = true) ≈ incgamma(a, x, upper = true, reg = false)  / gamma(a)
-
-	end
-
-end
-
-@testset "subsetparameters" begin
-
-	struct TestParameters <: ParameterConfigurations
-		v
-		θ
-		chols
-	end
-
-	K = 4
-	parameters = TestParameters(array(K), array(3, K), array(2, 2, K))
-	indices = 2:3
-	parameters_subset = subsetparameters(parameters, indices)
-	@test parameters_subset.θ     == parameters.θ[:, indices]
-	@test parameters_subset.chols == parameters.chols[:, :, indices]
-	@test parameters_subset.v     == parameters.v[indices]
-end
-
-
-@testset "Compress" begin
-
+@testset "loss functions" begin
+	#TODO kpowerloss, intervalscore, etc.
 	p = 3
-	a = [0.1, 4, 2]
-	b = [0.9, 9, 3]
-	l = Compress(a, b)
 	K = 10
+	θ̂ = array(p, K)
 	θ = array(p, K)
-	l(θ)
-	@test all([all(a .< x .< b) for x ∈ eachcol(l(θ))])
 
-	n = 20
-	Z = array(n, K)
-	θ̂ = Chain(Dense(n, 15), Dense(15, p), l)
-	@test all([all(a .< x .< b) for x ∈ eachcol(θ̂(Z))])
+	@testset "quantileloss" begin
+		@test quantileloss(θ̂, θ, 0.5) >= 0
+		@test quantileloss(θ̂, θ, 0.5) ≈ 0.5 * mae(θ̂, θ)
+	end
+
 end
 
 
-@testset "simulation" begin
+#TODO add simulateNMVM
+@testset "simulateX" begin
+
 	S = array(10, 2, T = Float32)
 	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
 	ρ = Float32.([0.6, 0.8])
@@ -198,13 +151,107 @@ end
 end
 
 
+
+# ---- Layers: forward operator ----
+
+# TODO should give all CholeskyParameters/CovarianceMatrixParameters layers diag_idx, or even a full set of indices to help the user
+
+@testset verbose = true "Layers: $dvc" for dvc ∈ devices
+
+	@testset "Compress" begin
+
+		p = 3
+		K = 10
+		a = [0.1, 4, 2]
+		b = [0.9, 9, 3]
+		l = Compress(a, b) |> dvc
+		θ = arrayn(p, K)   |> dvc
+		θ̂ = l(θ)
+		@test size(θ̂) == (p, K)
+		@test typeof(θ̂) == typeof(θ)
+		@test all([all(a .< cpu(x) .< b) for x ∈ eachcol(θ̂)])
+	end
+
+	@testset "vectotri" begin
+
+		# TODO check that ordering makes sense
+
+		d = 4
+		n = d*(d+1)÷2
+
+		v = arrayn(n) |> dvc
+		L = vectotril(v)
+		@test istril(L)
+		@test all([cpu(v)[i] ∈ cpu(L) for i ∈ 1:n])
+		@test containertype(L) == containertype(v)
+		U = vectotriu(v)
+		@test istriu(U)
+		@test all([cpu(v)[i] ∈ cpu(U) for i ∈ 1:n])
+		@test containertype(U) == containertype(v)
+	end
+
+	@testset "CholeskyParameters" begin
+
+		d = 4
+		p = d*(d+1)÷2
+		K = 50
+		l = CholeskyParameters(d) |> dvc
+		θ = arrayn(p, K)          |> dvc
+		θ̂ = l(θ)
+		@test size(θ̂) == (p, K)
+		@test all(θ̂[l.diag_idx, :] .> 0)
+		@test typeof(θ̂) == typeof(θ)
+
+		l = CholeskyParametersConstrained(d, 2f0) |> dvc
+		θ̂ = l(θ)
+		@test size(θ̂) == (p, K)
+		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0) # TODO
+		@test typeof(θ̂) == typeof(θ)
+		L = [vectotril(x) for x ∈ eachcol(θ̂)]  # FIXME
+		@test all(det.(L) .≈ 2)
+	end
+
+	@testset "CovarianceMatrixParameters" begin
+
+		d = 4
+		K = 50
+		p = d*(d+1)÷2
+		l = CovarianceMatrixParameters(d) |> dvc
+		θ = arrayn(p, K)                  |> dvc
+		θ̂ = l(θ)
+		@test size(θ̂) == (p, K)
+		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0)   # TODO
+		@test typeof(θ̂) == typeof(θ)
+
+		Σ = [Symmetric(vectotril(y), :L) for y ∈ eachcol(θ̂)]
+		Σ = convert.(Matrix, Σ)
+		@test all(isposdef.(Σ))
+
+		l = CovarianceMatrixParametersConstrained(d, 4f0) |> dvc
+		θ̂ = l(θ)
+		@test size(θ̂) == (p, K)
+		@test all(θ̂[l.choleskyparameters.choleskyparameters.diag_idx, :] .> 0) # TODO
+		@test typeof(θ̂) == typeof(θ)
+
+		Σ = [Symmetric(vectotril(y), :L) for y ∈ eachcol(θ̂)]
+		Σ = convert.(Matrix, Σ)
+		@test all(isposdef.(Σ))
+		@test all(det.(Σ) .≈ 4)
+	end
+
+end
+
+
+
+
+
 @testset "GraphPropagatePool" begin
 	n₁, n₂ = 11, 27
 	m₁, m₂ = 30, 50
 	d = 1
 	g₁ = rand_graph(n₁, m₁, ndata = array(d, n₁, T = Float32))
 	g₂ = rand_graph(n₂, m₂, ndata = array(d, n₂, T = Float32))
-	g = Flux.batch([g₁, g₂])
+	g  = Flux.batch([g₁, g₂])
 
 	# g is a single large GNNGraph containing the subgraphs
 	@test g.num_graphs == 2
@@ -297,19 +344,16 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 
 @testset verbose = true "$key" for key ∈ keys(estimators)
 
-	# key = :DeepSet
 	θ̂ = estimators[key]
 
 	@testset "$ky" for ky ∈ keys(devices)
 
-
-		# ky = :CPU
 		device = devices[ky]
 		θ̂ = θ̂ |> device
 
 		loss = Flux.Losses.mae |> device
 		γ    = Flux.params(θ̂)  |> device
-		θ    = array(p, K)      |> device
+		θ    = array(p, K)     |> device
 
 		Z = [array(n, m, T = Float32) for m ∈ rand(29:30, K)] |> device
 		@test size(θ̂(Z), 1) == p
