@@ -37,7 +37,7 @@ end
 
 # ---- Stand-alone functions ----
 
-	#TODO drop(), containertype()
+	#TODO drop()
 # Start testing with low-level functions, which form the base of the
 # dependency tree.
 @testset "UtilityFunctions" begin
@@ -75,6 +75,13 @@ end
 		@test parameters_subset.θ     == parameters.θ[:, indices]
 		@test parameters_subset.chols == parameters.chols[:, :, indices]
 		@test parameters_subset.v     == parameters.v[indices]
+	end
+	@testset "containertype" begin
+		a = rand(3, 4)
+		T = Array
+		@test containertype(a) == T
+		@test containertype(typeof(a)) == T
+		@test all([containertype(x) for x ∈ eachcol(a)] .== T)
 	end
 end
 
@@ -154,7 +161,8 @@ end
 
 # ---- Layers: forward operator ----
 
-# TODO should give all CholeskyParameters/CovarianceMatrixParameters layers diag_idx, or even a full set of indices to help the user
+# TODO add unit tests of backwards operator using gradients = gradient(() -> loss(θ̂(Z), θ), γ) (probably need a full architecture for θ̂)
+
 
 @testset verbose = true "Layers: $dvc" for dvc ∈ devices
 
@@ -205,9 +213,9 @@ end
 		l = CholeskyParametersConstrained(d, 2f0) |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
-		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0) # TODO
+		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0) # TODO should give all CholeskyParameters/CovarianceMatrixParameters layers diag_idx, or even a full set of indices to help the user
 		@test typeof(θ̂) == typeof(θ)
-		L = [vectotril(x) for x ∈ eachcol(θ̂)]  # FIXME
+		L = [vectotril(x) for x ∈ eachcol(θ̂)]
 		@test all(det.(L) .≈ 2)
 	end
 
@@ -220,7 +228,7 @@ end
 		θ = arrayn(p, K)                  |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
-		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0)   # TODO
+		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0)   # TODO should give all CholeskyParameters/CovarianceMatrixParameters layers diag_idx, or even a full set of indices to help the user
 		@test typeof(θ̂) == typeof(θ)
 
 		Σ = [Symmetric(vectotril(y), :L) for y ∈ eachcol(θ̂)]
@@ -230,7 +238,7 @@ end
 		l = CovarianceMatrixParametersConstrained(d, 4f0) |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
-		@test all(θ̂[l.choleskyparameters.choleskyparameters.diag_idx, :] .> 0) # TODO
+		@test all(θ̂[l.choleskyparameters.choleskyparameters.diag_idx, :] .> 0) # TODO should give all CholeskyParameters/CovarianceMatrixParameters layers diag_idx, or even a full set of indices to help the user
 		@test typeof(θ̂) == typeof(θ)
 
 		Σ = [Symmetric(vectotril(y), :L) for y ∈ eachcol(θ̂)]
@@ -242,7 +250,9 @@ end
 end
 
 
+# ---- Architectures ----
 
+# TODO update all of this
 
 
 @testset "GraphPropagatePool" begin

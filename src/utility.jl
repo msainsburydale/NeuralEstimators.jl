@@ -1,4 +1,4 @@
-#TODO document these functions (and add to online docs)
+#TODO document these functions (and add to online docs) and add unit testing
 
 nparams(model) = sum(length, Flux.params(model))
 
@@ -9,18 +9,23 @@ drop(nt::NamedTuple, keys::NTuple{N,Symbol}) where {N} = Base.structdiff(nt, Nam
 # Get the non-parametrized type name: https://stackoverflow.com/a/55977768/16776594
 """
 	containertype(A::Type)
+	containertype(::Type{A}) where A <: SubArray
 	containertype(a::A) where A
-Gets the container type of its argument.
+Returns the container type of its argument.
+
+If given a `SubArray`, returns the container type of the parent array.
 
 # Examples
 ```
 a = rand(3, 4)
 containertype(a)
 containertype(typeof(a))
+[containertype(x) for x ∈ eachcol(a)]
 ```
 """
 containertype(A::Type) = Base.typename(A).wrapper
 containertype(a::A) where A = containertype(A)
+containertype(::Type{A}) where A <: SubArray = containertype(A.types[1])
 
 
 """

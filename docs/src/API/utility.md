@@ -32,7 +32,7 @@ SplitApply
 ## Utility functions
 
 ```@docs
-vectotri
+vectotril
 
 containertype
 
