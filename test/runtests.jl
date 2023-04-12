@@ -7,8 +7,7 @@ using CUDA
 using DataFrames
 using Distributions: Normal, cdf, logpdf, quantile
 using Flux
-using Flux: DataLoader
-using Flux: mae
+using Flux: DataLoader, mae
 using Graphs
 using GraphNeuralNetworks
 using LinearAlgebra
@@ -34,10 +33,10 @@ else
 	devices = (CPU = cpu,)
 end
 
+#TODO should test all of the functions on the GPU
 
 # ---- Stand-alone functions ----
 
-	#TODO drop()
 # Start testing with low-level functions, which form the base of the
 # dependency tree.
 @testset "UtilityFunctions" begin
@@ -159,15 +158,20 @@ end
 
 
 
-# ---- Layers: forward operator ----
+# ---- Layers ----
 
-# TODO add unit tests of backwards operator using gradients = gradient(() -> loss(θ̂(Z), θ), γ) (probably need a full architecture for θ̂)
+# TODO should give all CholeskyParameters/CovarianceMatrixParameters layers diag_idx, or even a full set of indices to help the user
 
+function testbackprop(l, dvc, p::Integer, K::Integer, d::Integer)
+	Z = arrayn(d, K) |> dvc
+	θ = arrayn(p, K) |> dvc
+	θ̂ = Chain(Dense(d, p), l) |> dvc
+	@test isa(gradient(() -> mae(θ̂(Z), θ), Flux.params(θ̂)), Zygote.Grads) # TODO should probably use pullback() like I do in train()
+end
 
 @testset verbose = true "Layers: $dvc" for dvc ∈ devices
 
 	@testset "Compress" begin
-
 		p = 3
 		K = 10
 		a = [0.1, 4, 2]
@@ -178,11 +182,12 @@ end
 		@test size(θ̂) == (p, K)
 		@test typeof(θ̂) == typeof(θ)
 		@test all([all(a .< cpu(x) .< b) for x ∈ eachcol(θ̂)])
+		testbackprop(l, dvc, p, K, 20)
 	end
 
 	@testset "vectotri" begin
 
-		# TODO check that ordering makes sense
+		# TODO add check that the ordering is correct
 
 		d = 4
 		n = d*(d+1)÷2
@@ -196,55 +201,84 @@ end
 		@test istriu(U)
 		@test all([cpu(v)[i] ∈ cpu(U) for i ∈ 1:n])
 		@test containertype(U) == containertype(v)
+
+		# testing that it works for views of arrays
+		V = arrayn(n, 2) |> dvc
+		L = [vectotril(v) for v ∈ eachcol(V)]
+		@test all(istril.(L))
+		@test all(containertype.(L) .== containertype(v))
 	end
 
-	@testset "CholeskyParameters" begin
 
-		d = 4
-		p = d*(d+1)÷2
-		K = 50
+	d = 4
+	K = 50
+	p = d*(d+1)÷2
+	θ = arrayn(p, K) |> dvc
+
+	@testset "CholeskyParameters" begin
 		l = CholeskyParameters(d) |> dvc
-		θ = arrayn(p, K)          |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
 		@test all(θ̂[l.diag_idx, :] .> 0)
 		@test typeof(θ̂) == typeof(θ)
+		testbackprop(l, dvc, p, K, d)
+	end
 
+	@testset "CholeskyParametersConstrained" begin
 		l = CholeskyParametersConstrained(d, 2f0) |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
-		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0) # TODO should give all CholeskyParameters/CovarianceMatrixParameters layers diag_idx, or even a full set of indices to help the user
+		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0)
 		@test typeof(θ̂) == typeof(θ)
 		L = [vectotril(x) for x ∈ eachcol(θ̂)]
 		@test all(det.(L) .≈ 2)
+		testbackprop(l, dvc, p, K, d)
 	end
 
 	@testset "CovarianceMatrixParameters" begin
-
-		d = 4
-		K = 50
-		p = d*(d+1)÷2
 		l = CovarianceMatrixParameters(d) |> dvc
-		θ = arrayn(p, K)                  |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
-		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0)   # TODO should give all CholeskyParameters/CovarianceMatrixParameters layers diag_idx, or even a full set of indices to help the user
+		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0)
 		@test typeof(θ̂) == typeof(θ)
+		testbackprop(l, dvc, p, K, d)
 
-		Σ = [Symmetric(vectotril(y), :L) for y ∈ eachcol(θ̂)]
-		Σ = convert.(Matrix, Σ)
+		Σ = [Symmetric(cpu(vectotril(y)), :L) for y ∈ eachcol(θ̂)]
+		Σ = convert.(Matrix, Σ);
 		@test all(isposdef.(Σ))
+	end
 
+	@testset "CovarianceMatrixParametersConstrained" begin
 		l = CovarianceMatrixParametersConstrained(d, 4f0) |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
-		@test all(θ̂[l.choleskyparameters.choleskyparameters.diag_idx, :] .> 0) # TODO should give all CholeskyParameters/CovarianceMatrixParameters layers diag_idx, or even a full set of indices to help the user
+		@test all(θ̂[l.choleskyparameters.choleskyparameters.diag_idx, :] .> 0)
 		@test typeof(θ̂) == typeof(θ)
+		testbackprop(l, dvc, p, K, d)
 
-		Σ = [Symmetric(vectotril(y), :L) for y ∈ eachcol(θ̂)]
-		Σ = convert.(Matrix, Σ)
+		Σ = [Symmetric(cpu(vectotril(y)), :L) for y ∈ eachcol(θ̂)]
+		Σ = convert.(Matrix, Σ);
 		@test all(isposdef.(Σ))
 		@test all(det.(Σ) .≈ 4)
+	end
+
+	@testset "SplitApply" begin
+		p₁ = 2          # number of non-covariance matrix parameters
+		p₂ = d*(d+1)÷2  # number of covariance matrix parameters
+		p = p₁ + p₂
+
+		a = [0.1, 4]
+		b = [0.9, 9]
+		l₁ = Compress(a, b)
+		l₂ = CovarianceMatrixParameters(d)
+		l = SplitApply([l₁, l₂], [1:p₁, p₁+1:p])
+
+		l = l            |> dvc
+		θ = arrayn(p, K) |> dvc
+		θ̂ = l(θ)
+		@test size(θ̂) == (p, K)
+		@test typeof(θ̂) == typeof(θ)
+		testbackprop(l, dvc, p, K, 20)
 	end
 
 end
@@ -253,7 +287,6 @@ end
 # ---- Architectures ----
 
 # TODO update all of this
-
 
 @testset "GraphPropagatePool" begin
 	n₁, n₂ = 11, 27

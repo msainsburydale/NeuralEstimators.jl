@@ -676,7 +676,7 @@ l(θ)
 
 n = 20
 Z = rand(n, K)
-θ̂ = Chain(Dense(n, 15), Dense(15, p), l)
+θ̂ = Chain(Dense(n, p), l)
 θ̂(Z)
 ```
 """
@@ -801,13 +801,15 @@ function CholeskyParameters(d::Integer)
 	CholeskyParameters(d, diag_idx)
 end
 function (l::CholeskyParameters)(x)
-	y = [i ∈ l.diag_idx ? exp.(x[i, :]) : x[i, :] for i ∈ 1:size(x, 1)]
-	y = stackarrays(y, merge = false)'
-	y = copy(y) # convert y from adjoint{CuArray} to CuArray (the former does not allow indexing)
+	p, K = size(x)
+	y = [i ∈ l.diag_idx ? exp.(x[i, :]) : x[i, :] for i ∈ 1:p]
+
+	# Original code:
+	# copy(stackarrays(y, merge = false)')
+
+	# New code (compatible with Zygote, since it advoids Transpose/Adjoint objects):
+	permutedims(reshape(vcat(y...), K, p))
 end
-
-
-
 
 struct CholeskyParametersConstrained{T <: Integer, G}
   d::T
@@ -870,7 +872,9 @@ l = CovarianceMatrixParameters(d)
 l(θ)
 
 # convert matrix to Cholesky factors
-[Symmetric(vectotril(y), :L) for y ∈ eachcol(l(θ))]
+# (note that Symmetric behaves slightly differently on GPU and CPU matrices, so
+# for consistency we first move the lower triangular matrix to the CPU)
+[Symmetric(cpu(vectotril(y)), :L) for y ∈ eachcol(l(θ))]
 ```
 """
 struct CovarianceMatrixParameters{T <: Integer, G}
@@ -883,12 +887,6 @@ function CovarianceMatrixParameters(d::Integer)
 	idx = findall(vec(idx)) # convert to scalar indices
 	return CovarianceMatrixParameters(d, idx, CholeskyParameters(d))
 end
-function (l::CovarianceMatrixParameters)(x)
-	L = [vectotril(y) for y ∈ eachcol(l.choleskyparameters(x))]
-	Σ = broadcast(x -> x*x', L)
-	θ = broadcast(x -> x[l.idx], Σ)
-	return hcat(θ...)
-end
 
 struct CovarianceMatrixParametersConstrained{T <: Integer, G}
   d::T
@@ -900,11 +898,26 @@ function CovarianceMatrixParametersConstrained(d::Integer, determinant = 1f0)
 	idx = findall(vec(idx)) # convert to scalar indices
 	return CovarianceMatrixParametersConstrained(d, idx, CholeskyParametersConstrained(d, sqrt(determinant)))
 end
-function (l::CovarianceMatrixParametersConstrained)(x)
-	L = [vectotril(y) for y ∈ eachcol(l.choleskyparameters(x))]
-	Σ = broadcast(x -> x*x', L)
+
+function (l::Union{CovarianceMatrixParameters, CovarianceMatrixParametersConstrained})(x)
+	L = _constructL(l.choleskyparameters, x)
+	Σ = broadcast(x -> x*permutedims(x), L) # note that I replaced x' with permutedims(x) because Transpose/Adjoints don't work well with Zygote
 	θ = broadcast(x -> x[l.idx], Σ)
 	return hcat(θ...)
+end
+
+function _constructL(l::Union{CholeskyParameters, CholeskyParametersConstrained}, x)
+	Lθ = l(x)
+	K = size(Lθ, 2)
+	L = [vectotril(view(Lθ, :, i)) for i ∈ 1:K]
+	L
+end
+
+function _constructL(l::Union{CholeskyParameters, CholeskyParametersConstrained}, x::Array)
+	Lθ = l(x)
+	K = size(Lθ, 2)
+	L = [vectotril(collect(view(Lθ, :, i))) for i ∈ 1:K]
+	L
 end
 
 
