@@ -826,7 +826,6 @@ function (l::CholeskyParametersConstrained)(x)
 	vcat(y[1:end-1, :], v)
 end
 
-
 @doc raw"""
     CovarianceMatrixParameters(d)
 	CovarianceMatrixParametersConstrained(d, determinant = 1f0)
@@ -960,3 +959,9 @@ Flux.trainable(l::SplitApply) = ()
 function (l::SplitApply)(x::AbstractArray)
 	vcat([layer(x[idx, :]) for (layer, idx) in zip(l.layers, l.indices)]...)
 end
+
+
+(l::CholeskyParameters)(x::AbstractVector) = l(reshape(x, :, 1))
+(l::CholeskyParametersConstrained)(x::AbstractVector) = l(reshape(x, :, 1))
+(l::CovarianceMatrixParameters)(x::AbstractVector) = l(reshape(x, :, 1))
+(l::CovarianceMatrixParametersConstrained)(x::AbstractVector) = l(reshape(x, :, 1))
