@@ -187,8 +187,6 @@ end
 
 	@testset "vectotri" begin
 
-		# TODO add check that the ordering is correct
-
 		d = 4
 		n = d*(d+1)÷2
 
@@ -207,8 +205,20 @@ end
 		L = [vectotril(v) for v ∈ eachcol(V)]
 		@test all(istril.(L))
 		@test all(containertype.(L) .== containertype(v))
-	end
 
+		# strict variants
+		n = d*(d-1)÷2
+		v = arrayn(n) |> dvc
+		L = vectotrilstrict(v)
+		@test istril(L)
+		@test all([cpu(v)[i] ∈ cpu(L) for i ∈ 1:n])
+		@test containertype(L) == containertype(v)
+		U = vectotriustrict(v)
+		@test istriu(U)
+		@test all([cpu(v)[i] ∈ cpu(U) for i ∈ 1:n])
+		@test containertype(U) == containertype(v)
+
+	end
 
 	d = 4
 	K = 50
@@ -224,16 +234,6 @@ end
 		testbackprop(l, dvc, p, K, d)
 	end
 
-	@testset "CholeskyParametersConstrained" begin
-		l = CholeskyParametersConstrained(d, 2f0) |> dvc
-		θ̂ = l(θ)
-		@test size(θ̂) == (p, K)
-		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0)
-		@test typeof(θ̂) == typeof(θ)
-		L = [vectotril(x) for x ∈ eachcol(θ̂)]
-		@test all(det.(L) .≈ 2)
-		testbackprop(l, dvc, p, K, d)
-	end
 
 	@testset "CovarianceMatrixParameters" begin
 		l = CovarianceMatrixParameters(d) |> dvc
@@ -248,19 +248,24 @@ end
 		@test all(isposdef.(Σ))
 	end
 
-	@testset "CovarianceMatrixParametersConstrained" begin
-		l = CovarianceMatrixParametersConstrained(d, 4f0) |> dvc
+	@testset "CorrelationMatrixParameters" begin
+		p = d*(d-1)÷2
+		θ = arrayn(p, K) |> dvc
+		l = CorrelationMatrixParameters(d) |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
-		@test all(θ̂[l.choleskyparameters.choleskyparameters.diag_idx, :] .> 0)
 		@test typeof(θ̂) == typeof(θ)
-		testbackprop(l, dvc, p, K, d)
 
-		Σ = [Symmetric(cpu(vectotril(y)), :L) for y ∈ eachcol(θ̂)]
-		Σ = convert.(Matrix, Σ);
-		@test all(isposdef.(Σ))
-		@test all(det.(Σ) .≈ 4)
+		R = map(eachcol(l(θ))) do y
+			R = Symmetric(cpu(vectotrilstrict(y)), :L)
+			R[diagind(R)] .= 1
+			R
+		end
+		@test all(isposdef.(R))
+
+		testbackprop(l, dvc, p, K, d)
 	end
+
 
 	@testset "SplitApply" begin
 		p₁ = 2          # number of non-covariance matrix parameters

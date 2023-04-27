@@ -652,7 +652,6 @@ end
 
 # ---- Compress ----
 
-
 """
     Compress(a, b)
 
@@ -692,233 +691,7 @@ Compress(a, b) = Compress(a, b, (b + a) / 2)
 Flux.@functor Compress
 Flux.trainable(l::Compress) =  ()
 
-
-# ---- CholeskyParameters and CovarianceMatrixParameters ----
-
-# Original discussion: https://groups.google.com/g/julia-users/c/UARlZBCNlng
-"""
-	vectotril(v)
-	vectotriu(v)
-Converts a vector `v` of length ``d(d+1)÷2`` into a ``d``-dimensional lower
-or upper triangular matrix.
-
-Note that the triangular matrix is constructed on the CPU, but the returned
-matrix will be a GPU array if `v` is a GPU array. Note also that the
-return type is not of type `Triangular` matrix (i.e., the zeros are
-materialised) since `Traingular` matrices are not always compatible with other
-GPU operations.
-
-# Examples
-```
-d = 4
-n = d*(d+1)÷2
-v = collect(range(1, n))
-vectotril(v)
-vectotriu(v)
-```
-"""
-function vectotril(v) where V
-	ArrayType = containertype(v)
-	T = eltype(v)
-	v = cpu(v)
-	n = length(v)
-	d = (-1 + isqrt(1 + 8n)) ÷ 2
-	d*(d+1)÷2 == n || error("vectotril: length of vector is not triangular")
-
-	#TODO  get rid of k like I do in vectotriu(), for simpler code and one less allocation (k)
-	k = 0
-	L = [ i >= j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
-	# L = [ i>=j ? v[i*(i-1)÷2+j] : zero(T) for i=1:d, j=1:d ]
-	convert(ArrayType, L)
-end
-
-function vectotriu(v) where V
-	ArrayType = containertype(v)
-	T = eltype(v)
-	v = cpu(v)
-	n = length(v)
-	d = (-1 + isqrt(1 + 8n)) ÷ 2
-	d*(d+1)÷2 == n || error("vectotriu: length of vector is not triangular")
-	U = [ i<=j ? v[j*(j-1)÷2+i] : zero(T) for i=1:d, j=1:d ]
-	convert(ArrayType, U)
-end
-
-
-@doc raw"""
-    CholeskyParameters(d)
-	CholeskyParametersConstrained(d, determinant = 1f0)
-Layer for constructing the parameters of a Cholesky factor for a `d`-dimensional
-random vector.
-
-This layer transforms an `Matrix` with `d`(`d`+1)÷2 rows (the number of
-non-zero elements in a Cholesky factor) into a `Matrix` of the same
-dimension, but with `d` rows constrained to be positive (corresponding to
-the diagonal elements of the Cholesky factor) and the remaining rows
-unconstrained.
-
-The ordering of the transformed array aligns with Julia's column-major ordering,
-so that a Cholesky factor with `d` = 3,
-
-```math
-\begin{bmatrix}
-L₁₁ &  &  \\
-L₂₁ & L₂₂ &  \\
-L₃₁ & L₃₂ & L₃₃ \\
-\end{bmatrix},
-```
-
-will follow the ordering ``[L₁₁, L₂₁, L₃₁, L₂₂, L₃₂, L₃₃]'``. Since
-the diagonal elements must be positive, in this example rows 1, 4, and 6 of the
-transformed array will be constrained to be positive.
-
-`CholeskyParametersConstrained` constrains the `determinant` of the Cholesky
-factor. Since the determinant of a triangular matrix is equal to the product of
-its diagonal elements, the determinant is constrained by setting the final
-diagonal element equal to `determinant`/``(Π Lᵢᵢ)`` where the product is over
-``i < d``.
-
-# Examples
-```
-using NeuralEstimators
-
-d = 4
-p = d*(d+1)÷2
-θ = randn(p, 50)
-l = CholeskyParameters(d)
-l(θ)                                       # returns matrix (used for Flux networks)
-L = [vectotril(y) for y ∈ eachcol(l(θ))]   # convert matrix to Cholesky factors
-```
-"""
-struct CholeskyParameters{T <: Integer, G}
-  d::T
-  diag_idx::G
-end
-function CholeskyParameters(d::Integer)
-	diag_idx = [1]
-	for i ∈ 1:(d-1)
-		push!(diag_idx, diag_idx[i] + d-i+1)
-	end
-	CholeskyParameters(d, diag_idx)
-end
-function (l::CholeskyParameters)(x)
-	p, K = size(x)
-	y = [i ∈ l.diag_idx ? exp.(x[i, :]) : x[i, :] for i ∈ 1:p]
-
-	# Original code:
-	# copy(stackarrays(y, merge = false)')
-
-	# New code (compatible with Zygote, since it advoids Transpose/Adjoint objects):
-	permutedims(reshape(vcat(y...), K, p))
-end
-
-struct CholeskyParametersConstrained{T <: Integer, G}
-  d::T
-  determinant::G
-  choleskyparameters::CholeskyParameters
-end
-function CholeskyParametersConstrained(d, determinant = 1f0)
-	CholeskyParametersConstrained(d, determinant, CholeskyParameters(d))
-end
-function (l::CholeskyParametersConstrained)(x)
-	y = l.choleskyparameters(x)
-	u = y[l.choleskyparameters.diag_idx[1:end-1], :]
-	v = l.determinant ./ prod(u, dims = 1)
-	vcat(y[1:end-1, :], v)
-end
-
-@doc raw"""
-    CovarianceMatrixParameters(d)
-	CovarianceMatrixParametersConstrained(d, determinant = 1f0)
-
-Layer for constructing the parameters of a covariance matrix for a
-`d`-dimensional random vector.
-
-Due to symmetry, there are `d`(`d` + 1)/2 free parameters in a covariance
-matrix, so this layer transforms a `Matrix` with `d`(`d` + 1)/2 rows into a
-`Matrix` of the same dimension. Internally, it uses a `CholeskyParameters` layer
-to construct a valid Cholesky factor, from which a positive-definite covariance
-matrix Σ can be computed.
-
-The ordering of the transformed array aligns with Julia's column-major ordering,
-so that a covariance matrix with `d` = 3,
-
-```math
-\begin{bmatrix}
-Σ₁₁ & Σ₁₂ & Σ₁₃ \\
-Σ₂₁ & Σ₂₂ & Σ₂₃ \\
-Σ₃₁ & Σ₃₂ & Σ₃₃ \\
-\end{bmatrix},
-```
-
-will follow the ordering ``[Σ₁₁, Σ₂₁, Σ₃₁, Σ₂₂, Σ₃₂, Σ₃₃]'``. Only
-the lower triangle of the matrix is returned because covariance matrices are
-symmetric.
-
-`CovarianceMatrixParametersConstrained` constrains the `determinant` of the
-covariance matrix to `determinant`.
-
-# Examples
-```
-using NeuralEstimators
-using LinearAlgebra
-
-d = 4
-p = d*(d+1)÷2
-l = CovarianceMatrixParameters(d)
-θ = randn(p, 50)
-
-# returns matrix (used for Flux networks)
-l(θ)
-
-# convert matrix to Cholesky factors
-# (note that Symmetric behaves slightly differently on GPU and CPU matrices, so
-# for consistency we first move the lower triangular matrix to the CPU)
-[Symmetric(cpu(vectotril(y)), :L) for y ∈ eachcol(l(θ))]
-```
-"""
-struct CovarianceMatrixParameters{T <: Integer, G}
-  d::T
-  idx::G
-  choleskyparameters::CholeskyParameters
-end
-function CovarianceMatrixParameters(d::Integer)
-	idx = tril(trues(d, d))
-	idx = findall(vec(idx)) # convert to scalar indices
-	return CovarianceMatrixParameters(d, idx, CholeskyParameters(d))
-end
-
-struct CovarianceMatrixParametersConstrained{T <: Integer, G}
-  d::T
-  idx::G
-  choleskyparameters::CholeskyParametersConstrained
-end
-function CovarianceMatrixParametersConstrained(d::Integer, determinant = 1f0)
-	idx = tril(trues(d, d))
-	idx = findall(vec(idx)) # convert to scalar indices
-	return CovarianceMatrixParametersConstrained(d, idx, CholeskyParametersConstrained(d, sqrt(determinant)))
-end
-
-function (l::Union{CovarianceMatrixParameters, CovarianceMatrixParametersConstrained})(x)
-	L = _constructL(l.choleskyparameters, x)
-	Σ = broadcast(x -> x*permutedims(x), L) # note that I replaced x' with permutedims(x) because Transpose/Adjoints don't work well with Zygote
-	θ = broadcast(x -> x[l.idx], Σ)
-	return hcat(θ...)
-end
-
-function _constructL(l::Union{CholeskyParameters, CholeskyParametersConstrained}, x)
-	Lθ = l(x)
-	K = size(Lθ, 2)
-	L = [vectotril(view(Lθ, :, i)) for i ∈ 1:K]
-	L
-end
-
-function _constructL(l::Union{CholeskyParameters, CholeskyParametersConstrained}, x::Array)
-	Lθ = l(x)
-	K = size(Lθ, 2)
-	L = [vectotril(collect(view(Lθ, :, i))) for i ∈ 1:K]
-	L
-end
-
+# ---- SplitApply ----
 
 """
 	SplitApply(layers, indices)
@@ -961,7 +734,430 @@ function (l::SplitApply)(x::AbstractArray)
 end
 
 
+# ---- Cholesky, Covariance, and Correlation matrices ----
+
+# Original discussion: https://groups.google.com/g/julia-users/c/UARlZBCNlng
+vectotri_docs = """
+	vectotril(v)
+	vectotriu(v)
+	vectotrilstrict(v)
+	vectotriustrict(v)
+Converts a vector `v` of length ``d(d+1)÷2`` into a ``d × d`` lower or
+upper triangular matrix.
+
+The `strict` variants convert a vector `v` of length ``d(d-1)÷2`` into a
+``d × d`` *strictly* lower or upper triangular matrix.
+
+Note that the triangular matrix is constructed on the CPU, but the returned
+matrix will be a GPU array if `v` is a GPU array. Note also that the
+return type is not of type `Triangular` matrix (i.e., the zeros are
+materialised) since `Traingular` matrices are not always compatible with other
+GPU operations.
+
+# Examples
+```
+using NeuralEstimators
+
+d = 4
+
+n = d*(d+1)÷2
+v = collect(range(1, n))
+vectotril(v)
+vectotriu(v)
+
+n = d*(d-1)÷2
+v = collect(range(1, n))
+vectotrilstrict(v)
+vectotriustrict(v)
+```
+"""
+
+"$vectotri_docs"
+function vectotril(v)
+	ArrayType = containertype(v)
+	T = eltype(v)
+	v = cpu(v)
+	n = length(v)
+	d = (-1 + isqrt(1 + 8n)) ÷ 2
+	d*(d+1)÷2 == n || error("vectotril: length of vector is not triangular")
+	k = 0
+	L = [ i >= j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
+	convert(ArrayType, L)
+end
+
+"$vectotri_docs"
+function vectotriu(v)
+	ArrayType = containertype(v)
+	T = eltype(v)
+	v = cpu(v)
+	n = length(v)
+	d = (-1 + isqrt(1 + 8n)) ÷ 2
+	d*(d+1)÷2 == n || error("vectotriu: length of vector is not triangular")
+	k = 0
+	U = [ i <= j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
+	convert(ArrayType, U)
+end
+
+"$vectotri_docs"
+function vectotrilstrict(v)
+	ArrayType = containertype(v)
+	T = eltype(v)
+	v = cpu(v)
+	n = length(v)
+	d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
+	d*(d-1)÷2 == n || error("vectotrilstrict: length of vector is not triangular")
+	k = 0
+	L = [ i > j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
+	convert(ArrayType, L)
+end
+
+"$vectotri_docs"
+function vectotriustrict(v)
+	ArrayType = containertype(v)
+	T = eltype(v)
+	v = cpu(v)
+	n = length(v)
+	d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
+	d*(d-1)÷2 == n || error("vectotriustrict: length of vector is not triangular")
+	k = 0
+	U = [ i < j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
+	convert(ArrayType, U)
+end
+
+# NB this function is not differentiable because it mutates arrays. Using
+# ignore ignore_derivatives for now, but not 100% sure this is allowed.
+function vectocorrelationcholesky(v)
+	ArrayType = containertype(v)
+	v = cpu(v)
+	z = tanh.(vectotrilstrict(v))
+	T = eltype(z)
+	n = length(v)
+	d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
+
+	L = Matrix{T}(undef, d, d)
+	for i ∈ 1:d
+		for j ∈ 1:d
+			if i < j
+				L[i, j] = zero(T)
+			elseif i == j
+				if i == 1
+					L[i, j] = one(T)
+				else
+					L[i, j] = sqrt(one(T) - sum(L[i, 1:j-1].^2))
+				end
+			else
+				L[i, j] = z[i, j] * sqrt(one(T) - sum(L[i, 1:j-1].^2))
+			end
+		end
+	end
+
+	return convert(ArrayType, L)
+end
+
+# function vectocorrelationcholesky2(v)
+# 	v = cpu(v)
+# 	z = tanh.(vectotrilstrict(v))
+# 	T = eltype(z)
+# 	n = length(v)
+# 	d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
+#
+# 	rows = map(1:d) do i
+# 		x = T[]
+# 		for j ∈ 1:d
+# 			if i > j
+# 				push!(x, z[i, j] * sqrt(one(T) - sum(x[1:j-1].^2)))
+# 			elseif i == j
+# 				if i == 1
+# 					push!(x, one(T))
+# 				else
+# 					push!(x, sqrt(one(T) - sum(x[1:j-1].^2)))
+# 				end
+# 			else
+# 				push!(x, zero(T))
+# 			end
+# 		end
+# 		x
+# 	end
+#
+# 	return permutedims(hcat(rows...))
+# end
+
+
+
+#TODO see:
+# https://mc-stan.org/docs/reference-manual/cholesky-factors-of-correlation-matrices-1.html#cholesky-factor-of-correlation-matrix-inverse-transform
+# https://mc-stan.org/docs/reference-manual/correlation-matrix-transform.html#correlation-matrix-transform.section
+@doc raw"""
+	CorrelationMatrixParameters(d)
+Layer for constructing the parameters of a `d`-dimensional correlation matrix.
+
+This layer transforms a `Matrix` with `d`(`d`-1)÷2 rows into a `Matrix` with
+the same dimension. The ordering of the transformed `Matrix` aligns with Julia's
+column-major ordering so that the correlation matrix,
+
+```math
+\begin{bmatrix}
+1   & R₁₂ &  R₁₃ \\
+R₂₁ & 1   &  R₂₃\\
+R₃₁ & R₃₂ & 1\\
+\end{bmatrix},
+```
+
+will follow the ordering ``[R₂₁, R₃₁, R₃₂]'``. Only the lower triangle is
+returned because correlation matrices are symmetric.
+
+# Examples
+```
+using NeuralEstimators
+using LinearAlgebra
+
+d = 4
+p = d*(d-1)÷2
+l = CorrelationMatrixParameters(d)
+θ = randn(p, 50)
+
+# returns matrix (used for Flux networks)
+l(θ)
+
+# Convert matrix of parameters to correlation matrices
+R = map(eachcol(l(θ))) do y
+	R = Symmetric(cpu(vectotrilstrict(y)), :L)
+	R[diagind(R)] .= 1
+	R
+end
+```
+"""
+struct CorrelationMatrixParameters{T <: Integer, Q}
+  d::T
+  idx::Q
+end
+function CorrelationMatrixParameters(d::Integer)
+	idx = tril(trues(d, d), -1)
+	idx = findall(vec(idx)) # convert to scalar indices
+	return CorrelationMatrixParameters(d, idx)
+end
+function (l::CorrelationMatrixParameters)(x)
+	p, K = size(x)
+	R = map(1:K) do k
+		L = @ignore_derivatives vectocorrelationcholesky(view(x, :, k)) # NB I'm not 100% sure if it's ok to use @ignore_derivatives
+		(L*L')[l.idx]
+	end
+	return permutedims(reshape(vcat(R...), K, p))
+end
+
+
+@doc raw"""
+    CholeskyParameters(d)
+Layer for constructing the parameters of the Cholesky factor associated with a
+`d`-dimensional covariance matrix.
+
+This layer transforms a `Matrix` with `d`(`d`+1)÷2 rows (the number of
+non-zero elements in a Cholesky factor) into a `Matrix` of the same
+dimension, but with `d` rows constrained to be positive (corresponding to
+the diagonal elements of the Cholesky factor) and the remaining rows
+unconstrained.
+
+The ordering of the transformed array aligns with Julia's column-major ordering,
+so that a Cholesky factor with `d` = 3,
+
+```math
+\begin{bmatrix}
+L₁₁ &  &  \\
+L₂₁ & L₂₂ &  \\
+L₃₁ & L₃₂ & L₃₃ \\
+\end{bmatrix},
+```
+
+will follow the ordering ``[L₁₁, L₂₁, L₃₁, L₂₂, L₃₂, L₃₃]'``. Since
+the diagonal elements must be positive, in this example rows 1, 4, and 6 of the
+transformed array will be constrained to be positive.
+
+# Examples
+```
+using NeuralEstimators
+
+d = 4
+p = d*(d+1)÷2
+θ = randn(p, 50)
+l = CholeskyParameters(d)
+l(θ)                                       # returns matrix (used for Flux networks)
+L = [vectotril(y) for y ∈ eachcol(l(θ))]   # convert matrix to Cholesky factors
+```
+"""
+struct CholeskyParameters{T <: Integer, G}
+  d::T
+  diag_idx::G
+end
+function CholeskyParameters(d::Integer)
+	diag_idx = [1]
+	for i ∈ 1:(d-1)
+		push!(diag_idx, diag_idx[i] + d-i+1)
+	end
+	CholeskyParameters(d, diag_idx)
+end
+function (l::CholeskyParameters)(x)
+	p, K = size(x)
+	y = [i ∈ l.diag_idx ? exp.(x[i, :]) : x[i, :] for i ∈ 1:p]
+
+	# Original code:
+	# copy(stackarrays(y, merge = false)')
+
+	# New code (compatible with Zygote, since it advoids Transpose/Adjoint objects):
+	permutedims(reshape(vcat(y...), K, p))
+end
+
+
+
+@doc raw"""
+    CovarianceMatrixParameters(d)
+
+Layer for constructing the parameters of an unconstrained `d`×`d` covariance matrix .
+
+Due to symmetry, the layer transforms a `Matrix` with `d`(`d` + 1)/2 rows into a
+`Matrix` of the same dimension. Internally, it uses a `CholeskyParameters` layer
+to construct a valid Cholesky factor ``𝐋``, from which a positive-definite covariance
+matrix ``𝚺 = 𝐋𝐋'`` can be computed.
+
+The ordering of the transformed array aligns with Julia's column-major ordering,
+so that the covariance matrix,
+
+```math
+\begin{bmatrix}
+Σ₁₁ & Σ₁₂ & Σ₁₃ \\
+Σ₂₁ & Σ₂₂ & Σ₂₃ \\
+Σ₃₁ & Σ₃₂ & Σ₃₃ \\
+\end{bmatrix},
+```
+
+will follow the ordering ``[Σ₁₁, Σ₂₁, Σ₃₁, Σ₂₂, Σ₃₂, Σ₃₃]'``. Only the diagonal
+and lower triangle of the matrix is returned because covariance matrices are
+symmetric.
+
+# Examples
+```
+using NeuralEstimators
+using LinearAlgebra
+
+d = 4
+p = d*(d+1)÷2
+l = CovarianceMatrixParameters(d)
+θ = randn(p, 50)
+
+# Apply the layer returns an array used for Flux networks
+l(θ)
+
+# Construct the implied covariance matrices
+[Symmetric(cpu(vectotril(y)), :L) for y ∈ eachcol(l(θ))]
+```
+"""
+struct CovarianceMatrixParameters{T <: Integer, G}
+  d::T
+  idx::G
+  choleskyparameters::CholeskyParameters
+end
+function CovarianceMatrixParameters(d::Integer)
+	idx = tril(trues(d, d))
+	idx = findall(vec(idx)) # convert to scalar indices
+	return CovarianceMatrixParameters(d, idx, CholeskyParameters(d))
+end
+
+
+# function (l::Union{CovarianceMatrixParameters, CovarianceMatrixParametersConstrained})(x)
+function (l::CovarianceMatrixParameters)(x)
+	L = _constructL(l.choleskyparameters, x)
+	Σ = broadcast(x -> x*permutedims(x), L) # note that I replaced x' with permutedims(x) because Transpose/Adjoints don't work well with Zygote
+	θ = broadcast(x -> x[l.idx], Σ)
+	return hcat(θ...)
+end
+
+# function _constructL(l::Union{CholeskyParameters, CholeskyParametersConstrained}, x)
+function _constructL(l::CholeskyParameters, x)
+	Lθ = l(x)
+	K = size(Lθ, 2)
+	L = [vectotril(view(Lθ, :, i)) for i ∈ 1:K]
+	L
+end
+
+# function _constructL(l::Union{CholeskyParameters, CholeskyParametersConstrained}, x::Array)
+function _constructL(l::CholeskyParameters, x::Array)
+	Lθ = l(x)
+	K = size(Lθ, 2)
+	L = [vectotril(collect(view(Lθ, :, i))) for i ∈ 1:K]
+	L
+end
+
 (l::CholeskyParameters)(x::AbstractVector) = l(reshape(x, :, 1))
-(l::CholeskyParametersConstrained)(x::AbstractVector) = l(reshape(x, :, 1))
 (l::CovarianceMatrixParameters)(x::AbstractVector) = l(reshape(x, :, 1))
-(l::CovarianceMatrixParametersConstrained)(x::AbstractVector) = l(reshape(x, :, 1))
+
+
+# ---- Withheld layers ----
+
+# The following layers are withheld for now because the determinant constraint
+# can cause exploding gradients during training. I may make these available
+# in the future if I ever come up with a more stable way to implement the
+# constraint.
+
+# """
+# `CholeskyParametersConstrained` constrains the `determinant` of the Cholesky
+# factor. Since the determinant of a triangular matrix is equal to the product of
+# its diagonal elements, the determinant is constrained by setting the final
+# diagonal element equal to `determinant`/``(Π Lᵢᵢ)`` where the product is over
+# ``i < d``.
+# """
+# struct CholeskyParametersConstrained{T <: Integer, G}
+#   d::T
+#   determinant::G
+#   choleskyparameters::CholeskyParameters
+# end
+# function CholeskyParametersConstrained(d, determinant = 1f0)
+# 	CholeskyParametersConstrained(d, determinant, CholeskyParameters(d))
+# end
+# function (l::CholeskyParametersConstrained)(x)
+# 	y = l.choleskyparameters(x)
+# 	u = y[l.choleskyparameters.diag_idx[1:end-1], :]
+# 	v = l.determinant ./ prod(u, dims = 1)
+# 	vcat(y[1:end-1, :], v)
+# end
+#
+# """
+# `CovarianceMatrixParametersConstrained` constrains the `determinant` of the
+# covariance matrix to `determinant`.
+# """
+# struct CovarianceMatrixParametersConstrained{T <: Integer, G}
+#   d::T
+#   idx::G
+#   choleskyparameters::CholeskyParametersConstrained
+# end
+# function CovarianceMatrixParametersConstrained(d::Integer, determinant = 1f0)
+# 	idx = tril(trues(d, d))
+# 	idx = findall(vec(idx)) # convert to scalar indices
+# 	return CovarianceMatrixParametersConstrained(d, idx, CholeskyParametersConstrained(d, sqrt(determinant)))
+# end
+#
+# (l::CholeskyParametersConstrained)(x::AbstractVector) = l(reshape(x, :, 1))
+# (l::CovarianceMatrixParametersConstrained)(x::AbstractVector) = l(reshape(x, :, 1))
+
+# @testset "CholeskyParametersConstrained" begin
+# 	l = CholeskyParametersConstrained(d, 2f0) |> dvc
+# 	θ̂ = l(θ)
+# 	@test size(θ̂) == (p, K)
+# 	@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0)
+# 	@test typeof(θ̂) == typeof(θ)
+# 	L = [vectotril(x) for x ∈ eachcol(θ̂)]
+# 	@test all(det.(L) .≈ 2)
+# 	testbackprop(l, dvc, p, K, d)
+# end
+
+# @testset "CovarianceMatrixParametersConstrained" begin
+# 	l = CovarianceMatrixParametersConstrained(d, 4f0) |> dvc
+# 	θ̂ = l(θ)
+# 	@test size(θ̂) == (p, K)
+# 	@test all(θ̂[l.choleskyparameters.choleskyparameters.diag_idx, :] .> 0)
+# 	@test typeof(θ̂) == typeof(θ)
+# 	testbackprop(l, dvc, p, K, d)
+#
+# 	Σ = [Symmetric(cpu(vectotril(y)), :L) for y ∈ eachcol(θ̂)]
+# 	Σ = convert.(Matrix, Σ);
+# 	@test all(isposdef.(Σ))
+# 	@test all(det.(Σ) .≈ 4)
+# end

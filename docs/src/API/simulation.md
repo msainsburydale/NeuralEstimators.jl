@@ -19,8 +19,6 @@ These low-level functions may be of use for various models.
 matern
 
 maternchols
-
-incgamma
 ```
 
 

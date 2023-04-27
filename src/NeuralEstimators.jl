@@ -1,6 +1,5 @@
 module NeuralEstimators
 
-# Note that functions must be explicitly imported to be extended with new methods. Be aware of type piracy, though.
 using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
 import Base: merge
@@ -32,21 +31,13 @@ include("loss.jl")
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
-# ---- Estimator types ----
-
 export NeuralEstimator, PointEstimator, IntervalEstimator, QuantileEstimator, PiecewiseEstimator
 include("Estimators.jl")
 
-# ---- Architectures and layers ----
-
-export DeepSet, DeepSetExpert, GraphPropagatePool, Compress
-export CholeskyParameters, CholeskyParametersConstrained
-export vectotril, vectotriu
-export CovarianceMatrixParameters, CovarianceMatrixParametersConstrained
-export SplitApply
+export DeepSet, DeepSetExpert, GraphPropagatePool, Compress, SplitApply
+export CholeskyParameters, CovarianceMatrixParameters, CorrelationMatrixParameters
+export vectotril, vectotriu, vectotrilstrict, vectotriustrict
 include("Architectures.jl")
-
-# ---- Other ---
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
 export matern, maternchols, scaledlogistic, scaledlogit
@@ -70,15 +61,9 @@ include("bootstrap.jl")
 export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams, samplesize, drop, containertype
 include("utility.jl")
 
-
-
 end
 
-
-
 # ---- long term:
-# - Decide if we want a NeuralEstimator class (see src/devel/NeuralEstimator.jl)
-# - record the example clip, but while ssh'd into my office computer (with the GPU).
 # - README.md
 # - plotrisk and plotdistribution (wait until the R interface is finished)
 # - Add "AR(k) time series" and "Irregular spatial data" examples. (The former will be an example using partially exchangeable neural networks and the latter will be an example using GNNs.)

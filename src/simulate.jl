@@ -111,7 +111,7 @@ Accepts either the lower Cholesky factor `L` associated with a Gaussian process
 or a `GaussianRandomField` object `grf`.
 
 # Keyword arguments
-- `C = 3.5`: a tuning parameter that controls the accuracy of the algorith: small `C` favours computational efficiency, while large `C` favours accuracy. Schlather (2002) recommends the use of `C = 3`.
+- `C = 3.5`: a tuning parameter that controls the accuracy of the algorithm: small `C` favours computational efficiency, while large `C` favours accuracy. Schlather (2002) recommends the use of `C = 3`.
 - `Gumbel = true`: flag indicating whether the data should be log-transformed from the unit Fréchet scale to the `Gumbel` scale.
 
 # Examples

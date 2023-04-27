@@ -26,6 +26,8 @@ CholeskyParameters
 
 CovarianceMatrixParameters
 
+CorrelationMatrixParameters
+
 SplitApply
 ```
 
