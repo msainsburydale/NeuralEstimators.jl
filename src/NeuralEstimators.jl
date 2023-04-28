@@ -36,7 +36,7 @@ include("Estimators.jl")
 
 export DeepSet, DeepSetExpert, GraphPropagatePool, Compress, SplitApply
 export CholeskyParameters, CovarianceMatrixParameters, CorrelationMatrixParameters
-export vectotril, vectotriu, vectotrilstrict, vectotriustrict
+export vectotril, vectotriu
 include("Architectures.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
@@ -62,6 +62,8 @@ export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams, samp
 include("utility.jl")
 
 end
+
+#TODO make some document examples doctests
 
 # ---- long term:
 # - README.md

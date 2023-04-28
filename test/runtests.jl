@@ -209,12 +209,14 @@ end
 		# strict variants
 		n = d*(d-1)÷2
 		v = arrayn(n) |> dvc
-		L = vectotrilstrict(v)
+		L = vectotril(v; strict = true)
 		@test istril(L)
+		@test all(L[diagind(L)] .== 0)
 		@test all([cpu(v)[i] ∈ cpu(L) for i ∈ 1:n])
 		@test containertype(L) == containertype(v)
-		U = vectotriustrict(v)
+		U = vectotriu(v; strict = true)
 		@test istriu(U)
+		@test all(U[diagind(U)] .== 0)
 		@test all([cpu(v)[i] ∈ cpu(U) for i ∈ 1:n])
 		@test containertype(U) == containertype(v)
 
@@ -257,7 +259,7 @@ end
 		@test typeof(θ̂) == typeof(θ)
 
 		R = map(eachcol(l(θ))) do y
-			R = Symmetric(cpu(vectotrilstrict(y)), :L)
+			R = Symmetric(cpu(vectotril(y; strict=true)), :L)
 			R[diagind(R)] .= 1
 			R
 		end
