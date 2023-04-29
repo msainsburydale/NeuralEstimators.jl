@@ -103,7 +103,7 @@ end
 		@test quantileloss(θ̂, θ, 0.5) >= 0
 		@test quantileloss(θ̂, θ, 0.5) ≈ 0.5 * mae(θ̂, θ)
 
-		#TODO need to check the other methods of quantileloss (see the GNN experiments where I use them)
+		#TODO need to test the other methods of quantileloss (see the GNN experiments where I use them)
 	end
 
 	#TODO intervalscore
@@ -168,7 +168,7 @@ end
 end
 
 
-@testset "vectotri" begin
+@testset verbose = true "vectotri: $dvc" for dvc ∈ devices
 
 	d = 4
 	n = d*(d+1)÷2
