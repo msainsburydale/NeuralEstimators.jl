@@ -6,6 +6,97 @@ nparams(model) = sum(length, Flux.params(model))
 drop(nt::NamedTuple, key::Symbol) =  Base.structdiff(nt, NamedTuple{(key,)})
 drop(nt::NamedTuple, keys::NTuple{N,Symbol}) where {N} = Base.structdiff(nt, NamedTuple{keys})
 
+
+# Original discussion: https://groups.google.com/g/julia-users/c/UARlZBCNlng
+vectotri_docs = """
+	vectotril(v; strict = false)
+	vectotriu(v; strict = false)
+Converts a vector `v` of length ``d(d+1)÷2`` (a triangular number) into a
+``d × d`` lower or upper triangular matrix.
+
+If `strict = true`, the matrix will be *strictly* lower or upper triangular,
+that is, a ``(d+1) × (d+1)`` triangular matrix with zero diagonal.
+
+Note that the triangular matrix is constructed on the CPU, but the returned
+matrix will be a GPU array if `v` is a GPU array. Note also that the
+return type is not of type `Triangular` matrix (i.e., the zeros are
+materialised) since `Traingular` matrices are not always compatible with other
+GPU operations.
+
+# Examples
+```
+using NeuralEstimators
+
+d = 4
+n = d*(d+1)÷2
+v = collect(range(1, n))
+vectotril(v)
+vectotriu(v)
+vectotril(v; strict = true)
+vectotriu(v; strict = true)
+```
+"""
+
+"$vectotri_docs"
+function vectotril(v; strict::Bool = false)
+	if strict
+		vectotrilstrict(v)
+	else
+		ArrayType = containertype(v)
+		T = eltype(v)
+		v = cpu(v)
+		n = length(v)
+		d = (-1 + isqrt(1 + 8n)) ÷ 2
+		d*(d+1)÷2 == n || error("vectotril: length of vector is not triangular")
+		k = 0
+		L = [ i >= j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
+		convert(ArrayType, L)
+	end
+end
+
+"$vectotri_docs"
+function vectotriu(v; strict::Bool = false)
+	if strict
+		vectotriustrict(v)
+	else
+		ArrayType = containertype(v)
+		T = eltype(v)
+		v = cpu(v)
+		n = length(v)
+		d = (-1 + isqrt(1 + 8n)) ÷ 2
+		d*(d+1)÷2 == n || error("vectotriu: length of vector is not triangular")
+		k = 0
+		U = [ i <= j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
+		convert(ArrayType, U)
+	end
+end
+
+function vectotrilstrict(v)
+	ArrayType = containertype(v)
+	T = eltype(v)
+	v = cpu(v)
+	n = length(v)
+	d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
+	d*(d-1)÷2 == n || error("vectotrilstrict: length of vector is not triangular")
+	k = 0
+	L = [ i > j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
+	convert(ArrayType, L)
+end
+
+function vectotriustrict(v)
+	ArrayType = containertype(v)
+	T = eltype(v)
+	v = cpu(v)
+	n = length(v)
+	d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
+	d*(d-1)÷2 == n || error("vectotriustrict: length of vector is not triangular")
+	k = 0
+	U = [ i < j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
+	convert(ArrayType, U)
+end
+
+
+
 # Get the non-parametrized type name: https://stackoverflow.com/a/55977768/16776594
 """
 	containertype(A::Type)

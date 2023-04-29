@@ -35,7 +35,7 @@ export NeuralEstimator, PointEstimator, IntervalEstimator, QuantileEstimator, Pi
 include("Estimators.jl")
 
 export DeepSet, DeepSetExpert, GraphPropagatePool, Compress, SplitApply
-export CholeskyParameters, CovarianceMatrixParameters, CorrelationMatrixParameters
+export CholeskyCovariance, CovarianceMatrix, CorrelationMatrix
 export vectotril, vectotriu
 include("Architectures.jl")
 

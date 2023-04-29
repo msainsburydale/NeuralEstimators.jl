@@ -7,7 +7,7 @@ using CUDA
 using DataFrames
 using Distributions: Normal, cdf, logpdf, quantile
 using Flux
-using Flux: DataLoader, mae
+using Flux: DataLoader, mae, mse
 using Graphs
 using GraphNeuralNetworks
 using LinearAlgebra
@@ -86,22 +86,33 @@ end
 
 
 @testset "loss functions" begin
-	#TODO kpowerloss, intervalscore, etc.
+
 	p = 3
 	K = 10
-	θ̂ = array(p, K)
-	θ = array(p, K)
+	θ̂ = arrayn(p, K)
+	θ = arrayn(p, K) * 0.9
+
+	@testset "kpowerloss" begin
+		@test kpowerloss(θ̂, θ, 2; safeorigin = false) ≈ mse(θ̂, θ)
+		@test kpowerloss(θ̂, θ, 1; safeorigin = false) ≈ mae(θ̂, θ)
+		@test kpowerloss(θ̂, θ, 1; safeorigin = true) ≈ mae(θ̂, θ)
+		@test kpowerloss(θ̂, θ, 0.1) >= 0
+	end
 
 	@testset "quantileloss" begin
 		@test quantileloss(θ̂, θ, 0.5) >= 0
 		@test quantileloss(θ̂, θ, 0.5) ≈ 0.5 * mae(θ̂, θ)
+
+		#TODO need to check the other methods of quantileloss (see the GNN experiments where I use them)
 	end
+
+	#TODO intervalscore
 
 end
 
 
 #TODO add simulateNMVM
-@testset "simulateX" begin
+@testset "simulate" begin
 
 	S = array(10, 2, T = Float32)
 	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
@@ -157,10 +168,45 @@ end
 end
 
 
+@testset "vectotri" begin
+
+	d = 4
+	n = d*(d+1)÷2
+
+	v = arrayn(n) |> dvc
+	L = vectotril(v)
+	@test istril(L)
+	@test all([cpu(v)[i] ∈ cpu(L) for i ∈ 1:n])
+	@test containertype(L) == containertype(v)
+	U = vectotriu(v)
+	@test istriu(U)
+	@test all([cpu(v)[i] ∈ cpu(U) for i ∈ 1:n])
+	@test containertype(U) == containertype(v)
+
+	# testing that it works for views of arrays
+	V = arrayn(n, 2) |> dvc
+	L = [vectotril(v) for v ∈ eachcol(V)]
+	@test all(istril.(L))
+	@test all(containertype.(L) .== containertype(v))
+
+	# strict variants
+	n = d*(d-1)÷2
+	v = arrayn(n) |> dvc
+	L = vectotril(v; strict = true)
+	@test istril(L)
+	@test all(L[diagind(L)] .== 0)
+	@test all([cpu(v)[i] ∈ cpu(L) for i ∈ 1:n])
+	@test containertype(L) == containertype(v)
+	U = vectotriu(v; strict = true)
+	@test istriu(U)
+	@test all(U[diagind(U)] .== 0)
+	@test all([cpu(v)[i] ∈ cpu(U) for i ∈ 1:n])
+	@test containertype(U) == containertype(v)
+
+end
+
 
 # ---- Layers ----
-
-# TODO should give all CholeskyParameters/CovarianceMatrixParameters layers diag_idx, or even a full set of indices to help the user
 
 function testbackprop(l, dvc, p::Integer, K::Integer, d::Integer)
 	Z = arrayn(d, K) |> dvc
@@ -185,50 +231,13 @@ end
 		testbackprop(l, dvc, p, K, 20)
 	end
 
-	@testset "vectotri" begin
-
-		d = 4
-		n = d*(d+1)÷2
-
-		v = arrayn(n) |> dvc
-		L = vectotril(v)
-		@test istril(L)
-		@test all([cpu(v)[i] ∈ cpu(L) for i ∈ 1:n])
-		@test containertype(L) == containertype(v)
-		U = vectotriu(v)
-		@test istriu(U)
-		@test all([cpu(v)[i] ∈ cpu(U) for i ∈ 1:n])
-		@test containertype(U) == containertype(v)
-
-		# testing that it works for views of arrays
-		V = arrayn(n, 2) |> dvc
-		L = [vectotril(v) for v ∈ eachcol(V)]
-		@test all(istril.(L))
-		@test all(containertype.(L) .== containertype(v))
-
-		# strict variants
-		n = d*(d-1)÷2
-		v = arrayn(n) |> dvc
-		L = vectotril(v; strict = true)
-		@test istril(L)
-		@test all(L[diagind(L)] .== 0)
-		@test all([cpu(v)[i] ∈ cpu(L) for i ∈ 1:n])
-		@test containertype(L) == containertype(v)
-		U = vectotriu(v; strict = true)
-		@test istriu(U)
-		@test all(U[diagind(U)] .== 0)
-		@test all([cpu(v)[i] ∈ cpu(U) for i ∈ 1:n])
-		@test containertype(U) == containertype(v)
-
-	end
-
 	d = 4
 	K = 50
 	p = d*(d+1)÷2
 	θ = arrayn(p, K) |> dvc
 
-	@testset "CholeskyParameters" begin
-		l = CholeskyParameters(d) |> dvc
+	@testset "CholeskyCovariance" begin
+		l = CholeskyCovariance(d) |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
 		@test all(θ̂[l.diag_idx, :] .> 0)
@@ -236,9 +245,8 @@ end
 		testbackprop(l, dvc, p, K, d)
 	end
 
-
-	@testset "CovarianceMatrixParameters" begin
-		l = CovarianceMatrixParameters(d) |> dvc
+	@testset "CovarianceMatrix" begin
+		l = CovarianceMatrix(d) |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
 		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0)
@@ -250,10 +258,10 @@ end
 		@test all(isposdef.(Σ))
 	end
 
-	@testset "CorrelationMatrixParameters" begin
+	@testset "CorrelationMatrix" begin
 		p = d*(d-1)÷2
 		θ = arrayn(p, K) |> dvc
-		l = CorrelationMatrixParameters(d) |> dvc
+		l = CorrelationMatrix(d) |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
 		@test typeof(θ̂) == typeof(θ)
@@ -268,7 +276,6 @@ end
 		testbackprop(l, dvc, p, K, d)
 	end
 
-
 	@testset "SplitApply" begin
 		p₁ = 2          # number of non-covariance matrix parameters
 		p₂ = d*(d+1)÷2  # number of covariance matrix parameters
@@ -277,7 +284,7 @@ end
 		a = [0.1, 4]
 		b = [0.9, 9]
 		l₁ = Compress(a, b)
-		l₂ = CovarianceMatrixParameters(d)
+		l₂ = CovarianceMatrix(d)
 		l = SplitApply([l₁, l₂], [1:p₁, p₁+1:p])
 
 		l = l            |> dvc

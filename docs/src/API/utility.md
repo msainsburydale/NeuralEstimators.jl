@@ -14,7 +14,7 @@ numberreplicates
 subsetdata
 ```
 
-## Architecture layers
+## Activation functions
 
 These layers can be used at the end of an architecture to ensure that the
 neural estimator provides valid parameters.
@@ -22,11 +22,11 @@ neural estimator provides valid parameters.
 ```@docs
 Compress
 
-CholeskyParameters
+CholeskyCovariance
 
-CovarianceMatrixParameters
+CovarianceMatrix
 
-CorrelationMatrixParameters
+CorrelationMatrix
 
 SplitApply
 ```
