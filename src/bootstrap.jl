@@ -1,14 +1,18 @@
 """
-	interval(θ̃, θ̂ = nothing; type, probs = [0.05, 0.95], parameter_names)
+	interval(θ̃, θ̂ = nothing; type::String, probs = [0.05, 0.95], parameter_names)
 
-Compute a confidence interval using the quantiles of the p × B matrix of
-bootstrap samples, `θ̃`, where p is the number of parameters in the model.
+Compute a confidence interval using the p × B matrix of bootstrap samples, `θ̃`,
+where p is the number of parameters in the model.
 
-The quantile levels are controlled with the argument `probs`. The rows can be
-named with a vector of strings `parameter_names` (sensible defaults provided).
+If `type = "quantile"`, the interval is constructed by simply taking the quantiles of
+`θ̃`, and if `type = "reverse-quantile"`, the so-called
+[reverse-quantile](https://en.wikipedia.org/wiki/Bootstrapping_(statistics)#Methods_for_bootstrap_confidence_intervals)
+method is used. In both cases, the quantile levels are controlled by the argument `probs`.
+
+The rows can be named with a vector of strings `parameter_names`.
 
 The return type is a p × 2 matrix, whose first and second columns respectively
-contain the lower and upper bounds of the confidence interval.
+contain the lower and upper bounds of the interval.
 
 # Examples
 ```
@@ -30,16 +34,10 @@ function interval(θ̃, θ̂ = nothing; type::String = "percentile", probs = [0.
 	if type ∈ ["percentile", "quantile"]
 		ci = mapslices(x -> quantile(x, probs), θ̃, dims = 2)
 	elseif type ∈ ["basic", "reverse-percentile", "reverse-quantile"]
+		isnothing(θ̂) && error("`θ̂` must be provided if `type` is 'basic', 'reverse-percentile', or 'reverse-quantile'")
 		q = mapslices(x -> quantile(x, probs), θ̃, dims = 2)
 		ci = [[2θ̂[i] - q[i, 2], 2θ̂[i] - q[i, 1]] for i ∈ 1:p]
 		ci = hcat(ci...)'
-	elseif type ∈ ["studentised", "studentized"]
-		#TODO
-	elseif type == "bca"
-		#TODO
-		# z₀ # bias-correction
-		# a  # acceleration
-		# G = mapslices(StatsBase.ecdf, θ̃, dims = 2)
 	else
 		error("argument `type` not matched: it should be one of 'percentile', 'basic', 'studentised', or 'bca'.")
 	end
@@ -50,9 +48,9 @@ function interval(θ̃, θ̂ = nothing; type::String = "percentile", probs = [0.
 	labelinterval(l, u, parameter_names)
 end
 
-function interval(ciestimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu::Bool = true)
+function interval(estimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu::Bool = true)
 
-	ci = _runondevice(ciestimator, Z, use_gpu)
+	ci = _runondevice(estimator, Z, use_gpu)
 	ci = cpu(ci)
 
 	@assert size(ci, 1) % 2 == 0
@@ -129,7 +127,7 @@ function bootstrap(θ̂, parameters::P, m::Integer; B::Integer = 400, use_gpu::B
 	return θ̃
 end
 
-function bootstrap(θ̂, parameters::P, Z; use_gpu::Bool = true) where P <: Union{AbstractMatrix, ParameterConfigurations}
+function bootstrap(θ̂, parameters::P, Z̃; use_gpu::Bool = true) where P <: Union{AbstractMatrix, ParameterConfigurations}
 	K = size(parameters, 2)
 	@assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
 	θ̃ = _runondevice(θ̂, Z̃, use_gpu)
@@ -205,26 +203,36 @@ end
 
 
 """
-	coverage(ci::V, θ) where  {V <: AbstractArray{M}} where M <: AbstractMatrix
+	coverage(intervals::V, θ) where  {V <: AbstractArray{M}} where M <: AbstractMatrix
 
 Given a p×K matrix of true parameters `θ`, determine the empirical coverage of
-the confidence intervals `ci` (a K-vector of px2 matrices).
+a collection of confidence `intervals` (a K-vector of px2 matrices).
 
 The overall empirical coverage is obtained by averaging the resulting 0-1 matrix
-over all data sets.
+elementwise over all parameter vectors.
+
+# Examples
+```
+using NeuralEstimators
+p = 3
+K = 100
+θ = rand(p, K)
+intervals = [rand(p, 2) for _ in 1:K]
+coverage(intervals, θ)
+```
 """
-function coverage(ci::V, θ) where  {V <: AbstractArray{M}} where M <: AbstractMatrix
+function coverage(intervals::V, θ) where  {V <: AbstractArray{M}} where M <: AbstractMatrix
 
     p, K = size(θ)
-	@assert length(ci) == K
-	@assert all(size.(ci, 1) .== p)
-	@assert all(size.(ci, 2) .== 2)
+	@assert length(intervals) == K
+	@assert all(size.(intervals, 1) .== p)
+	@assert all(size.(intervals, 2) .== 2)
 
 	# for each confidence interval, determine if the true parameters, θ, are
 	# within the interval.
-	within = map(eachindex(ci)) do k
+	within = map(eachindex(intervals)) do k
 
-		c = ci[k]
+		c = intervals[k]
 
 		# Determine if the confidence intervals contain the true parameter.
 		# The result is an indicator vector specifying which parameters are

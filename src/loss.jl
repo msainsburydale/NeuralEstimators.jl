@@ -1,4 +1,4 @@
-# This is an internal function used in Flux to check that the size of the
+# This is an internal function used in Flux to check the size of the
 # arguments passed to a loss function
 function _check_sizes(ŷ::AbstractArray, y::AbstractArray)
   for d in 1:max(ndims(ŷ), ndims(y))
@@ -119,6 +119,8 @@ end
 
 function quantileloss(θ̂, θ, q::V; agg = mean) where {T, V <: AbstractVector{T}}
 
+  q = convert(containertype(θ̂), q) # convert q to the gpu (this line means that users don't need to manually move q to the gpu)
+
   # Check that the sizes match
   @assert size(θ̂, 2) == size(θ, 2)
   p, K = size(θ)
@@ -140,6 +142,7 @@ end
 
 """
     intervalscore(l, u, θ, α; agg = mean)
+    intervalscore(θ̂, θ, α; agg = mean)
 
 Given a 100×(1-`α`)% confidence interval [`l`, `u`] with true value `θ`, the
 interval score is defined by
@@ -147,6 +150,10 @@ interval score is defined by
 S(l, u, θ; α) = (u - l) + 2α⁻¹(l - θ)𝕀(θ < l) + 2α⁻¹(θ - u)𝕀(θ > u),
 ```
 where `α` ∈ (0, 1) and 𝕀(⋅) is the indicator function.
+
+The method that takes a single value `θ̂` assumes that `θ̂` is a matrix with 2p rows,
+where p is the number of parameters in the statistical model. Then, the first
+and second set of p rows will be used as `l` and `u`, respectively.
 
 For further discussion, see Section 6 of Gneiting, T. and Raftery, A. E. (2007),
 "Strictly proper scoring rules, prediction, and estimation",

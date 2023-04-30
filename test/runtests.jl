@@ -18,11 +18,8 @@ using Statistics: mean, sum
 using Test
 using Zygote
 array(size...; T = Float64) = T.(reshape(1:prod(size), size...) ./ prod(size))
-function arrayn(size...; T = Float64)
-	x = array(size..., T = T)
-	x .- mean(x)
-end
-verbose = false # verbose used in the NeuralEstimators code
+arrayn(size...; T = Float64) = array(size..., T = T) .- mean(array(size..., T = T))
+verbose = false # verbose used in NeuralEstimators code (not @testset)
 
 if CUDA.functional()
 	@info "Testing on both the CPU and the GPU... "
@@ -32,8 +29,6 @@ else
 	@info "The GPU is unavailable so we'll test on the CPU only... "
 	devices = (CPU = cpu,)
 end
-
-#TODO should test all of the functions on the GPU
 
 # ---- Stand-alone functions ----
 
@@ -84,13 +79,12 @@ end
 	end
 end
 
-
-@testset "loss functions" begin
+@testset verbose = true "loss functions: $dvc" for dvc ∈ devices
 
 	p = 3
 	K = 10
-	θ̂ = arrayn(p, K)
-	θ = arrayn(p, K) * 0.9
+	θ̂ = arrayn(p, K)       |> dvc
+	θ = arrayn(p, K) * 0.9 |> dvc
 
 	@testset "kpowerloss" begin
 		@test kpowerloss(θ̂, θ, 2; safeorigin = false) ≈ mse(θ̂, θ)
@@ -100,18 +94,24 @@ end
 	end
 
 	@testset "quantileloss" begin
-		@test quantileloss(θ̂, θ, 0.5) >= 0
-		@test quantileloss(θ̂, θ, 0.5) ≈ 0.5 * mae(θ̂, θ)
+		q = 0.5
+		@test quantileloss(θ̂, θ, q) >= 0
+		@test quantileloss(θ̂, θ, q) ≈ mae(θ̂, θ)/2
 
-		#TODO need to test the other methods of quantileloss (see the GNN experiments where I use them)
+		q = [0.025, 0.975]
+		@test_throws Exception quantileloss(θ̂, θ, q)
+		θ̂ = arrayn(length(q) * p, K) |> dvc
+		@test quantileloss(θ̂, θ, q) >= 0
 	end
 
-	#TODO intervalscore
+	@testset "intervalscore" begin
+		α = 0.025
+		θ̂ = arrayn(2p, K) |> dvc
+		@test intervalscore(θ̂, θ, α) >= 0
+	end
 
 end
 
-
-#TODO add simulateNMVM
 @testset "simulate" begin
 
 	S = array(10, 2, T = Float32)
@@ -212,7 +212,7 @@ function testbackprop(l, dvc, p::Integer, K::Integer, d::Integer)
 	Z = arrayn(d, K) |> dvc
 	θ = arrayn(p, K) |> dvc
 	θ̂ = Chain(Dense(d, p), l) |> dvc
-	@test isa(gradient(() -> mae(θ̂(Z), θ), Flux.params(θ̂)), Zygote.Grads) # TODO should probably use pullback() like I do in train()
+	@test isa(gradient(() -> mae(θ̂(Z), θ), Flux.params(θ̂)), Zygote.Grads) # TODO should probably use pullback() like I do in train(). Do this after updating the training functions in line with the recent versions of Flux.
 end
 
 @testset verbose = true "Layers: $dvc" for dvc ∈ devices
@@ -480,13 +480,35 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 		end
 
 		@testset "bootstrap" begin
-			Z = Z[1] # bootstrap functions are designed for a single data set
-			bootstrap(θ̂, Parameters(1, ξ), 50; use_gpu = use_gpu)
+
+			# parametric bootstrap functions are designed for a single parameter configuration
+			parameters = Parameters(1, ξ)
+			m = 20
+			B = 400
+			Z̃ = simulate(parameters, m, B)
+			bootstrap(θ̂, parameters, Z̃; use_gpu = use_gpu)
+			bootstrap(θ̂, parameters, m; use_gpu = use_gpu)
+
+			# non-parametric bootstrap is designed for a single parameter configuration and a single data set
+			Z = Z̃[1] |> device
 			bootstrap(θ̂, Z; use_gpu = use_gpu)
 			bootstrap(θ̂, [Z]; use_gpu = use_gpu)
 			@test_throws Exception bootstrap(θ̂, [Z, Z]; use_gpu = use_gpu)
 			bootstrap(θ̂, Z, use_gpu = use_gpu, blocks = rand(1:2, size(Z)[end]))
-			interval(bootstrap(θ̂, Z; use_gpu = use_gpu))
+
+			# interval
+			θ̃ = bootstrap(θ̂, parameters, m; use_gpu = use_gpu)
+			@test size(interval(θ̃)) == (p, 2)
+			# @test size(interval(θ̃, θ̂(Z), type = "basic")) == (p, 2) #FIXME broken on the GPU
+			@test_throws Exception interval(θ̃, type = "basic")
+			@test_throws Exception interval(θ̃, type = "zxcvbnm")
+
+			# Coverage
+			ci = interval(θ̃)
+			θ  = parameters.θ
+			cov = coverage([ci], θ)
+			@test length(cov) == p
+			@assert all(0 .<= cov .<= 1)
 		end
 	end
 end
@@ -527,4 +549,27 @@ end
 	θ̂₁ = hcat(θ̂_deepset(Z[[1]]), MLE(Z[[2]]))
 	θ̂₂ = θ̂_piecewise(Z)
 	@test θ̂₁ ≈ θ̂₂
+end
+
+
+@testset "IntervalEstimator" begin
+	# Generate some toy data
+	n = 2  # bivariate data
+	m = 10 # number of independent replicates
+	Z = rand(n, m)
+
+	# Create an architecture
+	p = 3  # parameters in the model
+	w = 8  # width of each layer
+	ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
+	ϕ = Chain(Dense(w, w, relu), Dense(w, p));
+	architecture = DeepSet(ψ, ϕ)
+
+	# Initialise the interval estimator
+	estimator = IntervalEstimator(architecture)
+
+	# Apply the interval estimator
+	estimator(Z)
+	ci = interval(estimator, Z, parameter_names = ["ρ", "σ", "τ"])
+	@test size(ci[1]) == (p, 2) # FIXME why does this method of interval return a vector??
 end
