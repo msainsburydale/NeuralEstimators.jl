@@ -206,7 +206,7 @@ end
 end
 
 
-# ---- Layers ----
+# ---- Activation functions ----
 
 function testbackprop(l, dvc, p::Integer, K::Integer, d::Integer)
 	Z = arrayn(d, K) |> dvc
@@ -215,7 +215,7 @@ function testbackprop(l, dvc, p::Integer, K::Integer, d::Integer)
 	@test isa(gradient(() -> mae(θ̂(Z), θ), Flux.params(θ̂)), Zygote.Grads) # TODO should probably use pullback() like I do in train(). Do this after updating the training functions in line with the recent versions of Flux.
 end
 
-@testset verbose = true "Layers: $dvc" for dvc ∈ devices
+@testset verbose = true "Activation functions: $dvc" for dvc ∈ devices
 
 	@testset "Compress" begin
 		p = 3
@@ -300,8 +300,16 @@ end
 
 # ---- Architectures ----
 
-# TODO update all of this
+# Expert summary statistic that may be used in DeepSetExpert
+S = samplesize
 
+#TODO # Multiple data sets with set-level covariates
+# function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <:
+
+
+
+# DeepSet and DeepSetExpert with GraphPropagatePool module
+#TODO need to test this on the GPU
 @testset "GraphPropagatePool" begin
 	n₁, n₂ = 11, 27
 	m₁, m₂ = 30, 50
@@ -310,7 +318,7 @@ end
 	g₂ = rand_graph(n₂, m₂, ndata = array(d, n₂, T = Float32))
 	g  = Flux.batch([g₁, g₂])
 
-	# g is a single large GNNGraph containing the subgraphs
+	# g is a single large GNNGraph containing subgraphs
 	@test g.num_graphs == 2
 	@test g.num_nodes == n₁ + n₂
 	@test g.num_edges == m₁ + m₂
@@ -342,38 +350,46 @@ end
 	h₂ = meanpool(graphtograph(g₂))
 	@test graph_features(h) == hcat(graph_features(h₁), graph_features(h₂))
 
-	# Full estimator
+	# Full estimator couched in Deep Set framework
 	w = 32
 	p = 3
-	ψ = GraphPropagatePool(graphtograph, meanpool)
-	ϕ = Chain(Dense(o, w, relu), Dense(w, p))
-	est = DeepSet(ψ, ϕ)
 
-	# Test on a single graph containing sub-graphs
-	θ̂ = est(g)
-	@test size(θ̂, 1) == p
-	@test size(θ̂, 2) == 1
+	@testset verbose = true "GraphPropagatePool: $ds" for ds ∈ ["DeepSet", "DeepSetExpert"]
+		ψ = GraphPropagatePool(graphtograph, meanpool)
+		ϕ = Chain(Dense(o, w, relu), Dense(w, p))
 
-	# test on a vector of graphs
-	v = [g₁, g₂, Flux.batch([g₁, g₂])]
-	θ̂ = est(v)
-	@test size(θ̂, 1) == p
-	@test size(θ̂, 2) == length(v)
+		# TODO Add if statement for DeepSet or DeepSetExpert
+		est = DeepSet(ψ, ϕ)
 
-	# test that it can be trained
-	K = 10
-	Z = [rand_graph(n₁, m₁, ndata = array(d, n₁, T = Float32)) for _ in 1:K]
-	θ = array(p, K)
-	train(est, θ, θ, Z, Z; batchsize = 2, epochs = 3, verbose = verbose)
+		# Test on a single graph containing sub-graphs
+		θ̂ = est(g)
+		@test size(θ̂, 1) == p
+		@test size(θ̂, 2) == 1
+
+		# test on a vector of graphs
+		v = [g₁, g₂, Flux.batch([g₁, g₂])]
+		θ̂ = est(v)
+		@test size(θ̂, 1) == p
+		@test size(θ̂, 2) == length(v)
+
+		# test that it can be trained
+		K = 10
+		Z = [rand_graph(n₁, m₁, ndata = array(d, n₁, T = Float32)) for _ in 1:K]
+		θ = array(p, K)
+		train(est, θ, θ, Z, Z; batchsize = 2, epochs = 3, verbose = verbose)
+	end
+
 end
 
 
-# Simple example for testing.
+# DeepSet and DeepSetExpert with array input data
+
 struct Parameters <: ParameterConfigurations
 	θ
 	σ
 end
-ξ = (Ω = Normal(0, 0.5), σ = 1)
+parameter_names = ["μ"]
+ξ = (Ω = Normal(0, 0.5), σ = 1, parameter_names)
 Parameters(K::Integer, ξ) = Parameters(rand(ξ.Ω, 1, K), ξ.σ)
 function simulate(parameters::Parameters, m::Integer)
 	n = 1
@@ -381,6 +397,7 @@ function simulate(parameters::Parameters, m::Integer)
 	Z = [rand(Normal(μ, parameters.σ), n, m) for μ ∈ θ]
 end
 parameters = Parameters(100, ξ)
+
 
 MLE(Z) = mean.(Z)'
 MLE(Z, ξ) = MLE(Z) # the MLE doesn't need ξ, but we include it for testing
@@ -392,7 +409,6 @@ p = 1
 ψ = Chain(Dense(n, w), Dense(w, w), Flux.flatten)
 ϕ = Chain(Dense(w, w), Dense(w, p))
 θ̂_deepset = DeepSet(ψ, ϕ)
-S = samplesize
 ϕₛ = Chain(Dense(w + 1, w), Dense(w, p))
 θ̂_deepsetexpert = DeepSetExpert(ψ, ϕₛ, S)
 dₓ= 2
@@ -473,6 +489,11 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 			@test typeof(assessment)         == Assessment
 			@test typeof(assessment.df)      == DataFrame
 			@test typeof(assessment.runtime) == DataFrame
+			@test typeof(merge(assessment, assessment)) == Assessment
+			risk(assessment)
+			risk(assessment; average_over_parameters = false)
+			risk(assessment; average_over_sample_sizes = false)
+			risk(assessment; average_over_parameters = false, average_over_sample_sizes = false)
 
 			# Test that estimators needing invariant model information can be used:
 			assess([MLE], parameters, Z_test, verbose = verbose)
@@ -513,7 +534,7 @@ estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
 	end
 end
 
-
+# TODO this should be moved into the above loop
 @testset "set-level covariates" begin
 	n = 10
 	p = 4
@@ -544,6 +565,8 @@ end
 end
 
 @testset "PiecewiseEstimator" begin
+	@test_throws Exception PiecewiseEstimator((θ̂_deepset, MLE), (30, 50))
+	@test_throws Exception PiecewiseEstimator((θ̂_deepset, MLE, MLE), (50, 30))
 	θ̂_piecewise = PiecewiseEstimator((θ̂_deepset, MLE), (30))
 	Z = [array(n, 1, 10, T = Float32), array(n, 1, 50, T = Float32)]
 	θ̂₁ = hcat(θ̂_deepset(Z[[1]]), MLE(Z[[2]]))
@@ -570,6 +593,6 @@ end
 
 	# Apply the interval estimator
 	estimator(Z)
-	ci = interval(estimator, Z, parameter_names = ["ρ", "σ", "τ"])
+	ci = interval(estimator, Z, parameter_names = ["ρ", "σ", "τ"]) #TODO  suppress these warnings
 	@test size(ci[1]) == (p, 2) # FIXME why does this method of interval return a vector??
 end
