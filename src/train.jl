@@ -198,7 +198,7 @@ function train(θ̂, sampler, simulator;
 			# Full simulation on the fly and just-in-time sampling:
 			epoch_time = @elapsed for _ ∈ 1:batches
 				parameters = isnothing(ξ) ? sampler(batchsize) : sampler(batchsize, ξ)
-				Z = simulate(parameters, m)
+				Z = simulator(parameters, m)
 				θ = _extractθ(parameters)
 				train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 			end
@@ -310,7 +310,7 @@ function train(θ̂, θ_train::P, θ_val::P, simulator;
 			epoch_time_simulate = 0.0
 			epoch_time    = 0.0
 			for parameters ∈ _ParameterLoader(θ_train, batchsize = batchsize)
-				epoch_time_simulate += @elapsed Z = simulate(parameters, m)
+				epoch_time_simulate += @elapsed Z = simulator(parameters, m)
 				θ = _extractθ(parameters)
 				epoch_time += @elapsed train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 			end
@@ -553,50 +553,7 @@ function trainx(θ̂, θ_train::P, θ_val::P, simulator, M; args...)  where {P <
 end
 
 
-function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: AbstractVector{T}}  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
-
-	@assert length(Z_train) == length(Z_val)
-	E = length(Z_train) # number of estimators
-
-	kwargs = (;args...)
-	verbose = _checkargs_trainx(kwargs)
-
-	# Create a copy of θ̂ each sample size
-	estimators = _deepcopyestimator(θ̂, kwargs, E)
-
-	for i ∈ eachindex(estimators)
-
-		# Subset the training and validation data to the current sample size
-		Z_trainᵢ = Z_train[i]
-		Z_valᵢ   = Z_val[i]
-
-		mᵢ = extrema(unique(numberreplicates(Z_valᵢ)))
-		if mᵢ[1] == mᵢ[2]
-			mᵢ = mᵢ[1]
-			verbose && @info "training with m=$(mᵢ)"
-		else
-			verbose && @info "training with m ∈ [$(mᵢ[1]), $(mᵢ[2])]"
-			mᵢ = "$(mᵢ[1])-$(mᵢ[2])"
-		end
-
-		# Pre-train if this is not the first estimator
-		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
-
-		# Modify/check the keyword arguments before passing them onto train
-		kwargs = (;args...)
-		if haskey(kwargs, :savepath) && kwargs.savepath != ""
-			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
-		end
-		kwargs = _modifyargs(kwargs, i, E)
-
-		# train
-		estimators[i] = train(estimators[i], θ_train, θ_val, Z_trainᵢ, Z_valᵢ; kwargs...)
-	end
-
-	return estimators
-end
-
-
+# This is for when the data CAN be easily subsetted
 function trainx(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
 
 	@assert length(unique(numberreplicates(Z_val))) == 1 "The elements of `Z_val` should be equally replicated: check with `numberreplicates(Z_val)`"
@@ -630,6 +587,52 @@ function trainx(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}
 		# Subset the validation data to the current sample size, and then train
 		Z_valᵢ = subsetdata(Z_val, 1:mᵢ)
 		estimators[i] = train(estimators[i], θ_train, θ_val, Z_train, Z_valᵢ; kwargs...)
+	end
+
+	return estimators
+end
+
+# This method is for when the data CANNOT be easily subsetted, so another layer of vectors is needed
+# FIXME This need to accomodate vectors of tuples
+# function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: AbstractVector{T}}  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
+function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{T}} where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+	@assert length(Z_train) == length(Z_val)
+	E = length(Z_train) # number of estimators
+
+	kwargs = (;args...)
+	verbose = _checkargs_trainx(kwargs)
+
+	# Create a copy of θ̂ for each sample size
+	estimators = _deepcopyestimator(θ̂, kwargs, E)
+
+	for i ∈ eachindex(estimators)
+
+		# Subset the training and validation data to the current sample size
+		Z_trainᵢ = Z_train[i]
+		Z_valᵢ   = Z_val[i]
+
+		mᵢ = extrema(unique(numberreplicates(Z_valᵢ)))
+		if mᵢ[1] == mᵢ[2]
+			mᵢ = mᵢ[1]
+			verbose && @info "training with m=$(mᵢ)"
+		else
+			verbose && @info "training with m ∈ [$(mᵢ[1]), $(mᵢ[2])]"
+			mᵢ = "$(mᵢ[1])-$(mᵢ[2])"
+		end
+
+		# Pre-train if this is not the first estimator
+		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
+
+		# Modify/check the keyword arguments before passing them onto train
+		kwargs = (;args...)
+		if haskey(kwargs, :savepath) && kwargs.savepath != ""
+			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
+		end
+		kwargs = _modifyargs(kwargs, i, E)
+
+		# train
+		estimators[i] = train(estimators[i], θ_train, θ_val, Z_trainᵢ, Z_valᵢ; kwargs...)
 	end
 
 	return estimators
@@ -732,6 +735,8 @@ function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 	return ls
 end
 
+
+#TODO this may need to be modifided to dispatch on Z being a graph rather than θ̂, now that GraphPropagatePool is a module of the DeepSet framework
 function _updatebatch!(θ̂::GraphPropagatePool, Z, θ, device, loss, γ, optimiser)
 
 	m = numberreplicates(Z)

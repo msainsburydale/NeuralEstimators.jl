@@ -1,9 +1,9 @@
-# """
-# Generic function that may be overloaded to implicitly define a statistical model.
-# Specifically, the user should provide a method `simulate(parameters, m)`
-# that returns `m` simulated replicates for each element in the given set of
-# `parameters`.
-# """
+"""
+Generic function that may be overloaded to implicitly define a statistical model.
+Specifically, the user should provide a method `simulate(parameters, m)`
+that returns `m` simulated replicates for each element in the given set of
+`parameters`.
+"""
 function simulate end
 
 """
@@ -29,14 +29,15 @@ simulate(parameters, m)
 simulate(parameters, m, 2)
 ```
 """
-function simulate(parameters, m, J::Integer)
+function simulate(parameters::P, m, J::Integer) where P <: Union{Matrix, ParameterConfigurations}
 	v = [simulate(parameters, m) for i ∈ 1:J]
-	v = vcat(v...)
-	# note that vcat() should be ok since we're only splatting J vectors, which
-	# doesn't get prohibitively large even during bootstrapping. Note also that
-	# I don't want to use stack(), because it only works if the data are stored
-	# as arrays. In theory, I could define another method of stack() that falls
-	# back to vcat(v...)
+	if typeof(v[1]) <: Tuple
+		z = vcat([v[i][1] for i ∈ eachindex(v)]...)
+		x = vcat([v[i][2] for i ∈ eachindex(v)]...)
+		v = (z, x)
+	else
+		v = vcat(v...)
+	end
 	return v
 end
 

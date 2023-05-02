@@ -97,23 +97,24 @@ end
 (c::QuantileEstimator)(Z) = vcat(c.l(Z), c.l(Z) .+ exp.(c.u(Z)))
 
 
-# ---- PiecewiseEstimator: variable sample sizes ----
+
+# ---- PiecewiseEstimator ----
 
 """
 	PiecewiseEstimator(estimators, breaks)
 Creates a piecewise estimator from a collection of `estimators`, based on the
-collection of sample-size changepoints, `breaks`, which should contain one
-element fewer than the number of `estimators`.
+collection of changepoints, `breaks`, which should contain one element fewer
+than the number of `estimators`.
 
 Any estimator can be included in `estimators`, including any of the subtypes of
-`NeuralEstimator` exported with the package (e.g., `PointEstimator`,
+`NeuralEstimator` exported with the package `NeuralEstimators` (e.g., `PointEstimator`,
 `IntervalEstimator`, etc.).
 
 # Examples
 ```
 # Suppose that we've trained two neural estimators. The first, θ̂₁, is trained
 # for small sample sizes (e.g., m ≤ 30), and the second, `θ̂₂`, is trained for
-# moderate-to-large sample sizes (e.g., m > 30). Then we construct a piecewise
+# moderate-to-large sample sizes (e.g., m > 30). We construct a piecewise
 # estimator with a sample-size changepoint of 30, which dispatches θ̂₁ if m ≤ 30
 # and θ̂₂ if m > 30.
 

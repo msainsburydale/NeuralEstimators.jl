@@ -94,17 +94,17 @@ end
 # ---- Parameteric bootstrap ----
 
 """
-	bootstrap(θ̂, parameters::P, Z̃) where P <: Union{AbstractMatrix, ParameterConfigurations}
-	bootstrap(θ̂, parameters::P, m::Integer; B = 400) where P <: Union{AbstractMatrix, ParameterConfigurations}
+	bootstrap(θ̂, parameters::P, Z) where P <: Union{AbstractMatrix, ParameterConfigurations}
+	bootstrap(θ̂, parameters::P, simulator, m::Integer; B = 400) where P <: Union{AbstractMatrix, ParameterConfigurations}
 	bootstrap(θ̂, Z; B = 400, blocks = nothing)
 
 Generates `B` bootstrap estimates from an estimator `θ̂`.
 
 Parametric bootstrapping is facilitated by passing a single parameter
-configuration, `parameters`, and corresponding simulated data, `Z̃`, whose length
-implicitly defines `B`. Alternatively, if the user has defined a method
-`simulate(parameters, m)`, one may simply pass the desired sample size `m` for
-the simulated data sets.
+configuration, `parameters`, and corresponding simulated data, `Z`, whose length
+implicitly defines `B`. Alternatively, one may provide a `simulator` and the
+desired sample size, in which case the data will be simulated using
+`simulator(parameters, m)`.
 
 Non-parametric bootstrapping is facilitated by passing a single data set, `Z`.
 The argument `blocks` caters for block bootstrapping, and it should be a vector
@@ -119,11 +119,21 @@ if it is available (default `true`).
 
 The return type is a p × `B` matrix, where p is the number of parameters in the model.
 """
-function bootstrap(θ̂, parameters::P, m::Integer; B::Integer = 400, use_gpu::Bool = true) where P <: Union{AbstractMatrix, ParameterConfigurations}
+function bootstrap(θ̂, parameters::P, simulator, m::Integer; B::Integer = 400, use_gpu::Bool = true) where P <: Union{AbstractMatrix, ParameterConfigurations}
 	K = size(parameters, 2)
 	@assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
-	Z̃ = simulate(parameters, m, B)
-	θ̃ = _runondevice(θ̂, Z̃, use_gpu)
+
+	# simulate the data
+	v = [simulator(parameters, m) for i ∈ 1:B]
+	if typeof(v[1]) <: Tuple
+		z = vcat([v[i][1] for i ∈ eachindex(v)]...)
+		x = vcat([v[i][2] for i ∈ eachindex(v)]...)
+		v = (z, x)
+	else
+		v = vcat(v...)
+	end
+	
+	θ̃ = _runondevice(θ̂, v, use_gpu)
 	return θ̃
 end
 
@@ -153,7 +163,7 @@ function bootstrap(θ̂, Z; B::Integer = 400, use_gpu::Bool = true, blocks = not
 end
 
 # simple wrapper to handle the common case that the user forgot to extract the
-# array from the single-element vector returned by simulate()
+# array from the single-element vector returned by a simulator
 function bootstrap(θ̂, Z::V; args...) where {V <: AbstractVector{A}} where A
 
 	@assert length(Z) == 1
@@ -199,52 +209,4 @@ function _blockresample(Z, B::Integer, blocks)
 	end
 
 	return Z̃
-end
-
-
-"""
-	coverage(intervals::V, θ) where  {V <: AbstractArray{M}} where M <: AbstractMatrix
-
-Given a p×K matrix of true parameters `θ`, determine the empirical coverage of
-a collection of confidence `intervals` (a K-vector of px2 matrices).
-
-The overall empirical coverage is obtained by averaging the resulting 0-1 matrix
-elementwise over all parameter vectors.
-
-# Examples
-```
-using NeuralEstimators
-p = 3
-K = 100
-θ = rand(p, K)
-intervals = [rand(p, 2) for _ in 1:K]
-coverage(intervals, θ)
-```
-"""
-function coverage(intervals::V, θ) where  {V <: AbstractArray{M}} where M <: AbstractMatrix
-
-    p, K = size(θ)
-	@assert length(intervals) == K
-	@assert all(size.(intervals, 1) .== p)
-	@assert all(size.(intervals, 2) .== 2)
-
-	# for each confidence interval, determine if the true parameters, θ, are
-	# within the interval.
-	within = map(eachindex(intervals)) do k
-
-		c = intervals[k]
-
-		# Determine if the confidence intervals contain the true parameter.
-		# The result is an indicator vector specifying which parameters are
-		# contained in the interval
-		[c[i, 1] < θ[i, k] < c[i, 2] for i ∈ 1:p]
-	end
-
-	# combine the counts into a single matrix p x K matrix
-	within = hcat(within...)
-
-	# compute the empirical coverage
-	cvg = mean(within, dims = 2)
-
-	return cvg
 end

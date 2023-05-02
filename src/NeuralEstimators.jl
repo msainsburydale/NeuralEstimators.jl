@@ -55,7 +55,7 @@ include("assess.jl")
 export plotrisk, plotdistribution
 include("plotting.jl")
 
-export bootstrap, coverage, interval
+export bootstrap, interval
 include("bootstrap.jl")
 
 export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams, samplesize, drop, containertype
@@ -74,7 +74,6 @@ end
 # - See if DeepSet.jl is something that the Flux people would like to include. (They may also improve the code.)
 # - With the fixed parameters method of train, there seems to be substantial overhead with my current implementation of simulation on the fly. When epochs_per_Z_refresh = 1, the run-time increases by a factor of 4 for the Gaussian process with nu varied and with m = 1. For now, I’ve added an argument simulate_on_the_fly::Bool, which allows us not to switch off on-the-fly simulation even when epochs_per_Z_refresh = 1. However, it would be good to reduce this overhead.
 # - Callback function for plotting during training. See https://www.youtube.com/watch?v=ObYDHi_jJXk&ab_channel=TheJuliaProgrammingLanguage. Also, I know there is a specific module for call backs while training Flux models, so may this is already possible in Julia too. In either case, I think train() should have an additional argument, callback. See also the example at: https://github.com/stefan-m-lenz/JuliaConnectoR.
-# - Frameworks based on Neyman inversion allow for confidence sets with correct conditional coverage.
 # - Keep the Bill Venables award in mind: https://statsocaus.github.io/venables-award/
 
 # ---- once I've made the project public:

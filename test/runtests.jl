@@ -1,11 +1,10 @@
 # NB train() breaks when updated from Flux@v0.13.9 to Flux@v0.13.11
-
+println("Updated!")
 using NeuralEstimators
 using NeuralEstimators: _getindices, _runondevice
-import NeuralEstimators: simulate
 using CUDA
 using DataFrames
-using Distributions: Normal, cdf, logpdf, quantile
+using Distributions: Normal, Uniform, Product, cdf, logpdf, quantile
 using Flux
 using Flux: DataLoader, mae, mse
 using Graphs
@@ -29,6 +28,22 @@ else
 	@info "The GPU is unavailable so we'll test on the CPU only... "
 	devices = (CPU = cpu,)
 end
+
+# Structure of tests:
+# - Stand-alone functions
+# - Activation functions
+# - Architectures (in point estimation context):
+#	- DeepSet/DeepSetExpert
+#		- Array data
+#			- data with/without set-level covariates
+#		- Graph data (using GraphPropagatePool)
+#			- Single data set
+#			- Single data set with set-level covariates
+#			- Multiple data sets
+#			- Multiple data sets with set-level covariates
+# - PointEstimator
+# - IntervalEstimator
+# - PiecewiseEstimator
 
 # ---- Stand-alone functions ----
 
@@ -79,7 +94,7 @@ end
 	end
 end
 
-@testset verbose = true "loss functions: $dvc" for dvc ∈ devices
+@testset "loss functions: $dvc" for dvc ∈ devices
 
 	p = 3
 	K = 10
@@ -168,7 +183,7 @@ end
 end
 
 
-@testset verbose = true "vectotri: $dvc" for dvc ∈ devices
+@testset "vectotri: $dvc" for dvc ∈ devices
 
 	d = 4
 	n = d*(d+1)÷2
@@ -215,7 +230,7 @@ function testbackprop(l, dvc, p::Integer, K::Integer, d::Integer)
 	@test isa(gradient(() -> mae(θ̂(Z), θ), Flux.params(θ̂)), Zygote.Grads) # TODO should probably use pullback() like I do in train(). Do this after updating the training functions in line with the recent versions of Flux.
 end
 
-@testset verbose = true "Activation functions: $dvc" for dvc ∈ devices
+@testset "Activation functions: $dvc" for dvc ∈ devices
 
 	@testset "Compress" begin
 		p = 3
@@ -232,7 +247,7 @@ end
 	end
 
 	d = 4
-	K = 50
+	K = 100
 	p = d*(d+1)÷2
 	θ = arrayn(p, K) |> dvc
 
@@ -265,6 +280,7 @@ end
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
 		@test typeof(θ̂) == typeof(θ)
+		@test all(-1 .<= θ̂ .<= 1)
 
 		R = map(eachcol(l(θ))) do y
 			R = Symmetric(cpu(vectotril(y; strict=true)), :L)
@@ -294,282 +310,249 @@ end
 		@test typeof(θ̂) == typeof(θ)
 		testbackprop(l, dvc, p, K, 20)
 	end
-
 end
 
 
 # ---- Architectures ----
 
-# Expert summary statistic that may be used in DeepSetExpert
-S = samplesize
+S = samplesize # Expert summary statistic used in DeepSetExpert
+parameter_names = ["μ", "σ"]
+struct Parameters <: ParameterConfigurations
+	θ
+end
+Ω = Product([Normal(0, 1), Uniform(0.1, 1.5)])
+ξ = (Ω = Ω, parameter_names = parameter_names)
+K = 100
+Parameters(K::Integer, ξ) = Parameters(rand(ξ.Ω, K))
+parameters = Parameters(K, ξ)
+p = length(parameter_names)
 
-#TODO # Multiple data sets with set-level covariates
-# function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <:
+#### Array data
+
+n = 1  # univariate data
+simulatearray(parameters::Parameters, m) = [θ[1] .+ θ[2] .* randn(n, m) for θ ∈ eachcol(parameters.θ)]
+function simulatorwithcovariates(parameters::Parameters, m)
+	Z = simulatearray(parameters, m)
+	x = [rand(qₓ) for _ ∈ eachindex(Z)]
+	(Z, x)
+end
+function simulatorwithcovariates(parameters, m, J::Integer)
+	v = [simulatorwithcovariates(parameters, m) for i ∈ 1:J]
+	z = vcat([v[i][1] for i ∈ eachindex(v)]...)
+	x = vcat([v[i][2] for i ∈ eachindex(v)]...)
+	(z, x)
+end
+function simulatornocovariates(parameters::Parameters, m)
+	simulatearray(parameters, m)
+end
+function simulatornocovariates(parameters, m, J::Integer)
+	v = [simulatornocovariates(parameters, m) for i ∈ 1:J]
+	vcat(v...)
+end
+
+# Traditional estimator that may be used for comparison
+MLE(Z) = permutedims(hcat(mean.(Z), var.(Z)))
+MLE(Z::Tuple) = MLE(Z[1])
+MLE(Z, ξ) = MLE(Z) # the MLE doesn't need ξ, but we include it for testing
+
+w  = 32 # width of each layer
+qₓ = 2  # number of set-level covariates
+m  = 10 # default sample size
+
+@testset "Array data: $arch" for arch ∈ ["DeepSet" "DeepSetExpert"]
+	@testset "$covar" for covar ∈ ["no set-level covariates" "set-level covariates"]
+		q = w
+		if covar == "set-level covariates"
+			q = q + qₓ
+			simulator = simulatorwithcovariates
+		else
+			simulator = simulatornocovariates
+		end
+		if arch == "DeepSet"
+			ψ = Chain(Dense(n, w), Dense(w, w), Flux.flatten)
+			ϕ = Chain(Dense(q, w), Dense(w, p))
+			θ̂ = DeepSet(ψ, ϕ)
+		elseif arch == "DeepSetExpert"
+			ψ = Chain(Dense(n, w), Dense(w, w), Flux.flatten)
+			ϕ = Chain(Dense(q + 1, w), Dense(w, p))
+			θ̂ = DeepSetExpert(ψ, ϕ, S)
+		end
+		@testset "$dvc" for dvc ∈ devices
+
+			θ̂ = θ̂ |> dvc
+
+			loss = Flux.Losses.mae |> dvc
+			γ    = Flux.params(θ̂)  |> dvc
+			θ    = array(p, K)     |> dvc
+
+			Z = simulator(parameters, m) |> dvc
+			@test size(θ̂(Z), 1) == p
+			@test size(θ̂(Z), 2) == K
+			@test isa(loss(θ̂(Z), θ), Number)
+
+			# Test that we can update the neural-network parameters
+			optimiser = ADAM(0.01)
+			gradients = gradient(() -> loss(θ̂(Z), θ), γ)
+			@test isa(gradients, Zygote.Grads)
+			Flux.update!(optimiser, γ, gradients)
+
+		    use_gpu = dvc == gpu
+			@testset "train" begin
+
+				# train: single estimator
+				θ̂ = train(θ̂, Parameters, simulator, m = m, epochs = 2, use_gpu = use_gpu, verbose = verbose, ξ = ξ)
+				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 2, use_gpu = use_gpu, verbose = verbose)
+				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 2, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
+				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 2, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
+				Z_train = simulator(parameters, 2m);
+				Z_val   = simulator(parameters, m);
+				train(θ̂, parameters, parameters, Z_train, Z_val; epochs = 5, use_gpu = use_gpu, verbose = verbose)
+
+				# trainx: Multiple estimators
+				trainx(θ̂, Parameters, simulator, [1, 2, 5]; ξ = ξ, epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
+				trainx(θ̂, parameters, parameters, simulator, [1, 2, 5]; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
+				trainx(θ̂, parameters, parameters, Z_train, Z_val, [1, 2, 5]; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
+				Z_train = [simulator(parameters, m) for m ∈ [1, 2, 5]];
+				Z_val   = [simulator(parameters, m) for m ∈ [1, 2, 5]];
+				trainx(θ̂, parameters, parameters, Z_train, Z_val; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
+			end
+
+			@testset "assess" begin
+
+				# J == 1
+				Z_test = simulator(parameters, m)
+				assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
+				@test typeof(assessment)         == Assessment
+				@test typeof(assessment.df)      == DataFrame
+				@test typeof(assessment.runtime) == DataFrame
+
+				@test typeof(merge(assessment, assessment)) == Assessment
+				risk(assessment)
+				risk(assessment; average_over_parameters = false)
+				risk(assessment; average_over_sample_sizes = false)
+				risk(assessment; average_over_parameters = false, average_over_sample_sizes = false)
+
+				# J == 5 > 1
+				Z_test = simulator(parameters, m, 5)
+				assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
+				@test typeof(assessment)         == Assessment
+				@test typeof(assessment.df)      == DataFrame
+				@test typeof(assessment.runtime) == DataFrame
+
+				# Test that estimators needing invariant model information can be used:
+				assess([MLE], parameters, Z_test, verbose = verbose)
+				assess([MLE], parameters, Z_test, verbose = verbose, ξ = ξ)
+			end
 
 
+			@testset "bootstrap" begin
 
-# DeepSet and DeepSetExpert with GraphPropagatePool module
-#TODO need to test this on the GPU
-@testset "GraphPropagatePool" begin
-	n₁, n₂ = 11, 27
-	m₁, m₂ = 30, 50
-	d = 1
-	g₁ = rand_graph(n₁, m₁, ndata = array(d, n₁, T = Float32))
-	g₂ = rand_graph(n₂, m₂, ndata = array(d, n₂, T = Float32))
-	g  = Flux.batch([g₁, g₂])
+				# parametric bootstrap functions are designed for a single parameter configuration
+				pars = Parameters(1, ξ)
+				m = 20
+				B = 400
+				Z̃ = simulator(pars, m, B)
+				size(bootstrap(θ̂, pars, Z̃; use_gpu = use_gpu)) == (p, K)
+				size(bootstrap(θ̂, pars, simulator, m; use_gpu = use_gpu)) == (p, K)
 
-	# g is a single large GNNGraph containing subgraphs
-	@test g.num_graphs == 2
-	@test g.num_nodes == n₁ + n₂
-	@test g.num_edges == m₁ + m₂
+				if covar == "no set-level covariates" # TODO non-parametric bootstrapping does not work for tuple data
+					# non-parametric bootstrap is designed for a single parameter configuration and a single data set
+					if typeof(Z̃) <: Tuple
+						Z = ([Z̃[1][1]], [Z̃[2][1]]) # NB not ideal that we need to still store these a vectors, given that the estimator doesn't require it
+					else
+						Z = Z̃[1]
+					end
+					Z = Z |> dvc
 
-	# Greate a mini-batch from g (use integer range to extract multiple graphs)
-	@test getgraph(g, 1) == g₁
+					@test size(bootstrap(θ̂, Z; use_gpu = use_gpu)) == (p, B)
+					@test size(bootstrap(θ̂, [Z]; use_gpu = use_gpu)) == (p, B)
+					@test_throws Exception bootstrap(θ̂, [Z, Z]; use_gpu = use_gpu)
+					@test size(bootstrap(θ̂, Z, use_gpu = use_gpu, blocks = rand(1:2, size(Z)[end]))) == (p, B)
 
-	# We can pass a single GNNGraph to Flux's DataLoader, and this will iterate over
-	# the subgraphs in the expected manner.
-	train_loader = DataLoader(g, batchsize=1, shuffle=true)
-	for g in train_loader
-	    @test g.num_graphs == 1
+					# interval
+					θ̃ = bootstrap(θ̂, pars, simulator, m; use_gpu = use_gpu)
+					@test size(interval(θ̃)) == (p, 2)
+					# @test size(interval(θ̃, θ̂(Z), type = "basic")) == (p, 2) #FIXME broken on the GPU
+					@test_throws Exception interval(θ̃, type = "basic")
+					@test_throws Exception interval(θ̃, type = "zxcvbnm")
+				end
+			end
+		end
 	end
+end
 
-	# graph-to-graph propagation module
-	w = 5
-	o = 7
-	graphtograph = GNNChain(GraphConv(d => w), GraphConv(w => w), GraphConv(w => o))
-	@test graphtograph(g) == Flux.batch([graphtograph(g₁), graphtograph(g₂)])
 
-	# global pooling module
-	# We can apply the pooling operation to the whole graph; however, I think this
-	# is mainly possible because the GlobalPool with mean is very simple.
-	# We may need to do something different for general global pooling layers (e.g.,
-	# universal pooling with DeepSets).
-	meanpool = GlobalPool(mean)
-	h  = meanpool(graphtograph(g))
-	h₁ = meanpool(graphtograph(g₁))
-	h₂ = meanpool(graphtograph(g₂))
-	@test graph_features(h) == hcat(graph_features(h₁), graph_features(h₂))
+#### Graph data
+# NB at some point, I may add another loop to the above checks to test
+#    GraphPropagatePool with all possible combinations that it may encounter.
+#    This might be facilitated with reshapedataGNN().
+@testset "GraphPropagatePool" begin
+	@testset "$dvc" for dvc ∈ devices
+		use_gpu = dvc == gpu
 
-	# Full estimator couched in Deep Set framework
-	w = 32
-	p = 3
+		n₁, n₂ = 11, 27
+		m₁, m₂ = 30, 50
+		d = 1
+		g₁ = rand_graph(n₁, m₁, ndata = array(d, n₁, T = Float32)) |> dvc
+		g₂ = rand_graph(n₂, m₂, ndata = array(d, n₂, T = Float32)) |> dvc
+		g  = Flux.batch([g₁, g₂])
 
-	@testset verbose = true "GraphPropagatePool: $ds" for ds ∈ ["DeepSet", "DeepSetExpert"]
+		# g is a single large GNNGraph containing subgraphs
+		@test g.num_graphs == 2
+		@test g.num_nodes == n₁ + n₂
+		@test g.num_edges == m₁ + m₂
+
+		# graph-to-graph propagation module
+		w = 32
+		q = 8
+		graphtograph = GNNChain(GraphConv(d => w), GraphConv(w => w), GraphConv(w => q))
+		graphtograph = graphtograph |> dvc
+		x = graphtograph(g)
+		y = Flux.batch([graphtograph(g₁), graphtograph(g₂)])
+		@test size(x) == size(y)
+		@test all(x.ndata.x .≈ y.ndata.x)
+
+		# global pooling module
+		# We can apply the pooling operation to the whole graph; however, I think this
+		# is mainly possible because the GlobalPool with mean is very simple.
+		# We may need to do something different for general global pooling layers (e.g.,
+		# universal pooling with DeepSets).
+		meanpool = GlobalPool(mean)
+		h  = meanpool(graphtograph(g))
+		h₁ = meanpool(graphtograph(g₁))
+		h₂ = meanpool(graphtograph(g₂))
+		@test all(graph_features(h) .≈ hcat(graph_features(h₁), graph_features(h₂)))
+
+		# Full estimator couched in Deep Set framework
+		p = 3
 		ψ = GraphPropagatePool(graphtograph, meanpool)
-		ϕ = Chain(Dense(o, w, relu), Dense(w, p))
-
-		# TODO Add if statement for DeepSet or DeepSetExpert
-		est = DeepSet(ψ, ϕ)
+		ϕ = Chain(Dense(q, w, relu), Dense(w, p))
+		θ̂ = DeepSet(ψ, ϕ) |> dvc
 
 		# Test on a single graph containing sub-graphs
-		θ̂ = est(g)
-		@test size(θ̂, 1) == p
-		@test size(θ̂, 2) == 1
+		@test size(θ̂(g)) == (p, 1)
 
 		# test on a vector of graphs
 		v = [g₁, g₂, Flux.batch([g₁, g₂])]
-		θ̂ = est(v)
-		@test size(θ̂, 1) == p
-		@test size(θ̂, 2) == length(v)
+		@test size(θ̂(v)) == (p, length(v))
 
 		# test that it can be trained
 		K = 10
 		Z = [rand_graph(n₁, m₁, ndata = array(d, n₁, T = Float32)) for _ in 1:K]
 		θ = array(p, K)
-		train(est, θ, θ, Z, Z; batchsize = 2, epochs = 3, verbose = verbose)
-	end
-
-end
-
-
-# DeepSet and DeepSetExpert with array input data
-
-struct Parameters <: ParameterConfigurations
-	θ
-	σ
-end
-parameter_names = ["μ"]
-ξ = (Ω = Normal(0, 0.5), σ = 1, parameter_names)
-Parameters(K::Integer, ξ) = Parameters(rand(ξ.Ω, 1, K), ξ.σ)
-function simulate(parameters::Parameters, m::Integer)
-	n = 1
-	θ = vec(parameters.θ)
-	Z = [rand(Normal(μ, parameters.σ), n, m) for μ ∈ θ]
-end
-parameters = Parameters(100, ξ)
-
-
-MLE(Z) = mean.(Z)'
-MLE(Z, ξ) = MLE(Z) # the MLE doesn't need ξ, but we include it for testing
-
-n = 1
-K = 100
-w = 32
-p = 1
-ψ = Chain(Dense(n, w), Dense(w, w), Flux.flatten)
-ϕ = Chain(Dense(w, w), Dense(w, p))
-θ̂_deepset = DeepSet(ψ, ϕ)
-ϕₛ = Chain(Dense(w + 1, w), Dense(w, p))
-θ̂_deepsetexpert = DeepSetExpert(ψ, ϕₛ, S)
-dₓ= 2
-estimators = (DeepSet = θ̂_deepset, DeepSetExpert = θ̂_deepsetexpert)
-
-
-@testset verbose = true "$key" for key ∈ keys(estimators)
-
-	θ̂ = estimators[key]
-
-	@testset "$ky" for ky ∈ keys(devices)
-
-		device = devices[ky]
-		θ̂ = θ̂ |> device
-
-		loss = Flux.Losses.mae |> device
-		γ    = Flux.params(θ̂)  |> device
-		θ    = array(p, K)     |> device
-
-		Z = [array(n, m, T = Float32) for m ∈ rand(29:30, K)] |> device
-		@test size(θ̂(Z), 1) == p
-		@test size(θ̂(Z), 2) == K
-		@test isa(loss(θ̂(Z), θ), Number)
-
-		# Test that we can use gradient descent to update the θ̂ weights
-		optimiser = ADAM(0.01)
-		gradients = gradient(() -> loss(θ̂(Z), θ), γ)
-		Flux.update!(optimiser, γ, gradients)
-
-	    use_gpu = device == gpu
-		@testset "train" begin
-
-			# train: single estimator
-			θ̂ = train(θ̂, Parameters, simulate, m = 10, epochs = 5, use_gpu = use_gpu, verbose = verbose, ξ = ξ)
-			θ̂ = train(θ̂, parameters, parameters, simulate, m = 10, epochs = 5, use_gpu = use_gpu, verbose = verbose)
-			θ̂ = train(θ̂, parameters, parameters, simulate, m = 10, epochs = 5, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
-			θ̂ = train(θ̂, parameters, parameters, simulate, m = 10, epochs = 5, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
-			Z_train = simulate(parameters, 20);
-			Z_val   = simulate(parameters, 10);
-			train(θ̂, parameters, parameters, Z_train, Z_val; epochs = 5, use_gpu = use_gpu, verbose = verbose)
-
-			# trainx: Multiple estimators
-			trainx(θ̂, Parameters, simulate, [1, 2, 5]; ξ = ξ, epochs = [10, 5, 3], use_gpu = use_gpu, verbose = verbose)
-			trainx(θ̂, parameters, parameters, simulate, [1, 2, 5]; epochs = [10, 5, 3], use_gpu = use_gpu, verbose = verbose)
-			trainx(θ̂, parameters, parameters, Z_train, Z_val, [1, 2, 5]; epochs = [10, 5, 3], use_gpu = use_gpu, verbose = verbose)
-			Z_train = [simulate(parameters, m) for m ∈ [1, 2, 5]];
-			Z_val   = [simulate(parameters, m) for m ∈ [1, 2, 5]];
-			trainx(θ̂, parameters, parameters, Z_train, Z_val; epochs = [10, 5, 3], use_gpu = use_gpu, verbose = verbose)
-
-			# Decided not to test the saving functions, because we can't always assume that we have write privledges
-			# θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "dummy123", use_gpu = use_gpu, verbose = verbose)
-			# θ̂ = train(θ̂, parameters, parameters, m = 10, epochs = 5, savepath = "dummy123", use_gpu = use_gpu, verbose = verbose)
-			# then rm dummy123 folder
-		end
-
-		# FIXME On the GPU, bug in this test
-		# @testset "_runondevice" begin
-		# 	θ̂₁ = θ̂(Z)
-		# 	θ̂₂ = _runondevice(θ̂, Z, use_gpu)
-		# 	@test size(θ̂₁) == size(θ̂₂)
-		# 	@test θ̂₁ ≈ θ̂₂ # checked that this is fine by seeing if the following replacement fixes things: @test maximum(abs.(θ̂₁ .- θ̂₂)) < 0.0001
-		# end
-
-		@testset "assess" begin
-
-			m = 20
-
-			# J == 1
-			Z_test = simulate(parameters, m)
-			assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
-			@test typeof(assessment)         == Assessment
-			@test typeof(assessment.df)      == DataFrame
-			@test typeof(assessment.runtime) == DataFrame
-
-			# J == 5 > 1
-			Z_test = simulate(parameters, m, 5)
-			assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
-			@test typeof(assessment)         == Assessment
-			@test typeof(assessment.df)      == DataFrame
-			@test typeof(assessment.runtime) == DataFrame
-			@test typeof(merge(assessment, assessment)) == Assessment
-			risk(assessment)
-			risk(assessment; average_over_parameters = false)
-			risk(assessment; average_over_sample_sizes = false)
-			risk(assessment; average_over_parameters = false, average_over_sample_sizes = false)
-
-			# Test that estimators needing invariant model information can be used:
-			assess([MLE], parameters, Z_test, verbose = verbose)
-			assess([MLE], parameters, Z_test, verbose = verbose, ξ = ξ)
-		end
-
-		@testset "bootstrap" begin
-
-			# parametric bootstrap functions are designed for a single parameter configuration
-			parameters = Parameters(1, ξ)
-			m = 20
-			B = 400
-			Z̃ = simulate(parameters, m, B)
-			bootstrap(θ̂, parameters, Z̃; use_gpu = use_gpu)
-			bootstrap(θ̂, parameters, m; use_gpu = use_gpu)
-
-			# non-parametric bootstrap is designed for a single parameter configuration and a single data set
-			Z = Z̃[1] |> device
-			bootstrap(θ̂, Z; use_gpu = use_gpu)
-			bootstrap(θ̂, [Z]; use_gpu = use_gpu)
-			@test_throws Exception bootstrap(θ̂, [Z, Z]; use_gpu = use_gpu)
-			bootstrap(θ̂, Z, use_gpu = use_gpu, blocks = rand(1:2, size(Z)[end]))
-
-			# interval
-			θ̃ = bootstrap(θ̂, parameters, m; use_gpu = use_gpu)
-			@test size(interval(θ̃)) == (p, 2)
-			# @test size(interval(θ̃, θ̂(Z), type = "basic")) == (p, 2) #FIXME broken on the GPU
-			@test_throws Exception interval(θ̃, type = "basic")
-			@test_throws Exception interval(θ̃, type = "zxcvbnm")
-
-			# Coverage
-			ci = interval(θ̃)
-			θ  = parameters.θ
-			cov = coverage([ci], θ)
-			@test length(cov) == p
-			@assert all(0 .<= cov .<= 1)
-		end
+		train(θ̂, θ, θ, Z, Z; batchsize = 2, epochs = 2, verbose = verbose, use_gpu = use_gpu)
 	end
 end
 
-# TODO this should be moved into the above loop
-@testset "set-level covariates" begin
-	n = 10
-	p = 4
 
-	w = 32 # width of each layer
-	ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
-
-	Z₁ = rand(n, 3);                  # single set of 3 realisations
-	Z₂ = [rand(n, m) for m ∈ (3, 3)]; # two sets each containing 3 realisations
-	Z₃ = [rand(n, m) for m ∈ (3, 4)]; # two sets containing 3 and 4 realisations
-	θ = rand(p, 2)
-
-	dₓ = 2
-	x₁ = rand(dₓ)
-	x₂ = [rand(dₓ) for _ ∈ eachindex(Z₂)]
-
-	# regular deepset
-	ϕ = Chain(Dense(w + dₓ, w, relu), Dense(w, p));
-	θ̂ = DeepSet(ψ, ϕ)
-	θ̂((Z₁, x₁))
-	θ̂((Z₂, x₂))
-	θ̂((Z₃, x₂))
-
-	# Test that training works:
-	train(θ̂, θ, θ, (Z₂, x₂), (Z₂, x₂), epochs = 3, batchsize = 2, verbose = verbose)
-	train(θ̂, θ, θ, (broadcast(z -> hcat(z, z), Z₂), x₂), (Z₂, x₂), epochs = 3, batchsize = 2, verbose = verbose)
-	train(θ̂, θ, θ, (Z₃, x₂), (Z₃, x₂), epochs = 3, batchsize = 2, verbose = verbose)
-end
+# ---- Estimators ----
 
 @testset "PiecewiseEstimator" begin
-	@test_throws Exception PiecewiseEstimator((θ̂_deepset, MLE), (30, 50))
-	@test_throws Exception PiecewiseEstimator((θ̂_deepset, MLE, MLE), (50, 30))
-	θ̂_piecewise = PiecewiseEstimator((θ̂_deepset, MLE), (30))
+	@test_throws Exception PiecewiseEstimator((MLE, MLE), (30, 50))
+	@test_throws Exception PiecewiseEstimator((MLE, MLE, MLE), (50, 30))
+	θ̂_piecewise = PiecewiseEstimator((MLE, MLE), (30))
 	Z = [array(n, 1, 10, T = Float32), array(n, 1, 50, T = Float32)]
-	θ̂₁ = hcat(θ̂_deepset(Z[[1]]), MLE(Z[[2]]))
+	θ̂₁ = hcat(MLE(Z[[1]]), MLE(Z[[2]]))
 	θ̂₂ = θ̂_piecewise(Z)
 	@test θ̂₁ ≈ θ̂₂
 end
@@ -578,11 +561,12 @@ end
 @testset "IntervalEstimator" begin
 	# Generate some toy data
 	n = 2  # bivariate data
-	m = 10 # number of independent replicates
+	m = 256 # number of independent replicates
 	Z = rand(n, m)
 
 	# Create an architecture
-	p = 3  # parameters in the model
+	parameter_names = ["ρ", "σ", "τ"]
+	p = length(parameter_names)
 	w = 8  # width of each layer
 	ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
 	ϕ = Chain(Dense(w, w, relu), Dense(w, p));
@@ -593,6 +577,6 @@ end
 
 	# Apply the interval estimator
 	estimator(Z)
-	ci = interval(estimator, Z, parameter_names = ["ρ", "σ", "τ"]) #TODO  suppress these warnings
-	@test size(ci[1]) == (p, 2) # FIXME why does this method of interval return a vector??
+	ci = interval(estimator, Z, parameter_names = parameter_names)
+	@test size(ci[1]) == (p, 2)
 end
