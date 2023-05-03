@@ -1,4 +1,4 @@
-# Core functions
+# Core 
 
 This page documents the functions that are central to the workflow of `NeuralEstimators`. Its organisation reflects the order in which these functions appear in a standard implementation; that is, from sampling parameters from the prior distribution, to uncertainty quantification of the final estimates via bootstrapping.
 
@@ -19,12 +19,10 @@ ParameterConfigurations
 
 The data should be stored as a `Vector{A}`, where each element of the vector is associated with one parameter configuration, and where `A` depends on the architecture of the neural estimator.
 
-
-```@docs
-simulate(parameters, m, J::Integer)
-```
-
 ## Types of estimators
+
+See also [Architectures and activations functions](@ref) that are often used
+when constructing neural estimators.
 
 ```@docs
 NeuralEstimator
@@ -36,35 +34,6 @@ IntervalEstimator
 QuantileEstimator
 
 PiecewiseEstimator
-```
-
-## Architectures
-
-Although the user is free to construct their neural estimator however they see fit, `NeuralEstimators` provides several useful architectures described below. See
-also [Activation functions](@ref) for some useful layers that can be used to
-ensure that the neural estimator provides valid parameters.
-
-
-```@docs
-DeepSet
-
-DeepSetExpert
-
-GraphPropagatePool
-```
-
-## Loss functions
-
-In addition to the standard loss functions provided by `Flux`
-(e.g., `mae`, `mse`, etc.), `NeuralEstimators` provides the following loss
-functions.
-
-```@docs
-kpowerloss
-
-quantileloss
-
-intervalscore
 ```
 
 ## Training
@@ -86,8 +55,6 @@ assess
 Assessment
 
 risk
-
-coverage
 
 plotrisk
 

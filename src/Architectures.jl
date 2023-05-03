@@ -646,35 +646,54 @@ end
 # 	return θ̂
 # end
 
-"""
-    Compress(a, b)
 
-Layer to compress the output to be within `a` and `b`, where each element of `a`
-is less than the corresponding element of `b`.
+@doc raw"""
+    Compress(a, b, k = 1)
+Layer that compresses its input to be within the range `a` and `b`, where each
+element of `a` is less than the corresponding element of `b`.
+
+The layer uses a logistic function,
+
+```math
+l(θ) = a + \frac{b - a}{1 + e^{-kθ}},
+```
+
+where the arguments `a` and `b` together combine to shift and scale the logistic
+function to the desired range, and the growth rate `k` controls the steepness
+of the curve.
+
+The logistic function given [here](https://en.wikipedia.org/wiki/Logistic_function)
+contains an additional parameter, θ₀, which is the input value corresponding to
+the functions midpoint. In `Compress`, we fix θ₀ = 0, since the output of a
+randomly initialised neural network is typically around zero.
 
 # Examples
 ```
 using NeuralEstimators
 using Flux
 
-p = 3
-a = [0.1, -1, 2]
-b = [0.9, 1, 3]
+a = [25, 0.5, -pi/2]
+b = [500, 2.5, 0]
+p = length(a)
+K = 100
+θ = randn(p, K)
+l = Compress(a, b)
+l(θ)
+
 n = 20
-K = 10
-θ̂ = Chain(Dense(n, p), Compress(a, b))
-Z = rand(n, K)
+θ̂ = Chain(Dense(n, p), l)
+Z = randn(n, K)
 θ̂(Z)
 ```
 """
 struct Compress{T}
   a::T
   b::T
-  m::T
+  k::T
 end
-Compress(a, b) = Compress(a, b, (b + a) / 2)
+Compress(a, b) = Compress(a, b, ones(eltype(a), length(a)))
 
-(l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-(θ .- l.m)))
+(l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-l.k .* θ))
 
 Flux.@functor Compress
 Flux.trainable(l::Compress) =  ()

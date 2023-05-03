@@ -2,7 +2,7 @@
 	ParameterConfigurations
 
 An abstract supertype for user-defined types that store parameters and any
-intermediate objects needed for data simulation with [`simulate`](@ref).
+intermediate objects needed for data simulation.
 
 The user-defined type must have a field `θ` that stores the ``p`` × ``K`` matrix
 of parameters, where ``p`` is the number of parameters in the model and ``K`` is the
