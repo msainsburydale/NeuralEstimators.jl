@@ -36,7 +36,7 @@ end
 #	- DeepSet/DeepSetExpert
 #		- Array data
 #			- data with/without set-level covariates
-#		- Graph data (using GraphPropagatePool)
+#		- Graph data (using GNN/PropagateReadout)
 #			- Single data set
 #			- Single data set with set-level covariates
 #			- Multiple data sets
@@ -484,9 +484,9 @@ end
 
 #### Graph data
 # NB at some point, I may add another loop to the above checks to test
-#    GraphPropagatePool with all possible combinations that it may encounter.
+#    PropagateReadout with all possible combinations that it may encounter.
 #    This might be facilitated with reshapedataGNN().
-@testset "GraphPropagatePool" begin
+@testset "PropagateReadout" begin
 	@testset "$dvc" for dvc ∈ devices
 		use_gpu = dvc == gpu
 
@@ -525,7 +525,7 @@ end
 
 		# Full estimator couched in Deep Set framework
 		p = 3
-		ψ = GraphPropagatePool(graphtograph, meanpool)
+		ψ = PropagateReadout(graphtograph, meanpool)
 		ϕ = Chain(Dense(q, w, relu), Dense(w, p))
 		θ̂ = DeepSet(ψ, ϕ) |> dvc
 

@@ -375,25 +375,27 @@ function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V�
 end
 
 
+# ---- GNN ----
 
 
-# ---- GraphPropagatePool ----
 
 """
-    GraphPropagatePool(propagation, globalpool)
+    GNN(propagation, readout, deepset)
 
-A graph neural network (GNN) module designed to act as the inner network `ψ` in
-the `DeepSet`/`DeepSetExpert` architecture.
+A graph neural network (GNN) designed for parameter estimation.
 
-The `propagation` module transforms graphical input
-data into a set of hidden feature graphs; the `globalpool` module aggregates
-the feature graphs (graph-wise) into a single hidden-feature vector.
-Critically, this hidden-feature vector is of fixed length irrespective of the
-size and shape of the graph.
+The `propagation` module transforms graphical input data into a set of
+hidden-feature graphs; the `readout` module aggregates these feature graphs
+(graph-wise) into a single hidden feature vector of fixed length; and the
+`deepset` module maps the hidden feature vector onto the output space.
 
 The data should be a `GNNGraph` or `AbstractVector{GNNGraph}`, where each graph
 is associated with a single parameter vector. The graphs may contain sub-graphs
 corresponding to independent replicates from the model.
+
+Note that this architecture is currently more efficient than using
+`PropagateReadout` as the inner network of a `DeepSet`, because here we are
+able to invoke the efficient `array`-method of `DeepSet`.
 
 # Examples
 ```
@@ -404,63 +406,170 @@ using GraphNeuralNetworks
 using Statistics: mean
 
 # Create some graphs
-d = 1             # dimension of the response variable
-n₁, n₂ = 11, 27   # number of nodes
-e₁, e₂ = 30, 50   # number of edges
-g₁ = rand_graph(n₁, e₁, ndata = rand(d, n₁))
-g₂ = rand_graph(n₂, e₂, ndata = rand(d, n₂))
-g  = batch([g₁, g₂])
+d = 1                                       # dimension of response variable
+n₁, n₂ = 11, 27                             # number of nodes
+e₁, e₂ = 30, 50                             # number of edges
+g₁ = rand_graph(n₁, e₁, ndata=rand(d, n₁))
+g₂ = rand_graph(n₂, e₂, ndata=rand(d, n₂))
+g₃ = batch([g₁, g₂])
 
-# propagation module and global pooling module
-w = 5
-o = 7
+# propagation and readout modules
+w = 5; o = 7
 propagation = GNNChain(GraphConv(d => w), GraphConv(w => w), GraphConv(w => o))
-meanpool = GlobalPool(mean)
+readout     = GlobalPool(mean)
 
-# DeepSet-based estimator with GNN for the inner network ψ
+# DeepSet module
 w = 32
 p = 3
-ψ = GraphPropagatePool(propagation, meanpool)
+ψ = Chain(Dense(o, w, relu), Dense(w, w, relu), Dense(w, w, relu))
+ϕ = Chain(Dense(w, w, relu), Dense(w, p))
+deepset = DeepSet(ψ, ϕ)
+
+# GNN estimator
+θ̂ = GNN(propagation, readout, deepset)
+
+# Apply the estimator to a single graph, a single graph containing sub-graphs,
+# and a vector of graphs:
+θ̂(g₁)
+θ̂(g₃)
+θ̂([g₁, g₂, g₃])
+```
+"""
+struct GNN{F, G, H}
+	propagation::F      # propagation module
+	readout::G       # global pooling module
+	deepset::H          # Deep Set module to map the learned feature vector to the parameter space
+end
+@functor GNN
+
+
+# Single data set (he replicates in g are associated with a single parameter).
+function (est::GNN)(g::GNNGraph)
+
+	# Apply the graph-to-graph transformation
+	g̃ = est.propagation(g)
+
+	# Global pooling
+	ḡ = est.readout(g̃)
+
+	# Extract the graph level data (i.e., the pooled features).
+	# h is a matrix with
+	# 	nrows = number of feature graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
+	#	ncols = number of original graphs (i.e., number of independent replicates).
+	h = ḡ.gdata.u
+
+	# Apply the Deep Set module to map to the parameter space.
+	θ̂ = est.deepset(h)
+end
+
+# Multiple data sets
+# (see also the Union{GNN, PropagateReadout} method defined below)
+function (est::GNN)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
+
+	# Apply the graph-to-graph transformation and global pooling
+	ḡ = est.readout(est.propagation(g))
+
+	# Extract the graph level features (i.e., pooled features), a matrix with:
+	# 	nrows = number of features graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
+	#	ncols = total number of original graphs (i.e., total number of independent replicates).
+	h = ḡ.gdata.u
+
+	# Split the features based on the original grouping
+	ng = length(m)
+	cs = cumsum(m)
+	indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
+	h̃ = [h[:, idx] for idx ∈ indices]
+
+	# Apply the DeepSet module to map to the parameter space
+	return est.deepset(h̃)
+end
+
+
+# ---- PropagateReadout ----
+
+"""
+    PropagateReadout(propagation, readout)
+
+A module intended to act as the `propagation` and `readout` (global pooling)
+modules used for the inner network `ψ` in a `DeepSet` or `DeepSetExpert`
+architecture.
+
+The graphical data should be stored as a `GNNGraph` or `AbstractVector{GNNGraph}`,
+where each graph is associated with a single parameter vector. The graphs may
+contain sub-graphs corresponding to independent replicates from the model.
+
+Note that this approach is less efficient than [`GNN`](@ref) but *currently*
+more flexible, as it allows us to exploit the `DeepSetExpert` architecture and
+set-level covariate methods for `DeepSet`. It may be possible to improve the
+efficiency of this approach by carefully defining some specialised methods, or
+I could make `GNN` more flexible, again by carefully defining some specialised methods.
+
+# Examples
+```
+using NeuralEstimators
+using Flux
+using Flux: batch
+using GraphNeuralNetworks
+using Statistics: mean
+
+# Create some graph data
+d = 1                                        # dimension of response variable
+n₁, n₂ = 11, 27                              # number of nodes
+e₁, e₂ = 30, 50                              # number of edges
+g₁ = rand_graph(n₁, e₁, ndata = rand(d, n₁))
+g₂ = rand_graph(n₂, e₂, ndata = rand(d, n₂))
+g₃ = batch([g₁, g₂])
+
+# propagation module and readout modules
+w = 5; o = 7
+propagation = GNNChain(GraphConv(d => w), GraphConv(w => w), GraphConv(w => o))
+readout = GlobalPool(mean)
+
+# DeepSet estimator with GNN for the inner network ψ
+w = 32
+p = 3
+ψ = PropagateReadout(propagation, readout)
 ϕ = Chain(Dense(o, w, relu), Dense(w, p))
 θ̂ = DeepSet(ψ, ϕ)
 
-# Apply the estimator
-θ̂(g₁)           # single graph with a single replicate
-θ̂(g)            # single graph with sub-graphs (i.e., with replicates)
-θ̂([g₁, g₂, g])  # vector of graphs (each element is a different data set)
+# Apply the estimator to a single graph, a single graph containing sub-graphs,
+# and a vector of graphs:
+θ̂(g₁)
+θ̂(g₃)
+θ̂([g₁, g₂, g₃])
 
 # Repeat the above but with set-level information:
 qₓ = 2
 ϕ = Chain(Dense(o + qₓ, w, relu), Dense(w, p))
 θ̂ = DeepSet(ψ, ϕ)
 x₁ = rand(qₓ)
-x₂ = [rand(qₓ) for _ ∈ eachindex([g₁, g₂, g])]
+x₂ = [rand(qₓ) for _ ∈ eachindex([g₁, g₂, g₃])]
 θ̂((g₁, x₁))
-θ̂((g, x₁))
-θ̂(([g₁, g₂, g], x₂))
+θ̂((g₃, x₁))
+θ̂(([g₁, g₂, g₃], x₂))
 
-# Repeat the above but with set-level information and expert statistics:
+# Repeat the above but with expert statistics:
 S = samplesize
 qₛ = 1
 ϕ = Chain(Dense(o + qₓ + qₛ, w, relu), Dense(w, p))
 θ̂ = DeepSetExpert(ψ, ϕ, S)
 θ̂((g₁, x₁))
-θ̂((g, x₁))
-θ̂(([g₁, g₂, g], x₂))
+θ̂((g₃, x₁))
+θ̂(([g₁, g₂, g₃], x₂))
 ```
 """
-struct GraphPropagatePool{F, G}
+struct PropagateReadout{F, G}
 	propagation::F      # propagation module
-	globalpool::G       # global pooling module
+	readout::G       # global pooling module
 end
-@functor GraphPropagatePool
+@functor PropagateReadout
 
 
 # Single data set
-function (est::GraphPropagatePool)(g::GNNGraph)
+function (est::PropagateReadout)(g::GNNGraph)
 
 	# Apply the graph-to-graph transformation and global pooling
-	ḡ = est.globalpool(est.propagation(g))
+	ḡ = est.readout(est.propagation(g))
 
 	# Extract the graph level data (i.e., pooled features), a matrix with:
 	# 	nrows = number of feature graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
@@ -475,7 +584,7 @@ end
 # fully exploit GPU parallelism. What is slightly different here is that,
 # contrary to most applications, we have a multiple graphs associated with each
 # label (usually, each graph is associated with a label).
-function (est::GraphPropagatePool)(v::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
+function (est::Union{GNN, PropagateReadout})(v::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
 
 	# Simple, inefficient implementation for sanity checking. Note that this is
 	# much slower than the efficient approach below.
@@ -495,10 +604,10 @@ function (est::GraphPropagatePool)(v::V) where {V <: AbstractVector{G}} where {G
 
 	return est(g, m)
 end
-function (est::GraphPropagatePool)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
+function (est::PropagateReadout)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
 
 	# Apply the graph-to-graph transformation and global pooling
-	ḡ = est.globalpool(est.propagation(g))
+	ḡ = est.readout(est.propagation(g))
 
 	# Extract the graph level features (i.e., pooled features), a matrix with:
 	# 	nrows = number of features graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
@@ -511,9 +620,9 @@ function (est::GraphPropagatePool)(g::GNNGraph, m::AbstractVector{I}) where {I <
 	indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
 	h̃ = [h[:, idx] for idx ∈ indices]
 
+	# Return the hidden feature vector associated with each group of replicates
 	return h̃
 end
-
 
 
 
@@ -531,7 +640,7 @@ end
 # ϕ₁ = Chain(Dense(w, w, relu), Dense(w, R))
 # deepsetpool = DeepSet(ψ₁, ϕ₁)
 #
-# function (est::GraphPropagatePool)(g::GNNGraph)
+# function (est::PropagateReadout)(g::GNNGraph)
 #
 # 	# Apply the graph-to-graph transformation, and then extract the node-level
 # 	# features. This yields a matrix of size (H, N), where H is the number of
@@ -555,7 +664,7 @@ end
 # 	# (i.e., each row of x̃). The pooling function should return a vector of length
 # 	# equal to the number of graphs, and where each element is a vector of length RH,
 # 	# where R is the number of elements in each graph after pooling.
-# 	h = est.globalpool(x̃)
+# 	h = est.readout(x̃)
 #
 # 	# Apply the Deep Set module to map the learned feature vector to the
 # 	# parameter space
@@ -577,12 +686,12 @@ end
 
 
 
-# ---- Functions assuming that the propagation and globalpool layers have been wrapped in WithGraph() ----
+# ---- Functions assuming that the propagation and readout layers have been wrapped in WithGraph() ----
 
 # NB this is a low priority optimisation that is only useful if we are training
 # with a fixed set of locations.
 
-# function (est::GraphPropagatePool)(a::A) where {A <: AbstractArray{T, N}} where {T, N}
+# function (est::PropagateReadout)(a::A) where {A <: AbstractArray{T, N}} where {T, N}
 #
 # 	# Apply the graph-to-graph transformation
 # 	g̃ = est.propagation(a)
@@ -591,7 +700,7 @@ end
 # 	# h is a matrix with,
 # 	# 	nrows = number of features graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
 # 	#	ncols = number of original graphs (i.e., number of independent replicates).
-# 	h = est.globalpool(g̃)
+# 	h = est.readout(g̃)
 #
 # 	# Reshape matrix to three-dimensional arrays for compatibility with Flux
 # 	o = size(h, 1)
@@ -602,7 +711,7 @@ end
 # end
 #
 #
-# function (est::GraphPropagatePool)(v::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+# function (est::PropagateReadout)(v::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 #
 # 	# Simple, less efficient implementation for sanity checking:
 # 	θ̂ = stackarrays(est.(v))
@@ -622,7 +731,7 @@ end
 # 	# g̃ = est.propagation.model(g)
 # 	#
 # 	# # Global pooling
-# 	# ḡ = est.globalpool(g̃)
+# 	# ḡ = est.readout(g̃)
 # 	#
 # 	# # Extract the graph level data (i.e., the pooled features).
 # 	# # h is a matrix with,

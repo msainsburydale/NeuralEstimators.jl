@@ -736,8 +736,7 @@ function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 end
 
 
-#TODO this may need to be modifided to dispatch on Z being a graph rather than θ̂, now that GraphPropagatePool is a module of the DeepSet framework
-function _updatebatch!(θ̂::GraphPropagatePool, Z, θ, device, loss, γ, optimiser)
+function _updatebatch!(θ̂::Union{GNN, PropagateReadout}, Z, θ, device, loss, γ, optimiser)
 
 	m = numberreplicates(Z)
 	Z = Flux.batch(Z)

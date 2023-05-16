@@ -3,14 +3,16 @@
 
 ## Architectures
 
-Although the user is free to construct their neural estimator however they see fit, `NeuralEstimators` provides several useful architectures described below. 
+Although the user is free to construct their neural estimator however they see fit, `NeuralEstimators` provides several useful architectures described below.
 
 ```@docs
 DeepSet
 
 DeepSetExpert
 
-GraphPropagatePool
+GNN
+
+PropagateReadout
 ```
 
 

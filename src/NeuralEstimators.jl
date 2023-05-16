@@ -34,7 +34,7 @@ include("Parameters.jl")
 export NeuralEstimator, PointEstimator, IntervalEstimator, QuantileEstimator, PiecewiseEstimator
 include("Estimators.jl")
 
-export DeepSet, DeepSetExpert, GraphPropagatePool, Compress, SplitApply
+export DeepSet, DeepSetExpert, GNN, PropagateReadout, Compress, SplitApply
 export CholeskyCovariance, CovarianceMatrix, CorrelationMatrix
 export vectotril, vectotriu
 include("Architectures.jl")
@@ -63,7 +63,7 @@ include("utility.jl")
 
 end
 
-#TODO make some document examples doctests
+#TODO turn some document examples into "doctests"
 
 # ---- long term:
 # - README.md
