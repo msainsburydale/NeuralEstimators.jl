@@ -227,14 +227,18 @@ end
 
 
 """
-    maternchols(D, ρ, ν, σ² = 1)
+    maternchols(D, ρ, ν, σ² = 1; stack = true)
 Given a distance matrix `D`, constructs the Cholesky factor of the covariance matrix
 under the Matérn covariance function with range parameter `ρ`, smoothness
-parameter `ν`, and marginal variance σ².
+parameter `ν`, and marginal variance `σ²`.
 
 Providing vectors of parameters will yield a three-dimensional array of Cholesky factors (note
 that the vectors must of the same length, but a mix of vectors and scalars is
 allowed). A vector of distance matrices `D` may also be provided.
+
+If `stack = true`, the Cholesky factors will be "stacked" into a
+three-dimensional array (this is only possible if all distance matrices in `D`
+are the same size).
 
 # Examples
 ```
@@ -252,6 +256,10 @@ maternchols(D, ρ, ν, σ²)
 S̃  = rand(n, 2)
 D̃  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S̃), sⱼ ∈ eachrow(S̃)]
 maternchols([D, D̃], ρ, ν, σ²)
+
+S̃  = rand(2n, 2)
+D̃  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S̃), sⱼ ∈ eachrow(S̃)]
+maternchols([D, D̃], ρ, ν, σ²; stack = false)
 ```
 """
 function maternchols(D, ρ, ν, σ² = one(eltype(D)))
@@ -274,7 +282,7 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)))
 	return L
 end
 
-function maternchols(D::V, ρ, ν, σ² = one(eltype(D))) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+function maternchols(D::V, ρ, ν, σ² = one(eltype(D)); stack::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 	n = max(length(ρ), length(ν), length(σ²))
 	if n > 1
 		@assert all([length(θ) ∈ (1, n) for θ ∈ (ρ, ν, σ²)])
@@ -284,6 +292,8 @@ function maternchols(D::V, ρ, ν, σ² = one(eltype(D))) where {V <: AbstractVe
 	end
 	@assert length(D) == n
 	L = maternchols.(D, ρ, ν, σ²)
-	L = stackarrays(L, merge = true)
+	if stack
+		L = stackarrays(L, merge = true)
+	end
 	return L
 end
