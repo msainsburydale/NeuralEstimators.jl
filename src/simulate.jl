@@ -251,18 +251,19 @@ D  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ ∈ eachrow(S)]
 ν  = [0.7, 1.2]
 σ² = [0.2, 0.4]
 maternchols(D, ρ, ν)
-maternchols(D, ρ, ν, σ²)
+maternchols(D, ρ, ν, σ²; stack = false)
 
 S̃  = rand(n, 2)
 D̃  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S̃), sⱼ ∈ eachrow(S̃)]
 maternchols([D, D̃], ρ, ν, σ²)
+maternchols([D, D̃], ρ, ν, σ²; stack = false)
 
 S̃  = rand(2n, 2)
 D̃  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S̃), sⱼ ∈ eachrow(S̃)]
 maternchols([D, D̃], ρ, ν, σ²; stack = false)
 ```
 """
-function maternchols(D, ρ, ν, σ² = one(eltype(D)))
+function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
 	n = max(length(ρ), length(ν), length(σ²))
 	if n > 1
 		@assert all([length(θ) ∈ (1, n) for θ ∈ (ρ, ν, σ²)])
@@ -277,8 +278,13 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)))
 		C = matern.(UpperTriangular(D), ρ[i], ν[i], σ²[i])
 		cholesky(Symmetric(C)).L
 	end
-	L = convert.(Array, L)
-	L = stackarrays(L, merge = false)
+	L = convert.(Array, L) # choose to retain this conversion here for type stability
+
+	# L is currently a vector of matrices: optionally convert this vector into
+	# a three-dimensional array
+	if stack
+		L = stackarrays(L, merge = false)
+	end
 	return L
 end
 
@@ -291,9 +297,16 @@ function maternchols(D::V, ρ, ν, σ² = one(eltype(D)); stack::Bool = true) wh
 		if length(σ²) == 1 σ² = repeat([σ²], n) end
 	end
 	@assert length(D) == n
-	L = maternchols.(D, ρ, ν, σ²)
+	L = maternchols.(D, ρ, ν, σ², stack = false)
+
+	# L is currently a vector of vectors of matrices: drop the redundant outer vector
+	L = stackarrays(L, merge = true)
+
+	# L is now a vector of matrices: optionally convert this vector into
+	# a three-dimensional array
 	if stack
-		L = stackarrays(L, merge = true)
+		@assert length(unique(size.(D))) == 1 "Converting the Cholesky factors from a vector of matrices to a three-dimenisonal array is only possible if the Cholesky factors (i.e., all elements of the vector of matrices `D`) are the same size."
+		L = stackarrays(L, merge = false)
 	end
 	return L
 end
