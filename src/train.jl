@@ -593,9 +593,7 @@ function trainx(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}
 end
 
 # This method is for when the data CANNOT be easily subsetted, so another layer of vectors is needed
-# FIXME This need to accomodate vectors of tuples
-# function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: AbstractVector{T}}  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
-function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{T}} where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
+function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: Union{V₁, Tuple{V₁, V₂}}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
 
 	@assert length(Z_train) == length(Z_val)
 	E = length(Z_train) # number of estimators
