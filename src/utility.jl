@@ -133,7 +133,12 @@ function numberreplicates(Z::A) where {A <: AbstractArray{T, N}} where {T, N}
 end
 
 function numberreplicates(Z::G) where {G <: GNNGraph}
-	Z.num_graphs
+	x = Z.ndata.x
+	if ndims(x) == 3
+		size(x, 2)
+	else
+		Z.num_graphs
+	end
 end
 
 function numberreplicates(Z::V) where {V <: AbstractVector{A}} where A

@@ -377,7 +377,9 @@ end
 
 # ---- GNN ----
 
-
+# Note that this architecture is currently more efficient than using
+# `PropagateReadout` as the inner network of a `DeepSet`, because here we are
+# able to invoke the efficient `array`-method of `DeepSet`.
 
 """
     GNN(propagation, readout, deepset)
@@ -391,11 +393,12 @@ hidden-feature graphs; the `readout` module aggregates these feature graphs
 
 The data should be a `GNNGraph` or `AbstractVector{GNNGraph}`, where each graph
 is associated with a single parameter vector. The graphs may contain sub-graphs
-corresponding to independent replicates from the model.
-
-Note that this architecture is currently more efficient than using
-`PropagateReadout` as the inner network of a `DeepSet`, because here we are
-able to invoke the efficient `array`-method of `DeepSet`.
+corresponding to independent replicates from the model. In cases where the
+independent replicates are stored over a fixed set of nodes, one
+may store the replicated data in the `ndata` field of a graph as a
+three-dimensional array with dimensions d × m × n, where d is the dimension of
+the response variable (i.e, d = 1 for univariate data), m is the
+number of replicates of the graph, and n is the number of nodes in the graph.
 
 # Examples
 ```
@@ -404,17 +407,10 @@ using Flux
 using Flux: batch
 using GraphNeuralNetworks
 using Statistics: mean
-
-# Create some graphs
-d = 1                                       # dimension of response variable
-n₁, n₂ = 11, 27                             # number of nodes
-e₁, e₂ = 30, 50                             # number of edges
-g₁ = rand_graph(n₁, e₁, ndata=rand(d, n₁))
-g₂ = rand_graph(n₂, e₂, ndata=rand(d, n₂))
-g₃ = batch([g₁, g₂])
+using Test
 
 # propagation and readout modules
-w = 5; o = 7
+d = 1; w = 5; o = 7
 propagation = GNNChain(GraphConv(d => w), GraphConv(w => w), GraphConv(w => o))
 readout     = GlobalPool(mean)
 
@@ -430,9 +426,40 @@ deepset = DeepSet(ψ, ϕ)
 
 # Apply the estimator to a single graph, a single graph containing sub-graphs,
 # and a vector of graphs:
+n₁, n₂ = 11, 27                             # number of nodes
+e₁, e₂ = 30, 50                             # number of edges
+g₁ = rand_graph(n₁, e₁, ndata=rand(d, n₁))
+g₂ = rand_graph(n₂, e₂, ndata=rand(d, n₂))
+g₃ = batch([g₁, g₂])
 θ̂(g₁)
 θ̂(g₃)
 θ̂([g₁, g₂, g₃])
+
+@test size(θ̂(g₁)) == (p, 1)
+@test size(θ̂(g₃)) == (p, 1)
+@test size(θ̂([g₁, g₂, g₃])) == (p, 3)
+
+# Efficient storage approach when the nodes do not vary between replicates:
+n = 100                     # number of nodes in the graph
+e = 200                     # number of edges in the graph
+m = 30                      # number of replicates of the graph
+g = rand_graph(n, e)        # fixed structure for all graphs
+x = rand(d, m, n)
+g₁ = Flux.batch([GNNGraph(g; ndata = x[:, i, :]) for i ∈ 1:m])
+g₂ = GNNGraph(g; ndata = x)
+θ₁ = θ̂(g₁)
+θ₂ = θ̂(g₂)
+@test size(θ₁) == (p, 1)
+@test size(θ₂) == (p, 1)
+@test all(θ₁ .≈ θ₂)
+
+v₁ = [g₁, g₁]
+v₂ = [g₂, g₂]
+θ₁ = θ̂(v₁)
+θ₂ = θ̂(v₂)
+@test size(θ₁) == (p, 2)
+@test size(θ₂) == (p, 2)
+@test all(θ₁ .≈ θ₂)
 ```
 """
 struct GNN{F, G, H}
@@ -443,7 +470,10 @@ end
 @functor GNN
 
 
-# Single data set (he replicates in g are associated with a single parameter).
+dropsingleton(x::AbstractMatrix) = x
+dropsingleton(x::A) where A <: AbstractArray{T, 3} where T = dropdims(x, dims = 3)
+
+# Single data set (replicates in g are associated with a single parameter).
 function (est::GNN)(g::GNNGraph)
 
 	# Apply the graph-to-graph transformation
@@ -457,6 +487,7 @@ function (est::GNN)(g::GNNGraph)
 	# 	nrows = number of feature graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
 	#	ncols = number of original graphs (i.e., number of independent replicates).
 	h = ḡ.gdata.u
+	h = dropsingleton(h) # drops the redundant third dimension in the "efficient" storage approach
 
 	# Apply the Deep Set module to map to the parameter space.
 	θ̂ = est.deepset(h)
@@ -475,10 +506,14 @@ function (est::GNN)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
 	h = ḡ.gdata.u
 
 	# Split the features based on the original grouping
-	ng = length(m)
-	cs = cumsum(m)
-	indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
-	h̃ = [h[:, idx] for idx ∈ indices]
+	if ndims(h) == 2
+		ng = length(m)
+		cs = cumsum(m)
+		indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
+		h̃ = [h[:, idx] for idx ∈ indices]
+	elseif ndims(h) == 3
+		h̃ = [h[:, :, i] for i ∈ 1:size(h, 3)]
+	end
 
 	# Apply the DeepSet module to map to the parameter space
 	return est.deepset(h̃)
@@ -490,19 +525,19 @@ end
 """
     PropagateReadout(propagation, readout)
 
-A module intended to act as the `propagation` and `readout` (global pooling)
-modules used for the inner network `ψ` in a `DeepSet` or `DeepSetExpert`
-architecture.
+A module intended to act as the inner network `ψ` in a `DeepSet` or `DeepSetExpert`
+architecture, performing the `propagation` and `readout` (global pooling)
+transformations of a GNN.
 
 The graphical data should be stored as a `GNNGraph` or `AbstractVector{GNNGraph}`,
 where each graph is associated with a single parameter vector. The graphs may
 contain sub-graphs corresponding to independent replicates from the model.
 
-Note that this approach is less efficient than [`GNN`](@ref) but *currently*
+This approach is less efficient than [`GNN`](@ref) but *currently*
 more flexible, as it allows us to exploit the `DeepSetExpert` architecture and
 set-level covariate methods for `DeepSet`. It may be possible to improve the
-efficiency of this approach by carefully defining some specialised methods, or
-I could make `GNN` more flexible, again by carefully defining some specialised methods.
+efficiency of this approach by carefully defining specialised methods, or I
+could make `GNN` more flexible, again by carefully defining specialised methods.
 
 # Examples
 ```
@@ -575,20 +610,18 @@ function (est::PropagateReadout)(g::GNNGraph)
 	# 	nrows = number of feature graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
 	#	ncols = number of original graphs (i.e., number of independent replicates).
 	h = ḡ.gdata.u
+	h = dropsingleton(h) # drops the redundant third dimension in the "efficient" storage approach
 
 	return h
 end
 
+
 # Multiple data sets
-# Internally, we combine the graphs when doing mini-batching, to
+# Internally, we combine the graphs when doing mini-batching to
 # fully exploit GPU parallelism. What is slightly different here is that,
 # contrary to most applications, we have a multiple graphs associated with each
 # label (usually, each graph is associated with a label).
 function (est::Union{GNN, PropagateReadout})(v::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
-
-	# Simple, inefficient implementation for sanity checking. Note that this is
-	# much slower than the efficient approach below.
-	# θ̂ = stackarrays(est.(v))
 
 	# Convert v to a super graph. Since each element of v is itself a super graph
 	# (where each sub graph corresponds to an independent replicate), we need to
@@ -604,6 +637,8 @@ function (est::Union{GNN, PropagateReadout})(v::V) where {V <: AbstractVector{G}
 
 	return est(g, m)
 end
+
+
 function (est::PropagateReadout)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
 
 	# Apply the graph-to-graph transformation and global pooling
@@ -614,20 +649,103 @@ function (est::PropagateReadout)(g::GNNGraph, m::AbstractVector{I}) where {I <: 
 	#	ncols = total number of original graphs (i.e., total number of independent replicates).
 	h = ḡ.gdata.u
 
-	# Split the features based on the original grouping.
-	ng = length(m)
-	cs = cumsum(m)
-	indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
-	h̃ = [h[:, idx] for idx ∈ indices]
+	# Split the features based on the original grouping
+	if ndims(h) == 2
+		ng = length(m)
+		cs = cumsum(m)
+		indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
+		h̃ = [h[:, idx] for idx ∈ indices]
+	elseif ndims(h) == 3
+		h̃ = [h[:, :, i] for i ∈ 1:size(h, 3)]
+	end
 
 	# Return the hidden feature vector associated with each group of replicates
 	return h̃
 end
 
+# ---- GraphConv ----
+
+using Flux: batched_mul, ⊠
+using GraphNeuralNetworks: check_num_nodes
+import GraphNeuralNetworks: GraphConv
+export GraphConv
 
 
+"""
+	(l::GraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
 
+Given an array `x` with dimensions d × m × n, where m is the
+number of replicates of the graph and n is the number of nodes in the graph,
+this method yields an array with dimensions `out` × m × n, where `out` is the
+number of output channels for the given layer.
 
+After global pooling, the pooled features are a three-dimenisonal array of size
+`out` × m × 1, which is close to the format of the pooled features one would
+obtain when "batching" the graph replicates into a single supergraph (in that
+case, the the pooled features are a matrix of size `out` × m).
+
+# Examples
+```
+using GraphNeuralNetworks
+d = 2                       # dimension of response variable
+n = 100                     # number of nodes in the graph
+e = 200                     # number of edges in the graph
+m = 30                      # number of replicates of the graph
+g = rand_graph(n, e)        # fixed structure for all graphs
+g.ndata.x = rand(d, m, n)   # node data varies between graphs
+
+# One layer example:
+out = 16
+l = GraphConv(d => out)
+l(g)
+size(l(g)) # (16, 30, 100)
+
+# Propagation and global-pooling modules:
+gnn = GNNChain(
+	GraphConv(d => out),
+	GraphConv(out => out),
+	GlobalPool(+)
+)
+gnn(g)
+u = gnn(g).gdata.u
+size(u)    # (16, 30, 1)
+
+# check that gnn(g) == gnn(all_graphs)
+using GraphNeuralNetworks
+using Flux
+using Test
+d = 2                       # dimension of response variable
+n = 100                     # number of nodes in the graph
+e = 200                     # number of edges in the graph
+m = 30                      # number of replicates of the graph
+g = rand_graph(n, e)        # fixed structure for all graphs
+out = 16
+x = rand(d, m, n)
+gnn = GNNChain(
+	GraphConv(d => out),
+	GraphConv(out => out),
+	GlobalPool(+)
+)
+g₁ = Flux.batch([GNNGraph(g; ndata = x[:, i, :]) for i ∈ 1:m])
+g₂ = GNNGraph(g; ndata = x)
+gnn(g₁)
+gnn(g₂)
+u₁ = gnn(g₁).gdata.u
+u₂ = gnn(g₂).gdata.u
+y = gnn(g₂)
+dropsingleton(y.gdata.u)
+
+@test size(u₁)[1:2] == size(u₂)[1:2]
+@test size(u₂, 3) == 1
+@test all(u₁ .≈ u₂)
+```
+"""
+function (l::GraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
+    check_num_nodes(g, x)
+    m = GraphNeuralNetworks.propagate(copy_xj, g, l.aggr, xj = x)
+    x = l.σ.(l.weight1 ⊠ x .+ l.weight2 ⊠ m .+ l.bias) # ⊠ is shorthand for batched_mul
+	return x
+end
 
 
 # ---- Deep Set pooling (dimension after pooling is greater than 1) ----
