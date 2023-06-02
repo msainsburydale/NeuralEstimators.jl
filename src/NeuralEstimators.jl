@@ -34,10 +34,12 @@ include("Parameters.jl")
 export NeuralEstimator, PointEstimator, IntervalEstimator, QuantileEstimator, PiecewiseEstimator
 include("Estimators.jl")
 
-export DeepSet, DeepSetExpert, GNN, PropagateReadout, Compress, SplitApply
+export DeepSet, DeepSetExpert, Compress, SplitApply
 export CholeskyCovariance, CovarianceMatrix, CorrelationMatrix
 export vectotril, vectotriu
+export GNNGraphFixedStructure, GNN, PropagateReadout
 include("Architectures.jl")
+include("Graphs.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
 export matern, maternchols, scaledlogistic, scaledlogit
@@ -62,6 +64,9 @@ export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams, samp
 include("utility.jl")
 
 end
+
+#TODO make _runondevice an exported function: Jordan needed it for his example.
+#TODO bootstrap(): add keyword argument use_gpu in function descriptions
 
 #TODO turn some document examples into "doctests"
 
