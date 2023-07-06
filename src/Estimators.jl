@@ -12,7 +12,8 @@ abstract type NeuralEstimator end
 """
     PointEstimator(arch)
 
-TODO
+A simple point estimator, that is, a mapping from the sample space to the
+parameter space, defined by the given architecture `arch`.
 """
 struct PointEstimator{F} <: NeuralEstimator
 	arch::F
@@ -79,22 +80,24 @@ IntervalEstimator(l) = IntervalEstimator(l, deepcopy(l))
 
 # ---- QuantileEstimator: estimating arbitrary quantiles of the posterior distribution ----
 
-
-# TODO Follow up with this point from Gnieting's paper:
+# Should Follow up with this point from Gnieting's paper:
 # 9.2 Quantile Estimation
 # Koenker and Bassett (1978) proposed quantile regression using an optimum score estimator based on the proper scoring rule (41).
 
+
+#TODO this is a topic of ongoing research with Jordan
 """
     QuantileEstimator()
 
-TODO
+Coming soon: this structure will allow for the simultaneous estimation of an
+arbitrary number of marginal quantiles of the posterior distribution.
 """
 struct QuantileEstimator{F, G} <: NeuralEstimator
 	l::F
 	u::G
 end
-@functor QuantileEstimator
-(c::QuantileEstimator)(Z) = vcat(c.l(Z), c.l(Z) .+ exp.(c.u(Z)))
+# @functor QuantileEstimator
+# (c::QuantileEstimator)(Z) = vcat(c.l(Z), c.l(Z) .+ exp.(c.u(Z)))
 
 
 

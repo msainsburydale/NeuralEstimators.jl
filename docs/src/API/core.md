@@ -1,4 +1,4 @@
-# Core 
+# Core
 
 This page documents the functions that are central to the workflow of `NeuralEstimators`. Its organisation reflects the order in which these functions appear in a standard implementation; that is, from sampling parameters from the prior distribution, to uncertainty quantification of the final estimates via bootstrapping.
 
@@ -55,10 +55,6 @@ assess
 Assessment
 
 risk
-
-plotrisk
-
-plotdistribution
 ```
 
 ## Bootstrapping

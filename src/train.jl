@@ -6,7 +6,7 @@
 Train a neural estimator with architecture `θ̂`.
 
 The methods cater for different forms of on-the-fly simulation. The method that
-takes functions `sampler` and `simulator`for sampling parameters and simulating
+takes functions `sampler` and `simulator` for sampling parameters and simulating
 data, respectively, allows for both the parameters and the data to be
 simulated on-the-fly. Note that `simulator` is called as `simulator(θ, m)`,
 where `θ` is a set of parameters and `m` is the sample size
@@ -456,7 +456,7 @@ end
 # ---- Wrapper functions for training multiple estimators over a range of sample sizes ----
 
 #TODO reduce code repetition
-#TODO not ideal that M is a capital letter, which is usually reserved for types.
+#TODO not ideal that M is a capital letter, which is usually reserved for types. Since it is a positional argument, it's probably ok to leave it for now and settle on a name later.
 """
 	trainx(θ̂, P, simulator, M; )
 	trainx(θ̂, θ_train, θ_val, simulator, M; )
@@ -468,9 +468,10 @@ A wrapper around `train` to construct neural estimators for different sample siz
 The collection `M` specifies the desired sample sizes.
 Each estimator is pre-trained with the estimator for the previous sample size.
 For example, if `M = [m₁, m₂]`, the estimator for sample size `m₂` is
-pre-trained with the estimator for sample size `m₁`. The method for `Z_train::T`
-and `Z_val::T` subsets the data using `subsetdata(Z, 1:mᵢ)` for each `mᵢ ∈ M`.
+pre-trained with the estimator for sample size `m₁`.
 
+The method for `Z_train::T`
+and `Z_val::T` subsets the data using `subsetdata(Z, 1:mᵢ)` for each `mᵢ ∈ M`.
 The method for `Z_train::V` and `Z_val::V` trains an estimator for each
 element of `Z_train` and `Z_val`; hence, it does not need to invoke `subsetdata`,
 which can be slow or difficult to define in some cases (e.g., for graphical data).

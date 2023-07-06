@@ -287,6 +287,18 @@ function loadbestweights(path::String)
 	return best_weights
 end
 
+# exported version of _runondevice()
+# note that we retain _runondevice() for backwards compatibility
+"""
+	estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = true)
+
+Apply the estimator `θ̂` on minibatches of `z` of size `batchsize`, to avoid
+memory issues that can occur when `z` is very large.
+"""
+function estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = true)
+	_runondevice(θ̂, z, use_gpu; batchsize = batchsize)
+end
+
 function _runondevice(θ̂, x, use_gpu::Bool; batchsize::Integer = 32)
 
 	if typeof(x) <: AbstractVector

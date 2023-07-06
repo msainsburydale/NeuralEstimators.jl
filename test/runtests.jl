@@ -1,5 +1,5 @@
 # NB train() breaks when updated from Flux@v0.13.9 to Flux@v0.13.11
-println("Updated!")
+# println("Updated!")
 using NeuralEstimators
 using NeuralEstimators: _getindices, _runondevice
 using CUDA

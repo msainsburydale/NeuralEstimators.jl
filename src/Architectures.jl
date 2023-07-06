@@ -1,9 +1,6 @@
 using Functors: @functor
 using RecursiveArrayTools: VectorOfArray, convert
 
-#TODO We could easily provide convenience constructors for DeepSet that take
-# integers. This would help the feel of the package.
-
 # ---- Aggregation (pooling) and misc functions ----
 
 meanlastdim(X::A) where {A <: AbstractArray{T, N}} where {T, N} = mean(X, dims = N)
