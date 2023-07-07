@@ -1,61 +1,50 @@
 # Theoretical framework
 
-## Neural Bayes estimators
+In this section, we provide an overview of point estimation using neural Bayes estimators. For a more detailed discussion on the framework and its implementation, see Sainsbury-Dale et al. (2022; arxiv:2208.12942).
 
-A statistical model is a set of probability distributions $\mathcal{P}$ on a sample space $\mathcal{S}$. A parametric statistical model is one where the probability distributions in $\mathcal{P}$ are parameterised via some $p$-dimensional parameter vector $\boldsymbol{\theta}$, that is, where $\mathcal{P} \equiv \{P_{\boldsymbol{\theta}} : \boldsymbol{\theta} \in \Theta\}$, where $\Theta$ is the parameter space. Suppose that we have $m$ mutually independent realisations from $P_{\boldsymbol{\theta}} \in \mathcal{P}$, which we collect in $\boldsymbol{Z} \equiv (\boldsymbol{Z}_1',\dots,\boldsymbol{Z}_m')'$. Then, the goal of parameter point estimation is to infer the unknown $\boldsymbol{\theta}$ from $\boldsymbol{Z}$ using an estimator,
-```math
-\hat{\boldsymbol{\theta}} : \mathcal{S}^m \to \Theta,
-```
-a mapping from $m$ independent realisations from $\mathcal{P}_{\boldsymbol{\theta}}$ to the parameter space.
+### Neural Bayes estimators
 
-Estimators can be constructed intuitively within a decision-theoretic framework.
-Consider a non-negative loss function, $L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z}))$, which assesses an estimator $\hat{\boldsymbol{\theta}}(\cdot)$ for a given $\boldsymbol{\theta}$ and data set $\boldsymbol{Z}$.  
- The estimator's risk function is the loss averaged over all possible data realisations. Assume, without loss of generality, that our sample space is $\mathcal{S} = \mathbb{R}^n$. Then, the risk function is
+A parametric statistical model is a set of probability distributions on a sample space $\mathcal{S}$, where the probability distributions are parameterised via some $p$-dimensional parameter vector $\boldsymbol{\theta}$ on a parameter space $\Theta$. Suppose that we have data from one such distribution, which we denote as $\boldsymbol{Z}$. Then, the goal of parameter point estimation is to come up with an estimate of the unknown $\boldsymbol{\theta}$ from $\boldsymbol{Z}$ using an estimator,
 
 ```math
- R(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\cdot)) \equiv \int_{\mathcal{S}^m}  L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z}))p(\boldsymbol{Z} \mid \boldsymbol{\theta}) {\text{d}} \boldsymbol{Z},
+ \hat{\boldsymbol{\theta}} : \mathcal{S} \to \Theta,
 ```
+which is a mapping from the sample space to the parameter space.
 
-where $p(\boldsymbol{Z} \mid \boldsymbol{\theta}) = \prod_{i=1}^mp(\boldsymbol{Z}_i \mid \boldsymbol{\theta})$ is the likelihood function. A ubiquitous approach in estimator design is to minimise a weighted summary of the risk function known as the Bayes risk,
+Estimators can be constructed within a decision-theoretic framework. Assume that the sample space is $\mathcal{S} = \mathbb{R}^n$, and consider a non-negative loss function, $L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z}))$, which assesses an estimator $\hat{\boldsymbol{\theta}}(\cdot)$ for a given $\boldsymbol{\theta}$ and data set $\boldsymbol{Z} \sim f(\boldsymbol{z} \mid \boldsymbol{\theta})$, where $f(\boldsymbol{z} \mid \boldsymbol{\theta})$ is the probability density function of the data conditional on $\boldsymbol{\theta}$. $\boldsymbol{\theta}$. An estimator's risk function is its loss averaged over all possible data realisations,
+
+```math
+ R(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\cdot)) \equiv \int_{\mathcal{S}}  L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{z}))f(\boldsymbol{z} \mid \boldsymbol{\theta}) \rm{d} \boldsymbol{z}.
+```
+So-called Bayes estimators minimise the Bayes risk,
 
 ```math
  r_{\Omega}(\hat{\boldsymbol{\theta}}(\cdot))
- \equiv \int_\Theta R(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\cdot)) {\text{d}}\Omega(\boldsymbol{\theta}),  
+ \equiv \int_\Theta R(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\cdot)) \rm{d} \Omega(\boldsymbol{\theta}),  
 ```
+where $\Omega(\cdot)$ is a prior measure for $\boldsymbol{\theta}$.
 
-where $\Omega(\cdot)$ is a prior measure which, for ease of exposition, we will assume admits a density $p(\cdot)$ with respect to Lebesgue measure. A minimiser of the Bayes risk is said to be a *Bayes estimator* with respect to $L(\cdot,\cdot)$ and $\Omega(\cdot)$.
+Bayes estimators are theoretically attractive: for example, unique Bayes estimators are admissible and, under suitable regularity conditions and the squared-error loss, are consistent and asymptotically efficient. Further, for a large class of prior distributions, every set of conditions that imply consistency of the maximum likelihood (ML) estimator also imply consistency of Bayes estimators. Importantly, Bayes estimators are not motivated purely by asymptotics: by construction, they are Bayes irrespective of the sample size and model class. Unfortunately, however, Bayes estimators are typically unavailable in closed form for the complex models often encountered in practice. A way forward is to assume a flexible parametric model for $\hat{\boldsymbol{\theta}}(\cdot)$, and to optimise the parameters within that model in order to approximate the Bayes estimator. Neural networks are ideal candidates, since they are universal function approximators, and because they are also fast to evaluate, usually involving only simple matrix-vector operations.
 
- Recently, neural networks have been used to approximate Bayes estimators. Denote such a neural network by $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma})$, where $\boldsymbol{\gamma}$ are the neural-network parameters.  
-Then, Bayes estimators may be approximated by $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}^*)$, where
+Let $\hat{\boldsymbol{\theta}}(\boldsymbol{Z}; \boldsymbol{\gamma})$ denote a *neural point estimator*, that is, a neural network that returns a point estimate from data $\boldsymbol{Z}$, where $\boldsymbol{\gamma}$ contains the neural-network parameters. Bayes estimators may be approximated with $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}^*)$ by solving the optimisation problem,  
+
 ```math
 \boldsymbol{\gamma}^*
 \equiv
 \underset{\boldsymbol{\gamma}}{\mathrm{arg\,min}} \; r_{\Omega}(\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma})).
 ```
-
-The Bayes risk cannot typically be directly evaluated, but it can be approximated using Monte Carlo methods. Specifically, given a set of $K$ parameter vectors sampled from the prior $\Omega(\cdot)$ denoted by $\vartheta$  and, for each $\boldsymbol{\theta} \in \vartheta$, $J$ sets of $m$ mutually independent realisations from $P_{\boldsymbol{\theta}}$ collected in $\mathcal{Z}_{\boldsymbol{\theta}}$,
+ Typically, $r_{\Omega}(\cdot)$ cannot be directly evaluated, but it can be approximated using Monte Carlo methods. Specifically, given a set of $K$ parameter vectors sampled from the prior $\Omega(\cdot)$ denoted by $\vartheta$ and, for each $\boldsymbol{\theta} \in \vartheta$, $J$ realisations from $f(\boldsymbol{z} \mid  \boldsymbol{\theta})$ collected in $\mathcal{Z}_{\boldsymbol{\theta}}$,
 
 ```math
- r_{\Omega}(\hat{\boldsymbol{\theta}}(\cdot))
+ r_{\Omega}(\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}))
  \approx
-\frac{1}{K} \sum_{\boldsymbol{\theta} \in \vartheta} \frac{1}{J} \sum_{\boldsymbol{Z} \in \mathcal{Z}_{\boldsymbol{\theta}}} L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z})).  
+\frac{1}{K} \sum_{\boldsymbol{\theta} \in \vartheta} \frac{1}{J} \sum_{\boldsymbol{z} \in \mathcal{Z}_{\boldsymbol{\theta}}} L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{z}; \boldsymbol{\gamma})).  
 ```
+ Note that the above approximation does not involve evaluation, or knowledge, of the likelihood function.
 
-Therefore, the optimisation problem of finding $\boldsymbol{\gamma}^*$, which is typically performed using stochastic gradient descent, can be approximated using simulation from the model, but does not require evaluation or knowledge of the likelihood function. For sufficiently flexible architectures, the point estimator targets a Bayes estimator with respect to $L(\cdot, \cdot)$ and $\Omega(\cdot)$, and will therefore inherit the associated optimality properties, namely, consistency and asymptotic efficiency. We therefore call the fitted neural estimator a *neural Bayes estimator*.
+ The Monte-Carlo-approximated Bayes risk can be straightforwardly minimised with respect to $\boldsymbol{\gamma}$ using back-propagation and stochastic gradient descent. For sufficiently flexible architectures, the point estimator targets a Bayes estimator with respect to $L(\cdot, \cdot)$ and $\Omega(\cdot)$. We therefore call the fitted neural point estimator a  *neural Bayes estimator*. Like Bayes estimators, neural Bayes estimators target a specific point summary of the posterior distribution. For instance, the absolute-error and squared-error loss functions lead to neural Bayes estimators that approximate the posterior median and mean, respectively.
 
-
-## Neural Bayes estimators for replicated data
-
-Unique Bayes estimators are invariant to permutations of the mutually independent data collected in $\boldsymbol{Z} \equiv (\boldsymbol{Z}_1',\dots,\boldsymbol{Z}_m')'$. Hence, in these cases, we represent our neural estimators in the DeepSets framework, which is a universal representation for permutation-invariant functions. Specifically, we model our neural estimators as
-
-```math
-\hat{\boldsymbol{\theta}}(\boldsymbol{Z}) = \boldsymbol{\phi}(\boldsymbol{T}(\boldsymbol{Z})), \quad \boldsymbol{T}(\boldsymbol{Z})  
-= \boldsymbol{a}\big(\{\boldsymbol{\psi}(\boldsymbol{Z}_i) : i = 1, \dots, m\}\big),
-```
-where $\boldsymbol{\phi}: \mathbb{R}^{q} \to \mathbb{R}^p$ and $\boldsymbol{\psi}: \mathbb{R}^{n} \to \mathbb{R}^q$ are neural networks (whose dependence on parameters $\boldsymbol{\gamma}$ is suppressed for notational convenience), and $\boldsymbol{a}: (\mathbb{R}^q)^m \to \mathbb{R}^q$ is a permutation-invariant set function, which is typically elementwise addition, average, or maximum.
-
-
-## Construction of neural Bayes estimators
+### Construction of neural Bayes estimators
 
 The neural Bayes estimators is conceptually simple and can be used in a wide range of problems where other approaches, such as maximum-likelihood estimation, are computationally infeasible. The estimator also has marked practical appeal, as the general workflow for its construction is only loosely connected to the statistical or physical model being considered. The workflow is as follows:
 

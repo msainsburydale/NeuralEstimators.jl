@@ -58,19 +58,17 @@ Z     = [simulate(θ, m) for m ∈ (5, 10, 15, 20, 30)]
 assessment = assess([θ̂], θ, Z)
 ```
 
-The returned object is an object of type [`Assessment`](@ref), which contains the true parameters and their corresponding estimates, and the time taken to compute the estimates for each sample size and each estimator. The risk function may be computed using the function [`risk`](@ref), and plotted against the sample size with [`plotrisk`](@ref):
+The returned object is an object of type [`Assessment`](@ref), which contains the true parameters and their corresponding estimates, and the time taken to compute the estimates for each sample size and each estimator. The risk function may be computed using the function [`risk`](@ref):
 ```
 risk(assessment)
-plotrisk(assessment)
 ```
 
-It is often helpful to visualise the empirical joint distribution of an estimator for a particular parameter configuration and a particular sample size. This can be done by providing [`assess`](@ref) with $J$ data sets simulated under a particular parameter configuration (below facilitated with the pre-defined method `simulate(parameters, m, J::Integer)`, which wraps the method of `simulate` that we defined earlier), and then calling [`plotdistribution`](@ref):
+It is often helpful to visualise the empirical sampling distribution of an estimator for a particular parameter configuration and a particular sample size. This can be done by providing [`assess`](@ref) with $J$ data sets simulated under a particular parameter configuration (below facilitated with the pre-defined method `simulate(parameters, m, J::Integer)`, which wraps the method of `simulate` that we defined earlier), and then plotting the estimates contained in the long-form `DataFrame` in the resulting [`Assessment`](@ref) object:
 ```
 J = 100
 θ = sample(1)
 Z = [simulate(θ, m, J)]
 assessment = assess([θ̂], θ, Z)  
-plotdistribution(assessment)
 ```
 
 Once the neural Bayes estimator has been assessed, it may then be applied to observed data, with parametric/non-parametric bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`interval`](@ref). Below, we use simulated data as a substitute for observed data:
