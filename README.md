@@ -15,5 +15,10 @@
 This software was developed as part of academic research. If you would like to support it, please star the repository. If you use `NeuralEstimators` in your research or other activities, please use the following citation.
 
 ```
-omitted for anonymity
+@article{SZH_2022_neural_estimators,
+	author = {Sainsbury-Dale, Matthew and Zammit-Mangion, Andrew and Huser, Raphaël},
+	title = {Likelihood-Free Parameter Estimation with Neural {B}ayes Estimators},
+	journal={arXiv:2208.12942},
+	year={2022}
+}
 ```

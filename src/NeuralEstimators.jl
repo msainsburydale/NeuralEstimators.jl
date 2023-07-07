@@ -70,9 +70,11 @@ end
 # help the feel of the package and allow us to perform an implementation without
 # writing any Julia code, which is very important.
 
+#TODO Update vignettes + documentation with our current notation.
+
 
 #TODO Add helper functions for censoring and missing data (take these from EM paper)
-#TODO Cluster process for constructing an amortised GNN-based estimator for irregular spatial data. 
+#TODO Cluster process for constructing an amortised GNN-based estimator for irregular spatial data.
 
 # ---- long term:
 # - README.md
