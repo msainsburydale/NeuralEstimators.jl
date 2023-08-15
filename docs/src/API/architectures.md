@@ -1,5 +1,11 @@
 # Architectures and activations functions
 
+## Index
+
+```@index
+Order = [:type, :function]
+Pages   = ["architectures.md"]
+```
 
 ## Architectures
 
@@ -11,12 +17,17 @@ DeepSet
 DeepSetExpert
 
 GNN
-
-PropagateReadout
 ```
 
+## Layers
 
-## Activation functions
+```@docs
+WeightedGraphConv
+
+UniversalPool
+```
+
+## Output activation functions
 
 These layers can be used at the end of an architecture to ensure that the
 neural estimator provides valid parameters.

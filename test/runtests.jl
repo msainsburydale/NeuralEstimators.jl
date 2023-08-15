@@ -1,12 +1,11 @@
-# NB train() breaks when updated from Flux@v0.13.9 to Flux@v0.13.11
-# println("Updated!")
 using NeuralEstimators
 using NeuralEstimators: _getindices, _runondevice
 using CUDA
 using DataFrames
 using Distributions: Normal, Uniform, Product, cdf, logpdf, quantile
+using Distances
 using Flux
-using Flux: DataLoader, mae, mse
+using Flux: batch, DataLoader, mae, mse
 using Graphs
 using GraphNeuralNetworks
 using LinearAlgebra
@@ -92,6 +91,53 @@ end
 		@test containertype(typeof(a)) == T
 		@test all([containertype(x) for x ∈ eachcol(a)] .== T)
 	end
+end
+
+
+@testset "maternclusterprocess" begin
+
+	S = maternclusterprocess()
+	@test size(S, 2) == 2
+
+end
+
+
+@testset "adjacencymatrix" begin
+
+	n = 100
+	d = 2
+	S = rand(n, d)
+	k = 5
+	r = 0.3
+
+	# Memory efficient constructors (avoids constructing the full distance matrix D)
+	A₁ = adjacencymatrix(S, k)
+	A₂ = adjacencymatrix(S, r)
+
+	# Construct from full distance matrix D
+	D = pairwise(Euclidean(), S, S, dims = 1)
+	Ã₁ = adjacencymatrix(D, k)
+	Ã₂ = adjacencymatrix(D, r)
+
+	# Test that the matrices are the same irrespective of which method was used
+	@test Ã₁ ≈ A₁
+	@test Ã₂ ≈ A₂
+end
+
+
+@testset "WeightedGraphConv" begin
+	# Construct a spatially-weighted adjacency matrix based on k-nearest neighbours
+	# with k = 5, and convert to a graph with random (uncorrelated) dummy data:
+	n = 100
+	S = rand(n, 2)
+	d = 1 # dimension of each observation (univariate data here)
+	A = adjacencymatrix(S, 5)
+	Z = GNNGraph(A, ndata = rand(d, n))
+
+	layer = WeightedGraphConv(d => 16)
+	h = layer(Z) # convolved features
+
+	@test size(h.ndata.x) == (16, n)
 end
 
 @testset "loss functions: $dvc" for dvc ∈ devices
@@ -543,6 +589,49 @@ end
 		train(θ̂, θ, θ, Z, Z; batchsize = 2, epochs = 2, verbose = verbose, use_gpu = use_gpu)
 	end
 end
+
+
+@testset "GNN" begin
+
+	# Propagation module
+    d = 1      # dimension of response variable
+    nh = 32    # dimension of node feature vectors
+    propagation = GNNChain(GraphConv(d => nh), GraphConv(nh => nh), GraphConv(nh => nh))
+
+    # Readout module
+    nt = 32   # dimension of the summary vector for each node
+    no = 128  # dimension of the final summary vector for each graph
+    readout = UniversalPool(
+    	Chain(Dense(nh, nt), Dense(nt, nt)),
+    	Chain(Dense(nt, nt), Dense(nt, no))
+    	)
+
+    # Mapping module
+    p = 3     # number of parameters in the statistical model
+    w = 64    # width of layers used for the outer network ϕ
+    ϕ = Chain(Dense(no, w, relu), Dense(w, w, relu), Dense(w, p))
+
+    # Construct the estimator
+    θ̂ = GNN(propagation, readout, ϕ)
+
+    # Apply the estimator to:
+    # 1. a single graph,
+    # 2. a single graph with sub-graphs (corresponding to independent replicates), and
+    # 3. a vector of graphs (corresponding to multiple spatial data sets, each
+    #    possibly containing independent replicates).
+    g₁ = rand_graph(11, 30, ndata=rand(d, 11))
+    g₂ = rand_graph(13, 40, ndata=rand(d, 13))
+    g₃ = batch([g₁, g₂])
+    θ̂(g₁)
+    θ̂(g₃)
+    θ̂([g₁, g₂, g₃])
+
+	@test size(θ̂(g₁)) == (p, 1)
+	@test size(θ̂(g₃)) == (p, 1)
+	@test size(θ̂([g₁, g₂, g₃])) == (p, 3)
+end
+
+
 
 
 # ---- Estimators ----

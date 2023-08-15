@@ -11,6 +11,12 @@ simulategaussianprocess
 simulateschlather
 ```
 
+## Spatial point processes
+
+```@docs
+maternclusterprocess
+```
+
 ## Low-level functions
 
 These low-level functions may be of use for various models.

@@ -1,6 +1,6 @@
 # Examples
 
-## Univariate Gaussian data
+## Univariate data
 
 Here, we develop a neural Bayes estimator for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $Z_1, \dots, Z_m$ that are independent and identically distributed according to a $N(\mu, \sigma^2)$ distribution. We'll use the priors $\mu \sim N(0, 1)$ and $\sigma \sim U(0.1, 1)$, and we assume that the parameters are independent a priori.
 
@@ -23,7 +23,7 @@ function sample(K)
 end
 ```
 
-Next, we implicitly define the statistical model with simulated data. The data are stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and where `A` depends on the representation of the neural estimator. Since our data is replicated, we will use the Deep Sets framework and, since each replicate is univariate, we will use a dense neural network (DNN) for the inner network. Since the inner network is a DNN, `A` should be a sub-type of `AbstractArray`, with the independent replicates stored in the final dimension.
+Next, we implicitly define the statistical model with simulated data. The data are stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and where `A` depends on the representation of the neural estimator. Since our data is replicated, we will use the DeepSets framework and, since each replicate is univariate, we will use a dense neural network (DNN) for the inner network. Since the inner network is a DNN, `A` should be a sub-type of `AbstractArray`, with the independent replicates stored in the final dimension.
 ```
 function simulate(parameters, m)
 	Z = [θ[1] .+ θ[2] .* randn(Float32, 1, m) for θ ∈ eachcol(parameters)]
@@ -31,7 +31,7 @@ function simulate(parameters, m)
 end
 ```
 
-We now design architectures for the inner and outer neural networks, $\boldsymbol{\psi}(\cdot)$ and $\boldsymbol{\phi}(\cdot)$ respectively, in the Deep Sets framework, and initialise the neural estimator as a [`PointEstimator`](@ref) object.
+We now design architectures for the inner and outer neural networks, $\boldsymbol{\psi}(\cdot)$ and $\boldsymbol{\phi}(\cdot)$ respectively, in the DeepSets framework, and initialise the neural estimator as a [`PointEstimator`](@ref) object.
 
 ```
 p = 2   # number of parameters in the statistical model
@@ -78,3 +78,40 @@ Z = simulate(θ, m)     # pretend that this is observed data
 θ̃ = bootstrap(θ̂, Z)    # non-parametric bootstrap estimates
 interval(θ̃)  # confidence interval from the bootstrap estimates
 ```
+
+
+## Multivariate data
+
+Suppose now that our data consists of $m$ replicates of a $d$-dimensional multivariate distribution. Everything remains as given in the univariate example above, except that we now store the data as a vector of $d \times m$ matrices (previously they were stored as $1\times m$ matrices), and the inner network of the DeepSets representation takes a $d$-dimensional input (previously it took a 1-dimensional input).
+
+<!-- Note that, when estimating a covariance matrix, one may wish to constrain the neural estimator to only produce parameters that imply a valid (i.e., positive definite) covariance matrix. This can be achieved by appending a  [`CovarianceMatrix`](@ref) layer to the end of the outer network of the DeepSets representation. However, this is often unnecessary as the estimator will typically learn to provide valid estimates, even if not constrained to do so. -->
+
+
+## Gridded spatial data
+
+For spatial data measured on a regular grid, the estimator is typically based on a convolutional neural network (CNN), and each data set is stored as a four-dimensional array, where the first three dimensions corresponding to the width, height, and depth/channels dimensions, and the fourth dimension stores the independent replicates. Note that, for univariate spatial processes, the channels dimension is simply equal to 1. For a 16x16 spatial grid, a possible architecture is given below.
+
+```
+p = 2    # number of parameters in the statistical model
+w = 32   # number of neurons in each layer
+d = 2    # dimension of the response variable
+
+ψ = Chain(
+	Conv((10, 10), 1 => 32,  relu),
+	Conv((5, 5),  32 => 64,  relu),
+	Conv((3, 3),  64 => 128, relu),
+	Flux.flatten
+	)
+ϕ = Chain(Dense(128, 512, relu), Dense(512, p))
+architecture = DeepSet(ψ, ϕ)
+```
+
+
+## Irregular spatial data
+
+This example is coming soon! The methodology involves the use of graph neural networks, which in Julia can be implemented using the package [`GraphNeuralNetworks.jl`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/). Some key steps:
+
+- Sampling spatial locations during the training phase: see [`maternclusterprocess`](@ref).
+- Computing (spatially-weighted) adjacency matrices: see [`adjacencymatrix`](@ref).
+- Storing the data as a graph: see [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/gnngraph/#GNNGraph-type).
+- Constructing an appropriate architecture for the neural Bayes estimator: see [`GNN`](@ref) and [`WeightedGraphConv`](@ref).

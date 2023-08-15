@@ -161,10 +161,10 @@ Generic function for subsetting replicates from a data set. Default methods are:
 	subsetdata(Z::G, m) where {G <: AbstractGraph}
 
 Note that `subsetdata` is slow for graphical data, and one should consider using
-a method of `train` that does not require the data to be subsetted. Use
-`numberreplicates` to check that the training and validation data sets are
-equally replicated, which prevents the invocation of `subsetdata`. Note also
-that `subsetdata` only applies to vectors of batched graphs.
+a method of `train` that does not require the data to be subsetted when working
+with graphical data: use `numberreplicates` to check that the training and
+validation data sets are equally replicated, which prevents the invocation of
+`subsetdata`. Note also that `subsetdata` only applies to vectors of batched graphs.
 
 If the user is working with data that is not covered by the default methods,
 simply overload `subsetdata` with the appropriate type for `Z`.

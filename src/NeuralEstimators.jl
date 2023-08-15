@@ -9,18 +9,21 @@ using ChainRulesCore: @non_differentiable, @ignore_derivatives
 using CUDA
 using CSV
 using DataFrames
+using Distances
 using Distributions
 import Distributions: cdf, logpdf, quantile, minimum, maximum, insupport, var, skewness
 using Flux
-using Flux: ofeltype, params, DataLoader, update!
+using Flux: ofeltype, params, DataLoader, update!, glorot_uniform
 using Functors: @functor
 using GraphNeuralNetworks
+using GraphNeuralNetworks: check_num_nodes
 using GaussianRandomFields
 using Graphs
 using LinearAlgebra
 using NamedArrays
 using Random: randexp
 using RecursiveArrayTools: VectorOfArray, convert
+using SparseArrays
 using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum
 using Zygote
@@ -37,8 +40,9 @@ include("Estimators.jl")
 export DeepSet, DeepSetExpert, Compress, SplitApply
 export CholeskyCovariance, CovarianceMatrix, CorrelationMatrix
 export vectotril, vectotriu
-export GNNGraphFixedStructure, GNN, PropagateReadout
 include("Architectures.jl")
+
+export GNN, PropagateReadout, UniversalPool, adjacencymatrix, WeightedGraphConv, maternclusterprocess
 include("Graphs.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
@@ -68,13 +72,9 @@ end
 #TODO NeuralEstimatorsR: We could easily provide convenience constructors for
 # estimators that take integers for width, depth, q = width, etc.  This would
 # help the feel of the package and allow us to perform an implementation without
-# writing any Julia code, which is very important.
-
-#TODO Update vignettes + documentation with our current notation.
-
+# writing any Julia code, which is important.
 
 #TODO Add helper functions for censoring and missing data (take these from EM paper)
-#TODO Cluster process for constructing an amortised GNN-based estimator for irregular spatial data.
 
 # ---- long term:
 # - README.md
