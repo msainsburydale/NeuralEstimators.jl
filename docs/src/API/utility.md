@@ -25,6 +25,8 @@ adjacencymatrix
 
 containertype
 
+estimateinbatches
+
 expandgrid
 
 loadbestweights

@@ -3,18 +3,18 @@ using RecursiveArrayTools: VectorOfArray, convert
 
 # ---- Aggregation (pooling) and misc functions ----
 
-meanlastdim(X::A) where {A <: AbstractArray{T, N}} where {T, N} = mean(X, dims = N)
-sumlastdim(X::A)  where {A <: AbstractArray{T, N}} where {T, N} = sum(X, dims = N)
-LSElastdim(X::A)  where {A <: AbstractArray{T, N}} where {T, N} = logsumexp(X, dims = N)
+elementwise_mean(X::A) where {A <: AbstractArray{T, N}} where {T, N} = mean(X, dims = N)
+elementwise_sum(X::A)  where {A <: AbstractArray{T, N}} where {T, N} = sum(X, dims = N)
+elementwise_logsumexp(X::A)  where {A <: AbstractArray{T, N}} where {T, N} = logsumexp(X, dims = N)
 
 function _agg(a::String)
 	@assert a ∈ ["mean", "sum", "logsumexp"]
 	if a == "mean"
-		meanlastdim
+		elementwise_mean
 	elseif a == "sum"
-		sumlastdim
+		elementwise_sum
 	elseif a == "logsumexp"
-		LSElastdim
+		elementwise_logsumexp
 	end
 end
 

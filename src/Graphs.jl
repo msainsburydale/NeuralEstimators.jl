@@ -427,23 +427,24 @@ using NeuralEstimators
 using Flux
 using Flux: batch
 using GraphNeuralNetworks
+using Statistics: mean
 
 # Propagation module
 d = 1      # dimension of response variable
 nh = 32    # dimension of node feature vectors
 propagation = GNNChain(GraphConv(d => nh), GraphConv(nh => nh), GraphConv(nh => nh))
 
-# Readout module
-nt = 32   # dimension of the summary vector for each node
+# Readout module (using "universal pooling")
+nt = 64   # dimension of the summary vector for each node
 no = 128  # dimension of the final summary vector for each graph
-readout = UniversalPool(
-	Chain(Dense(nh, nt), Dense(nt, nt)),
-	Chain(Dense(nt, nt), Dense(nt, no))
-	)
+readout = UniversalPool(Dense(nh, nt), Dense(nt, nt))
+
+# Alternative readout module (using the elementwise average)
+# readout = GlobalPool(mean); no = nh
 
 # Mapping module
 p = 3     # number of parameters in the statistical model
-w = 64    # width of layers used for the outer network ϕ
+w = 64    # width of layers used for the mapping network ϕ
 ϕ = Chain(Dense(no, w, relu), Dense(w, w, relu), Dense(w, p))
 
 # Construct the estimator
@@ -472,14 +473,7 @@ end
 GNN(propagation, readout, ϕ, a) = GNN(propagation, readout, DeepSet(identity, ϕ, a))
 GNN(propagation, readout, ϕ; a::String = "mean") = GNN(propagation, readout, ϕ, _agg(a))
 
-# # Example of a GNN-based estimator using global-mean readout
-# using Statistics: mean
-# readout = GlobalPool(mean)
-# ϕ       = Chain(Dense(h, w, relu), Dense(w, w, relu), Dense(w, p))
-# θ̂       = GNN(propagation, readout, ϕ)
-
-
-Base.show(io::IO, D::GNN) = print(io, "\nGNN estimator with $(nparams(D)) trainable parameters, and modules:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout function ($(nparams(D.readout)) parameters):  $(D.readout)\n\nAggregation function:  $(D.deepset.a)\n\nOuter network ($(nparams(D.deepset.ϕ)) parameters):  $(D.deepset.ϕ)")
+Base.show(io::IO, D::GNN) = print(io, "\nGNN estimator with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)\n\nAggregation function ($(nparams(D.deepset.a)) parameters):  $(D.deepset.a)\n\nMapping module ($(nparams(D.deepset.ϕ)) parameters):  $(D.deepset.ϕ)")
 Base.show(io::IO, m::MIME"text/plain", D::GNN) = print(io, D)
 
 dropsingleton(x::AbstractMatrix) = x
