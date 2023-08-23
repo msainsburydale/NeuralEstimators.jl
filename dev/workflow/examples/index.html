@@ -27,7 +27,7 @@ Z = [simulate(θ, m, J)]
 assessment = assess([θ̂], θ, Z)  </code></pre><p>Once the neural Bayes estimator has been assessed, it may then be applied to observed data, with parametric/non-parametric bootstrap-based uncertainty quantification facilitated by <a href="../../API/core/#NeuralEstimators.bootstrap"><code>bootstrap</code></a> and <a href="../../API/core/#NeuralEstimators.interval"><code>interval</code></a>. Below, we use simulated data as a substitute for observed data:</p><pre><code class="nohighlight hljs">Z = simulate(θ, m)     # pretend that this is observed data
 θ̂(Z)                   # point estimates from the observed data
 θ̃ = bootstrap(θ̂, Z)    # non-parametric bootstrap estimates
-interval(θ̃)  # confidence interval from the bootstrap estimates</code></pre><h2 id="Multivariate-data"><a class="docs-heading-anchor" href="#Multivariate-data">Multivariate data</a><a id="Multivariate-data-1"></a><a class="docs-heading-anchor-permalink" href="#Multivariate-data" title="Permalink"></a></h2><p>Suppose now that our data consists of <span>$m$</span> replicates of a <span>$d$</span>-dimensional multivariate distribution. Everything remains as given in the univariate example above, except that we now store the data as a vector of <span>$d \times m$</span> matrices (previously they were stored as <span>$1\times m$</span> matrices), and the inner network of the DeepSets representation takes a <span>$d$</span>-dimensional input (previously it took a 1-dimensional input).</p><p>&lt;!– Note that, when estimating a covariance matrix, one may wish to constrain the neural estimator to only produce parameters that imply a valid (i.e., positive definite) covariance matrix. This can be achieved by appending a  <a href="../../API/architectures/#NeuralEstimators.CovarianceMatrix"><code>CovarianceMatrix</code></a> layer to the end of the outer network of the DeepSets representation. However, this is often unnecessary as the estimator will typically learn to provide valid estimates, even if not constrained to do so. –&gt;</p><h2 id="Gridded-spatial-data"><a class="docs-heading-anchor" href="#Gridded-spatial-data">Gridded spatial data</a><a id="Gridded-spatial-data-1"></a><a class="docs-heading-anchor-permalink" href="#Gridded-spatial-data" title="Permalink"></a></h2><p>For spatial data measured on a regular grid, the estimator is typically based on a convolutional neural network (CNN), and each data set is stored as a four-dimensional array, where the first three dimensions corresponding to the width, height, and depth/channels dimensions, and the fourth dimension stores the independent replicates. Note that, for univariate spatial processes, the channels dimension is simply equal to 1. For a 16x16 spatial grid, a possible architecture is given below.</p><pre><code class="nohighlight hljs">p = 2    # number of parameters in the statistical model
+interval(θ̃)  					# confidence interval from the bootstrap estimates</code></pre><h2 id="Multivariate-data"><a class="docs-heading-anchor" href="#Multivariate-data">Multivariate data</a><a id="Multivariate-data-1"></a><a class="docs-heading-anchor-permalink" href="#Multivariate-data" title="Permalink"></a></h2><p>Suppose now that our data consists of <span>$m$</span> replicates of a <span>$d$</span>-dimensional multivariate distribution. Everything remains as given in the univariate example above, except that we now store the data as a vector of <span>$d \times m$</span> matrices (previously they were stored as <span>$1\times m$</span> matrices), and the inner network of the DeepSets representation takes a <span>$d$</span>-dimensional input (previously it took a 1-dimensional input).</p><p>Note that, when estimating a full covariance matrix, one may wish to constrain the neural estimator to only produce parameters that imply a valid (i.e., positive definite) covariance matrix. This can be achieved by appending a  <a href="../../API/architectures/#NeuralEstimators.CovarianceMatrix"><code>CovarianceMatrix</code></a> layer to the end of the outer network of the DeepSets representation. However, this is often unnecessary as the estimator will typically learn to provide valid estimates, even if not constrained to do so.</p><h2 id="Gridded-spatial-data"><a class="docs-heading-anchor" href="#Gridded-spatial-data">Gridded spatial data</a><a id="Gridded-spatial-data-1"></a><a class="docs-heading-anchor-permalink" href="#Gridded-spatial-data" title="Permalink"></a></h2><p>For spatial data measured on a regular grid, the estimator is typically based on a convolutional neural network (CNN), and each data set is stored as a four-dimensional array, where the first three dimensions correspond to the width, height, and channels dimensions, and the fourth dimension stores the independent replicates. Note that, for univariate spatial processes, the channels dimension is simply equal to 1. For a 16x16 spatial grid, a possible architecture is given below.</p><pre><code class="nohighlight hljs">p = 2    # number of parameters in the statistical model
 w = 32   # number of neurons in each layer
 d = 2    # dimension of the response variable
 
@@ -38,4 +38,103 @@ d = 2    # dimension of the response variable
 	Flux.flatten
 	)
 ϕ = Chain(Dense(128, 512, relu), Dense(512, p))
-architecture = DeepSet(ψ, ϕ)</code></pre><h2 id="Irregular-spatial-data"><a class="docs-heading-anchor" href="#Irregular-spatial-data">Irregular spatial data</a><a id="Irregular-spatial-data-1"></a><a class="docs-heading-anchor-permalink" href="#Irregular-spatial-data" title="Permalink"></a></h2><p>This example is coming soon! The methodology involves the use of graph neural networks, which in Julia can be implemented using the package <a href="https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/"><code>GraphNeuralNetworks.jl</code></a>. Some key steps:</p><ul><li>Sampling spatial locations during the training phase: see <a href="../../API/simulation/#NeuralEstimators.maternclusterprocess"><code>maternclusterprocess</code></a>.</li><li>Computing (spatially-weighted) adjacency matrices: see <a href="../../API/utility/#NeuralEstimators.adjacencymatrix"><code>adjacencymatrix</code></a>.</li><li>Storing the data as a graph: see <a href="https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/gnngraph/#GNNGraph-type"><code>GNNGraph</code></a>.</li><li>Constructing an appropriate architecture for the neural Bayes estimator: see <a href="../../API/architectures/#NeuralEstimators.GNN"><code>GNN</code></a> and <a href="../../API/architectures/#NeuralEstimators.WeightedGraphConv"><code>WeightedGraphConv</code></a>.</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../overview/">« Overview</a><a class="docs-footer-nextpage" href="../advancedusage/">Advanced usage »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.25 on <span class="colophon-date" title="Monday 21 August 2023 20:50">Monday 21 August 2023</span>. Using Julia version 1.7.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+architecture = DeepSet(ψ, ϕ)</code></pre><h2 id="Irregular-spatial-data"><a class="docs-heading-anchor" href="#Irregular-spatial-data">Irregular spatial data</a><a id="Irregular-spatial-data-1"></a><a class="docs-heading-anchor-permalink" href="#Irregular-spatial-data" title="Permalink"></a></h2><p>The methodology we illustrate here uses graph neural networks (GNNs), which are implemented in Julia in the package <a href="https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/"><code>GraphNeuralNetworks.jl</code></a>. GNN-based estimators parsimoniously model spatial dependence, and they can be applied to data collected over arbitrary spatial locations. Some key steps involve:</p><ul><li>Sampling spatial locations to cover a wide range of spatial configurations during the training phase: see <a href="../../API/simulation/#NeuralEstimators.maternclusterprocess"><code>maternclusterprocess</code></a>.</li><li>Computing (spatially-weighted) adjacency matrices: see <a href="../../API/utility/#NeuralEstimators.adjacencymatrix"><code>adjacencymatrix</code></a>.</li><li>Storing the data as a graph: see <a href="https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/gnngraph/#GNNGraph-type"><code>GNNGraph</code></a>.</li><li>Constructing an appropriate architecture: see <a href="../../API/architectures/#NeuralEstimators.GNN"><code>GNN</code></a> and <a href="../../API/architectures/#NeuralEstimators.WeightedGraphConv"><code>WeightedGraphConv</code></a>.</li></ul><p>For a concrete example, we consider a classical spatial model, the linear Gaussian-Gaussian model,</p><p class="math-container">\[Z_{j} = Y(\boldsymbol{s}_{j}) + \epsilon_{j}, \; j = 1, \dots, n,\]</p><p>where <span>$\boldsymbol{Z} \equiv (Z_{1}, \dots, Z_{n})&#39;$</span> are data observed at locations <span>$\{\boldsymbol{s}_{1}, \dots, \boldsymbol{s}_{n}\} \subset \mathcal{D}$</span>, where <span>$\mathcal{D}$</span> is some spatial domain, <span>$Y(\cdot)$</span> is a spatially-correlated mean-zero Gaussian process, and <span>$\epsilon_j \sim N(0, \tau^2)$</span>, <span>$j = 1, \dots, n$</span> is Gaussian white noise with standard deviation <span>$\tau &gt; 0$</span>. Here, we use the popular isotropic Matérn covariance function with fixed marginal variance <span>$\sigma^2 = 1$</span>, fixed smoothness parameter <span>$\nu = 0.5$</span>, and unknown range parameter <span>$\rho &gt; 0$</span>. See <a href="../../API/simulation/#NeuralEstimators.matern"><code>matern</code></a> for the specific parametrisation used in this example. Hence, we will construct a neural Bayes estimator for <span>$\boldsymbol{\theta} \equiv (\tau, \rho)&#39;$</span>.</p><p>Before proceeding, we load the required packages:</p><pre><code class="nohighlight hljs">using NeuralEstimators
+using Flux
+using GraphNeuralNetworks
+using Distributions: Uniform
+using Distances: pairwise, Euclidean
+using LinearAlgebra
+using Statistics: mean</code></pre><p>First, we define a function to sample parameters from the prior. As before, the sampled parameters are stored as <span>$p \times K$</span> matrices, with <span>$p$</span> the number of parameters in the model and <span>$K$</span> the number of sampled parameter vectors. We use the priors <span>$\tau \sim U(0.1, 1)$</span> and <span>$\rho \sim U(0.05, 0.5)$</span>, and we assume that the parameters are independent a priori. Simulation from this model involves the computation of an expensive intermediate object, namely, the Cholesky factor of the covariance matrix. Storing this Cholesky factor for re-use can enable the fast simulation of new data sets (provided that the parameters are held fixed): hence, in this example, we define a class, <code>Parameters</code>, which is a sub-type of <a href="../../API/core/#NeuralEstimators.ParameterConfigurations"><code>ParameterConfigurations</code></a>, for storing the matrix of parameters and the corresponding intermediate objects needed for data simulation.</p><p>If one wishes to make inference from a single spatial data set only, and this data is collected before the estimator is constructed, then the data can be simulated using the observed spatial locations. However, if one wishes to construct an estimator that is (approximately) Bayes irrespective of the spatial locations, then synthetic spatial locations must be generated during the training phase. If no prior knowledge on the sampling configuration is available, then a wide variety of spatial configurations must be simulated to produce an estimator that is broadly applicable. Below, we use a Matérn cluster process (see <a href="../../API/simulation/#NeuralEstimators.maternclusterprocess"><code>maternclusterprocess</code></a>) for this task (note that the hyper-parameters of this process govern the expected number of locations in each sampled set of spatial locations, and the degree of clustering).</p><p>We define two constructors for our <code>Parameters</code> object: one that constructs a <code>Parameters</code> object given a single integer <code>K</code>, and another that constructs a <code>Parameters</code> object given a pre-specified <span>$p\times K$</span> matrix of parameters and a set of spatial locations associated with each parameter vector. These constructors will be useful in the workflow below.</p><pre><code class="nohighlight hljs">struct Parameters{T} &lt;: ParameterConfigurations
+	θ::Matrix{T}
+	locations
+	chols
+	graphs
+end
+
+function Parameters(K::Integer)
+
+	# Sample parameters from the prior distribution
+	τ = rand(Uniform(0.1, 1.0), K)
+	ρ = rand(Uniform(0.05, 0.5), K)
+
+	# Combine parameters into a pxK matrix
+	θ = permutedims(hcat(τ, ρ))
+
+	# Simulate spatial locations from a cluster process over the unit square
+	n = rand(Uniform(75, 200), K)
+	λ = rand(Uniform(10, 50), K)
+	locations = [maternclusterprocess(λ = λ[k], μ = n[k]/λ[k]) for k ∈ 1:K]
+
+	Parameters(θ::Matrix, locations)
+end
+
+function Parameters(θ::Matrix, locations)
+
+	# Compute distance matrices and construct the graphs
+	D = pairwise.(Ref(Euclidean()), locations, locations, dims = 1)
+	A = adjacencymatrix.(D, 0.15)
+	graphs = GNNGraph.(A)
+
+	# Compute Cholesky factors using the distance matrices
+	ρ = θ[2, :]
+	ν = 0.5
+	σ = 1
+	chols = maternchols(D, ρ, ν, σ.^2; stack = false)     
+
+	Parameters(θ, locations, chols, graphs)
+end</code></pre><p>Next, we define a function for simulating from the model given an object of type <code>Parameters</code>. Although here we are constructing an estimator for a single replicate, the code below enables simulation of an arbitrary number of independent replicates <code>m</code>: one may provide a single integer for <code>m</code>, a range of values (e.g., <code>1:30</code>), or any object that can be sampled from using <code>rand(m, K)</code>.</p><pre><code class="nohighlight hljs">function simulate(parameters::Parameters, m)
+
+	K = size(parameters, 2)
+	m̃ = rand(m, K)
+
+	τ      = parameters.θ[1, :]
+	chols  = parameters.chols
+	g      = parameters.graphs
+
+	# Z = Folds.map(1:K) do i # use this for parallel simulation
+	Z = map(1:K) do k
+		L = chols[k][:, :]
+		z = simulategaussianprocess(L, m̃[k])  # simulate a smooth field
+		z = z + τ[k] * randn(size(z)...)      # add white noise
+		z = batch([GNNGraph(g[k], ndata = z[:, i, :]&#39;) for i ∈ 1:m̃[k]])
+		z
+	end
+
+	return Z
+end
+simulate(parameters::Parameters, m::Integer) = simulate(parameters, range(m, m))</code></pre><p>Next we construct an appropriate architecture using <a href="../../API/architectures/#NeuralEstimators.GNN"><code>GNN</code></a> and <a href="../../API/architectures/#NeuralEstimators.WeightedGraphConv"><code>WeightedGraphConv</code></a>. For example, we might construct a point estimator as:</p><pre><code class="nohighlight hljs"># Propagation module
+d = 1      # dimension of response variable
+nh = 32    # dimension of node feature vectors
+propagation = GNNChain(WeightedGraphConv(d =&gt; nh), WeightedGraphConv(nh =&gt; nh), WeightedGraphConv(nh =&gt; nh))
+
+# Readout module (using the elementwise average)
+no = nh    # dimension of the final summary vector for each graph
+readout = GlobalPool(mean)
+
+# Mapping module (use exponential output activation to ensure positive estimates)
+p = 2     # number of parameters in the statistical model
+w = 64    # width of layers used for the mapping network ϕ
+ϕ = Chain(Dense(no, w, relu), Dense(w, w, relu), Dense(w, p, exp))
+
+# Construct the estimator
+θ̂ = GNN(propagation, readout, ϕ)
+θ̂ = PointEstimator(θ̂)</code></pre><p>Next, we train the neural estimator using <a href="../../API/core/#NeuralEstimators.train"><code>train</code></a>, here using the default absolute-error loss. We&#39;ll train the estimator using a single realisation per parameter configuration (i.e., with <code>m = 1</code>). Below, we use a very small number of epochs and a small number of training parameter vectors to keep the run time of this example low, and this will of course result in a poor estimator: in practice, one may set <code>K</code> to some large value (say, 10,000), and leave <code>epochs</code> unspecified so that training halts only when the risk function ceases to decrease.</p><pre><code class="nohighlight hljs">θ̂ = train(θ̂, Parameters, simulate, m = 1, epochs = 5, K = 500)</code></pre><p>Note that one may also train the estimator using fixed parameter sets and fixed training data (as described in <a href="../../API/core/#NeuralEstimators.train"><code>train</code></a>), by passing parameter or data instances:</p><pre><code class="nohighlight hljs"># Fixed parameters, but data simulated on-the-fly:
+θ_train = Parameters(500)
+θ_val   = Parameters(100)
+θ̂ = train(θ̂, θ_train, θ_val, simulate, m = 1, epochs = 5)
+
+# Fixed parameters and data:
+z_train = simulate(θ_train, 1)
+z_val   = simulate(θ_val, 1)
+θ̂ = train(θ̂, θ_train, θ_val, z_train, z_val, epochs = 5)</code></pre><p>Once the neural Bayes estimator has been trained, it can be assessed with testing data using <a href="../../API/core/#NeuralEstimators.assess"><code>assess</code></a>, as illustrated in the univariate example above. Finally, once the neural Bayes estimator has been assessed, it may be applied to observed data, with bootstrap-based uncertainty quantification facilitated by <a href="../../API/core/#NeuralEstimators.bootstrap"><code>bootstrap</code></a> and <a href="../../API/core/#NeuralEstimators.interval"><code>interval</code></a>. Below, we use simulated data as a substitute for observed data:</p><pre><code class="nohighlight hljs"># Generate some toy data
+parameters = Parameters(1)   # sample a single parameter vector
+z = simulate(parameters, 1)  # simulate some data                  
+θ = parameters.θ             # true parameters used to generate data
+S = parameters.locations     # observed locations
+
+# Point estimates
+θ̂(z)
+
+# Parametric bootstrap sample and bootstrap confidence interval
+θ̃ = bootstrap(θ̂, Parameters(θ̂(z), S), simulate, 1)   
+interval(θ̃)  					                </code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../overview/">« Overview</a><a class="docs-footer-nextpage" href="../advancedusage/">Advanced usage »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.25 on <span class="colophon-date" title="Wednesday 23 August 2023 02:22">Wednesday 23 August 2023</span>. Using Julia version 1.7.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
