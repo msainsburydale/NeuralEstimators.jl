@@ -22,7 +22,6 @@ end
 (pe::PointEstimator)(Z) = pe.arch(Z)
 
 
-
 # ---- IntervalEstimator: credible intervals  ----
 
 """
@@ -75,6 +74,9 @@ end
 IntervalEstimator(l) = IntervalEstimator(l, deepcopy(l))
 @functor IntervalEstimator
 (c::IntervalEstimator)(Z) = vcat(c.l(Z), c.l(Z) .+ exp.(c.u(Z)))
+# Ensure that IntervalEstimator objects are not constructed with PointEstimator:
+IntervalEstimator(l::PointEstimator, u::PointEstimator) = IntervalEstimator(l.arch, u.arch)
+
 
 
 

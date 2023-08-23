@@ -83,7 +83,7 @@ end
 # ---- WeightedGraphConv ----
 
 @doc raw"""
-    WeightedGraphConv(in => out, σ=identity; aggr=+, bias=true, init=glorot_uniform)
+    WeightedGraphConv(in => out, σ=identity; aggr=mean, bias=true, init=glorot_uniform)
 Same as regular [`GraphConv`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/conv/#GraphNeuralNetworks.GraphConv) layer, but where the neighbours of a node are weighted by their spatial distance to that node.
 
 # Arguments
@@ -123,7 +123,7 @@ end
 
 @functor WeightedGraphConv
 
-function WeightedGraphConv(ch::Pair{Int,Int}, σ=identity; aggr=+,
+function WeightedGraphConv(ch::Pair{Int,Int}, σ=identity; aggr=mean,
                    init=glorot_uniform, bias::Bool=true)
     in, out = ch
     W1 = init(out, in)
@@ -544,6 +544,11 @@ function (est::GNN)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
 	# Apply the DeepSet module to map to the parameter space
 	return est.deepset(h̃)
 end
+
+# Methods needed to accomodate above method of GNN. They are exactly the same as
+# the standard methods defined in Estimators.jl, but also pass through m.
+(pe::PointEstimator{<:GNN})(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = pe.arch(g, m)
+(pe::IntervalEstimator{<:GNN})(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = vcat(c.l(Z, m), c.l(Z, m) .+ exp.(c.u(Z, m)))
 
 
 # ---- PropagateReadout ----

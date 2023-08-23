@@ -226,6 +226,7 @@ end
 
 
 
+
 """
     maternchols(D, ρ, ν, σ² = 1; stack = true)
 Given a distance matrix `D`, constructs the Cholesky factor of the covariance matrix
@@ -273,6 +274,7 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
 	end
 
 	# compute Cholesky factorization
+	#TODO use Folds.map to make this parallel
 	L = map(1:n) do i
 		# Exploit symmetry of D to minimise the number of computations
 		C = matern.(UpperTriangular(D), ρ[i], ν[i], σ²[i])

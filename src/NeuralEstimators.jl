@@ -74,7 +74,7 @@ end
 # help the feel of the package and allow us to perform an implementation without
 # writing any Julia code, which is important.
 
-#TODO Add helper functions for censoring and missing data (take these from EM paper)
+#TODO Add helper functions for censoring and missing data (take these from EM paper, and ask Jordan if he has any code he would like to share)
 
 # ---- long term:
 # - README.md
