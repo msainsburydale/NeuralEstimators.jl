@@ -549,7 +549,7 @@ end
 # the standard methods defined in Estimators.jl, but also pass through m.
 #TODO unit testing for these methods
 (est::PointEstimator{<:GNN})(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = est.arch(g, m)
-(est::IntervalEstimator{<:GNN})(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = vcat(est.l(Z, m), est.l(Z, m) .+ exp.(est.u(Z, m)))
+(est::IntervalEstimator{<:GNN})(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = vcat(est.l(g, m), est.l(g, m) .+ exp.(est.u(g, m)))
 
 
 # ---- PropagateReadout ----
