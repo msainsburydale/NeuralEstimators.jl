@@ -29,8 +29,8 @@ simulate(parameters, m)
 simulate(parameters, m, 2)
 ```
 """
-function simulate(parameters::P, m, J::Integer) where P <: Union{Matrix, ParameterConfigurations}
-	v = [simulate(parameters, m) for i ∈ 1:J]
+function simulate(parameters::P, m, J::Integer; args...) where P <: Union{Matrix, ParameterConfigurations}
+	v = [simulate(parameters, m; args...) for i ∈ 1:J]
 	if typeof(v[1]) <: Tuple
 		z = vcat([v[i][1] for i ∈ eachindex(v)]...)
 		x = vcat([v[i][2] for i ∈ eachindex(v)]...)
@@ -268,7 +268,7 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
 	K = max(length(ρ), length(ν), length(σ²))
 	if K > 1
 		@assert all([length(θ) ∈ (1, K) for θ ∈ (ρ, ν, σ²)])
-		#TODO converting the parameters to be of length K below is not completely robust: if the parameters are a length-one vector, we will get a vector of a vector, which will cause an error. 
+		#TODO converting the parameters to be of length K below is not completely robust: if the parameters are a length-one vector, we will get a vector of a vector, which will cause an error.
 		if length(ρ)  == 1 ρ  = repeat([ρ], K) end
 		if length(ν)  == 1 ν  = repeat([ν], K) end
 		if length(σ²) == 1 σ² = repeat([σ²], K) end
