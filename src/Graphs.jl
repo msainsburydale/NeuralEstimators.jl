@@ -547,8 +547,9 @@ end
 
 # Methods needed to accomodate above method of GNN. They are exactly the same as
 # the standard methods defined in Estimators.jl, but also pass through m.
-(pe::PointEstimator{<:GNN})(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = pe.arch(g, m)
-(pe::IntervalEstimator{<:GNN})(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = vcat(c.l(Z, m), c.l(Z, m) .+ exp.(c.u(Z, m)))
+#TODO unit testing for these methods
+(est::PointEstimator{<:GNN})(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = est.arch(g, m)
+(est::IntervalEstimator{<:GNN})(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = vcat(est.l(Z, m), est.l(Z, m) .+ exp.(est.u(Z, m)))
 
 
 # ---- PropagateReadout ----

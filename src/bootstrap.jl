@@ -48,6 +48,8 @@ function interval(θ̃, θ̂ = nothing; type::String = "percentile", probs = [0.
 	labelinterval(l, u, parameter_names)
 end
 
+
+#TODO need to document this method
 function interval(estimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu::Bool = true)
 
 	ci = _runondevice(estimator, Z, use_gpu)
@@ -132,7 +134,7 @@ function bootstrap(θ̂, parameters::P, simulator, m::Integer; B::Integer = 400,
 	else
 		v = vcat(v...)
 	end
-	
+
 	θ̃ = _runondevice(θ̂, v, use_gpu)
 	return θ̃
 end

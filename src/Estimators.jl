@@ -19,7 +19,7 @@ struct PointEstimator{F} <: NeuralEstimator
 	arch::F
 end
 @functor PointEstimator (arch,)
-(pe::PointEstimator)(Z) = pe.arch(Z)
+(est::PointEstimator)(Z) = est.arch(Z)
 
 
 # ---- IntervalEstimator: credible intervals  ----
@@ -73,7 +73,7 @@ struct IntervalEstimator{F, G} <: NeuralEstimator
 end
 IntervalEstimator(l) = IntervalEstimator(l, deepcopy(l))
 @functor IntervalEstimator
-(c::IntervalEstimator)(Z) = vcat(c.l(Z), c.l(Z) .+ exp.(c.u(Z)))
+(est::IntervalEstimator)(Z) = vcat(est.l(Z), est.l(Z) .+ exp.(est.u(Z)))
 # Ensure that IntervalEstimator objects are not constructed with PointEstimator:
 IntervalEstimator(l::PointEstimator, u::PointEstimator) = IntervalEstimator(l.arch, u.arch)
 
