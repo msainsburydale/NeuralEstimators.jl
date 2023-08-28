@@ -6,6 +6,11 @@ nparams(model) = length(Flux.params(model)) > 0 ? sum(length, Flux.params(model)
 drop(nt::NamedTuple, key::Symbol) =  Base.structdiff(nt, NamedTuple{(key,)})
 drop(nt::NamedTuple, keys::NTuple{N,Symbol}) where {N} = Base.structdiff(nt, NamedTuple{keys})
 
+# Check element type of arbitrarily nested array: https://stackoverflow.com/a/41847530
+nested_eltype(x) = nested_eltype(typeof(x))
+nested_eltype(::Type{T}) where T <:AbstractArray = nested_eltype(eltype(T))
+nested_eltype(::Type{T}) where T = T
+
 
 # Original discussion: https://groups.google.com/g/julia-users/c/UARlZBCNlng
 vectotri_docs = """

@@ -222,10 +222,9 @@ function matern(h, ρ, ν, σ² = one(typeof(h)))
     return C
 end
 
-#matern(h, ρ) =  matern(h, ρ, one(typeof(ρ)))
 
-
-
+#TODO the following functions are not ideal... not extremely robust and I
+#     think there are several conversions that are unnecessary.
 
 """
     maternchols(D, ρ, ν, σ² = 1; stack = true)
@@ -252,6 +251,7 @@ D  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ ∈ eachrow(S)]
 ν  = [0.7, 1.2]
 σ² = [0.2, 0.4]
 maternchols(D, ρ, ν)
+maternchols([D], ρ, ν)
 maternchols(D, ρ, ν, σ²; stack = false)
 
 S̃  = rand(n, 2)
@@ -265,22 +265,23 @@ maternchols([D, D̃], ρ, ν, σ²; stack = false)
 ```
 """
 function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
-	n = max(length(ρ), length(ν), length(σ²))
-	if n > 1
-		@assert all([length(θ) ∈ (1, n) for θ ∈ (ρ, ν, σ²)])
-		if length(ρ) == 1 ρ  = repeat([ρ], n) end
-		if length(ν) == 1 ν = repeat([ν], n) end
-		if length(σ²) == 1 σ² = repeat([σ²], n) end
+	K = max(length(ρ), length(ν), length(σ²))
+	if K > 1
+		@assert all([length(θ) ∈ (1, K) for θ ∈ (ρ, ν, σ²)])
+		if length(ρ)  == 1 ρ  = repeat([ρ], K) end
+		if length(ν)  == 1 ν  = repeat([ν], K) end
+		if length(σ²) == 1 σ² = repeat([σ²], K) end
 	end
 
-	# compute Cholesky factorization
-	#TODO use Folds.map to make this parallel
-	L = map(1:n) do i
-		# Exploit symmetry of D to minimise the number of computations
-		C = matern.(UpperTriangular(D), ρ[i], ν[i], σ²[i])
+	# compute Cholesky factorization (exploit symmetry of D to minimise computations)
+	# NB surprisingly, Folds.map() is slower than map() #TODO try FLoops and other parallel packages
+	L = map(ρ, ν, σ²) do ρ, ν, σ²
+		C = matern.(UpperTriangular(D), ρ, ν, σ²)
 		cholesky(Symmetric(C)).L
 	end
-	L = convert.(Array, L) # choose to retain this conversion here for type stability
+
+	# Convert from Triangular to Array for type stability
+	L = convert.(Array, L)
 
 	# L is currently a vector of matrices: optionally convert this vector into
 	# a three-dimensional array
@@ -290,24 +291,24 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
 	return L
 end
 
-function maternchols(D::V, ρ, ν, σ² = one(eltype(D)); stack::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-	n = max(length(ρ), length(ν), length(σ²))
-	if n > 1
-		@assert all([length(θ) ∈ (1, n) for θ ∈ (ρ, ν, σ²)])
-		if length(ρ)  == 1 ρ  = repeat([ρ], n) end
-		if length(ν)  == 1 ν  = repeat([ν], n) end
-		if length(σ²) == 1 σ² = repeat([σ²], n) end
+function maternchols(D::V, ρ, ν, σ² = one(nested_eltype(D)); stack::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+	K = max(length(ρ), length(ν), length(σ²))
+	if K > 1
+		@assert all([length(θ) ∈ (1, K) for θ ∈ (ρ, ν, σ²)])
+		if length(ρ)  == 1 ρ  = repeat([ρ], K) end
+		if length(ν)  == 1 ν  = repeat([ν], K) end
+		if length(σ²) == 1 σ² = repeat([σ²], K) end
 	end
-	@assert length(D) == n
+	@assert length(D) ∈ (1, K)
 	L = maternchols.(D, ρ, ν, σ², stack = false)
 
-	# L is currently a vector of vectors of matrices: drop the redundant outer vector
+	# L is currently a length-one Vector of Vectors: drop the redundant outer vector
 	L = stackarrays(L, merge = true)
 
 	# L is now a vector of matrices: optionally convert this vector into
 	# a three-dimensional array
 	if stack
-		@assert length(unique(size.(D))) == 1 "Converting the Cholesky factors from a vector of matrices to a three-dimenisonal array is only possible if the Cholesky factors (i.e., all elements of the vector of matrices `D`) are the same size."
+		@assert length(unique(size.(D))) == 1 "Converting the Cholesky factors from a vector of matrices to a three-dimenisonal array is only possible if the Cholesky factors (i.e., all matrices `D`) are the same size."
 		L = stackarrays(L, merge = false)
 	end
 	return L

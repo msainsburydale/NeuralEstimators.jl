@@ -674,8 +674,9 @@ function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 end
 
 
+#TODO would be better if we can provide it both as a positional argument and keyword argument; don't want to stop the user for no reason. 
 function _checkargs_trainx(kwargs)
-	@assert !haskey(kwargs, :m) "`m` should not be provided; use the positional argument `M`"
+	@assert !haskey(kwargs, :m) "Please provide the number of independent replicates, `m`, as a positional argument (i.e., provide the argument simply as `m`, not `m = m`)."
 	verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
 	return verbose
 end
