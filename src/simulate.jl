@@ -223,8 +223,7 @@ function matern(h, ρ, ν, σ² = one(typeof(h)))
 end
 
 
-#TODO the following functions are not ideal... not extremely robust and I
-#     think there are several conversions that are unnecessary.
+
 
 """
     maternchols(D, ρ, ν, σ² = 1; stack = true)
@@ -265,50 +264,58 @@ maternchols([D, D̃], ρ, ν, σ²; stack = false)
 ```
 """
 function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
+
 	K = max(length(ρ), length(ν), length(σ²))
 	if K > 1
 		@assert all([length(θ) ∈ (1, K) for θ ∈ (ρ, ν, σ²)])
+		#TODO converting the parameters to be of length K below is not completely robust: if the parameters are a length-one vector, we will get a vector of a vector, which will cause an error. 
 		if length(ρ)  == 1 ρ  = repeat([ρ], K) end
 		if length(ν)  == 1 ν  = repeat([ν], K) end
 		if length(σ²) == 1 σ² = repeat([σ²], K) end
 	end
 
 	# compute Cholesky factorization (exploit symmetry of D to minimise computations)
-	# NB surprisingly, Folds.map() is slower than map() #TODO try FLoops and other parallel packages
-	L = map(ρ, ν, σ²) do ρ, ν, σ²
-		C = matern.(UpperTriangular(D), ρ, ν, σ²)
-		cholesky(Symmetric(C)).L
+	# NB surprisingly, found that Folds.map() is slower than map()
+	# TODO try FLoops and other parallel packages
+	L = map(1:K) do k
+		C = matern.(UpperTriangular(D), ρ[k], ν[k], σ²[k])
+		L = cholesky(Symmetric(C)).L
+		L = convert(Array, L) # convert from Triangular to Array so that stackarrays() can be used
+		L
 	end
 
-	# Convert from Triangular to Array for type stability
-	L = convert.(Array, L)
-
-	# L is currently a vector of matrices: optionally convert this vector into
-	# a three-dimensional array
+	# Optionally convert from Vector of Matrices to 3D Array
 	if stack
 		L = stackarrays(L, merge = false)
 	end
+
 	return L
 end
 
 function maternchols(D::V, ρ, ν, σ² = one(nested_eltype(D)); stack::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+
+	if stack
+		@assert length(unique(size.(D))) == 1 "Converting the Cholesky factors from a vector of matrices to a three-dimenisonal array is only possible if the Cholesky factors (i.e., all matrices `D`) are the same size."
+	end
+
 	K = max(length(ρ), length(ν), length(σ²))
 	if K > 1
 		@assert all([length(θ) ∈ (1, K) for θ ∈ (ρ, ν, σ²)])
+		#TODO converting the parameters to be of length K below is not completely robust: if the parameters are a length-one vector, we will get a vector of a vector, which will cause an error.
 		if length(ρ)  == 1 ρ  = repeat([ρ], K) end
 		if length(ν)  == 1 ν  = repeat([ν], K) end
 		if length(σ²) == 1 σ² = repeat([σ²], K) end
 	end
 	@assert length(D) ∈ (1, K)
+
+	# Compute the Cholesky factors
 	L = maternchols.(D, ρ, ν, σ², stack = false)
 
-	# L is currently a length-one Vector of Vectors: drop the redundant outer vector
+	# L is currently a length-one Vector of Vectors: drop redundant outer vector
 	L = stackarrays(L, merge = true)
 
-	# L is now a vector of matrices: optionally convert this vector into
-	# a three-dimensional array
+	# Optionally convert from Vector of Matrices to 3D Array
 	if stack
-		@assert length(unique(size.(D))) == 1 "Converting the Cholesky factors from a vector of matrices to a three-dimenisonal array is only possible if the Cholesky factors (i.e., all matrices `D`) are the same size."
 		L = stackarrays(L, merge = false)
 	end
 	return L
