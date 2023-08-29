@@ -50,18 +50,26 @@ end
 
 
 #TODO need to document this method
-function interval(estimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu::Bool = true)
+function interval(estimator::Union{IntervalEstimator, PointIntervalEstimator}, Z; parameter_names = nothing, use_gpu::Bool = true)
 
-	ci = _runondevice(estimator, Z, use_gpu)
+	ci = estimateinbatches(estimator, Z, use_gpu = use_gpu)
 	ci = cpu(ci)
 
-	@assert size(ci, 1) % 2 == 0
-	p = size(ci, 1) ÷ 2
+	if typeof(estimator) <: IntervalEstimator
+		@assert size(ci, 1) % 2 == 0
+		p = size(ci, 1) ÷ 2
+	elseif typeof(estimator) <: PointIntervalEstimator
+		@assert size(ci, 1) % 3 == 0
+		p = size(ci, 1) ÷ 3
+		ci = ci[p+1:end, :]
+	end
+
 	if isnothing(parameter_names)
 		parameter_names = ["θ$i" for i ∈ 1:p]
 	else
 		@assert length(parameter_names) == p
 	end
+
 	labelinterval(ci, parameter_names)
 end
 
@@ -135,14 +143,14 @@ function bootstrap(θ̂, parameters::P, simulator, m::Integer; B::Integer = 400,
 		v = vcat(v...)
 	end
 
-	θ̃ = _runondevice(θ̂, v, use_gpu)
+	θ̃ = estimateinbatches(θ̂, v, use_gpu = use_gpu)
 	return θ̃
 end
 
 function bootstrap(θ̂, parameters::P, Z̃; use_gpu::Bool = true) where P <: Union{AbstractMatrix, ParameterConfigurations}
 	K = size(parameters, 2)
 	@assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
-	θ̃ = _runondevice(θ̂, Z̃, use_gpu)
+	θ̃ = estimateinbatches(θ̂, Z̃, use_gpu = use_gpu)
 	return θ̃
 end
 
@@ -159,7 +167,7 @@ function bootstrap(θ̂, Z; B::Integer = 400, use_gpu::Bool = true, blocks = not
 		Z̃ = [subsetdata(Z, rand(1:m, m)) for _ in 1:B]
 	end
 	# Estimate the parameters for each bootstrap sample
-	θ̃ = _runondevice(θ̂, Z̃, use_gpu)
+	θ̃ = estimateinbatches(θ̂, Z̃, use_gpu = use_gpu)
 
 	return θ̃
 end

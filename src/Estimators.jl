@@ -27,7 +27,7 @@ end
 """
 	IntervalEstimator(arch_lower, arch_upper)
 	IntervalEstimator(arch)
-A neural estimator that produces credible intervals constructed as,
+A neural estimator that jointly estimates credible intervals constructed as,
 
 ```math
 [l(Z), l(Z) + \\mathrm{exp}(u(Z))],
@@ -40,7 +40,7 @@ network architecture `arch` is provided, it will be used for both `arch_lower`
 and `arch_upper`.
 
 Internally, the output from `arch_lower` and `arch_upper` are concatenated, so
-that `IntervalEstimator` objects transform data into ``2p``-dimensional vectors.
+that `IntervalEstimator` objects transform data into matrices with ``2p`` rows.
 
 # Examples
 ```
@@ -48,8 +48,8 @@ using NeuralEstimators
 using Flux
 
 # Generate some toy data
-n = 2  # bivariate data
-m = 10 # number of independent replicates
+n = 2   # bivariate data
+m = 100 # number of independent replicates
 Z = rand(n, m)
 
 # Create an architecture
@@ -64,7 +64,7 @@ estimator = IntervalEstimator(architecture)
 
 # Apply the interval estimator
 estimator(Z)
-interval(estimator, Z, parameter_names = ["ρ", "σ", "τ"])
+interval(estimator, Z)
 ```
 """
 struct IntervalEstimator{F, G} <: NeuralEstimator
@@ -73,11 +73,81 @@ struct IntervalEstimator{F, G} <: NeuralEstimator
 end
 IntervalEstimator(l) = IntervalEstimator(l, deepcopy(l))
 @functor IntervalEstimator
-(est::IntervalEstimator)(Z) = vcat(est.l(Z), est.l(Z) .+ exp.(est.u(Z)))
+function (est::IntervalEstimator)(Z)
+	l = est.l(Z)
+	vcat(l, l .+ exp.(est.u(Z)))
+end
 # Ensure that IntervalEstimator objects are not constructed with PointEstimator:
+#TODO find a neater way to do this; don't want to write so many methods, especially for PointIntervalEstimator
 IntervalEstimator(l::PointEstimator, u::PointEstimator) = IntervalEstimator(l.arch, u.arch)
+IntervalEstimator(l, u::PointEstimator) = IntervalEstimator(l, u.arch)
+IntervalEstimator(l::PointEstimator, u) = IntervalEstimator(l.arch, u)
 
 
+"""
+	PointIntervalEstimator(arch_point, arch_lower, arch_upper)
+	PointIntervalEstimator(arch_point, arch_bound)
+	PointEstimator(arch)
+A neural estimator that jointly produces point estimates, θ̂(Z), where θ̂(Z) is a
+neural point estimator with architecture `arch_point`, and credible intervals constructed as,
+
+```math
+[θ̂(Z) - \\mathrm{exp}(l(Z)), θ̂(Z) + \\mathrm{exp}(u(Z))],
+```
+
+where ``l(⋅)`` and ``u(⋅)`` are the neural networks `arch_lower` and
+`arch_upper`, both of which should transform data into ``p``-dimensional vectors,
+where ``p`` is the number of parameters in the model.
+
+If only a single neural network architecture `arch` is provided, it will be used
+for all architectures; similarly, if two architectures are provided, the second
+will be used for both `arch_lower` and `arch_upper`.
+
+Internally, the point estimates, lower-bound estimates, and upper-bound estimates are concatenated, so
+that `PointIntervalEstimator` objects transform data into matrices with ``3p`` rows.
+
+# Examples
+```
+using NeuralEstimators
+using Flux
+
+# Generate some toy data
+n = 2   # bivariate data
+m = 100 # number of independent replicates
+Z = rand(n, m)
+
+# Create an architecture
+p = 3  # parameters in the model
+w = 8  # width of each layer
+ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
+ϕ = Chain(Dense(w, w, relu), Dense(w, p));
+architecture = DeepSet(ψ, ϕ)
+
+# Initialise the estimator
+estimator = PointIntervalEstimator(architecture)
+
+# Apply the estimator
+estimator(Z)
+interval(estimator, Z)
+```
+"""
+struct PointIntervalEstimator{H, F, G} <: NeuralEstimator
+	θ̂::H
+	l::F
+	u::G
+end
+PointIntervalEstimator(θ̂) = PointIntervalEstimator(θ̂, deepcopy(θ̂), deepcopy(θ̂))
+PointIntervalEstimator(θ̂, l) = PointIntervalEstimator(θ̂, deepcopy(l), deepcopy(l))
+@functor PointIntervalEstimator
+function (est::PointIntervalEstimator)(Z)
+	θ̂ = est.θ̂(Z)
+	vcat(θ̂, θ̂ .- exp.(est.l(Z)), θ̂ .+ exp.(est.u(Z)))
+end
+# Ensure that IntervalEstimator objects are not constructed with PointEstimator:
+#TODO find a neater way to do this; don't want to write so many methods, especially for PointIntervalEstimator
+PointIntervalEstimator(θ̂::PointEstimator, l::PointEstimator, u::PointEstimator) = PointIntervalEstimator(θ̂.arch, l.arch, u.arch)
+PointIntervalEstimator(θ̂::PointEstimator, l, u) = PointIntervalEstimator(θ̂.arch, l, u)
+PointIntervalEstimator(θ̂, l::PointEstimator, u::PointEstimator) = PointIntervalEstimator(θ̂, l.arch, u.arch)
 
 
 # ---- QuantileEstimator: estimating arbitrary quantiles of the posterior distribution ----

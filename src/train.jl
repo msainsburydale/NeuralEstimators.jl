@@ -674,7 +674,7 @@ function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 end
 
 
-#TODO would be better if we can provide it both as a positional argument and keyword argument; don't want to stop the user for no reason. 
+#TODO would be better if we can provide it both as a positional argument and keyword argument; don't want to stop the user for no reason.
 function _checkargs_trainx(kwargs)
 	@assert !haskey(kwargs, :m) "Please provide the number of independent replicates, `m`, as a positional argument (i.e., provide the argument simply as `m`, not `m = m`)."
 	verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
@@ -735,7 +735,7 @@ function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 	return ls
 end
 
-function _updatebatch!(θ̂::Union{GNN, PointEstimator{<:GNN}, IntervalEstimator{<:GNN}}, Z, θ, device, loss, γ, optimiser)
+function _updatebatch!(θ̂::Union{GNN, PointEstimator{<:GNN}, IntervalEstimator{<:GNN}, PointIntervalEstimator{<:GNN}}, Z, θ, device, loss, γ, optimiser)
 
 	m = numberreplicates(Z)
 	Z = Flux.batch(Z)
@@ -753,7 +753,7 @@ function _updatebatch!(θ̂::Union{GNN, PointEstimator{<:GNN}, IntervalEstimator
 end
 
 
-function _updatebatch!(θ̂::Union{PropagateReadout, PointEstimator{<:PropagateReadout}, IntervalEstimator{<:PropagateReadout}}, Z, θ, device, loss, γ, optimiser)
+function _updatebatch!(θ̂::Union{PropagateReadout, PointEstimator{<:PropagateReadout}, IntervalEstimator{<:PropagateReadout}, PointIntervalEstimator{<:GNN}}, Z, θ, device, loss, γ, optimiser)
 
 	m = numberreplicates(Z)
 	Z = Flux.batch(Z)

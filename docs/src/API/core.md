@@ -31,6 +31,8 @@ PointEstimator
 
 IntervalEstimator
 
+PointIntervalEstimator
+
 QuantileEstimator
 
 PiecewiseEstimator

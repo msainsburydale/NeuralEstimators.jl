@@ -148,7 +148,7 @@ function assess(
 	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors in `θ`"
 	J = KJ ÷ K
 	if J > 1
-		verbose && @info "There are more simulated data sets than unique parameter vectors: the parameter matrix will be recycled by horizontal concatenation."
+		# verbose && @info "There are more simulated data sets than unique parameter vectors: the parameter matrix will be recycled by horizontal concatenation."
 		θ = repeat(θ, outer = (1, J))
 	end
 
@@ -181,18 +181,17 @@ function assess(
 		verbose && println("	Running estimator $(estimator_names[i])...")
 
 		if use_ξ[i]
-			# pass ξ to the estimator by passing a closure to _runondevice().
+			# pass ξ to the estimator by passing a closure to estimateinbatches().
 			# This approach allows the estimator to use the gpu, and provides a
 			# consistent format of the estimates regardless of whether or not
-			# ξ is used.
-			# NB this doesn't work because some elements of ξ may need to
+			# ξ is used. NB this doesn't work because some elements of ξ may need to
 			# be subsetted when batching... So, at the moment, we cannot use
 			# ξ and the gpu, unless we are willing to move the entire data
-			# set and ξ to the gpu :(
-			# time = @elapsed θ̂ = _runondevice(z -> estimators[i](z, ξ), Z, use_gpu[i])
+			# set and ξ to the gpu.
+			# time = @elapsed θ̂ = estimateinbatches(z -> estimators[i](z, ξ), Z, use_gpu = use_gpu[i])
 			time = @elapsed θ̂ = estimators[i](Z, ξ)
 		else
-			time = @elapsed θ̂ = _runondevice(estimators[i], Z, use_gpu[i])
+			time = @elapsed θ̂ = estimateinbatches(estimators[i], Z, use_gpu = use_gpu[i])
 		end
 		θ̂ = convert(Matrix, θ̂) # sometimes estimators return vectors rather than matrices, which can mess things up
 

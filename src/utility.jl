@@ -292,62 +292,53 @@ function loadbestweights(path::String)
 	return best_weights
 end
 
-# exported version of _runondevice()
-# note that we retain _runondevice() for backwards compatibility
+
 """
 	estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = true)
 
 Apply the estimator `θ̂` on minibatches of `z` of size `batchsize`, to avoid
 memory issues that can occur when `z` is very large.
+
+Minibatching will only be done if there are multiple data sets in `z`; this
+will be inferred by `z` being a vector, or a tuple whose first element is a vector.
 """
 function estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = true)
-	_runondevice(θ̂, z, use_gpu; batchsize = batchsize)
-end
 
-function _runondevice(θ̂, x, use_gpu::Bool; batchsize::Integer = 32)
-
-	if typeof(x) <: AbstractVector
-		batchsize = min(length(x), batchsize)
-	elseif typeof(x) <: Tuple
-		batchsize = min(length(x[1]), batchsize)
+	# Only do minibatching if we have multiple data sets
+	if typeof(z) <: AbstractVector
+		minibatching = true
+		batchsize = min(length(z), batchsize)
+	elseif typeof(z) <: Tuple && typeof(z[1]) <: AbstractVector
+		minibatching = true
+		batchsize = min(length(z[1]), batchsize)
+	else # we dont have replicates: just apply the estimator without minibatching
+		minibatching = false
 	end
 
 	device  = _checkgpu(use_gpu, verbose = false)
 	θ̂ = θ̂ |> device
 
-	# ---- Simple ----
-
-	# 	x = x |> device
-	# 	ŷ = θ̂(x)
-	#   ŷ = ŷ |> cpu
-
-	# ---- Memory sensitive ----
-
-	# If we're using the GPU, we need to be careful not to run out of memory.
-	# Hence, we use mininbatching.
-	data_loader = _quietDataLoader(x, batchsize, shuffle=false, partial=true)
-
-	ŷ = map(data_loader) do xᵢ
-		xᵢ = xᵢ |> device
-		ŷ = θ̂(xᵢ)
+	if !minibatching
+		z = z |> device
+		ŷ = θ̂(z)
 		ŷ = ŷ |> cpu
-		ŷ
+	else
+		data_loader = _quietDataLoader(z, batchsize, shuffle=false, partial=true)
+		ŷ = map(data_loader) do zᵢ
+			zᵢ = zᵢ |> device
+			ŷ = θ̂(zᵢ)
+			ŷ = ŷ |> cpu
+			ŷ
+		end
+		ŷ = stackarrays(ŷ)
 	end
-	ŷ = stackarrays(ŷ)
 
 	return ŷ
 end
+# Backwards compatability:
+_runondevice(θ̂, z, use_gpu::Bool; batchsize::Integer = 32) = estimateinbatches(θ̂, z, use_gpu; batchsize = batchsize)
 
 
-
-# Here, it's important that the same order for the grid is used as was
-# done in R when computing the Cholesky factors. In R, the spatial domain D
-# was constructed using the function make.surface.grid() from the package
-# fields. For example, try the following code in R:
-# N = 3; fields::make.surface.grid(list(x = 1:N, y = 1:N))
-# This results in a grid where each cell is separated by 1 unit in the
-# horizontal and vertical directions, and where the first dimension runs
-# faster than the second. The following code replicates this.
 """
     expandgrid(xs, ys)
 
@@ -365,18 +356,7 @@ function expandgrid(xs, ys)
     end
     return res
 end
-
 expandgrid(N::Integer) = expandgrid(1:N, 1:N)
-
-
-# # Source: https://en.wikipedia.org/wiki/ANSI_escape_code#CSI_sequences
-# function _overprint(str)
-#    print("\u1b[1F") #Moves cursor to beginning of the line n (default 1) lines up
-#    print(str)   #prints the new line
-#    print("\u1b[0K") # clears  part of the line.
-#    println() #prints a new line
-# end
-
 
 
 # ---- Helper functions ----
@@ -452,28 +432,3 @@ function stackarrays(v::V; merge::Bool = true) where {V <: AbstractVector{A}} wh
 
 	return a
 end
-
-# ---- Notes and unused code ----
-
-# Important concept for parametric types: https://stackoverflow.com/a/64686826
-# Unresolved type-instability issue in Flux Conv layers: https://github.com/FluxML/Flux.jl/issues/1178
-
-# Method 2: Pre-allocating an Array. This method can't be used during
-# training since array mutation is not supported by Zygote.
-# Initialise array for storing the pooled features. The first ndims(ψa) - 1
-# dimensions have the same size as ψa, but the last dimension is equal to
-# the length of v (the number of unique parameter configurations)
-# large_aggregated_ψa = similar(ψa, size(ψa)[ndims(ψa) - 1]..., length(v))
-# for i ∈ eachindex(indices)
-# 	large_aggregated_ψa[colons..., i] = d.agg(ψa[colons..., indices[i]])
-# end
-
-# stackarrays() code for when the size of the last dimension varies:
-# This code doesn't work with Zygote because it mutates an array.
-# first_dims_sizes = size(v[1])[1:(N - 1)]
-# a = A(undef, (first_dims_sizes..., sum(n)))
-# indices = _getindices(v)
-# colons = ntuple(_ -> (:), N - 1)
-# for i ∈ eachindex(v)
-# 	a[colons..., indices[i]] = v[i]
-# end
