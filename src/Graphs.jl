@@ -162,23 +162,35 @@ end
 
 # ---- Adjacency matrices ----
 
+# TODO keyword argument method that might be a bit easier to deal with for the user
+
 # See https://en.wikipedia.org/wiki/Heap_(data_structure) for a description
 # of the heap data structure, and see
 # https://juliacollections.github.io/DataStructures.jl/latest/heaps/
 # for a description of Julia's implementation of the heap data structure.
 
-#NB could easily parallelise this to speed it up
+
 
 """
 	adjacencymatrix(M::Matrix, k::Integer)
 	adjacencymatrix(M::Matrix, r::Float)
+	adjacencymatrix(M::Matrix, r::Float, k::Integer)
 
 Computes a spatially weighted adjacency matrix from `M` based on either the `k`
-nearest neighbours of each location, or a fixed spatial radius of `r` units.
+nearest neighbours of each location, or a fixed spatial radius of `r` units; if
+both `r` and `k` are provided, randomly selects `k` neighbours within a radius
+of `r` units.
 
 If `M` is a square matrix, is it treated as a distance matrix; otherwise, it
 should be an n x d matrix, where n is the number of spatial sample locations
-and d is the spatial dimension (typically d = 2).
+and d is the spatial dimension (typically d = 2). In the latter case, the
+distance metric is taken to be the Euclidean distance.
+
+All methods accept the keyword argument `self_loops` (default `false`); set to
+`true` nodes are considered to self connected, so that the diagonal of the
+adjacency matrix is non-zero.
+
+See also the package [`NearestNeighbors.jl`](https://github.com/KristofferC/NearestNeighbors.jl).
 
 # Examples
 ```
@@ -201,7 +213,55 @@ adjacencymatrix(D, k)
 adjacencymatrix(D, r)
 ```
 """
-function adjacencymatrix(M::Mat, k::Integer) where Mat <: AbstractMatrix{T} where T
+function adjacencymatrix(M::Mat, r::F, k::Integer; self_loops::Bool = false) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
+
+	@assert k > 0
+	@assert r > 0
+
+	I = Int64[]
+	J = Int64[]
+	V = Float64[]
+	n = size(M, 1)
+	m = size(M, 2)
+
+	for i ∈ 1:n
+		sᵢ = M[i, :]
+		kᵢ = 0
+		iter = self_loops ? (1:n) : Iterators.filter(j -> j != i, 1:n) # don't include sᵢ in the search list
+		iter = shuffle(collect(iter)) # randomly shuffle iter to prevent weighting observations based on their ordering in M
+
+		for j ∈ iter
+
+			if m == n # square matrix, so assume M is a distance matrix
+				dᵢⱼ = M[i, j]
+			else
+				sⱼ  = M[j, :]
+				dᵢⱼ = norm(sᵢ - sⱼ)
+			end
+
+			if dᵢⱼ <= r
+				push!(I, i)
+				push!(J, j)
+				push!(V, dᵢⱼ)
+				kᵢ += 1
+			end
+			if kᵢ == k break end
+		end
+
+	end
+
+
+	return sparse(I,J,V,n,n)
+end
+adjacencymatrix(M::Mat, k::Integer, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat} = adjacencymatrix(M, r, k)
+
+
+
+function adjacencymatrix(M::Mat, k::Integer; self_loops::Bool = false) where Mat <: AbstractMatrix{T} where T
+
+
+
+	@assert k > 0
 
 	I = Int64[]
 	J = Int64[]
@@ -211,17 +271,17 @@ function adjacencymatrix(M::Mat, k::Integer) where Mat <: AbstractMatrix{T} wher
 
 	for i ∈ 1:n
 
-		if m == n
-			# since we have a square matrix, it's reasonable to assume that S
-			# is actually a distance matrix, D:
+		if m == n # square matrix, so assume M is a distance matrix
 			d = M[i, :]
 		else
 			# Compute distances between sᵢ and all other locations
 			d = colwise(Euclidean(), M', M[i, :])
 		end
 
-		# Replace d(s) with Inf so that it's not included in the adjacency matrix
-		d[i] = Inf
+		if !self_loops
+			# Replace d(sᵢ) with Inf so that it's not included in the adjacency matrix
+			d[i] = Inf
+		end
 
 		# Find the neighbours of s
 		j, v = findneighbours(d, k)
@@ -234,19 +294,21 @@ function adjacencymatrix(M::Mat, k::Integer) where Mat <: AbstractMatrix{T} wher
 	return sparse(I,J,V,n,n)
 end
 
-function adjacencymatrix(M::Mat, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
+function adjacencymatrix(M::Mat, r::F; self_loops::Bool = false) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
 
 	@assert r > 0
 
 	n = size(M, 1)
 	m = size(M, 2)
 
-	if m == n
+	if m == n # square matrix, so assume M is a distance matrix, D:
 
 		D = M
 		# bit-matrix specifying which locations are d-neighbours
 		A = D .< r
-		A[diagind(A)] .= 0 # remove the diagonal entries
+		if !self_loops
+			A[diagind(A)] .= 0 # remove the diagonal entries
+		end
 
 		# replace non-zero elements of A with the corresponding distance in D
 		indices = copy(A)
@@ -264,12 +326,18 @@ function adjacencymatrix(M::Mat, r::F) where Mat <: AbstractMatrix{T} where {T, 
 		V = Float64[]
 		for i ∈ 1:n
 
+			#TODO many ways to speed this up...
+			#     For instance, we don't need to compute all distances, we can
+			#     immediately throw away some values if the difference between
+			#     any of their marginal coordinates is greater than r
 			# Compute distances between s and all other locations
 			s = S[i, :]
 			d = colwise(Euclidean(), S', s)
 
-			# Replace d(s) with Inf so that it's not included in the adjacency matrix
-			d[i] = Inf
+			if !self_loops
+				# Replace d(sᵢ) with Inf so that it's not included in the adjacency matrix
+				d[i] = Inf
+			end
 
 			# Find the r-neighbours of s
 			j = d .< r
@@ -290,25 +358,6 @@ function findneighbours(d, k::Integer)
 	J = [findfirst(v .== d) for v ∈ V]
     return J, V
 end
-
-
-# @testset "adjacencymatrix" begin
-# 	n = 10
-# 	S = rand(n, 2)
-# 	k = 5
-# 	d = 0.3
-# 	A₁ = adjacencymatrix(S, k)
-# 	@test all([A₁[i, i] for i ∈ 1:n] .== zeros(n))
-# 	A₂ = adjacencymatrix(S, d)
-# 	@test all([A₂[i, i] for i ∈ 1:n] .== zeros(n))
-#
-# 	D = pairwise(Euclidean(), S, S, dims = 1)
-# 	Ã₁ = adjacencymatrix(D, k)
-# 	Ã₂ = adjacencymatrix(D, d)
-# 	@test Ã₁ == A₁
-# 	@test Ã₂ == A₂
-# end
-
 
 # NB investigate why I can't get this to work when I have more time (it's very
 # close). I think this approach will be more efficient than the above method.

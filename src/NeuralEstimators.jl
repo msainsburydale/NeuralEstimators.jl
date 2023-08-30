@@ -21,7 +21,7 @@ using GaussianRandomFields
 using Graphs
 using LinearAlgebra
 using NamedArrays
-using Random: randexp
+using Random: randexp, shuffle
 using RecursiveArrayTools: VectorOfArray, convert
 using SparseArrays
 using SpecialFunctions: besselk, gamma, loggamma

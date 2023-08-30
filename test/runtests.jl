@@ -93,7 +93,6 @@ end
 	end
 end
 
-
 @testset "maternclusterprocess" begin
 
 	S = maternclusterprocess()
@@ -102,7 +101,14 @@ end
 end
 
 
+
 @testset "adjacencymatrix" begin
+
+	# using NeuralEstimators
+	# using Distances
+	# using Test
+	# using LinearAlgebra
+	# using Random: seed!
 
 	n = 100
 	d = 2
@@ -122,7 +128,20 @@ end
 	# Test that the matrices are the same irrespective of which method was used
 	@test Ã₁ ≈ A₁
 	@test Ã₂ ≈ A₂
+
+	# Randomly selecting k nodes within a node's neighbourhood disc.
+	seed!(1); A₃ = adjacencymatrix(S, k, r)
+	@test A₃.n == A₃.m == n
+	@test length(adjacencymatrix(S, k, 0.02).nzval) < k*n
+	seed!(1); Ã₃ = adjacencymatrix(D, k, r)
+	@test Ã₃ ≈ A₃
+
 end
+
+
+
+
+
 
 
 @testset "WeightedGraphConv" begin
