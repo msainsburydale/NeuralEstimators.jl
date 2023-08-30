@@ -336,7 +336,7 @@ function estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = tru
 	return ŷ
 end
 # Backwards compatability:
-_runondevice(θ̂, z, use_gpu::Bool; batchsize::Integer = 32) = estimateinbatches(θ̂, z, use_gpu; batchsize = batchsize)
+_runondevice(θ̂, z, use_gpu::Bool; batchsize::Integer = 32) = estimateinbatches(θ̂, z; batchsize = batchsize, use_gpu = use_gpu)
 
 
 """
