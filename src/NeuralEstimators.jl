@@ -42,7 +42,7 @@ export CholeskyCovariance, CovarianceMatrix, CorrelationMatrix
 export vectotril, vectotriu
 include("Architectures.jl")
 
-export GNN, PropagateReadout, UniversalPool, adjacencymatrix, WeightedGraphConv, maternclusterprocess
+export GNN, PropagateReadout, UniversalPool, adjacencymatrix, WeightedGraphConv, WeightedGINConv, maternclusterprocess
 include("Graphs.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes

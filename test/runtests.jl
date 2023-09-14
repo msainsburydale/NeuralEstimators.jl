@@ -104,12 +104,6 @@ end
 
 @testset "adjacencymatrix" begin
 
-	# using NeuralEstimators
-	# using Distances
-	# using Test
-	# using LinearAlgebra
-	# using Random: seed!
-
 	n = 100
 	d = 2
 	S = rand(n, d)
