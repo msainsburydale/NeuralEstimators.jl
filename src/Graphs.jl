@@ -601,7 +601,7 @@ function (est::IntervalEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) wher
 	l = est.l(Z, m)
 	vcat(l, l .+ exp.(est.u(Z, m)))
 end
-function (est::IntervalEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
+function (est::IntervalEstimatorCompactPrior{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
 	# Extract the compress object that encodes the compact prior support:
 	c = est.c
 
