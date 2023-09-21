@@ -27,7 +27,7 @@ end
 """
 	IntervalEstimator(arch_lower, arch_upper)
 	IntervalEstimator(arch)
-A neural estimator that jointly estimates credible intervals constructed as,
+A neural interval estimator that jointly estimates credible intervals constructed as,
 
 ```math
 [l(Z), l(Z) + \\mathrm{exp}(u(Z))],
@@ -35,12 +35,14 @@ A neural estimator that jointly estimates credible intervals constructed as,
 
 where ``l(⋅)`` and ``u(⋅)`` are the neural networks `arch_lower` and
 `arch_upper`, both of which should transform data into ``p``-dimensional vectors,
-where ``p`` is the number of parameters in the model. If only a single neural
-network architecture `arch` is provided, it will be used for both `arch_lower`
-and `arch_upper`.
+where ``p`` is the number of parameters in the statistical model. If only a
+single neural network architecture `arch` is provided, it will be used for both
+`arch_lower` and `arch_upper`.
 
-Internally, the output from `arch_lower` and `arch_upper` are concatenated, so
-that `IntervalEstimator` objects transform data into matrices with ``2p`` rows.
+The returned value is a matrix with ``2p`` rows, where the first and second ``p``
+rows correspond to estimates of the lower and upper bound, respectively.
+
+See also [`IntervalEstimatorCompactPrior`](@ref).
 
 # Examples
 ```
@@ -53,7 +55,7 @@ m = 100 # number of independent replicates
 Z = rand(n, m)
 
 # Create an architecture
-p = 3  # parameters in the model
+p = 3  # number of parameters in the statistical model
 w = 8  # width of each layer
 ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
 ϕ = Chain(Dense(w, w, relu), Dense(w, p));
@@ -84,10 +86,91 @@ IntervalEstimator(l, u::PointEstimator) = IntervalEstimator(l, u.arch)
 IntervalEstimator(l::PointEstimator, u) = IntervalEstimator(l.arch, u)
 
 
+#TODO unit testing
+"""
+	IntervalEstimatorCompactPrior(u, v, min_supp::Vector, max_supp::Vector)
+	IntervalEstimatorCompactPrior(u, v, compress::Compress)
+A neural interval estimator that uses the neural networks `u` and `v` to jointly
+estimates credible intervals that are guaranteed to be within the support of the
+prior distribution, as defined by the ``p``-dimensional vectors `min_supp` and
+`max_supp` (alternatively, defined by a single object, `compress::Compress`).
+
+Given data ``Z``, the intervals are constructed as
+
+```math
+[f(u(Z)), f(u(Z)) + g(v(Z), f(u(Z)))],
+```
+
+where
+
+- ``u(⋅)`` and ``v(⋅)`` are neural networks, both of which should transform data into ``p``-dimensional vectors, with ``p`` the number of parameters in the statistical model;
+- ``f(⋅)`` is a logistic function that maps the output of ``u(⋅)`` to the prior support; and
+- ``g(⋅, ⋅)`` is a logistic function that maps the output of ``v(⋅)`` to be between zero and the difference between `max_supp` and ``f(u(Z)))``.
+
+The returned value is a matrix with ``2p`` rows, where the first and second ``p``
+rows correspond to estimates of the lower and upper bound, respectively.
+
+See also [`IntervalEstimator`](@ref) and [`Compress`](@ref).
+
+# Examples
+```
+using NeuralEstimators
+using Flux
+
+# prior support
+min_supp = [25, 0.5, -pi/2]
+max_supp = [500, 2.5, 0]
+p = length(min_supp)  # number of parameters in the statistical model
+
+# Generate some toy data
+n = 2   # bivariate data
+m = 100 # number of independent replicates
+Z = rand(n, m)
+
+# Create an architecture
+w = 8  # width of each layer
+ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
+ϕ = Chain(Dense(w, w, relu), Dense(w, p));
+u = DeepSet(ψ, ϕ)
+v = deepcopy(u) # use the same architecture for both u and v
+
+# Initialise the interval estimator
+estimator = IntervalEstimatorCompactPrior(u, v, min_supp, max_supp)
+
+# Apply the interval estimator
+estimator(Z)
+interval(estimator, Z)
+```
+"""
+struct IntervalEstimatorCompactPrior{F, G} <: NeuralEstimator
+	u::F
+	v::G
+	c::Compress
+end
+IntervalEstimatorCompactPrior(u, v, min_supp, max_supp) = IntervalEstimatorCompactPrior(u, v, Compress(min_supp, max_supp))
+@functor IntervalEstimatorCompactPrior
+Flux.trainable(est::IntervalEstimatorCompactPrior) = (est.u, est.v)
+function (est::IntervalEstimatorCompactPrior)(Z)
+
+	# Extract the compress object that encodes the compact prior support:
+	c = est.c
+
+	# Scale the low quantile to the prior support:
+	u = est.u(Z)
+	f = c(u)
+
+	# Scale the high-quantile term to be within u and the maximum of the prior support:
+	v = est.v(Z)
+	g = (c.b .- f) ./ (one(eltype(v)) .+ exp.(-c.k .* v))
+
+	vcat(f, f .+ g)
+end
+
+#TODO unit testing
 """
 	PointIntervalEstimator(arch_point, arch_lower, arch_upper)
 	PointIntervalEstimator(arch_point, arch_bound)
-	PointEstimator(arch)
+	PointIntervalEstimator(arch)
 A neural estimator that jointly produces point estimates, θ̂(Z), where θ̂(Z) is a
 neural point estimator with architecture `arch_point`, and credible intervals constructed as,
 
@@ -97,7 +180,7 @@ neural point estimator with architecture `arch_point`, and credible intervals co
 
 where ``l(⋅)`` and ``u(⋅)`` are the neural networks `arch_lower` and
 `arch_upper`, both of which should transform data into ``p``-dimensional vectors,
-where ``p`` is the number of parameters in the model.
+where ``p`` is the number of parameters in the statistical model.
 
 If only a single neural network architecture `arch` is provided, it will be used
 for all architectures; similarly, if two architectures are provided, the second
@@ -117,7 +200,7 @@ m = 100 # number of independent replicates
 Z = rand(n, m)
 
 # Create an architecture
-p = 3  # parameters in the model
+p = 3  # number of parameters in the statistical model
 w = 8  # width of each layer
 ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
 ϕ = Chain(Dense(w, w, relu), Dense(w, p));
@@ -197,7 +280,7 @@ using NeuralEstimators
 using Flux
 
 n = 2  # bivariate data
-p = 3  # number of parameters in the model
+p = 3  # number of parameters in the statistical model
 w = 8  # width of each layer
 
 ψ₁ = Chain(Dense(n, w, relu), Dense(w, w, relu));

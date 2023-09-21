@@ -735,7 +735,8 @@ function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 	return ls
 end
 
-function _updatebatch!(θ̂::Union{GNN, PointEstimator{<:GNN}, IntervalEstimator{<:GNN}, PointIntervalEstimator{<:GNN}}, Z, θ, device, loss, γ, optimiser)
+#TODO Surely there is a better way of dispatching here...
+function _updatebatch!(θ̂::Union{GNN, PointEstimator{<:GNN}, IntervalEstimator{<:GNN}, IntervalEstimatorCompactPrior{<:GNN}, PointIntervalEstimator{<:GNN}}, Z, θ, device, loss, γ, optimiser)
 
 	m = numberreplicates(Z)
 	Z = Flux.batch(Z)
@@ -753,7 +754,7 @@ function _updatebatch!(θ̂::Union{GNN, PointEstimator{<:GNN}, IntervalEstimator
 end
 
 
-function _updatebatch!(θ̂::Union{PropagateReadout, PointEstimator{<:PropagateReadout}, IntervalEstimator{<:PropagateReadout}, PointIntervalEstimator{<:GNN}}, Z, θ, device, loss, γ, optimiser)
+function _updatebatch!(θ̂::Union{PropagateReadout, PointEstimator{<:PropagateReadout}, IntervalEstimator{<:PropagateReadout}, IntervalEstimatorCompactPrior{<:PropagateReadout}, PointIntervalEstimator{<:GNN}}, Z, θ, device, loss, γ, optimiser)
 
 	m = numberreplicates(Z)
 	Z = Flux.batch(Z)

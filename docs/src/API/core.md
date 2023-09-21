@@ -31,6 +31,8 @@ PointEstimator
 
 IntervalEstimator
 
+IntervalEstimatorCompactPrior
+
 PointIntervalEstimator
 
 QuantileEstimator

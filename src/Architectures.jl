@@ -386,7 +386,7 @@ l(θ) = a + \frac{b - a}{1 + e^{-kθ}},
 ```
 
 where the arguments `a` and `b` together combine to shift and scale the logistic
-function to the desired range, and the growth rate `k` controls the steepness
+function to the range (`a`, `b`), and the growth rate `k` controls the steepness
 of the curve.
 
 The logistic function given [here](https://en.wikipedia.org/wiki/Logistic_function)

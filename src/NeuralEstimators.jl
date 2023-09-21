@@ -34,15 +34,15 @@ include("loss.jl")
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
-export NeuralEstimator, PointEstimator, IntervalEstimator, PointIntervalEstimator, QuantileEstimator, PiecewiseEstimator
-include("Estimators.jl")
-
 export DeepSet, DeepSetExpert, Compress, SplitApply
 export CholeskyCovariance, CovarianceMatrix, CorrelationMatrix
 export vectotril, vectotriu
 include("Architectures.jl")
 
-export GNN, PropagateReadout, UniversalPool, adjacencymatrix, WeightedGraphConv, WeightedGINConv, maternclusterprocess
+export NeuralEstimator, PointEstimator, IntervalEstimator, IntervalEstimatorCompactPrior, PointIntervalEstimator, QuantileEstimator, PiecewiseEstimator
+include("Estimators.jl")
+
+export GNN, PropagateReadout, UniversalPool, adjacencymatrix, WeightedGraphConv, maternclusterprocess
 include("Graphs.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes

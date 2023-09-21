@@ -50,12 +50,12 @@ end
 
 
 #TODO need to document this method
-function interval(estimator::Union{IntervalEstimator, PointIntervalEstimator}, Z; parameter_names = nothing, use_gpu::Bool = true)
+function interval(estimator::Union{IntervalEstimator, IntervalEstimatorCompactPrior, PointIntervalEstimator}, Z; parameter_names = nothing, use_gpu::Bool = true)
 
 	ci = estimateinbatches(estimator, Z, use_gpu = use_gpu)
 	ci = cpu(ci)
 
-	if typeof(estimator) <: IntervalEstimator
+	if typeof(estimator) <: IntervalEstimator || typeof(estimator) <: IntervalEstimatorCompactPrior
 		@assert size(ci, 1) % 2 == 0
 		p = size(ci, 1) ÷ 2
 	elseif typeof(estimator) <: PointIntervalEstimator

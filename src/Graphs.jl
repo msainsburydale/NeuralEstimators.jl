@@ -158,89 +158,6 @@ function Base.show(io::IO, l::WeightedGraphConv)
     print(io, ")")
 end
 
-
-# ---- WeightedGINConv ----
-
-#TODO need to document this properly (and document WeightedGraphConv). Possibly should also rename these "SpatialGraphConv" and "SpatialGINConv"
-@doc raw"""
-    WeightedGINConv(in => out, σ=identity; aggr=mean, bias=true, init=glorot_uniform)
-Same as regular [`GINConv`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/conv/#GraphNeuralNetworks.GINConv) layer, but where the neighbours of a node are weighted by their spatial distance to that node.
-
-This implementation also treats ϵ as a learnable parameter.
-
-# Arguments
-- `f`: A (possibly learnable) function acting on node features.
-- `ϵ`: Weighting factor.
-
-# Examples
-```
-using NeuralEstimators
-using GraphNeuralNetworks
-using Flux
-
-# Construct a spatially-weighted adjacency matrix based on k-nearest neighbours
-# with k = 5, and convert to a graph with random (uncorrelated) dummy data:
-n = 100
-S = rand(n, 2)
-d = 1 # dimension of each observation (univariate data here)
-A = adjacencymatrix(S, 5)
-Z = GNNGraph(A, ndata = rand(d, n))
-
-# Construct the layer and apply it to the data to generate convolved features
-layer = WeightedGINConv(d => 16)
-layer(Z)
-```
-"""
-struct WeightedGINConv{NN, A, B} <: GNNLayer
-    nn::NN
-    ϵ::A
-	w::A
-    aggr::B
-end
-
-function Base.show(io::IO, l::WeightedGINConv)
-    print(io, "GINConv($(l.nn)")
-    print(io, ", $(l.ϵ)")
-	print(io, ", $(l.w)")
-    print(io, ")")
-end
-
-@functor WeightedGINConv
-# Flux.trainable(l::GINConv) = (nn = l.nn, w = l.w, ϵ = l.ϵ)
-
-# NB Even though w and ϵ are scalars, they need to be stored as arrays so that
-# they are recognised as trainable fields. Note that we could have different
-# parameters for each channel, in which case w and ϵ would be multi-dimensional arrays of parameters.
-function WeightedGINConv(nn; aggr = +, init=glorot_uniform)
-	w = init(1)
-	ϵ = zero(w)
-	WeightedGINConv(nn, ϵ, w, aggr)
-end
-function WeightedGINConv(ch::Pair{Int,Int}, σ = identity; mlp_layers::Int = 1, aggr = +, init=glorot_uniform, bias::Bool=true)
-    in, out = ch
-	nn = Chain(
-		Dense(in  => out, σ, bias = bias),
-		[Dense(out  => out, σ, bias = bias) for _ in 1:mlp_layers]...
-	)
-    WeightedGINConv(nn; aggr = aggr, init = init)
-end
-
-rangeparameter(l::WeightedGINConv) = exp.(l.w)
-
-
-#TODO 3D array version of this
-function (l::WeightedGINConv)(g::GNNGraph, x::AbstractMatrix)
-    check_num_nodes(g, x)
-	r = rangeparameter(l)  # strictly positive range parameter #TODO should possibly make ϵ strictly positive too.
-	d = g.graph[3]         # vector of spatial distances
-    w = exp.(-d ./ r)      # weights defined by exponentially decaying function of distance
-    m = propagate(copy_xj, g, l.aggr, xj = x, e = w)
-    l.nn((1 + l.ϵ[1]) * x + m)
-end
-
-
-
-
 # ---- Adjacency matrices ----
 
 # TODO keyword argument method that might be a bit easier to deal with for the user
@@ -678,14 +595,29 @@ end
 # Methods needed to accomodate above method of GNN. They are exactly the same as
 # the standard methods defined in Estimators.jl, but also pass through m.
 #TODO unit testing for these methods
-(est::PointEstimator{<:GNN})(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = est.arch(g, m)
-function (est::IntervalEstimator{<:GNN})(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
-	l = est.l(g, m)
-	vcat(l, l .+ exp.(est.u(g, m)))
+#TODO There should be a neater way to do this... Essentially, I am just replacing f(Z) with f(Z, m)... Is there a generic way to do this?
+(est::PointEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = est.arch(Z, m)
+function (est::IntervalEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
+	l = est.l(Z, m)
+	vcat(l, l .+ exp.(est.u(Z, m)))
 end
-function (est::PointIntervalEstimator{<:GNN})(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
-	θ̂ = est.θ̂(g, m)
-	vcat(θ̂, θ̂ .- exp.(est.l(g, m)), θ̂ .+ exp.(est.u(g, m)))
+function (est::IntervalEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
+	# Extract the compress object that encodes the compact prior support:
+	c = est.c
+
+	# Scale the low quantile to the prior support:
+	u = est.u(Z, m)
+	f = c(u)
+
+	# Scale the high-quantile term to be within u and the maximum of the prior support:
+	v = est.v(Z, m)
+	g = (c.b .- f) ./ (one(eltype(v)) .+ exp.(-c.k .* v))
+
+	vcat(f, f .+ g)
+end
+function (est::PointIntervalEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
+	θ̂ = est.θ̂(Z, m)
+	vcat(θ̂, θ̂ .- exp.(est.l(Z, m)), θ̂ .+ exp.(est.u(Z, m)))
 end
 
 
