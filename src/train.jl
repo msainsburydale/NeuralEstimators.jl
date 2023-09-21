@@ -754,25 +754,6 @@ function _updatebatch!(θ̂::Union{GNN, PointEstimator{<:GNN}, IntervalEstimator
 end
 
 
-function _updatebatch!(θ̂::Union{PropagateReadout, PointEstimator{<:PropagateReadout}, IntervalEstimator{<:PropagateReadout}, IntervalEstimatorCompactPrior{<:PropagateReadout}, PointIntervalEstimator{<:GNN}}, Z, θ, device, loss, γ, optimiser)
-
-	m = numberreplicates(Z)
-	Z = Flux.batch(Z)
-	Z, θ = Z |> device, θ |> device
-
-	# Compute gradients in such a way that the training loss is also saved.
-	# This is equivalent to: gradients = gradient(() -> loss(θ̂(Z), θ), γ)
-	ls, back = Zygote.pullback(() -> loss(θ̂(Z, m), θ), γ) # NB here we also pass m to θ̂, since Flux.batch() cannot be differentiated
-	gradients = back(one(ls))
-	update!(optimiser, γ, gradients)
-
-	# Assuming that loss returns an average, convert it to a sum.
-	ls = ls * size(θ)[end]
-	return ls
-end
-
-
-
 # Wrapper function that returns simulated data and the true parameter values
 _simulate(simulator, params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (simulator(params, m), _extractθ(params))
 _constructset(simulator, params::P, m, batchsize)  where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _quietDataLoader(_simulate(simulator, params, m), batchsize)

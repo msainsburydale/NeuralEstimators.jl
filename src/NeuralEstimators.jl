@@ -42,7 +42,7 @@ include("Architectures.jl")
 export NeuralEstimator, PointEstimator, IntervalEstimator, IntervalEstimatorCompactPrior, PointIntervalEstimator, QuantileEstimator, PiecewiseEstimator
 include("Estimators.jl")
 
-export GNN, PropagateReadout, UniversalPool, adjacencymatrix, WeightedGraphConv, maternclusterprocess
+export GNN, UniversalPool, adjacencymatrix, WeightedGraphConv, maternclusterprocess
 include("Graphs.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes

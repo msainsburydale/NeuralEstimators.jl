@@ -35,7 +35,7 @@ end
 #	- DeepSet/DeepSetExpert
 #		- Array data
 #			- data with/without set-level covariates
-#		- Graph data (using GNN/PropagateReadout)
+#		- Graph data
 #			- Single data set
 #			- Single data set with set-level covariates
 #			- Multiple data sets
@@ -542,67 +542,6 @@ end
 
 
 #### Graph data
-# NB at some point, I may add another loop to the above checks to test
-#    PropagateReadout with all possible combinations that it may encounter.
-#    This might be facilitated with reshapedataGNN().
-@testset "PropagateReadout" begin
-	@testset "$dvc" for dvc ∈ devices
-		use_gpu = dvc == gpu
-
-		n₁, n₂ = 11, 27
-		m₁, m₂ = 30, 50
-		d = 1
-		g₁ = rand_graph(n₁, m₁, ndata = array(d, n₁, T = Float32)) |> dvc
-		g₂ = rand_graph(n₂, m₂, ndata = array(d, n₂, T = Float32)) |> dvc
-		g  = Flux.batch([g₁, g₂])
-
-		# g is a single large GNNGraph containing subgraphs
-		@test g.num_graphs == 2
-		@test g.num_nodes == n₁ + n₂
-		@test g.num_edges == m₁ + m₂
-
-		# graph-to-graph propagation module
-		w = 32
-		q = 8
-		graphtograph = GNNChain(GraphConv(d => w), GraphConv(w => w), GraphConv(w => q))
-		graphtograph = graphtograph |> dvc
-		x = graphtograph(g)
-		y = Flux.batch([graphtograph(g₁), graphtograph(g₂)])
-		@test size(x) == size(y)
-		@test all(x.ndata.x .≈ y.ndata.x)
-
-		# global pooling module
-		# We can apply the pooling operation to the whole graph; however, I think this
-		# is mainly possible because the GlobalPool with mean is very simple.
-		# We may need to do something different for general global pooling layers (e.g.,
-		# universal pooling with DeepSets).
-		meanpool = GlobalPool(mean)
-		h  = meanpool(graphtograph(g))
-		h₁ = meanpool(graphtograph(g₁))
-		h₂ = meanpool(graphtograph(g₂))
-		@test all(graph_features(h) .≈ hcat(graph_features(h₁), graph_features(h₂)))
-
-		# Full estimator couched in Deep Set framework
-		p = 3
-		ψ = PropagateReadout(graphtograph, meanpool)
-		ϕ = Chain(Dense(q, w, relu), Dense(w, p))
-		θ̂ = DeepSet(ψ, ϕ) |> dvc
-
-		# Test on a single graph containing sub-graphs
-		@test size(θ̂(g)) == (p, 1)
-
-		# test on a vector of graphs
-		v = [g₁, g₂, Flux.batch([g₁, g₂])]
-		@test size(θ̂(v)) == (p, length(v))
-
-		# test that it can be trained
-		K = 10
-		Z = [rand_graph(n₁, m₁, ndata = array(d, n₁, T = Float32)) for _ in 1:K]
-		θ = array(p, K)
-		train(θ̂, θ, θ, Z, Z; batchsize = 2, epochs = 2, verbose = verbose, use_gpu = use_gpu)
-	end
-end
-
 
 @testset "GNN" begin
 
