@@ -90,22 +90,28 @@ IntervalEstimator(l::PointEstimator, u) = IntervalEstimator(l.arch, u)
 """
 	IntervalEstimatorCompactPrior(u, v, min_supp::Vector, max_supp::Vector)
 	IntervalEstimatorCompactPrior(u, v, compress::Compress)
-A neural interval estimator that uses the neural networks `u` and `v` to jointly
-estimates credible intervals that are guaranteed to be within the support of the
-prior distribution, as defined by the ``p``-dimensional vectors `min_supp` and
-`max_supp` (alternatively, defined by a single object, `compress::Compress`).
+Uses the neural networks `u` and `v` to jointly estimate credible intervals
+that are guaranteed to be within the support of the prior distributon. This
+support is defined by the ``p``-dimensional vectors `min_supp` and `max_supp`
+(or a single ``p``-dimensional object of type `Compress`), where ``p`` is the
+number of parameters in the statistical model.
 
 Given data ``Z``, the intervals are constructed as
 
 ```math
-[f(u(Z)), f(u(Z)) + g(v(Z), f(u(Z)))],
+[f(u(Z)), 	f(u(Z)) + g(v(Z), f(u(Z)))],
 ```
 
 where
 
-- ``u(⋅)`` and ``v(⋅)`` are neural networks, both of which should transform data into ``p``-dimensional vectors, with ``p`` the number of parameters in the statistical model;
+- ``u(⋅)`` and ``v(⋅)`` are neural networks, both of which should transform data into ``p``-dimensional vectors;
 - ``f(⋅)`` is a logistic function that maps the output of ``u(⋅)`` to the prior support; and
 - ``g(⋅, ⋅)`` is a logistic function that maps the output of ``v(⋅)`` to be between zero and the difference between `max_supp` and ``f(u(Z)))``.
+
+Note that, in addition to ensuring that the interval remains in the prior support,
+this constructions also ensures that the intervals are valid (i.e., it prevents
+quantile crossing, in the sense that the upper bound is always greater than the
+lower bound). 
 
 The returned value is a matrix with ``2p`` rows, where the first and second ``p``
 rows correspond to estimates of the lower and upper bound, respectively.
