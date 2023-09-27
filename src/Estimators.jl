@@ -99,19 +99,18 @@ number of parameters in the statistical model.
 Given data ``Z``, the intervals are constructed as
 
 ```math
-[f(u(Z)), 	f(u(Z)) + g(v(Z), f(u(Z)))],
+[g(u(Z)), 	g(u(Z)) + \\mathrm{exp}(v(Z)))],
 ```
 
 where
 
 - ``u(⋅)`` and ``v(⋅)`` are neural networks, both of which should transform data into ``p``-dimensional vectors;
-- ``f(⋅)`` is a logistic function that maps the output of ``u(⋅)`` to the prior support; and
-- ``g(⋅, ⋅)`` is a logistic function that maps the output of ``v(⋅)`` to be between zero and the difference between `max_supp` and ``f(u(Z)))``.
+- ``g(⋅)`` is a logistic function that maps its input to the prior support.
 
 Note that, in addition to ensuring that the interval remains in the prior support,
 this constructions also ensures that the intervals are valid (i.e., it prevents
 quantile crossing, in the sense that the upper bound is always greater than the
-lower bound). 
+lower bound).
 
 The returned value is a matrix with ``2p`` rows, where the first and second ``p``
 rows correspond to estimates of the lower and upper bound, respectively.
@@ -156,21 +155,33 @@ end
 IntervalEstimatorCompactPrior(u, v, min_supp, max_supp) = IntervalEstimatorCompactPrior(u, v, Compress(min_supp, max_supp))
 @functor IntervalEstimatorCompactPrior
 Flux.trainable(est::IntervalEstimatorCompactPrior) = (est.u, est.v)
+
 function (est::IntervalEstimatorCompactPrior)(Z)
-
-	# Extract the compress object that encodes the compact prior support:
+	x = est.u(Z)
+	y = x .+ exp.(est.v(Z))
 	c = est.c
-
-	# Scale the low quantile to the prior support:
-	u = est.u(Z)
-	f = c(u)
-
-	# Scale the high-quantile term to be within u and the maximum of the prior support:
-	v = est.v(Z)
-	g = (c.b .- f) ./ (one(eltype(v)) .+ exp.(-c.k .* v))
-
-	vcat(f, f .+ g)
+	vcat(c(x), c(y))
 end
+
+
+# NB more complicated version:
+# function (est::IntervalEstimatorCompactPrior)(Z)
+#
+# 	# Extract the compress object that encodes the compact prior support:
+# 	c = est.c
+#
+# 	# Scale the low quantile to the prior support:
+# 	u = est.u(Z)
+# 	f = c(u)
+#
+# 	# Scale the high-quantile term to be within u and the maximum of the prior support:
+# 	v = est.v(Z)
+# 	g = (c.b .- f) ./ (one(eltype(v)) .+ exp.(-c.k .* v))
+#
+# 	vcat(f, f .+ g)
+# end
+
+
 
 #TODO unit testing
 """

@@ -601,19 +601,11 @@ function (est::IntervalEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) wher
 	l = est.l(Z, m)
 	vcat(l, l .+ exp.(est.u(Z, m)))
 end
-function (est::IntervalEstimatorCompactPrior{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
-	# Extract the compress object that encodes the compact prior support:
+function (est::IntervalEstimatorCompactPrior)(Z)
+	x = est.u(Z, m)
+	y = x .+ exp.(est.v(Z, m))
 	c = est.c
-
-	# Scale the low quantile to the prior support:
-	u = est.u(Z, m)
-	f = c(u)
-
-	# Scale the high-quantile term to be within u and the maximum of the prior support:
-	v = est.v(Z, m)
-	g = (c.b .- f) ./ (one(eltype(v)) .+ exp.(-c.k .* v))
-
-	vcat(f, f .+ g)
+	vcat(c(x), c(y))
 end
 function (est::PointIntervalEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
 	θ̂ = est.θ̂(Z, m)
