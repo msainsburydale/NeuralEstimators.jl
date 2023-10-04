@@ -24,6 +24,8 @@ This software was developed as part of academic research. If you would like to s
 	title = {Likelihood-Free Parameter Estimation with Neural {B}ayes Estimators},
 	journal = {The American Statistician},
 	year = {2023},
-	volume = {to appear}
+	volume = {to appear},
+	doi = {10.1080/00031305.2023.2249522},
+	url = {https://doi.org/10.1080/00031305.2023.2249522}
 }
 ```
