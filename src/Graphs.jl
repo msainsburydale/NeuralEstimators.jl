@@ -601,7 +601,7 @@ function (est::IntervalEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) wher
 	l = est.l(Z, m)
 	vcat(l, l .+ exp.(est.u(Z, m)))
 end
-function (est::IntervalEstimatorCompactPrior)(Z)
+function (est::IntervalEstimatorCompactPrior)(Z::GNNGraph, m::AbstractVector{I})
 	x = est.u(Z, m)
 	y = x .+ exp.(est.v(Z, m))
 	c = est.c

@@ -219,12 +219,9 @@ function subsetdata(Z::G, m) where {G <: AbstractGraph}
 	 getgraph(Z, m)
 end
 
-
-
-# Note that these arguments differ to DataLoader(), so this function should never be exported.
 function _quietDataLoader(data, batchsize::Integer; shuffle = true, partial = false)
 	oldstd = stdout
-	redirect_stderr(open("/dev/null", "w"))
+	redirect_stderr(devnull)
 	data_loader = DataLoader(data, batchsize = batchsize, shuffle = shuffle, partial = partial)
 	redirect_stderr(oldstd)
 	return data_loader
