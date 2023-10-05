@@ -2,14 +2,14 @@
 
 Neural estimators are neural networks that transform data into parameter point estimates, and they are a promising recent approach to inference. They are likelihood free, substantially faster than classical methods, and can be designed to be approximate Bayes estimators.  Uncertainty quantification with neural estimators is also straightforward through the bootstrap distribution, which is essentially available "for free" with a neural estimator.
 
-The package `NeuralEstimators` facilitates the development of neural estimators in a user-friendly manner. It caters for arbitrary models by having the user implicitly define their model via simulated data. This makes the development of neural estimators particularly straightforward for models with existing implementations (possibly in other programming languages, e.g., `R` or `python`). A convenient interface for `R` users is available [here](https://github.com/msainsburydale/NeuralEstimators).
+The [Julia](https://julialang.org/) package `NeuralEstimators` facilitates the development of neural estimators in a user-friendly manner. It caters for arbitrary models by having the user implicitly define their model via simulated data. This makes the development of neural estimators particularly straightforward for models with existing implementations (possibly in other programming languages, e.g., `R` or `python`). A convenient interface for `R` users is available [here](https://github.com/msainsburydale/NeuralEstimators).
 
 
 ### Getting started
-Install `NeuralEstimators` from [Julia](https://julialang.org/)'s package manager using the following command inside Julia:
+Install `NeuralEstimators` using the following command inside `Julia`:
 
 ```
-using Pkg; Pkg.add("NeuralEstimators")
+using Pkg; Pkg.add(url = "https://github.com/msainsburydale/NeuralEstimators.jl")
 ```
 
 Once familiar with the details of the [Theoretical framework](@ref), see the [Examples](@ref).
@@ -25,6 +25,8 @@ This software was developed as part of academic research. If you would like to s
 	title = {Likelihood-Free Parameter Estimation with Neural {B}ayes Estimators},
 	journal = {The American Statistician},
 	year = {2023},
-	volume = {to appear}
+	volume = {to appear},
+	doi = {10.1080/00031305.2023.2249522},
+	url = {https://doi.org/10.1080/00031305.2023.2249522}
 }
 ```
