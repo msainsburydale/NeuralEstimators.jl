@@ -34,7 +34,7 @@ Arguments common to all methods:
 - `epochs::Integer = 100`
 - `batchsize::Integer = 32`
 - `optimiser = ADAM(1e-4)`
-- `savepath::String = ""`: path to save the trained estimator and other information; if savepath is an empty string (default), nothing is saved.
+- `savepath::String = ""`: path to save the neural-network weights during training (as `bson` files) and other information, such as the risk function per epoch (the risk function evaluated over the training and validation sets are saved in the first and second columns of `loss_per_epoch.csv`). If savepath is an empty string (default), nothing is saved.
 - `stopping_epochs::Integer = 5`: cease training if the risk doesn't improve in this number of epochs.
 - `use_gpu::Bool = true`
 - `verbose::Bool = true`

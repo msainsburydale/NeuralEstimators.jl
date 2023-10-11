@@ -64,15 +64,10 @@ include("plotting.jl")
 export bootstrap, interval
 include("bootstrap.jl")
 
-export stackarrays, expandgrid, loadbestweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches
+export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches
 include("utility.jl")
 
 end
-
-#TODO NeuralEstimatorsR: We could easily provide convenience constructors for
-# estimators that take integers for width, depth, q = width, etc.  This would
-# help the feel of the package and allow us to perform an implementation without
-# writing any Julia code, which is important.
 
 #TODO Add helper functions for censoring and missing data (take these from EM paper, and ask Jordan if he has any code he would like to share)
 

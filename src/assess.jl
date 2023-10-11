@@ -49,7 +49,7 @@ have ``J`` sets of ``m`` mutually independent realisations from the model
 collected in ``\mathcal{Z}_{\boldsymbol{\theta}}``.
 
 # Keyword arguments
-- `loss = (x, y) -> abs(x - y)`: a binary operator (default absolute-error loss).
+- `loss = (x, y) -> abs(x - y)`: a binary operator defining the loss function (default absolute-error loss).
 - `average_over_parameters::Bool = true`: if true (default), the loss is averaged over all parameters; otherwise, the loss is averaged over each parameter separately.
 - `average_over_sample_sizes::Bool = true`: if true (default), the loss is averaged over all sample sizes ``m``; otherwise, the loss is averaged over each sample size separately.
 """

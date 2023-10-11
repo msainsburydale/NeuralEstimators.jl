@@ -281,12 +281,21 @@ end
 """
 	loadbestweights(path::String)
 
-$common_docstring returns the weights of the best network (measured by validation loss).
+Returns the weights of the neural network saved as 'best_network.bson' in the given `path`.
 """
 function loadbestweights(path::String)
 	load_path     = joinpath(path, "best_network.bson")
 	best_weights = load(load_path, @__MODULE__)[:weights]
 	return best_weights
+end
+
+"""
+	loadweights(path::String)
+
+Returns the weights of the neural network in the given `path`.
+"""
+function loadweights(path::String)
+	load(path, @__MODULE__)[:weights]
 end
 
 
