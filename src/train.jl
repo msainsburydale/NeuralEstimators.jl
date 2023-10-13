@@ -652,15 +652,18 @@ end
 
 # E = number of estimators
 function _modifyargs(kwargs, i, E)
-	for arg ∈ [:epochs, :batchsize, :stopping_epochs, :optimiser]
+	for arg ∈ [:epochs, :batchsize, :stopping_epochs]
 		if haskey(kwargs, arg)
 			field = getfield(kwargs, arg)
-			@assert length(field) ∈ (1, E)
-			if length(field) > 1
-				kwargs = merge(kwargs, NamedTuple{(arg,)}(field[i]))
+			if typeof(field) <: Vector # this check is needed because there is no method length(::Adam)
+				@assert length(field) ∈ (1, E)
+				if length(field) > 1
+					kwargs = merge(kwargs, NamedTuple{(arg,)}(field[i]))
+				end
 			end
 		end
 	end
+
 	kwargs = Dict(pairs(kwargs)) # convert to Dictionary so that kwargs can be passed to train()
 	return kwargs
 end
