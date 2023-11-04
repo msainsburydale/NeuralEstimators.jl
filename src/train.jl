@@ -486,6 +486,8 @@ function trainx end
 
 function trainx(θ̂, P, simulator, M; args...)
 
+	@assert !(typeof(θ̂) <: Vector) # check that θ̂ is not a vector of estimators, which is common error if one calls trainx() on the output of a previous call to trainx()
+
 	kwargs = (;args...)
 	verbose = _checkargs_trainx(kwargs)
 
@@ -520,6 +522,8 @@ end
 
 
 function trainx(θ̂, θ_train::P, θ_val::P, simulator, M; args...)  where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+	@assert !(typeof(θ̂) <: Vector) # check that θ̂ is not a vector of estimators, which is common error if one calls trainx() on the output of a previous call to trainx()
 
 	kwargs = (;args...)
 	verbose = _checkargs_trainx(kwargs)
@@ -556,6 +560,8 @@ end
 
 # This is for when the data CAN be easily subsetted
 function trainx(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+
+	@assert !(typeof(θ̂) <: Vector) # check that θ̂ is not a vector of estimators, which is common error if one calls trainx() on the output of a previous call to trainx()
 
 	@assert length(unique(numberreplicates(Z_val))) == 1 "The elements of `Z_val` should be equally replicated: check with `numberreplicates(Z_val)`"
 	@assert length(unique(numberreplicates(Z_train))) == 1 "The elements of `Z_train` should be equally replicated: check with `numberreplicates(Z_train)`"
@@ -595,6 +601,8 @@ end
 
 # This method is for when the data CANNOT be easily subsetted, so another layer of vectors is needed
 function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: Union{V₁, Tuple{V₁, V₂}}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+	@assert !(typeof(θ̂) <: Vector) # check that θ̂ is not a vector of estimators, which is common error if one calls trainx() on the output of a previous call to trainx()
 
 	@assert length(Z_train) == length(Z_val)
 	E = length(Z_train) # number of estimators
