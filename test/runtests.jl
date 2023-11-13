@@ -161,9 +161,9 @@ end
 	θ = arrayn(p, K) * 0.9 |> dvc
 
 	@testset "kpowerloss" begin
-		@test kpowerloss(θ̂, θ, 2; safeorigin = false) ≈ mse(θ̂, θ)
-		@test kpowerloss(θ̂, θ, 1; safeorigin = false) ≈ mae(θ̂, θ)
-		@test kpowerloss(θ̂, θ, 1; safeorigin = true) ≈ mae(θ̂, θ)
+		@test kpowerloss(θ̂, θ, 2; safeorigin = false, joint=false) ≈ mse(θ̂, θ)
+		@test kpowerloss(θ̂, θ, 1; safeorigin = false, joint=false) ≈ mae(θ̂, θ)
+		@test kpowerloss(θ̂, θ, 1; safeorigin = true, joint=false) ≈ mae(θ̂, θ)
 		@test kpowerloss(θ̂, θ, 0.1) >= 0
 	end
 
