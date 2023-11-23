@@ -86,10 +86,10 @@ w = 32          # width of each layer
 
 # training: full simulation on-the-fly
 θ̂ = train(θ̂, smplr, simulate, m = m, K = K, epochs = 5)
-θ̂ = train(θ̂, smplr,  simulate, m = m, K = K, epochs = 5)
-θ̂ = train(θ̂, smplr,  simulate, m = m, K = K, epochs = 10, epochs_per_θ_refresh = 4, epochs_per_Z_refresh = 2)
+θ̂ = train(θ̂, smplr, simulate, m = m, K = K, epochs = 5)
+θ̂ = train(θ̂, smplr, simulate, m = m, K = K, epochs = 10, epochs_per_θ_refresh = 4, epochs_per_Z_refresh = 2)
 
-# training: fixed parameters
+# training: simulation on-the-fly but with fixed parameters
 θ_train = smplr(K)
 θ_val   = smplr(K ÷ 5)
 θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 5)

@@ -100,8 +100,6 @@ end
 
 end
 
-
-
 @testset "adjacencymatrix" begin
 
 	n = 100
@@ -133,8 +131,57 @@ end
 end
 
 
+@testset "missingdata" begin
+
+	# ---- removedata() ----
+	d = 5     # dimension of each replicate
+	n = 3     # number of observed elements of each replicate: must have n <= d
+	m = 2000  # number of replicates
+	Z = rand(d, m)
+
+	removedata(Z, n)
+	removedata(Z, n; fixed_pattern = true)
+	removedata(Z, n; contiguous_pattern = true)
+	removedata(Z, n, variable_proportion = true)
+	removedata(Z, n; contiguous_pattern = true, fixed_pattern = true)
+	removedata(Z, n; contiguous_pattern = true, variable_proportion = true)
+
+	# Passing the proportion of missingness
+	p = rand(d)
+	removedata(Z, p)
+	# Check that the probability of missingness is roughly correct:
+	mapslices(x -> sum(ismissing.(x))/length(x), removedata(Z, p), dims = 2)
+	# Check that none of the replicates contain 100% missing:
+	@test !(d ∈ unique(mapslices(x -> sum(ismissing.(x)), removedata(Z, p), dims = 1)))
 
 
+	# ---- encodedata() ----
+	n = 16
+	Z = rand(n)
+	Z = removedata(Z, 0.25)
+	UW = encodedata(Z);
+	@test ndims(UW) == 3
+	@test size(UW) == (n, 2, 1)
+
+	Z = rand(n, n)
+	Z = removedata(Z, 0.25)
+	UW = encodedata(Z);
+	@test ndims(UW) == 4
+	@test size(UW) == (n, n, 2, 1)
+
+	Z = rand(n, n, 1, 1)
+	Z = removedata(Z, 0.25)
+	UW = encodedata(Z);
+	@test ndims(UW) == 4
+	@test size(UW) == (n, n, 2, 1)
+
+	m = 5
+	Z = rand(n, n, 1, m)
+	Z = removedata(Z, 0.25)
+	UW = encodedata(Z);
+	@test ndims(UW) == 4
+	@test size(UW) == (n, n, 2, m)
+end
 
 
 

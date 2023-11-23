@@ -73,7 +73,7 @@ Then, setting the argument `m` in [`train`](@ref) to be an integer range (e.g., 
 
 See [`DeepSetExpert`](@ref).
 
-## Loading previously saved neural estimators
+## Loading pre-trained neural estimators
 
 As training is by far the most computationally demanding part of the workflow, one typically trains an estimator and then saves it for later use. More specifically, one usually saves the *parameters* of the neural estimator (e.g., the weights and biases of the neural networks); then, to load the neural estimator at a later time, one initialises an estimator with the same architecture used during training, and then loads the saved parameters into this estimator.
 

@@ -25,13 +25,23 @@ adjacencymatrix
 
 containertype
 
+encodedata
+
 estimateinbatches
 
 expandgrid
 
 loadbestweights
 
+removedata
+
 stackarrays
 
 vectotril
+```
+
+## Other
+
+```@docs
+NeuralEM
 ```

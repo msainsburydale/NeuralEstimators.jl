@@ -11,6 +11,7 @@ using CSV
 using DataFrames
 using Distances
 using Distributions
+using Distributions: Bernoulli, Product
 import Distributions: cdf, logpdf, quantile, minimum, maximum, insupport, var, skewness
 using Flux
 using Flux: ofeltype, params, DataLoader, update!, glorot_uniform
@@ -26,6 +27,7 @@ using RecursiveArrayTools: VectorOfArray, convert
 using SparseArrays
 using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum
+using StatsBase
 using Zygote
 
 export kpowerloss, intervalscore, quantileloss
@@ -66,6 +68,10 @@ include("bootstrap.jl")
 
 export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches
 include("utility.jl")
+
+
+export NeuralEM, removedata, encodedata # TODO unit testing for NeuralEM
+include("missingdata.jl")
 
 end
 
