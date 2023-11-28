@@ -34,12 +34,12 @@ This software was developed as part of academic research. If you would like to s
 
 ### Papers using NeuralEstimators
 
-- **Likelihood-Free Parameter Estimation with Neural Bayes Estimators** [[paper]](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522)
+- **Likelihood-Free Parameter Estimation with Neural Bayes Estimators** [[paper]](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522)\
 Matthew Sainsbury-Dale, Andrew Zammit-Mangion, Raphaël Huser (2023)
 
 
-- **Neural Bayes Estimators for Censored Inference with Peaks-Over-Threshold Models** [[paper]](https://arxiv.org/abs/2306.15642)
+- **Neural Bayes Estimators for Censored Inference with Peaks-Over-Threshold Models** [[paper]](https://arxiv.org/abs/2306.15642)\
 Jordan Richards, Matthew Sainsbury-Dale, Andrew Zammit-Mangion, Raphaël Huser (2023+)
 
-- **Neural Bayes Estimators for Irregular Spatial Data using Graph Neural Networks** [[paper]](https://arxiv.org/abs/2310.02600)
+- **Neural Bayes Estimators for Irregular Spatial Data using Graph Neural Networks** [[paper]](https://arxiv.org/abs/2310.02600)\
 Matthew Sainsbury-Dale, Jordan Richards, Andrew Zammit-Mangion, Raphaël Huser (2023+)
