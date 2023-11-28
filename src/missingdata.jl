@@ -142,7 +142,8 @@ function (neuralem::NeuralEM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = noth
 		θ₀ = repeat(θ₀, 1, length(Z))
 	end
 
-	estimates = Folds.map(eachindex(Z)) do i
+	# TODO should we do Folds.map() here?
+	estimates = map(eachindex(Z)) do i
 		neuralem(Z[i], θ₀[:, i]; args...)
 	end
 	estimates = hcat(estimates...)
