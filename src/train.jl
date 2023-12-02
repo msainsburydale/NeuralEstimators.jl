@@ -1,81 +1,66 @@
+#NB This behaviour is important for the implementation of trainx() but unnecessary for the user to know.
+
+# If the number of replicates in `Z_train` is a multiple of the
+# number of replicates for each element of `Z_val`, the training data will be
+# recycled throughout training. For example, if each
+# element of `Z_train` consists of 50 replicates, and each
+# element of `Z_val` consists of 10 replicates, the first epoch will use the first
+# 10 replicates in `Z_train`, the second epoch uses the next 10 replicates, and so
+# on, until the sixth epoch again uses the first 10 replicates. Note that this
+# requires the data to be subsettable with the function `subsetdata`.
+
 """
-	train(θ̂, sampler, simulator; )
-	train(θ̂, θ_train::P, θ_val::P, simulator; ) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
+	train(θ̂, sampler::Function, simulator::Function; ...)
+	train(θ̂, θ_train::P, θ_val::P, simulator::Function; ...) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
 
-Train a neural estimator with architecture `θ̂`.
+Train a neural estimator `θ̂`.
 
-The methods cater for different forms of on-the-fly simulation. The method that
-takes functions `sampler` and `simulator` for sampling parameters and simulating
-data, respectively, allows for both the parameters and the data to be
-simulated on-the-fly. Note that `simulator` is called as `simulator(θ, m)`,
-where `θ` is a set of parameters and `m` is the sample size
-(see keyword arguments below). If provided with specific instances of
-parameters (`θ_train` and `θ_val`) or data (`Z_train` and `Z_val`), they will be
-held fixed during training.
+The methods cater for different variants of "on-the-fly" simulation.
+Specifically, a `sampler` can be provided to continuously sample new parameter
+vectors from the prior, and a `simulator` can be provided to continuously
+simulate new data conditional on the parameters. If
+provided with specific sets of parameters (`θ_train` and `θ_val`) and/or data
+(`Z_train` and `Z_val`), they will be held fixed during training.
 
-In all methods, the validation set is held fixed to reduce noise when
-evaluating the validation risk function, which is used to monitor the
-performance of the estimator during training.
+In all methods, the validation parameters and data are held fixed to reduce noise when evaluating the validation risk.
 
-If the number of replicates in `Z_train` is a multiple of the
-number of replicates for each element of `Z_val`, the training data will be
-recycled throughout training. For example, if each
-element of `Z_train` consists of 50 replicates, and each
-element of `Z_val` consists of 10 replicates, the first epoch uses the first
-10 replicates in `Z_train`, the second epoch uses the next 10 replicates, and so
-on, until the sixth epoch again uses the first 10 replicates. Note that this
-requires the data to be subsettable with the function `subsetdata`.
-
-# Keyword arguments
-
-Arguments common to all methods:
-- `loss = mae`: the loss function, which should return the average loss when applied to multiple replicates.
+# Keyword arguments common to all methods:
+- `loss = mae`
 - `epochs::Integer = 100`
 - `batchsize::Integer = 32`
 - `optimiser = ADAM(1e-4)`
-- `savepath::String = ""`: path to save the neural-network weights during training (as `bson` files) and other information, such as the risk function per epoch (the risk function evaluated over the training and validation sets are saved in the first and second columns of `loss_per_epoch.csv`). If savepath is an empty string (default), nothing is saved.
+- `savepath::String = ""`: path to save the neural-network weights during training (as `bson` files) and other information, such as the risk vs epoch (the risk function evaluated over the training and validation sets are saved in the first and second columns of `loss_per_epoch.csv`). If `savepath` is an empty string (default), nothing is saved.
 - `stopping_epochs::Integer = 5`: cease training if the risk doesn't improve in this number of epochs.
 - `use_gpu::Bool = true`
 - `verbose::Bool = true`
 
-Arguments common to `train(θ̂, P, simulator)` and `train(θ̂, θ_train, θ_val, simulator)`:
-- `m`: sample sizes (either an `Integer` or a collection of `Integers`).
+# Keyword arguments common to `train(θ̂, sampler, simulator)` and `train(θ̂, θ_train, θ_val, simulator)`:
+- `m`: sample sizes (either an `Integer` or a collection of `Integers`). The `simulator` is called as `simulator(θ, m)`.
 - `epochs_per_Z_refresh::Integer = 1`: how often to refresh the training data.
 - `simulate_just_in_time::Bool = false`: flag indicating whether we should simulate just-in-time, in the sense that only a `batchsize` number of parameter vectors and corresponding data are in memory at a given time.
 
-Arguments unique to `train(θ̂, P, simulator)`:
+# Keyword arguments unique to `train(θ̂, sampler, simulator)`:
 - `K::Integer = 10000`: number of parameter vectors in the training set; the size of the validation set is `K ÷ 5`.
-- `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices); if `ξ` is provided, the parameter sampler is called as `sampler(K, ξ)`.
+- `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices); if `ξ` is provided, the parameter sampler is called as `sampler(K, ξ)`; otherwise, it will be called as `sampler(K)`.
 - `epochs_per_θ_refresh::Integer = 1`: how often to refresh the training parameters. Must be a multiple of `epochs_per_Z_refresh`.
 
 # Examples
 ```
 using NeuralEstimators
 using Flux
-using Distributions
 import NeuralEstimators: simulate
 
-# data simulator
-m = 15
-function simulate(θ_set, m)
-	[Float32.(rand(Normal(θ[1], θ[2]), 1, m)) for θ ∈ eachcol(θ_set)]
-end
-
 # parameter sampler
-K = 10000
-Ω = (μ = Normal(0, 1), σ = Uniform(0.1, 1)) # prior
-struct sampler
-	μ
-	σ
-end
-function (s::sampler)(K)
-	μ = rand(s.μ, K)
-	σ = rand(s.σ, K)
+function sampler(K)
+	μ = randn(K) # Gaussian prior
+	σ = rand(K)  # Uniform prior
 	θ = hcat(μ, σ)'
 	return θ
 end
-smplr = sampler(Ω.μ, Ω.σ)
+
+# data simulator
+simulator(θ_matrix, m) = [θ[1] .+ θ[2] * randn(1, m) for θ ∈ eachcol(θ_matrix)]
 
 # architecture
 p = length(Ω)   # number of parameters in the statistical model
@@ -84,21 +69,22 @@ w = 32          # width of each layer
 ϕ = Chain(Dense(w, w, relu), Dense(w, p))
 θ̂ = DeepSet(ψ, ϕ)
 
-# training: full simulation on-the-fly
-θ̂ = train(θ̂, smplr, simulate, m = m, K = K, epochs = 5)
-θ̂ = train(θ̂, smplr, simulate, m = m, K = K, epochs = 5)
-θ̂ = train(θ̂, smplr, simulate, m = m, K = K, epochs = 10, epochs_per_θ_refresh = 4, epochs_per_Z_refresh = 2)
+# number of independent replicates to use during training
+m = 15
 
-# training: simulation on-the-fly but with fixed parameters
-θ_train = smplr(K)
-θ_val   = smplr(K ÷ 5)
-θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 5)
-θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 5, epochs_per_Z_refresh = 2)
+# training: full simulation on-the-fly
+θ̂ = train(θ̂, sampler, simulate, m = m, epochs = 5)
+
+# training: simulation on-the-fly with fixed parameters
+K = 10000
+θ_train = sampler(K)
+θ_val   = sampler(K ÷ 5)
+θ̂ 		 = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 5)
 
 # training: fixed parameters and fixed data
 Z_train = simulate(θ_train, m)
 Z_val   = simulate(θ_val, m)
-θ̂ = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 5)
+θ̂ 		 = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 5)
 ```
 """
 function train end
@@ -456,30 +442,31 @@ end
 # ---- Wrapper functions for training multiple estimators over a range of sample sizes ----
 
 #TODO reduce code repetition
-#TODO not ideal that M is a capital letter, which is usually reserved for types. Since it is a positional argument, it's probably ok to leave it for now and settle on a name later.
+
 """
-	trainx(θ̂, P, simulator, M; )
-	trainx(θ̂, θ_train, θ_val, simulator, M; )
-	trainx(θ̂, θ_train, θ_val, Z_train::T, Z_val::T, M; )
-	trainx(θ̂, θ_train, θ_val, Z_train::V, Z_val::V; ) where {V <: AbstractVector{AbstractVector{Any}}}
+	trainx(θ̂, sampler::Function, simulator::Function, m::Vector{Integer}; ...)
+	trainx(θ̂, θ_train, θ_val, simulator::Function, m::Vector{Integer}; ...)
+	trainx(θ̂, θ_train, θ_val, Z_train, Z_val, m::Vector{Integer}; ...)
+	trainx(θ̂, θ_train, θ_val, Z_train::V, Z_val::V; ...) where {V <: AbstractVector{AbstractVector{Any}}}
 
-A wrapper around `train` to construct neural estimators for different sample sizes.
+A wrapper around `train()` to construct neural estimators for different sample sizes.
 
-The collection `M` specifies the desired sample sizes.
+The positional argument `m` specifies the desired sample sizes.
 Each estimator is pre-trained with the estimator for the previous sample size.
-For example, if `M = [m₁, m₂]`, the estimator for sample size `m₂` is
+For example, if `m = [m₁, m₂]`, the estimator for sample size `m₂` is
 pre-trained with the estimator for sample size `m₁`.
 
-The method for `Z_train::T`
-and `Z_val::T` subsets the data using `subsetdata(Z, 1:mᵢ)` for each `mᵢ ∈ M`.
-The method for `Z_train::V` and `Z_val::V` trains an estimator for each
-element of `Z_train` and `Z_val`; hence, it does not need to invoke `subsetdata`,
-which can be slow or difficult to define in some cases (e.g., for graphical data).
+The method for `Z_train` and `Z_val` subsets the data using
+`subsetdata(Z, 1:mᵢ)` for each `mᵢ ∈ m`. The method for `Z_train::V` and
+`Z_val::V` trains an estimator for each element of `Z_train::V` and `Z_val::V`
+and, hence, it does not need to invoke `subsetdata()`, which can be slow or
+difficult to define in some cases (e.g., for graphical data). Note that, in this
+case, `m` is inferred from the data.
 
-The keyword arguments inherit from `train`, and certain keyword arguments
-can be given as vectors. For example, if we are training two estimators, we can
-use a different number of epochs by providing `epochs = [e₁, e₂]`. Other
-arguments that allow vectors are `batchsize`, `stopping_epochs`, and `optimiser`.
+The keyword arguments inherit from `train()`. The keyword arguments `epochs`,
+`batchsize`, `stopping_epochs`, and `optimiser` can each be given as vectors.
+For example, if we are training two estimators, we can use a different number of
+epochs for each estimator by providing `epochs = [epoch₁, epoch₂]`.
 """
 function trainx end
 
@@ -676,7 +663,6 @@ function _modifyargs(kwargs, i, E)
 	return kwargs
 end
 
-
 function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 	@assert batchsize > 0
 	@assert epochs > 0
@@ -684,10 +670,8 @@ function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 	@assert epochs_per_Z_refresh > 0
 end
 
-
-#TODO would be better if we can provide it both as a positional argument and keyword argument; don't want to stop the user for no reason.
 function _checkargs_trainx(kwargs)
-	@assert !haskey(kwargs, :m) "Please provide the number of independent replicates, `m`, as a positional argument (i.e., provide the argument simply as `m`, not `m = m`)."
+	@assert !haskey(kwargs, :m) "Please provide the number of independent replicates, `m`, as a positional argument (i.e., provide the argument simply as `trainx(..., m)` rather than `trainx(..., m = m)`)."
 	verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
 	return verbose
 end

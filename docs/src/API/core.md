@@ -42,7 +42,7 @@ PiecewiseEstimator
 
 ## Training
 
-The function `train` is used to train a single neural estimator, while the wrapper function `trainx` is useful for training multiple neural estimators over a range of sample sizes, making using of the technique known as pre-training.
+The function [`train`](@ref) is used to train a single neural estimator, while the wrapper function [`trainx`](@ref) is useful for training multiple neural estimators over a range of sample sizes, making using of the technique known as pre-training.
 
 ```@docs
 train

@@ -75,18 +75,29 @@ include("missingdata.jl")
 
 end
 
-#TODO Add helper functions for censoring and missing data (take these from EM paper, and ask Jordan if he has any code he would like to share)
+#TODO
+# - Add helper functions for censored data and write an example in the documentation. 
+# -	Plotting from Julia (which can act directly on the object of type assessment).
+# -	Examples:
+#   o	Add some figures to the examples in the documentation (e.g., show the sampling distribution in univariate example).
+#   o	Give the formula for how to compute the input channels dimension in the gridded example.
+
 
 # ---- long term:
-# - README.md
 # - turn some document examples into "doctests"
 # - plotrisk and plotdistribution (wait until the R interface is finished)
-# - Add "AR(k) time series" and "Irregular spatial data" examples. (The former will be an example using partially exchangeable neural networks and the latter will be an example using GNNs.)
+# - Add "AR(k) time series" example. (An example using partially exchangeable neural networks.)
 # - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. It seems very easy, just need to add precompile(f, (arg_types…)) to whatever methods I want to precompile.
 # - Get DeepSetExpert working optimally on the GPU (leaving this for now as we don't need it for the paper).
-# - See if DeepSet.jl is something that the Flux people would like to include. (They may also improve the code.)
-# - With the fixed parameters method of train, there seems to be substantial overhead with my current implementation of simulation on the fly. When epochs_per_Z_refresh = 1, the run-time increases by a factor of 4 for the Gaussian process with nu varied and with m = 1. For now, I’ve added an argument simulate_on_the_fly::Bool, which allows us not to switch off on-the-fly simulation even when epochs_per_Z_refresh = 1. However, it would be good to reduce this overhead.
-# - Callback function for plotting during training. See https://www.youtube.com/watch?v=ObYDHi_jJXk&ab_channel=TheJuliaProgrammingLanguage. Also, I know there is a specific module for call backs while training Flux models, so may this is already possible in Julia too. In either case, I think train() should have an additional argument, callback. See also the example at: https://github.com/stefan-m-lenz/JuliaConnectoR.
+# - With the fixed parameters method of train, there seems to be overhead with my current implementation of just-in-time simulation. When epochs_per_Z_refresh = 1, the run-time increases by a factor of 4 for the Gaussian process with m = 1. For now, I’ve added an argument simulate_on_the_fly::Bool, which allows us to switch off just-in-time simulation.
 
-# ---- once I've made the project public:
+# ---- once the software is properly polished:
 # - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
+# -	Add NeuralEstimators.jl to https://github.com/smsharma/awesome-neural-sbi#code-packages-and-benchmarks.
+# -	Once NeuralEstimators is on the Julia package manager, add the following to index.md:
+#
+# Install `NeuralEstimators` from [Julia](https://julialang.org/)'s package manager using the following command inside Julia:
+#
+# ```
+# using Pkg; Pkg.add("NeuralEstimators")
+# ```
