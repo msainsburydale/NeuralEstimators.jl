@@ -42,8 +42,8 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 
 # Keyword arguments unique to `train(θ̂, sampler, simulator)`:
 - `K::Integer = 10000`: number of parameter vectors in the training set; the size of the validation set is `K ÷ 5`.
-- `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices); if `ξ` is provided, the parameter sampler is called as `sampler(K, ξ)`; otherwise, it will be called as `sampler(K)`.
-- `epochs_per_θ_refresh::Integer = 1`: how often to refresh the training parameters. Must be a multiple of `epochs_per_Z_refresh`.
+- `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices). If provided, the parameter sampler is called as `sampler(K, ξ)`; otherwise, the parameter sampler will be called as `sampler(K)`. Can also be provided as `xi`.
+- `epochs_per_θ_refresh::Integer = 1`: how often to refresh the training parameters. Must be a multiple of `epochs_per_Z_refresh`. Can also be provided as `epochs_per_theta_refresh`.
 
 # Examples
 ```
@@ -91,8 +91,8 @@ function train end
 
 function train(θ̂, sampler, simulator;
 	m,
-	ξ = nothing,
-	epochs_per_θ_refresh::Integer = 1,
+	ξ = nothing, xi = nothing, 
+	epochs_per_θ_refresh::Integer = 1, epochs_per_theta_refresh::Integer = 1,
 	epochs_per_Z_refresh::Integer = 1,
 	simulate_just_in_time::Bool = false,
 	loss = Flux.Losses.mae,
@@ -105,6 +105,12 @@ function train(θ̂, sampler, simulator;
 	verbose::Bool      = true,
 	K::Integer         = 10_000
 	)
+
+	# Check duplicated arguments that are needed so that the R interface uses ASCII characters only
+	@assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
+	@assert epochs_per_θ_refresh == 1 || epochs_per_theta_refresh == 1 "Only one of `epochs_per_θ_refresh` or `epochs_per_theta_refresh` should be provided"
+	if !isnothing(xi) ξ = xi end
+	if epochs_per_theta_refresh != 1 epochs_per_θ_refresh = epochs_per_theta_refresh == 1 end
 
     _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 

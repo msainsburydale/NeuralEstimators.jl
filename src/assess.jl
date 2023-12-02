@@ -86,8 +86,8 @@ The output is of type `Assessment`; see `?Assessment` for details.
 # Keyword arguments
 - `estimator_names::Vector{String}`: names of the estimators (sensible defaults provided).
 - `parameter_names::Vector{String}`: names of the parameters (sensible defaults provided). If `ξ` is provided with a field `parameter_names`, those names will be used.
-- `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices).
-- `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses `ξ`: if it does, the estimator will be applied as `estimator(Z, ξ)`. This argument is useful when multiple `estimators` are provided, only some of which need `ξ`; hence, if only one estimator is provided and `ξ` is not `nothing`, `use_ξ` is automatically set to `true`.
+- `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices). Can also be provided as `xi`.
+- `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses `ξ`: if it does, the estimator will be applied as `estimator(Z, ξ)`. This argument is useful when multiple `estimators` are provided, only some of which need `ξ`; hence, if only one estimator is provided and `ξ` is not `nothing`, `use_ξ` is automatically set to `true`. Can also be provided as `use_xi`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
 - `verbose::Bool = true`
 
@@ -134,11 +134,16 @@ function assess(
 	estimators, θ::P, Z;
 	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
-	ξ = nothing,
-	use_ξ = false,
+	ξ  = nothing, use_ξ  = false,
+	xi = nothing, use_xi = false,
 	use_gpu = true,
 	verbose::Bool = true
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+	# Check duplicated arguments that are needed so that the R interface uses ASCII characters only
+	@assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
+	if !isnothing(xi) ξ = xi end
+	if use_xi != false use_ξ = use_xi end  # note that here we check "use_xi != false" since use_xi might be a vector of bools, so it can't be used directly on the if statement
 
 	θ = _extractθ(θ)
 
