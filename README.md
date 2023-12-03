@@ -5,9 +5,13 @@
 [![][docs-dev-img]][docs-dev-url]
 [![CI](https://github.com/msainsburydale/NeuralEstimators.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/msainsburydale/NeuralEstimators.jl/actions/workflows/CI.yml)
 [![codecov](https://codecov.io/gh/msainsburydale/NeuralEstimators.jl/branch/main/graph/badge.svg?token=6cXItEsKs5)](https://codecov.io/gh/msainsburydale/NeuralEstimators.jl)
+<!-- [![][R-repo-img]][R-repo-url] -->
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://msainsburydale.github.io/NeuralEstimators.jl/dev/
+
+[R-repo-img]: https://img.shields.io/badge/R-interface-blue.svg
+[R-repo-url]: https://github.com/msainsburydale/NeuralEstimators
 
 `NeuralEstimators` facilitates the user-friendly development of neural point estimators, which are neural networks that transform data into parameter point estimates. They are likelihood free, substantially faster than classical methods, and can be designed to be approximate Bayes estimators. The package caters for any model for which simulation is feasible. See the [documentation](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) to get started!
 
