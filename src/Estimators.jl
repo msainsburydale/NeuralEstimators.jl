@@ -346,3 +346,110 @@ end
 # Clean printing:
 Base.show(io::IO, pe::PiecewiseEstimator) = print(io, "\nPiecewise estimator with $(length(pe.estimators)) estimators and sample size change-points: $(pe.breaks)")
 Base.show(io::IO, m::MIME"text/plain", pe::PiecewiseEstimator) = print(io, pe)
+
+
+# ---- Helper function for initialising an estimator ----
+
+"""
+    initialise_estimator(p::Integer; ...)
+Initialise a neural estimator for a statistical model with `p` unknown parameters.
+
+The estimator is couched in the DeepSets framework so that it can be applied to data with an arbitrary number of independent replicates (including the special case of a single replicate).
+
+# Keyword arguments
+- `architecture::String`: for unstructured data, one may use a densely-connected neural network ("DNN"); for data collected over a grid, a convolutional neural network ("CNN"); and for graphical or irregular spatial data, a graphical neural network ("GNN").
+- `d::Integer = 1`: dimension of the response variable (e.g., `d = 1` for univariate processes).
+- `estimator_type::String = "point"`: the type of estimator; either `"point"` or `"interval"`.
+- `depth = 3`: the number of hidden layers. Either a single integer or an integer vector of length two specifying the depth of inner (summary) and outer (inference) network of the DeepSets framework. Since there is an input and an output layer, the total number of layers in is `sum(depth) + 2`.
+- `width = 32`: a single integer or an integer vector of length `sum(depth)` specifying the width (or number of convolutional filters/channels) in each layer.
+- `activation::Function = relu`: the (non-linear) activation function of each hidden layer.
+- `activation_final::Function = relu`: the activation function of the output layer.
+- `kernel_size`: (applicable only to CNNs) a vector of length `depth[1]` containing integer tuples of length `D`, where `D` is the dimension of the convolution (e.g., `D = 2` for two-dimensional convolution).
+- `weight_by_distance::Bool = false`: (applicable only to GNNs) flag indicating whether the estimator will weight by spatial distance; if true, a `WeightedGraphConv` layer is used in the propagation module; otherwise, a regular `GraphConv` layer is used.
+
+# Examples
+```
+p = 2
+initialise_estimator(p, architecture = "DNN")
+initialise_estimator(p, architecture = "GNN")
+initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)])
+```
+"""
+function initialise_estimator(
+    p::Integer;
+	architecture::String,
+    d::Integer = 1,
+    estimator_type::String = "point",
+    depth::Union{Integer, Vector{<:Integer}} = 3,
+    width::Union{Integer, Vector{<:Integer}} = 32,
+    activation::Function = relu,
+    activation_output::Function = identity,
+    kernel_size = nothing,
+	weight_by_distance::Bool = false
+    )
+
+    @assert p > 0
+    @assert d > 0
+	@assert architecture ∈ ["DNN", "CNN", "GNN"]
+    @assert estimator_type ∈ ["point", "interval"]
+    @assert all(depth .> 0)
+    @assert length(depth) == 1 || length(depth) == 2
+	if isa(depth, Integer) depth = [depth] end
+	if length(depth) == 1 depth = repeat(depth, 2) end
+    @assert all(width .> 0)
+    @assert length(width) == 1 || length(width) == sum(depth)
+	if isa(width, Integer) width = [width] end
+	if length(width) == 1 width = repeat(width, sum(depth)) end
+	# henceforth, depth and width are integer vectors of length 2 and sum(depth), respectively
+
+	if architecture == "CNN"
+		@assert !isnothing(kernel_size) "The argument `kernel_size` must be provided when `architecture = 'CNN'`"
+		@assert length(kernel_size) == depth[1]
+		kernel_size = coercetotuple(kernel_size)
+	end
+
+	L = sum(depth) # total number of hidden layers
+
+	# mapping (outer) network
+	ϕ = Chain(
+		[Dense(width[l-1] => width[l], activation) for l ∈ (depth[1]+1):L]...,
+		Dense(width[L] => p, activation_output)
+		)
+
+	# summary (inner) network
+	if architecture == "DNN"
+		ψ = Chain(
+			Dense(d => width[1], activation),
+			[Dense(width[l] => width[l+1], activation) for l ∈ 1:depth[1]]...
+			)
+	elseif architecture == "CNN"
+		ψ = Chain(
+			Conv(kernel_size[1], d => width[1], activation),
+			[Conv(kernel_size[l], width[l] => width[l+1], activation) for l ∈ 1:depth[1]]...,
+			Flux.flatten
+			)
+	elseif architecture == "GNN"
+		propagation = weight_by_distance ? WeightedGraphConv : GraphConv
+		# propagation_module = GNNChain(
+		# 	propagation(d => width[1], activation),
+		# 	[propagation(width[l] => width[l+1], relu) for l ∈ 1:depth[1]]...
+		# 	)
+		# readout_module = GlobalPool(mean)
+		# return GNN(propagation_module, readout_module, ϕ) # return more-efficient GNN object
+		ψ = GNNChain(
+			propagation(d => width[1], activation, aggr = mean),
+			[propagation(width[l] => width[l+1], relu, aggr = mean) for l ∈ 1:depth[1]]...,
+			GlobalPool(mean) # readout module
+			)
+	end
+
+	θ̂ = DeepSet(ψ, ϕ)
+
+	if estimator_type == "interval"
+		θ̂ = IntervalEstimator(θ̂, θ̂)
+	end
+
+	return θ̂
+end
+
+coercetotuple(x) = (x...,)

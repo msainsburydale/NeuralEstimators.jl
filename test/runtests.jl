@@ -668,3 +668,19 @@ end
 	ci = interval(estimator, Z, parameter_names = parameter_names)
 	@test size(ci[1]) == (p, 2)
 end
+
+
+@testset "initialise_estimator" begin
+	p = 2
+	initialise_estimator(p, architecture = "DNN")
+	initialise_estimator(p, architecture = "GNN")
+	initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)])
+
+	@test typeof(initialise_estimator(p, architecture = "DNN", estimator_type = "interval")) <: IntervalEstimator
+	@test typeof(initialise_estimator(p, architecture = "GNN", estimator_type = "interval")) <: IntervalEstimator
+	@test typeof(initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)], estimator_type = "interval")) <: IntervalEstimator
+
+	@test_throws Exception initialise_estimator(0, architecture = "DNN")
+	@test_throws Exception initialise_estimator(p, d = 0, architecture = "DNN")
+	@test_throws Exception initialise_estimator(p, architecture = "CNN")
+end

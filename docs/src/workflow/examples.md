@@ -27,7 +27,7 @@ Next, we implicitly define the statistical model with simulated data. In `Neural
 simulate(parameters, m) = [θ[1] .+ θ[2] .* randn(1, m) for θ ∈ eachcol(parameters)]
 ```
 
-We now design architectures for the inner and outer neural networks, $\boldsymbol{\psi}(\cdot)$ and $\boldsymbol{\phi}(\cdot)$ respectively, in the [`DeepSet`](@ref) framework, and initialise the neural estimator as a [`PointEstimator`](@ref) object.
+We now design architectures for the inner and outer neural networks, $\boldsymbol{\psi}(\cdot)$ and $\boldsymbol{\phi}(\cdot)$ respectively, in the [`DeepSet`](@ref) framework, and initialise the neural estimator as a [`PointEstimator`](@ref) object. Note that this can be done directly using `Flux` code (as below), or with the helper function [`initialise_estimator`](@ref). 
 
 ```
 d = 1   # dimension of each replicate

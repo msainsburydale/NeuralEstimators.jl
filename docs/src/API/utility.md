@@ -31,6 +31,8 @@ estimateinbatches
 
 expandgrid
 
+initialise_estimator
+
 loadbestweights
 
 removedata

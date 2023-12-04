@@ -41,7 +41,7 @@ export CholeskyCovariance, CovarianceMatrix, CorrelationMatrix
 export vectotril, vectotriu
 include("Architectures.jl")
 
-export NeuralEstimator, PointEstimator, IntervalEstimator, IntervalEstimatorCompactPrior, PointIntervalEstimator, QuantileEstimator, PiecewiseEstimator
+export NeuralEstimator, PointEstimator, IntervalEstimator, IntervalEstimatorCompactPrior, PointIntervalEstimator, QuantileEstimator, PiecewiseEstimator, initialise_estimator
 include("Estimators.jl")
 
 export GNN, UniversalPool, adjacencymatrix, WeightedGraphConv, maternclusterprocess
@@ -69,14 +69,13 @@ include("bootstrap.jl")
 export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches
 include("utility.jl")
 
-
 export NeuralEM, removedata, encodedata # TODO unit testing for NeuralEM
 include("missingdata.jl")
 
 end
 
 #TODO
-# - Add helper functions for censored data and write an example in the documentation. 
+# - Add helper functions for censored data and write an example in the documentation.
 # -	Plotting from Julia (which can act directly on the object of type assessment).
 # -	Examples:
 #   o	Add some figures to the examples in the documentation (e.g., show the sampling distribution in univariate example).
