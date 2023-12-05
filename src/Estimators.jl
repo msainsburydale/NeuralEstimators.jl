@@ -354,24 +354,32 @@ Base.show(io::IO, m::MIME"text/plain", pe::PiecewiseEstimator) = print(io, pe)
     initialise_estimator(p::Integer; ...)
 Initialise a neural estimator for a statistical model with `p` unknown parameters.
 
-The estimator is couched in the DeepSets framework so that it can be applied to data with an arbitrary number of independent replicates (including the special case of a single replicate).
+The estimator is couched in the DeepSets framework (see [`DeepSet`](@ref)) so
+that it can be applied to data sets containing an arbitrary number of
+independent replicates (including the special case of a single replicate).
+
+Note also that the user is free to initialise their neural estimator however
+they see fit using arbitrary `Flux` code; see
+[here](https://fluxml.ai/Flux.jl/stable/models/layers/) for `Flux`'s API reference.
 
 # Keyword arguments
-- `architecture::String`: for unstructured data, one may use a densely-connected neural network ("DNN"); for data collected over a grid, a convolutional neural network ("CNN"); and for graphical or irregular spatial data, a graphical neural network ("GNN").
+- `architecture::String`: for unstructured data, one may use a densely-connected neural network (`"DNN"`); for data collected over a grid, a convolutional neural network (`"CNN"`); and for graphical or irregular spatial data, a graphical neural network (`"GNN"`).
 - `d::Integer = 1`: dimension of the response variable (e.g., `d = 1` for univariate processes).
 - `estimator_type::String = "point"`: the type of estimator; either `"point"` or `"interval"`.
-- `depth = 3`: the number of hidden layers. Either a single integer or an integer vector of length two specifying the depth of inner (summary) and outer (inference) network of the DeepSets framework. Since there is an input and an output layer, the total number of layers in is `sum(depth) + 2`.
-- `width = 32`: a single integer or an integer vector of length `sum(depth)` specifying the width (or number of convolutional filters/channels) in each layer.
+- `depth = 3`: the number of hidden layers; either a single integer or an integer vector of length two specifying the depth of the inner (summary) and outer (inference) network of the DeepSets framework.
+- `width = 32`: a single integer or an integer vector of length `sum(depth)` specifying the width (or number of convolutional filters/channels) in each hidden layer.
 - `activation::Function = relu`: the (non-linear) activation function of each hidden layer.
-- `activation_output::Function = relu`: the activation function of the output layer.
-- `kernel_size`: (applicable only to CNNs) a vector of length `depth[1]` containing integer tuples of length `D`, where `D` is the dimension of the convolution (e.g., `D = 2` for two-dimensional convolution).
+- `activation_output::Function = identity`: the activation function of the output layer.
+- `kernel_size = nothing`: (applicable only to CNNs) a vector of length `depth[1]` containing integer tuples of length `D`, where `D` is the dimension of the convolution (e.g., `D = 2` for two-dimensional convolution).
 - `weight_by_distance::Bool = false`: (applicable only to GNNs) flag indicating whether the estimator will weight by spatial distance; if true, a `WeightedGraphConv` layer is used in the propagation module; otherwise, a regular `GraphConv` layer is used.
 
 # Examples
 ```
+## DNN, GNN, 1D CNN, and 2D CNN for a statistical model with two parameters:
 p = 2
 initialise_estimator(p, architecture = "DNN")
 initialise_estimator(p, architecture = "GNN")
+initialise_estimator(p, architecture = "CNN", kernel_size = [10, 5, 3])
 initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)])
 ```
 """
