@@ -683,4 +683,5 @@ end
 	@test_throws Exception initialise_estimator(0, architecture = "DNN")
 	@test_throws Exception initialise_estimator(p, d = 0, architecture = "DNN")
 	@test_throws Exception initialise_estimator(p, architecture = "CNN")
+	@test_throws Exception initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5)])
 end

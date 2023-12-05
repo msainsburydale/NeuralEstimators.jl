@@ -363,7 +363,7 @@ The estimator is couched in the DeepSets framework so that it can be applied to 
 - `depth = 3`: the number of hidden layers. Either a single integer or an integer vector of length two specifying the depth of inner (summary) and outer (inference) network of the DeepSets framework. Since there is an input and an output layer, the total number of layers in is `sum(depth) + 2`.
 - `width = 32`: a single integer or an integer vector of length `sum(depth)` specifying the width (or number of convolutional filters/channels) in each layer.
 - `activation::Function = relu`: the (non-linear) activation function of each hidden layer.
-- `activation_final::Function = relu`: the activation function of the output layer.
+- `activation_output::Function = relu`: the activation function of the output layer.
 - `kernel_size`: (applicable only to CNNs) a vector of length `depth[1]` containing integer tuples of length `D`, where `D` is the dimension of the convolution (e.g., `D = 2` for two-dimensional convolution).
 - `weight_by_distance::Bool = false`: (applicable only to GNNs) flag indicating whether the estimator will weight by spatial distance; if true, a `WeightedGraphConv` layer is used in the propagation module; otherwise, a regular `GraphConv` layer is used.
 
@@ -405,7 +405,7 @@ function initialise_estimator(
 	if architecture == "CNN"
 		@assert !isnothing(kernel_size) "The argument `kernel_size` must be provided when `architecture = 'CNN'`"
 		@assert length(kernel_size) == depth[1]
-		kernel_size = coercetotuple(kernel_size)
+		kernel_size = coercetotuple.(kernel_size)
 	end
 
 	L = sum(depth) # total number of hidden layers
