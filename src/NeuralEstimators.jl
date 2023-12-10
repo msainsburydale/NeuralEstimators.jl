@@ -57,7 +57,7 @@ include("densities.jl")
 export train, trainx, subsetdata
 include("train.jl")
 
-export assess, Assessment, merge, risk
+export assess, Assessment, merge, risk, bias, rmse
 include("assess.jl")
 
 export plotrisk, plotdistribution

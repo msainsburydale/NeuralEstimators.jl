@@ -55,7 +55,7 @@ element of the vector is associated with one parameter vector (i.e., one set of
 independent replicates), and where `A` depends on the form of the data and the
 chosen architecture for `ψ`. As a rule of thumb, when the data are stored as an
 array, the replicates are stored in the final dimension of the array. (This is
-usually the 'batch' dimension, but batching with `DeepSets` is done at the set
+usually the 'batch' dimension, but batching with `DeepSet`s is done at the set
 level, i.e., sets of replicates are batched together.) For example, with
 gridded spatial data and `ψ` a CNN, `A` should be
 a 4-dimensional array, with the replicates stored in the 4ᵗʰ dimension.

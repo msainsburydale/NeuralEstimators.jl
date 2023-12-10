@@ -22,7 +22,7 @@ The data should be stored as a `Vector{A}`, where each element of the vector is 
 ## Types of estimators
 
 See also [Architectures and activations functions](@ref) that are often used
-when constructing neural estimators, and the convenience constructor [`initialise_estimator`](@ref). 
+when constructing neural estimators, and the convenience constructor [`initialise_estimator`](@ref).
 
 ```@docs
 NeuralEstimator
@@ -59,9 +59,15 @@ assess
 Assessment
 
 risk
+
+bias
+
+rmse
 ```
 
-## Bootstrapping
+## Uncertainty quantification
+
+Uncertainty quantification often proceeds through the bootstrap distribution, which is essentially available "for free" when bootstrap data sets can be quickly generated. Alternatively, one may approximate a set of low and high marginal posterior quantiles using a specially constructed neural Bayes estimator, which can then be used to construct credible intervals: see [`IntervalEstimator`](@ref) and its variants.  
 
 ```@docs
 bootstrap

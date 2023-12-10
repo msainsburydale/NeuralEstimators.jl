@@ -33,32 +33,31 @@ function merge(assessment::Assessment, assessments::Assessment...)
 end
 
 @doc raw"""
-	risk(assessment::Assessment; loss = (x, y) -> abs(x - y), average_over_parameters = true)
+	risk(assessment::Assessment; ...)
 
-Computes a Monte Carlo approximation of the Bayes risk,
+Computes a Monte Carlo approximation of an estimator's Bayes risk,
 
 ```math
-r_{\Omega}(\hat{\boldsymbol{\theta}}(\cdot))
+r(\hat{\boldsymbol{\theta}}(\cdot))
 \approx
-\frac{1}{K} \sum_{\boldsymbol{\theta} \in \vartheta} \frac{1}{J} \sum_{\boldsymbol{Z} \in \mathcal{Z}_{\boldsymbol{\theta}}} L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z})).
+\frac{1}{K} \sum_{k=1}^K L(\boldsymbol{\theta}^{(k)}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(k)})),
 ```
 
-where ``\vartheta`` denotes a set of ``K`` parameter vectors sampled from the
-prior ``\Omega(\cdot)`` and, for each ``\boldsymbol{\theta} \in \vartheta``, we
-have ``J`` sets of ``m`` mutually independent realisations from the model
-collected in ``\mathcal{Z}_{\boldsymbol{\theta}}``.
+where ``\{\boldsymbol{\theta}^{(k)} : k = 1, \dots, K\}`` denotes a set of ``K`` parameter vectors sampled from the
+prior and, for each ``k``, data ``\boldsymbol{Z}^{(k)}`` are simulated from the statistical model conditional on ``\boldsymbol{\theta}^{(k)}``.
 
 # Keyword arguments
 - `loss = (x, y) -> abs(x - y)`: a binary operator defining the loss function (default absolute-error loss).
 - `average_over_parameters::Bool = true`: if true (default), the loss is averaged over all parameters; otherwise, the loss is averaged over each parameter separately.
 - `average_over_sample_sizes::Bool = true`: if true (default), the loss is averaged over all sample sizes ``m``; otherwise, the loss is averaged over each sample size separately.
 """
-function risk(assessment::Assessment;
+risk(assessment::Assessment; args...) = risk(assessment.df; args...)
+
+function risk(df::DataFrame;
 			  loss = (x, y) -> abs(x - y),
 			  average_over_parameters::Bool = true,
 			  average_over_sample_sizes::Bool = true)
 
-	df = assessment.df
 	grouping_variables = [:estimator]
 	if !average_over_parameters push!(grouping_variables, :parameter) end
 	if !average_over_sample_sizes push!(grouping_variables, :m) end
@@ -69,6 +68,60 @@ function risk(assessment::Assessment;
 	return df
 end
 
+@doc raw"""
+	bias(assessment::Assessment; ...)
+
+Computes a Monte Carlo approximation of an estimator's bias,
+
+```math
+{\rm{bias}}(\hat{\boldsymbol{\theta}}(\cdot))
+\approx
+\frac{1}{K} \sum_{k=1}^K \hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(k)}) - \boldsymbol{\theta}^{(k)},
+```
+
+where ``\{\boldsymbol{\theta}^{(k)} : k = 1, \dots, K\}`` denotes a set of ``K`` parameter vectors sampled from the
+prior and, for each ``k``, data ``\boldsymbol{Z}^{(k)}`` are simulated from the statistical model conditional on ``\boldsymbol{\theta}^{(k)}``.
+
+This function inherits the keyword arguments of [`risk`](@ref) (excluding the argument `loss`).
+"""
+bias(assessment::Assessment; args...) = bias(assessment.df; args...)
+
+function bias(df::DataFrame; args...)
+
+    df = risk(df; loss = (x, y) -> x - y, args...)
+
+	rename!(df, :risk => :bias)
+
+	return df
+end
+
+@doc raw"""
+	rmse(assessment::Assessment; ...)
+
+Computes a Monte Carlo approximation of an estimator's root-mean-squared error,
+
+```math
+{\rm{rmse}}(\hat{\boldsymbol{\theta}}(\cdot))
+\approx
+\sqrt{\frac{1}{K} \sum_{k=1}^K (\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(k)}) - \boldsymbol{\theta}^{(k)})^2},
+```
+
+where ``\{\boldsymbol{\theta}^{(k)} : k = 1, \dots, K\}`` denotes a set of ``K`` parameter vectors sampled from the
+prior and, for each ``k``, data ``\boldsymbol{Z}^{(k)}`` are simulated from the statistical model conditional on ``\boldsymbol{\theta}^{(k)}``.
+
+This function inherits the keyword arguments of [`risk`](@ref) (excluding the argument `loss`).
+"""
+rmse(assessment::Assessment; args...) = rmse(assessment.df; args...)
+
+function rmse(df::DataFrame; args...)
+
+	df = risk(df; loss = (x, y) -> (x - y)^2, args...)
+
+    df[:, :risk] = sqrt.(df[:, :risk])
+    rename!(df, :risk => :rmse)
+
+	return df
+end
 
 # ---- assess() ----
 

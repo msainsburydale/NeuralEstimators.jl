@@ -108,7 +108,7 @@ where
 - ``g(⋅)`` is a logistic function that maps its input to the prior support.
 
 Note that, in addition to ensuring that the interval remains in the prior support,
-this constructions also ensures that the intervals are valid (i.e., it prevents
+this construction also ensures that the intervals are valid (i.e., it prevents
 quantile crossing, in the sense that the upper bound is always greater than the
 lower bound).
 
@@ -188,7 +188,7 @@ end
 	PointIntervalEstimator(arch_point, arch_lower, arch_upper)
 	PointIntervalEstimator(arch_point, arch_bound)
 	PointIntervalEstimator(arch)
-A neural estimator that jointly produces point estimates, θ̂(Z), where θ̂(Z) is a
+A neural estimator that jointly produces point estimates, ``θ̂(Z)``, where ``θ̂(⋅)`` is a
 neural point estimator with architecture `arch_point`, and credible intervals constructed as,
 
 ```math
@@ -363,8 +363,8 @@ they see fit using arbitrary `Flux` code; see
 [here](https://fluxml.ai/Flux.jl/stable/models/layers/) for `Flux`'s API reference.
 
 # Keyword arguments
-- `architecture::String`: for unstructured data, one may use a densely-connected neural network (`"DNN"`); for data collected over a grid, a convolutional neural network (`"CNN"`); and for graphical or irregular spatial data, a graphical neural network (`"GNN"`).
-- `d::Integer = 1`: dimension of the response variable (e.g., `d = 1` for univariate processes).
+- `architecture::String`: for unstructured multivariate data, one may use a densely-connected neural network (`"DNN"`); for data collected over a grid, a convolutional neural network (`"CNN"`); and for graphical or irregular spatial data, a graphical neural network (`"GNN"`).
+- `d::Integer = 1`: for unstructured multivariate data (i.e., when `architecture = "DNN"`), the dimension of the data (e.g., `d = 3` for trivariate data); otherwise, if `architecture ∈ ["CNN", "GNN"]`, the argument `d` controls the number of input channels (e.g., `d = 1` for univariate spatial processes).
 - `estimator_type::String = "point"`: the type of estimator; either `"point"` or `"interval"`.
 - `depth = 3`: the number of hidden layers; either a single integer or an integer vector of length two specifying the depth of the inner (summary) and outer (inference) network of the DeepSets framework.
 - `width = 32`: a single integer or an integer vector of length `sum(depth)` specifying the width (or number of convolutional filters/channels) in each hidden layer.

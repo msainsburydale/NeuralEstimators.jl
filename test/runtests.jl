@@ -534,9 +534,20 @@ m  = 10 # default sample size
 
 				@test typeof(merge(assessment, assessment)) == Assessment
 				risk(assessment)
+				risk(assessment, loss = (x, y) -> (x - y)^2)
 				risk(assessment; average_over_parameters = false)
 				risk(assessment; average_over_sample_sizes = false)
 				risk(assessment; average_over_parameters = false, average_over_sample_sizes = false)
+
+				bias(assessment)
+				bias(assessment; average_over_parameters = false)
+				bias(assessment; average_over_sample_sizes = false)
+				bias(assessment; average_over_parameters = false, average_over_sample_sizes = false)
+
+				rmse(assessment)
+				rmse(assessment; average_over_parameters = false)
+				rmse(assessment; average_over_sample_sizes = false)
+				rmse(assessment; average_over_parameters = false, average_over_sample_sizes = false)
 
 				# J == 5 > 1
 				Z_test = simulator(parameters, m, 5)
