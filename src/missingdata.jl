@@ -1,5 +1,4 @@
 # TODO If there are no missing entries, try to just apply the neuralMAP estimator (give a warning).
-# TODO Add main documentation page that shows the Gaussian process example.
 """
     NeuralEM(simulateconditional::Function, neuralMAP::NeuralPointEstimator, θ₀ = nothing)
 
@@ -91,7 +90,7 @@ function (neuralem::NeuralEM)(
 	)  where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 
 	if isnothing(θ₀)
-		@assert !isnothing(neuralem.θ₀) "Please provide initial estimates θ₀ in the functional call when applying the NeuralEM object or in the NeuralEM object itself."
+		@assert !isnothing(neuralem.θ₀) "Please provide initial estimates θ₀ in the function call when applying the NeuralEM object or in the NeuralEM object itself."
 		θ₀ = neuralem.θ₀
 	end
 
@@ -142,8 +141,7 @@ function (neuralem::NeuralEM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = noth
 		θ₀ = repeat(θ₀, 1, length(Z))
 	end
 
-	# TODO should we do Folds.map() here?
-	estimates = map(eachindex(Z)) do i
+	estimates = map(eachindex(Z)) do i # TODO should we use Folds.map()?
 		neuralem(Z[i], θ₀[:, i]; args...)
 	end
 	estimates = hcat(estimates...)

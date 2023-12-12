@@ -251,6 +251,7 @@ First, we construct a neural approximation of the MAP estimator. When $H$ is tak
 neuralMAPestimator = DeepSet(ψ, ϕ)
 
 H = 50
+neuralMAPestimator = initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)])
 neuralMAPestimator = train(neuralMAPestimator, Parameters, simulate, m = H, ξ = ξ, K = 1000, epochs = 10)
 ```
 

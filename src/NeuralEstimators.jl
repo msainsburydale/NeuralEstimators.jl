@@ -2,8 +2,7 @@ module NeuralEstimators
 
 using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
-import Base: merge
-import Base: size
+import Base: merge, show, size
 using BSON: @save, load
 using ChainRulesCore: @non_differentiable, @ignore_derivatives
 using CUDA

@@ -85,8 +85,6 @@ IntervalEstimator(l::PointEstimator, u::PointEstimator) = IntervalEstimator(l.ar
 IntervalEstimator(l, u::PointEstimator) = IntervalEstimator(l, u.arch)
 IntervalEstimator(l::PointEstimator, u) = IntervalEstimator(l.arch, u)
 
-
-#TODO unit testing
 """
 	IntervalEstimatorCompactPrior(u, v, min_supp::Vector, max_supp::Vector)
 	IntervalEstimatorCompactPrior(u, v, compress::Compress)
@@ -163,27 +161,6 @@ function (est::IntervalEstimatorCompactPrior)(Z)
 	vcat(c(x), c(y))
 end
 
-
-# NB more complicated version:
-# function (est::IntervalEstimatorCompactPrior)(Z)
-#
-# 	# Extract the compress object that encodes the compact prior support:
-# 	c = est.c
-#
-# 	# Scale the low quantile to the prior support:
-# 	u = est.u(Z)
-# 	f = c(u)
-#
-# 	# Scale the high-quantile term to be within u and the maximum of the prior support:
-# 	v = est.v(Z)
-# 	g = (c.b .- f) ./ (one(eltype(v)) .+ exp.(-c.k .* v))
-#
-# 	vcat(f, f .+ g)
-# end
-
-
-
-#TODO unit testing
 """
 	PointIntervalEstimator(arch_point, arch_lower, arch_upper)
 	PointIntervalEstimator(arch_point, arch_bound)
@@ -243,8 +220,7 @@ function (est::PointIntervalEstimator)(Z)
 	θ̂ = est.θ̂(Z)
 	vcat(θ̂, θ̂ .- exp.(est.l(Z)), θ̂ .+ exp.(est.u(Z)))
 end
-# Ensure that IntervalEstimator objects are not constructed with PointEstimator:
-#TODO find a neater way to do this; don't want to write so many methods, especially for PointIntervalEstimator
+# Ensure that IntervalEstimator objects are not constructed as a wrapper of PointEstimator:
 PointIntervalEstimator(θ̂::PointEstimator, l::PointEstimator, u::PointEstimator) = PointIntervalEstimator(θ̂.arch, l.arch, u.arch)
 PointIntervalEstimator(θ̂::PointEstimator, l, u) = PointIntervalEstimator(θ̂.arch, l, u)
 PointIntervalEstimator(θ̂, l::PointEstimator, u::PointEstimator) = PointIntervalEstimator(θ̂, l.arch, u.arch)
@@ -254,7 +230,8 @@ PointIntervalEstimator(θ̂, l::PointEstimator, u::PointEstimator) = PointInterv
 
 # Should Follow up with this point from Gnieting's paper:
 # 9.2 Quantile Estimation
-# Koenker and Bassett (1978) proposed quantile regression using an optimum score estimator based on the proper scoring rule (41).
+# Koenker and Bassett (1978) proposed quantile regression using an optimum
+# score estimator based on the proper scoring rule (41).
 
 
 #TODO this is a topic of ongoing research with Jordan
@@ -428,25 +405,25 @@ function initialise_estimator(
 	if architecture == "DNN"
 		ψ = Chain(
 			Dense(d => width[1], activation),
-			[Dense(width[l] => width[l+1], activation) for l ∈ 1:depth[1]]...
+			[Dense(width[l-1] => width[l], activation) for l ∈ 2:depth[1]]...
 			)
 	elseif architecture == "CNN"
 		ψ = Chain(
 			Conv(kernel_size[1], d => width[1], activation),
-			[Conv(kernel_size[l], width[l] => width[l+1], activation) for l ∈ 1:depth[1]]...,
+			[Conv(kernel_size[l], width[l-1] => width[l], activation) for l ∈ 2:depth[1]]...,
 			Flux.flatten
 			)
 	elseif architecture == "GNN"
 		propagation = weight_by_distance ? WeightedGraphConv : GraphConv
 		# propagation_module = GNNChain(
 		# 	propagation(d => width[1], activation),
-		# 	[propagation(width[l] => width[l+1], relu) for l ∈ 1:depth[1]]...
+		# 	[propagation(width[l-1] => width[l], relu) for l ∈ 2:depth[1]]...
 		# 	)
 		# readout_module = GlobalPool(mean)
 		# return GNN(propagation_module, readout_module, ϕ) # return more-efficient GNN object
 		ψ = GNNChain(
 			propagation(d => width[1], activation, aggr = mean),
-			[propagation(width[l] => width[l+1], relu, aggr = mean) for l ∈ 1:depth[1]]...,
+			[propagation(width[l-1] => width[l], relu, aggr = mean) for l ∈ 2:depth[1]]...,
 			GlobalPool(mean) # readout module
 			)
 	end

@@ -167,8 +167,6 @@ end
 # https://juliacollections.github.io/DataStructures.jl/latest/heaps/
 # for a description of Julia's implementation of the heap data structure.
 
-
-
 """
 	adjacencymatrix(M::Matrix, k::Integer)
 	adjacencymatrix(M::Matrix, r::Float)
@@ -359,7 +357,7 @@ end
 
 # NB investigate why I can't get this to work when I have more time (it's very
 # close). I think this approach will be more efficient than the above method.
-# Approach using the heap data structure (can't get it to work properly, for some reason)
+
 #using DataStructures # heap data structure
 # function findneighbours(d, k::Integer)
 #
@@ -595,7 +593,7 @@ end
 # Methods needed to accomodate above method of GNN. They are exactly the same as
 # the standard methods defined in Estimators.jl, but also pass through m.
 #TODO unit testing for these methods
-#TODO There should be a neater way to do this... Essentially, I am just replacing f(Z) with f(Z, m)... Is there a generic way to do this?
+#TODO Not ideal that there's so much code repetition... we're just replacing f(Z) with f(Z, m). Tried with the g(x...) = sum(x) approach; it almost worked, might be worth trying again.
 (est::PointEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = est.arch(Z, m)
 function (est::IntervalEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
 	l = est.l(Z, m)

@@ -1,5 +1,5 @@
 using NeuralEstimators
-using NeuralEstimators: _getindices, _runondevice
+using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ
 using CUDA
 using DataFrames
 using Distributions: Normal, Uniform, Product, cdf, logpdf, quantile
@@ -19,35 +19,21 @@ array(size...; T = Float64) = T.(reshape(1:prod(size), size...) ./ prod(size))
 arrayn(size...; T = Float64) = array(size..., T = T) .- mean(array(size..., T = T))
 verbose = false # verbose used in NeuralEstimators code (not @testset)
 
+oldstd = stdout
+redirect_stderr(devnull)
+
 if CUDA.functional()
 	@info "Testing on both the CPU and the GPU... "
 	CUDA.allowscalar(false)
 	devices = (CPU = cpu, GPU = gpu)
 else
-	@info "The GPU is unavailable so we'll test on the CPU only... "
+	@info "The GPU is unavailable so we will test on the CPU only... "
 	devices = (CPU = cpu,)
 end
 
-# Structure of tests:
-# - Stand-alone functions
-# - Activation functions
-# - Architectures (in point estimation context):
-#	- DeepSet/DeepSetExpert
-#		- Array data
-#			- data with/without set-level covariates
-#		- Graph data
-#			- Single data set
-#			- Single data set with set-level covariates
-#			- Multiple data sets
-#			- Multiple data sets with set-level covariates
-# - PointEstimator
-# - IntervalEstimator
-# - PiecewiseEstimator
-
 # ---- Stand-alone functions ----
 
-# Start testing with low-level functions, which form the base of the
-# dependency tree.
+# Start testing low-level functions, which form the base of the dependency tree.
 @testset "UtilityFunctions" begin
 	@testset "expandgrid" begin
 		@test expandgrid(1:2, 0:3) == [1 0; 2 0; 1 1; 2 1; 1 2; 2 2; 1 3; 2 3]
@@ -91,6 +77,8 @@ end
 		@test containertype(typeof(a)) == T
 		@test all([containertype(x) for x ∈ eachcol(a)] .== T)
 	end
+
+	@test isnothing(_check_sizes(1, 1))
 end
 
 @testset "maternclusterprocess" begin
@@ -140,6 +128,7 @@ end
 	Z = rand(d, m)
 
 	removedata(Z, n)
+	removedata(Z, d)
 	removedata(Z, n; fixed_pattern = true)
 	removedata(Z, n; contiguous_pattern = true)
 	removedata(Z, n, variable_proportion = true)
@@ -149,6 +138,7 @@ end
 	# Passing the proportion of missingness
 	p = rand(d)
 	removedata(Z, p)
+	removedata(Z, p; prevent_complete_missing = false)
 	# Check that the probability of missingness is roughly correct:
 	mapslices(x -> sum(ismissing.(x))/length(x), removedata(Z, p), dims = 2)
 	# Check that none of the replicates contain 100% missing:
@@ -193,10 +183,9 @@ end
 	d = 1 # dimension of each observation (univariate data here)
 	A = adjacencymatrix(S, 5)
 	Z = GNNGraph(A, ndata = rand(d, n))
-
 	layer = WeightedGraphConv(d => 16)
+	show(devnull, layer)
 	h = layer(Z) # convolved features
-
 	@test size(h.ndata.x) == (16, n)
 end
 
@@ -285,7 +274,10 @@ end
 	# construct a diagonally dominant covariance matrix (pos. def. guaranteed via Gershgorins Theorem)
 	Σ = array(n, n)
 	Σ[diagind(Σ)] .= diag(Σ) + sum(Σ, dims = 2)
-	@test gaussiandensity(y, Σ, logdensity = false) ≈ exp(gaussiandensity(y, Σ))
+	L  = cholesky(Symmetric(Σ)).L
+	@test gaussiandensity(y, L, logdensity = false) ≈ exp(gaussiandensity(y, L))
+	@test gaussiandensity(y, Σ) ≈ gaussiandensity(y, L)
+	@test gaussiandensity(hcat(y, y), Σ) ≈ 2 * gaussiandensity(y, L)
 end
 
 
@@ -431,6 +423,9 @@ end
 K = 100
 Parameters(K::Integer, ξ) = Parameters(rand(ξ.Ω, K))
 parameters = Parameters(K, ξ)
+show(devnull, parameters)
+@test size(parameters) == (2, 100)
+@test _extractθ(parameters.θ) == _extractθ(parameters)
 p = length(parameter_names)
 
 #### Array data
@@ -483,6 +478,9 @@ m  = 10 # default sample size
 			ϕ = Chain(Dense(q + 1, w), Dense(w, p))
 			θ̂ = DeepSetExpert(ψ, ϕ, S)
 		end
+
+		show(devnull, θ̂)
+
 		@testset "$dvc" for dvc ∈ devices
 
 			θ̂ = θ̂ |> dvc
@@ -615,6 +613,7 @@ end
     	Chain(Dense(nh, nt), Dense(nt, nt)),
     	Chain(Dense(nt, nt), Dense(nt, no))
     	)
+	show(devnull, readout)
 
     # Mapping module
     p = 3     # number of parameters in the statistical model
@@ -623,6 +622,7 @@ end
 
     # Construct the estimator
     θ̂ = GNN(propagation, readout, ϕ)
+	show(devnull, θ̂)
 
     # Apply the estimator to:
     # 1. a single graph,
@@ -650,6 +650,7 @@ end
 	@test_throws Exception PiecewiseEstimator((MLE, MLE), (30, 50))
 	@test_throws Exception PiecewiseEstimator((MLE, MLE, MLE), (50, 30))
 	θ̂_piecewise = PiecewiseEstimator((MLE, MLE), (30))
+	show(devnull, θ̂_piecewise)
 	Z = [array(n, 1, 10, T = Float32), array(n, 1, 50, T = Float32)]
 	θ̂₁ = hcat(MLE(Z[[1]]), MLE(Z[[2]]))
 	θ̂₂ = θ̂_piecewise(Z)
@@ -681,6 +682,8 @@ end
 end
 
 
+
+
 @testset "initialise_estimator" begin
 	p = 2
 	initialise_estimator(p, architecture = "DNN")
@@ -695,4 +698,145 @@ end
 	@test_throws Exception initialise_estimator(p, d = 0, architecture = "DNN")
 	@test_throws Exception initialise_estimator(p, architecture = "CNN")
 	@test_throws Exception initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5)])
+end
+
+@testset "NeuralEM" begin
+
+	# Set the prior distribution
+	Ω = (τ = Uniform(0.01, 0.3), ρ = Uniform(0.01, 0.3))
+
+	p = length(Ω)    # number of parameters in the statistical model
+
+	# Set the (gridded) spatial domain
+	points = range(0.0, 1.0, 16)
+	S = expandgrid(points, points)
+
+	# Model information that is constant (and which will be passed into later functions)
+	ξ = (
+		Ω = Ω,
+		ν = 1.0, 	# fixed smoothness
+		S = S,
+		D = pairwise(Euclidean(), S, S, dims = 1),
+		p = p
+	)
+
+	# Sampler from the prior
+	struct GPParameters <: ParameterConfigurations
+		θ
+		cholesky_factors
+	end
+
+	function GPParameters(K::Integer, ξ)
+
+		# Sample parameters from the prior
+		Ω = ξ.Ω
+		τ = rand(Ω.τ, K)
+		ρ = rand(Ω.ρ, K)
+
+		# Compute Cholesky factors
+		cholesky_factors = maternchols(ξ.D, ρ, ξ.ν)
+
+		# Concatenate into a matrix
+		θ = permutedims(hcat(τ, ρ))
+		θ = Float32.(θ)
+
+		GPParameters(θ, cholesky_factors)
+	end
+
+	function simulate(parameters, m::Integer)
+
+		K = size(parameters, 2)
+		τ = parameters.θ[1, :]
+
+		Z = map(1:K) do k
+			L = parameters.cholesky_factors[:, :, k]
+			z = simulategaussianprocess(L, m)
+			z = z + τ[k] * randn(size(z)...)
+			z = Float32.(z)
+			z = reshape(z, 16, 16, 1, :)
+			z
+		end
+
+		return Z
+	end
+
+	function simulateconditional(Z::M, θ, ξ; nsims::Integer = 1) where {M <: AbstractMatrix{Union{Missing, T}}} where T
+
+		# Save the original dimensions
+		dims = size(Z)
+
+		# Convert to vector
+		Z = vec(Z)
+
+		# Compute the indices of the observed and missing data
+		I₁ = findall(z -> !ismissing(z), Z) # indices of observed data
+		I₂ = findall(z -> ismissing(z), Z)  # indices of missing data
+		n₁ = length(I₁)
+		n₂ = length(I₂)
+
+		# Extract the observed data and drop Missing from the eltype of the container
+		Z₁ = Z[I₁]
+		Z₁ = [Z₁...]
+
+		# Distance matrices needed for covariance matrices
+		D   = ξ.D # distance matrix for all locations in the grid
+		D₂₂ = D[I₂, I₂]
+		D₁₁ = D[I₁, I₁]
+		D₁₂ = D[I₁, I₂]
+
+		# Extract the parameters from θ
+		τ = θ[1]
+		ρ = θ[2]
+
+		# Compute covariance matrices
+		ν = ξ.ν
+		Σ₂₂ = matern.(UpperTriangular(D₂₂), ρ, ν); Σ₂₂[diagind(Σ₂₂)] .+= τ^2
+		Σ₁₁ = matern.(UpperTriangular(D₁₁), ρ, ν); Σ₁₁[diagind(Σ₁₁)] .+= τ^2
+		Σ₁₂ = matern.(D₁₂, ρ, ν)
+
+		# Compute the Cholesky factor of Σ₁₁ and solve the lower triangular system
+		L₁₁ = cholesky(Symmetric(Σ₁₁)).L
+		x = L₁₁ \ Σ₁₂
+
+		# Conditional covariance matrix, cov(Z₂ ∣ Z₁, θ),  and its Cholesky factor
+		Σ = Σ₂₂ - x'x
+		L = cholesky(Symmetric(Σ)).L
+
+		# Conditonal mean, E(Z₂ ∣ Z₁, θ)
+		y = L₁₁ \ Z₁
+		μ = x'y
+
+		# Simulate from the distribution Z₂ ∣ Z₁, θ ∼ N(μ, Σ)
+		z = randn(n₂, nsims)
+		Z₂ = μ .+ L * z
+
+		# Combine the observed and missing data to form the complete data
+		Z = map(1:nsims) do l
+			z = Vector{T}(undef, n₁ + n₂)
+			z[I₁] = Z₁
+			z[I₂] = Z₂[:, l]
+			z
+		end
+		Z = stackarrays(Z, merge = false)
+
+		# Convert Z to an array with appropriate dimensions
+		Z = reshape(Z, dims..., 1, nsims)
+
+		return Z
+	end
+
+	θ = GPParameters(1, ξ)
+	Z = simulate(θ, 1)[1][:, :]		# simulate a single gridded field
+	Z = removedata(Z, 0.25)			# remove 25% of the data
+
+	neuralMAPestimator = initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)], activation_output = exp)
+	neuralem = NeuralEM(simulateconditional, neuralMAPestimator)
+	θ₀ = mean.([Ω...]) 						# initial estimate, the prior mean
+	H = 5
+	θ̂  = neuralem(Z, θ₀, ξ = ξ, nsims = H)
+	θ̂2  = neuralem([Z, Z], θ₀, ξ = ξ, nsims = H)
+
+	@test size(θ̂)  == (2, 1)
+	@test size(θ̂2) == (2, 2)
+	@test_throws Exception neuralem(Z)
 end

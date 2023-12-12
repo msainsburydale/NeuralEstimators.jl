@@ -22,7 +22,6 @@ end
 """
 abstract type ParameterConfigurations end
 
-import Base: show
 Base.show(io::IO, parameters::P) where {P <: ParameterConfigurations} = print(io, "\nA subtype of `ParameterConfigurations` with K = $(size(parameters, 2)) instances of the $(size(parameters, 1))-dimensional parameter vector θ.")
 Base.show(io::IO, m::MIME"text/plain", parameters::P) where {P <: ParameterConfigurations} = print(io, parameters)
 
@@ -114,8 +113,3 @@ end
 
     return (batch, nexti)
 end
-
-# function Base.length(d::_ParameterLoader)
-#     n = d.nobs / d.batchsize
-#     d.partial ? ceil(Int, n) : floor(Int, n)
-# end

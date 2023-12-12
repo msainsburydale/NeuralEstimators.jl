@@ -9,7 +9,7 @@ scaledlogit(f, Ω)    = scaledlogit(f, minimum(Ω), maximum(Ω))
 scaledlogit(f, a, b) = log((f - a) / (b - f))
 
 
-# ---- Efficient gaussianloglikelihood ----
+# ---- Gaussian density ----
 
 # The density function is
 # ```math
@@ -21,34 +21,34 @@ scaledlogit(f, a, b) = log((f - a) / (b - f))
 # ```
 
 @doc raw"""
-    gaussiandensity(y::V, L; logdensity = true) where {V <: AbstractVector{T}} where T
-	gaussiandensity(y::A, Σ; logdensity = true) where {A <: AbstractArray{T, N}} where {T, N}
+    gaussiandensity(y::V, L::LT) where {V <: AbstractVector, LT <: LowerTriangular}
+	gaussiandensity(y::A, L::LT) where {A <: AbstractArray, LT <: LowerTriangular}
+	gaussiandensity(y::A, Σ::M) where {A <: AbstractArray, M <: AbstractMatrix}
 
-Efficiently computes the density function for `y` ~ 𝑁(0, `Σ`), with `L` the
-lower Cholesky factor of the covariance matrix `Σ`.
+Efficiently computes the density function for `y` ~ 𝑁(0, `Σ`) for covariance
+matrix `Σ`, and where `L` is lower Cholesky factor of `Σ`.
 
-The method `gaussiandensity(y::A, Σ)` assumes that the last dimension of `y`
-corresponds to the independent-replicates dimension, and it exploits the fact
-that we need to compute the Cholesky factor `L` for these independent replicates
-once only.
+The method `gaussiandensity(y::A, L::LT)` assumes that the last dimension of `y`
+contains independent and identically distributed (iid) replicates.
+
+The log-density is returned if the keyword argument `logdensity` is true (default).
 """
-function gaussiandensity(y::V, L; logdensity::Bool = true) where {V <: AbstractVector{T}} where T
+function gaussiandensity(y::V, L::LT; logdensity::Bool = true) where {V <: AbstractVector{T}, LT <: LowerTriangular} where T
 	n = length(y)
 	x = L \ y # solution to Lx = y. If we need non-zero μ in the future, use x = L \ (y - μ)
 	l = -0.5n*log(2π) -logdet(L) -0.5dot(x, x)
     return logdensity ? l : exp(l)
 end
 
-function gaussiandensity(y::A, Σ; logdensity::Bool = true) where {A <: AbstractArray{T, N}} where {T, N}
-
-	# Here, we use `Symmetric()` to indicate that Σ is positive-definite;
-	# this can help to alleviate issues caused by rounding, as described at
-	# https://discourse.julialang.org/t/is-this-a-bug-with-cholesky/16970/3.
-	L  = cholesky(Symmetric(Σ)).L
+function gaussiandensity(y::A, L::LT; logdensity::Bool = true) where {A <: AbstractArray{T, N}, LT <: LowerTriangular} where {T, N}
 	l = mapslices(y -> gaussiandensity(vec(y), L, logdensity = logdensity), y, dims = 1:(N-1))
 	return logdensity ? sum(l) : prod(l)
 end
 
+function gaussiandensity(y::A, Σ::M; args...) where {A <: AbstractArray{T, N}, M <: AbstractMatrix{T}} where {T, N}
+	L = cholesky(Symmetric(Σ)).L
+	gaussiandensity(y, L; args...)
+end
 
 
 # ---- Bivariate density function for Schlather's model ----
@@ -64,11 +64,7 @@ V₁₂(z₁, z₂, ψ) = -0.5(1 - ψ^2) * f(z₁, z₂, ψ)^-1.5
 
 """
 	schlatherbivariatedensity(z₁, z₂, ψ; logdensity = true)
-The bivariate density function for Schlather's max-stable model, as given in
-Huser (2013, pg. 231--232).
-
-Huser, R. (2013). Statistical Modeling and Inference for Spatio-Temporal Ex-
-tremes. PhD thesis, Swiss Federal Institute of Technology, Lausanne, Switzerland.
+The bivariate density function for Schlather's max-stable model.
 """
 schlatherbivariatedensity(z₁, z₂, ψ; logdensity::Bool = true) = logdensity ? logG₁₂(z₁, z₂, ψ) : G₁₂(z₁, z₂, ψ)
 _schlatherbivariatecdf(z₁, z₂, ψ) = G(z₁, z₂, ψ)
