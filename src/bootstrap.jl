@@ -1,18 +1,17 @@
 """
-	interval(θ̃, θ̂ = nothing; type::String, probs = [0.05, 0.95], parameter_names)
+	interval(θ̃::Matrix; probs = [0.05, 0.95], parameter_names = nothing)
+	interval(estimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu = true)
 
-Compute a confidence interval using the p × B matrix of bootstrap samples, `θ̃`,
-where p is the number of parameters in the model.
+Compute a confidence interval based on a p × B matrix of bootstrap estimates, `θ̃`,
+where p is the number of parameters in the model, or from an `IntervalEstimator`
+and data `Z`.
 
-If `type = "quantile"`, the interval is constructed by simply taking the quantiles of
-`θ̃`, and if `type = "reverse-quantile"`, the so-called
-[reverse-quantile](https://en.wikipedia.org/wiki/Bootstrapping_(statistics)#Methods_for_bootstrap_confidence_intervals)
-method is used. In both cases, the quantile levels are controlled by the argument `probs`.
-
-The rows can be named with a vector of strings `parameter_names`.
+The bootstrap-based interval is constructed by taking the quantiles of `θ̃`,
+where the quantile levels are controlled by the keyword argument `probs`.
 
 The return type is a p × 2 matrix, whose first and second columns respectively
-contain the lower and upper bounds of the interval.
+contain the lower and upper bounds of the interval. The rows of this matrix can
+be named by passing a vector of strings to the keyword argument `parameter_names`.
 
 # Examples
 ```
@@ -22,25 +21,14 @@ B = 50
 θ̃ = rand(p, B)
 θ̂ = rand(p)
 interval(θ̃)
-interval(θ̃, θ̂, type = "basic")
 ```
 """
-function interval(θ̃, θ̂ = nothing; type::String = "percentile", probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 1:size(θ̃, 1)])
+function interval(θ̃; probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 1:size(θ̃, 1)])
 
-	#TODO add assertions and add type on θ̃
 	p, B = size(θ̃)
-	type = lowercase(type)
 
-	if type ∈ ["percentile", "quantile"]
-		ci = mapslices(x -> quantile(x, probs), θ̃, dims = 2)
-	elseif type ∈ ["basic", "reverse-percentile", "reverse-quantile"]
-		isnothing(θ̂) && error("`θ̂` must be provided if `type` is 'basic', 'reverse-percentile', or 'reverse-quantile'")
-		q = mapslices(x -> quantile(x, probs), θ̃, dims = 2)
-		ci = [[2θ̂[i] - q[i, 2], 2θ̂[i] - q[i, 1]] for i ∈ 1:p]
-		ci = hcat(ci...)'
-	else
-		error("argument `type` not matched: it should be one of 'percentile', 'basic', 'studentised', or 'bca'.")
-	end
+	# Compute the quantiles
+	ci = mapslices(x -> quantile(x, probs), θ̃, dims = 2)
 
 	# Add labels to the confidence intervals
 	l = ci[:, 1]
@@ -49,7 +37,6 @@ function interval(θ̃, θ̂ = nothing; type::String = "percentile", probs = [0.
 end
 
 
-#TODO need to document this method
 function interval(estimator::Union{IntervalEstimator, IntervalEstimatorCompactPrior, PointIntervalEstimator}, Z; parameter_names = nothing, use_gpu::Bool = true)
 
 	ci = estimateinbatches(estimator, Z, use_gpu = use_gpu)
@@ -94,11 +81,7 @@ function labelinterval(ci::M, parameter_names = ["θ$i" for i ∈ (size(ci, 1) �
 	p = size(ci, 1) ÷ 2
 	K = size(ci, 2)
 
-	map(1:K) do k
-		lₖ = ci[1:p, k]
-		uₖ = ci[(p+1):end, k]
-		labelinterval(lₖ, uₖ, parameter_names)
-	end
+	[labelinterval(ci[:, k], parameter_names) for k ∈ 1:K]
 end
 
 # ---- Parameteric bootstrap ----

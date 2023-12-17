@@ -618,9 +618,6 @@ m  = 10 # default sample size
 					# interval
 					θ̃ = bootstrap(θ̂, pars, simulator, m; use_gpu = use_gpu)
 					@test size(interval(θ̃)) == (p, 2)
-					# @test size(interval(θ̃, θ̂(Z), type = "basic")) == (p, 2) #FIXME broken on the GPU
-					@test_throws Exception interval(θ̃, type = "basic")
-					@test_throws Exception interval(θ̃, type = "zxcvbnm")
 				end
 			end
 		end
@@ -674,41 +671,6 @@ end
 
 # ---- Estimators ----
 
-@testset "PiecewiseEstimator" begin
-	@test_throws Exception PiecewiseEstimator((MLE, MLE), (30, 50))
-	@test_throws Exception PiecewiseEstimator((MLE, MLE, MLE), (50, 30))
-	θ̂_piecewise = PiecewiseEstimator((MLE, MLE), (30))
-	show(devnull, θ̂_piecewise)
-	Z = [array(n, 1, 10, T = Float32), array(n, 1, 50, T = Float32)]
-	θ̂₁ = hcat(MLE(Z[[1]]), MLE(Z[[2]]))
-	θ̂₂ = θ̂_piecewise(Z)
-	@test θ̂₁ ≈ θ̂₂
-end
-
-
-@testset "IntervalEstimator" begin
-	# Generate some toy data
-	n = 2  # bivariate data
-	m = 256 # number of independent replicates
-	Z = rand(n, m)
-
-	# Create an architecture
-	parameter_names = ["ρ", "σ", "τ"]
-	p = length(parameter_names)
-	w = 8  # width of each layer
-	ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
-	ϕ = Chain(Dense(w, w, relu), Dense(w, p));
-	architecture = DeepSet(ψ, ϕ)
-
-	# Initialise the interval estimator
-	estimator = IntervalEstimator(architecture)
-
-	# Apply the interval estimator
-	estimator(Z)
-	ci = interval(estimator, Z, parameter_names = parameter_names)
-	@test size(ci[1]) == (p, 2)
-end
-
 @testset "initialise_estimator" begin
 	p = 2
 	initialise_estimator(p, architecture = "DNN")
@@ -724,6 +686,48 @@ end
 	@test_throws Exception initialise_estimator(p, architecture = "CNN")
 	@test_throws Exception initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5)])
 end
+
+@testset "PiecewiseEstimator" begin
+	@test_throws Exception PiecewiseEstimator((MLE, MLE), (30, 50))
+	@test_throws Exception PiecewiseEstimator((MLE, MLE, MLE), (50, 30))
+	θ̂_piecewise = PiecewiseEstimator((MLE, MLE), (30))
+	show(devnull, θ̂_piecewise)
+	Z = [array(n, 1, 10, T = Float32), array(n, 1, 50, T = Float32)]
+	θ̂₁ = hcat(MLE(Z[[1]]), MLE(Z[[2]]))
+	θ̂₂ = θ̂_piecewise(Z)
+	@test θ̂₁ ≈ θ̂₂
+end
+
+
+@testset "IntervalEstimators" begin
+	# Generate some toy data and a basic architecture
+	d = 2  # bivariate data
+	m = 64 # number of independent replicates
+	Z = rand(d, m)
+	parameter_names = ["ρ", "σ", "τ"]
+	p = length(parameter_names)
+	w = 8  # width of each layer
+	arch = initialise_estimator(p, architecture = "DNN", d = d, width = 8)
+
+	# IntervalEstimator
+	estimator = IntervalEstimator(arch)
+	θ̂ = estimator(Z)
+	@test size(θ̂) == (2p, 1)
+	@test all(θ̂[1:p] .< θ̂[(p+1):end])
+	ci = interval(estimator, Z)
+	ci = interval(estimator, Z, parameter_names = parameter_names)
+	@test size(ci[1]) == (p, 2)
+
+	# PointIntervalEstimator
+	estimator = PointIntervalEstimator(arch)
+	θ̂ = estimator(Z)
+	@test size(θ̂) == (3p, 1)
+	@test all(θ̂[(p+1):2p] .< θ̂[1:p] .< θ̂[(2p+1):end])
+	ci = interval(estimator, Z)
+	ci = interval(estimator, Z, parameter_names = parameter_names)
+	@test size(ci[1]) == (p, 2)
+end
+
 
 @testset "NeuralEM" begin
 
