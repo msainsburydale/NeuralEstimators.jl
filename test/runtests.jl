@@ -1,4 +1,5 @@
 using NeuralEstimators
+import NeuralEstimators: simulate
 using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ
 using CUDA
 using DataFrames
@@ -6,6 +7,7 @@ using Distributions: Normal, Uniform, Product, cdf, logpdf, quantile
 using Distances
 using Flux
 using Flux: batch, DataLoader, mae, mse
+using GaussianRandomFields
 using Graphs
 using GraphNeuralNetworks
 using LinearAlgebra
@@ -69,6 +71,13 @@ end
 		@test parameters_subset.θ     == parameters.θ[:, indices]
 		@test parameters_subset.chols == parameters.chols[:, :, indices]
 		@test parameters_subset.v     == parameters.v[indices]
+
+		## Parameters stored as a simple matrix
+		parameters = rand(3, K)
+		indices = 2:3
+		parameters_subset = subsetparameters(parameters, indices)
+		@test size(parameters_subset) == (3, 2)
+		@test parameters_subset       == parameters[:, indices]
 	end
 	@testset "containertype" begin
 		a = rand(3, 4)
@@ -224,7 +233,8 @@ end
 
 @testset "simulate" begin
 
-	S = array(10, 2, T = Float32)
+	n = 10
+	S = array(n, 2, T = Float32)
 	D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
 	ρ = Float32.([0.6, 0.8])
 	ν = Float32.([0.5, 0.7])
@@ -240,7 +250,28 @@ end
 
 	@test eltype(simulategaussianprocess(L₁, m)) == Float32
 	# @code_warntype simulategaussianprocess(L₁, σ, m)
+
+	# Passing GaussianRandomFields:
+	cov = CovarianceFunction(2, Matern(ρ[1], ν[1]))
+	grf = GaussianRandomField(cov, GaussianRandomFields.Cholesky(), S)
+	y₁  = simulategaussianprocess(L₁)
+	y₂  = simulategaussianprocess(grf)
+	y₃  = simulateschlather(grf)
+	@test length(y₁) == length(y₂) == length(y₃)
+	@test size(grf) == size(grf, 1) == n
 end
+
+# Testing the function simulate(): Univariate Gaussian model with unknown mean and standard deviation
+p = 2
+K = 10
+m = 15
+parameters = rand(p, K)
+simulate(parameters, m) = [θ[1] .+ θ[2] .* randn(1, m) for θ ∈ eachcol(parameters)]
+simulate(parameters, m)
+simulate(parameters, m, 2)
+simulate(parameters, m) = ([θ[1] .+ θ[2] .* randn(1, m) for θ ∈ eachcol(parameters)], rand(2)) # Tuple (used for passing set-level covariate information)
+simulate(parameters, m)
+simulate(parameters, m, 2)
 
 
 @testset "densities" begin
@@ -325,7 +356,7 @@ function testbackprop(l, dvc, p::Integer, K::Integer, d::Integer)
 	Z = arrayn(d, K) |> dvc
 	θ = arrayn(p, K) |> dvc
 	θ̂ = Chain(Dense(d, p), l) |> dvc
-	@test isa(gradient(() -> mae(θ̂(Z), θ), Flux.params(θ̂)), Zygote.Grads) # TODO should probably use pullback() like I do in train(). Do this after updating the training functions in line with the recent versions of Flux.
+	@test isa(gradient(() -> mae(θ̂(Z), θ), Flux.params(θ̂)), Zygote.Grads) # NB should probably use pullback() like I do in train().
 end
 
 @testset "Activation functions: $dvc" for dvc ∈ devices
@@ -641,9 +672,6 @@ end
 	@test size(θ̂([g₁, g₂, g₃])) == (p, 3)
 end
 
-
-
-
 # ---- Estimators ----
 
 @testset "PiecewiseEstimator" begin
@@ -680,9 +708,6 @@ end
 	ci = interval(estimator, Z, parameter_names = parameter_names)
 	@test size(ci[1]) == (p, 2)
 end
-
-
-
 
 @testset "initialise_estimator" begin
 	p = 2
@@ -833,10 +858,16 @@ end
 	neuralem = NeuralEM(simulateconditional, neuralMAPestimator)
 	θ₀ = mean.([Ω...]) 						# initial estimate, the prior mean
 	H = 5
-	θ̂  = neuralem(Z, θ₀, ξ = ξ, nsims = H)
+	θ̂   = neuralem(Z, θ₀, ξ = ξ, nsims = H)
 	θ̂2  = neuralem([Z, Z], θ₀, ξ = ξ, nsims = H)
 
 	@test size(θ̂)  == (2, 1)
 	@test size(θ̂2) == (2, 2)
+
+	## Test initial-value handling
 	@test_throws Exception neuralem(Z)
+	@test_throws Exception neuralem([Z, Z])
+	neuralem = NeuralEM(simulateconditional, neuralMAPestimator, θ₀)
+	neuralem(Z, ξ = ξ, nsims = H)
+	neuralem([Z, Z], ξ = ξ, nsims = H)
 end

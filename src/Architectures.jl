@@ -18,18 +18,6 @@ function _agg(a::String)
 	end
 end
 
-"""
-	samplesize(Z)
-
-Computes the sample size m for a set of independent realisations `Z`, often
-useful as an expert summary statistic in `DeepSetExpert` objects.
-
-Note that this function is a simple wrapper around `numberreplicates`, but this
-function returns the number of replicates as the eltype of `Z`.
-"""
-samplesize(Z) = eltype(Z)(numberreplicates(Z))
-samplesize(Z::V) where V <: AbstractVector = samplesize.(Z)
-
 # ---- DeepSet ----
 
 """

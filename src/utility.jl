@@ -123,6 +123,16 @@ containertype(A::Type) = Base.typename(A).wrapper
 containertype(a::A) where A = containertype(A)
 containertype(::Type{A}) where A <: SubArray = containertype(A.types[1])
 
+"""
+	samplesize(Z)
+
+Computes the sample size m for a set of independent realisations `Z`, often
+useful as an expert summary statistic in `DeepSetExpert` objects.
+
+Note that this function is a simple wrapper around `numberreplicates`, but this
+function returns the number of replicates as the eltype of `Z`.
+"""
+samplesize(Z) = eltype(Z)(numberreplicates(Z))
 
 """
 	numberofreplicates(Z)

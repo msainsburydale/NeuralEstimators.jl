@@ -1,5 +1,3 @@
-# ---- Spatial point process ----
-
 """
 	maternclusterprocess(; λ=10, μ=10, r=0.1, xmin=0, xmax=1, ymin=0, ymax=1)
 
@@ -80,7 +78,7 @@ function maternclusterprocess(; λ = 10, μ = 10, r = 0.1, xmin = 0, xmax = 1, y
 end
 
 
-# ---- WeightedGraphConv ----
+# ---- Graph convolution layer weighted by spatial distance ----
 
 @doc raw"""
     WeightedGraphConv(in => out, σ=identity; aggr=mean, bias=true, init=glorot_uniform)
@@ -159,13 +157,6 @@ function Base.show(io::IO, l::WeightedGraphConv)
 end
 
 # ---- Adjacency matrices ----
-
-# TODO keyword argument method that might be a bit easier to deal with for the user
-
-# See https://en.wikipedia.org/wiki/Heap_(data_structure) for a description
-# of the heap data structure, and see
-# https://juliacollections.github.io/DataStructures.jl/latest/heaps/
-# for a description of Julia's implementation of the heap data structure.
 
 """
 	adjacencymatrix(M::Matrix, k::Integer)
@@ -357,6 +348,11 @@ end
 
 # NB investigate why I can't get this to work when I have more time (it's very
 # close). I think this approach will be more efficient than the above method.
+
+# See https://en.wikipedia.org/wiki/Heap_(data_structure) for a description
+# of the heap data structure, and see
+# https://juliacollections.github.io/DataStructures.jl/latest/heaps/
+# for a description of Julia's implementation of the heap data structure.
 
 #using DataStructures # heap data structure
 # function findneighbours(d, k::Integer)

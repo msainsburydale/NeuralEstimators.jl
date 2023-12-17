@@ -55,29 +55,37 @@ Simulates `m` independent and identically distributed (i.i.d.) realisations from
 a mean-zero Gaussian process.
 
 Accepts either the lower Cholesky factor `L` associated with a Gaussian process
-or a `GaussianRandomField` object `grf`.
+or an object from the package [`GaussianRandomFields`](https://github.com/PieterjanRobbe/GaussianRandomFields.jl).
+
+If `m` is not specified, the simulated data are returned as a vector with
+length equal to the number of spatial locations, ``n``; otherwise, the data are
+returned as an ``n``x`m` matrix.
 
 # Examples
 ```
 using NeuralEstimators
+using Distances
+using LinearAlgebra
 
-n  = 500
-S  = rand(n, 2)
-ρ  = 0.6
-ν  = 1.0
+n = 500
+ρ = 0.6
+ν = 1.0
+S = rand(n, 2)
 
-# Passing GaussianRandomField object:
-using GaussianRandomFields
-cov = CovarianceFunction(2, Matern(ρ, ν))
-grf = GaussianRandomField(cov, Cholesky(), S)
-simulategaussianprocess(grf)
-
-# Passing Cholesky factors directly as matrices:
-L = grf.data
+# Passing a Cholesky factor:
+D = pairwise(Euclidean(), S, S, dims = 1)
+Σ = Symmetric(matern.(D, ρ, ν))
+L = cholesky(Σ).L
 simulategaussianprocess(L)
 
-# Circulant embedding, which is fast but can on only be used on grids:
-pts = 1.0:50.0
+# Passing a GaussianRandomField with Cholesky decomposition:
+using GaussianRandomFields
+cov = CovarianceFunction(2, Matern(ρ, ν))
+grf = GaussianRandomField(cov, GaussianRandomFields.Cholesky(), S)
+simulategaussianprocess(grf)
+
+# Passing a GaussianRandomField with circulant embedding (fast but requires regular grid):
+pts = range(0.0, 1.0, 20)
 grf = GaussianRandomField(cov, CirculantEmbedding(), pts, pts, minpadding = 100)
 simulategaussianprocess(grf)
 ```
@@ -105,11 +113,14 @@ end
 
 Simulates `m` independent and identically distributed (i.i.d.) realisations from
 Schlather's max-stable model using the algorithm for approximate simulation given
-by Schlather (2002), "Models for stationary max-stable random fields", Extremes,
-5:33-44.
+by [Schlather (2002)](https://link.springer.com/article/10.1023/A:1020977924878).
 
 Accepts either the lower Cholesky factor `L` associated with a Gaussian process
-or a `GaussianRandomField` object `grf`.
+or an object from the package [`GaussianRandomFields`](https://github.com/PieterjanRobbe/GaussianRandomFields.jl).
+
+If `m` is not specified, the simulated data are returned as a vector with
+length equal to the number of spatial locations, ``n``; otherwise, the data are
+returned as an ``n``x`m` matrix.
 
 # Keyword arguments
 - `C = 3.5`: a tuning parameter that controls the accuracy of the algorithm: small `C` favours computational efficiency, while large `C` favours accuracy. Schlather (2002) recommends the use of `C = 3`.
@@ -118,24 +129,28 @@ or a `GaussianRandomField` object `grf`.
 # Examples
 ```
 using NeuralEstimators
+using Distances
+using LinearAlgebra
 
-n  = 500
-S  = rand(n, 2)
-ρ  = 0.6
-ν  = 1.0
+n = 500
+ρ = 0.6
+ν = 1.0
+S = rand(n, 2)
 
-# Passing GaussianRandomField object:
-using GaussianRandomFields
-cov = CovarianceFunction(2, Matern(ρ, ν))
-grf = GaussianRandomField(cov, Cholesky(), S)
-simulateschlather(grf)
-
-# Passing Cholesky factors directly as matrices:
-L = grf.data
+# Passing a Cholesky factor:
+D = pairwise(Euclidean(), S, S, dims = 1)
+Σ = Symmetric(matern.(D, ρ, ν))
+L = cholesky(Σ).L
 simulateschlather(L)
 
-# Circulant embedding, which is fast but can on only be used on grids:
-pts = 1.0:50.0
+# Passing a GaussianRandomField with Cholesky decomposition:
+using GaussianRandomFields
+cov = CovarianceFunction(2, Matern(ρ, ν))
+grf = GaussianRandomField(cov, GaussianRandomFields.Cholesky(), S)
+simulateschlather(grf)
+
+# Passing a GaussianRandomField with circulant embedding (fast but requires regular grid):
+pts = range(0.0, 1.0, 20)
 grf = GaussianRandomField(cov, CirculantEmbedding(), pts, pts, minpadding = 100)
 simulateschlather(grf)
 ```
@@ -185,8 +200,6 @@ function simulateschlather(obj::M; C = 3.5, Gumbel::Bool = true) where M <: Unio
 	return Z
 end
 
-
-
 # ---- Miscellaneous functions ----
 
 #NB Currently, second order optimisation methods cannot be used
@@ -221,8 +234,6 @@ function matern(h, ρ, ν, σ² = one(typeof(h)))
     end
     return C
 end
-
-
 
 
 """
@@ -267,16 +278,14 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
 
 	K = max(length(ρ), length(ν), length(σ²))
 	if K > 1
-		@assert all([length(θ) ∈ (1, K) for θ ∈ (ρ, ν, σ²)])
-		#TODO converting the parameters to be of length K below is not completely robust: if the parameters are a length-one vector, we will get a vector of a vector, which will cause an error.
-		if length(ρ)  == 1 ρ  = repeat([ρ], K) end
-		if length(ν)  == 1 ν  = repeat([ν], K) end
-		if length(σ²) == 1 σ² = repeat([σ²], K) end
+		@assert all([length(θ) ∈ (1, K) for θ ∈ (ρ, ν, σ²)]) "`ρ`, `ν`, and `σ²` should be the same length"
+		ρ  = _coercetoKvector(ρ, K)
+		ν  = _coercetoKvector(ν, K)
+		σ² = _coercetoKvector(σ², K)
 	end
 
 	# compute Cholesky factorization (exploit symmetry of D to minimise computations)
-	# NB surprisingly, found that Folds.map() is slower than map()
-	# TODO try FLoops and other parallel packages
+	# NB surprisingly, found that the parallel Folds.map() is slower than map(). Could try FLoops or other parallelisation packages.
 	L = map(1:K) do k
 		C = matern.(UpperTriangular(D), ρ[k], ν[k], σ²[k])
 		L = cholesky(Symmetric(C)).L
@@ -300,11 +309,10 @@ function maternchols(D::V, ρ, ν, σ² = one(nested_eltype(D)); stack::Bool = t
 
 	K = max(length(ρ), length(ν), length(σ²))
 	if K > 1
-		@assert all([length(θ) ∈ (1, K) for θ ∈ (ρ, ν, σ²)])
-		#TODO converting the parameters to be of length K below is not completely robust: if the parameters are a length-one vector, we will get a vector of a vector, which will cause an error.
-		if length(ρ)  == 1 ρ  = repeat([ρ], K) end
-		if length(ν)  == 1 ν  = repeat([ν], K) end
-		if length(σ²) == 1 σ² = repeat([σ²], K) end
+		@assert all([length(θ) ∈ (1, K) for θ ∈ (ρ, ν, σ²)]) "`ρ`, `ν`, and `σ²` should be the same length"
+		ρ  = _coercetoKvector(ρ, K)
+		ν  = _coercetoKvector(ν, K)
+		σ² = _coercetoKvector(σ², K)
 	end
 	@assert length(D) ∈ (1, K)
 
@@ -319,4 +327,12 @@ function maternchols(D::V, ρ, ν, σ² = one(nested_eltype(D)); stack::Bool = t
 		L = stackarrays(L, merge = false)
 	end
 	return L
+end
+
+# Coerces a single-number or length-one-vector x into a K vector
+function _coercetoKvector(x, K)
+	@assert length(x) ∈ (1, K)
+	if !isa(x, Vector) x = [x] end
+	if length(x) == 1  x = repeat(x, K) end
+	return x
 end
