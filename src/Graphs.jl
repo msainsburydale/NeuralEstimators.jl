@@ -458,7 +458,7 @@ hidden-feature graphs; the `readout` module aggregates these feature graphs into
 a single hidden feature vector of fixed length; the function `a`(⋅) is a
 permutation-invariant aggregation function, and `ϕ` is a neural network.
 
-The data should be stored as a `GNNGraph` or `AbstractVector{GNNGraph}`, where
+The data should be stored as a `GNNGraph` or `Vector{GNNGraph}`, where
 each graph is associated with a single parameter vector. The graphs may contain
 sub-graphs corresponding to independent replicates from the model.
 
@@ -586,22 +586,34 @@ function (est::GNN)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
 	return est.deepset(h̃)
 end
 
-# Methods needed to accomodate above method of GNN. They are exactly the same as
-# the standard methods defined in Estimators.jl, but also pass through m.
-#TODO unit testing for these methods
-#TODO Not ideal that there's so much code repetition... we're just replacing f(Z) with f(Z, m). Tried with the g(x...) = sum(x) approach; it almost worked, might be worth trying again.
+# Also need a custom method for _updatebatch!()
+# NB Surely there is a more generic way to dispatch here (e.g., any structure that contains GNN)
+function _updatebatch!(θ̂::Union{GNN, PointEstimator{<:GNN}, IntervalEstimator{<:GNN}}, Z, θ, device, loss, γ, optimiser)
+
+	m = numberreplicates(Z)
+	Z = Flux.batch(Z)
+	Z, θ = Z |> device, θ |> device
+
+	# Compute gradients in such a way that the training loss is also saved.
+	# This is equivalent to: gradients = gradient(() -> loss(θ̂(Z), θ), γ)
+	ls, back = Zygote.pullback(() -> loss(θ̂(Z, m), θ), γ) # NB here we also pass m to θ̂, since Flux.batch() cannot be differentiated
+	gradients = back(one(ls))
+	update!(optimiser, γ, gradients)
+
+	# Assuming that loss returns an average, convert it to a sum.
+	ls = ls * size(θ)[end]
+	return ls
+end
+
+
+# Higher level methods needed to accomodate above methods for GNN. They are
+# exactly the same as the standard methods defined in Estimators.jl, but we
+# also pass through m.
+#NB Not ideal that there's so much code repetition... we're just replacing
+#   f(Z) with f(Z, m). Tried with the g(x...) = sum(x) approach; it almost worked, might be worth trying again.
 (est::PointEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = est.arch(Z, m)
 function (est::IntervalEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
-	l = est.l(Z, m)
-	vcat(l, l .+ exp.(est.u(Z, m)))
-end
-function (est::IntervalEstimatorCompactPrior)(Z::GNNGraph, m::AbstractVector{I})
-	x = est.u(Z, m)
-	y = x .+ exp.(est.v(Z, m))
-	c = est.c
-	vcat(c(x), c(y))
-end
-function (est::PointIntervalEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
-	θ̂ = est.θ̂(Z, m)
-	vcat(θ̂, θ̂ .- exp.(est.l(Z, m)), θ̂ .+ exp.(est.u(Z, m)))
+	bₗ = est.u(Z, m)              # lower bound
+	bᵤ = bₗ .+ exp.(est.v(Z, m))  # upper bound
+	vcat(est.g(bₗ), est.g(bᵤ))
 end

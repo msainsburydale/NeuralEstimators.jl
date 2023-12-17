@@ -37,18 +37,14 @@ function interval(θ̃; probs = [0.05, 0.95], parameter_names = ["θ$i" for i �
 end
 
 
-function interval(estimator::Union{IntervalEstimator, IntervalEstimatorCompactPrior, PointIntervalEstimator}, Z; parameter_names = nothing, use_gpu::Bool = true)
+function interval(estimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu::Bool = true)
 
 	ci = estimateinbatches(estimator, Z, use_gpu = use_gpu)
 	ci = cpu(ci)
 
-	if typeof(estimator) <: IntervalEstimator || typeof(estimator) <: IntervalEstimatorCompactPrior
+	if typeof(estimator) <: IntervalEstimator
 		@assert size(ci, 1) % 2 == 0
 		p = size(ci, 1) ÷ 2
-	elseif typeof(estimator) <: PointIntervalEstimator
-		@assert size(ci, 1) % 3 == 0
-		p = size(ci, 1) ÷ 3
-		ci = ci[p+1:end, :]
 	end
 
 	if isnothing(parameter_names)

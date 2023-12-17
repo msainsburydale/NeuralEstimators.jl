@@ -91,7 +91,7 @@ function train end
 
 function train(θ̂, sampler, simulator;
 	m,
-	ξ = nothing, xi = nothing, 
+	ξ = nothing, xi = nothing,
 	epochs_per_θ_refresh::Integer = 1, epochs_per_theta_refresh::Integer = 1,
 	epochs_per_Z_refresh::Integer = 1,
 	simulate_just_in_time::Bool = false,
@@ -728,24 +728,6 @@ function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 	# Compute gradients in such a way that the training loss is also saved.
 	# This is equivalent to: gradients = gradient(() -> loss(θ̂(Z), θ), γ)
 	ls, back = Zygote.pullback(() -> loss(θ̂(Z), θ), γ)
-	gradients = back(one(ls))
-	update!(optimiser, γ, gradients)
-
-	# Assuming that loss returns an average, convert it to a sum.
-	ls = ls * size(θ)[end]
-	return ls
-end
-
-#TODO Surely there is a better way of dispatching here...
-function _updatebatch!(θ̂::Union{GNN, PointEstimator{<:GNN}, IntervalEstimator{<:GNN}, IntervalEstimatorCompactPrior{<:GNN}, PointIntervalEstimator{<:GNN}}, Z, θ, device, loss, γ, optimiser)
-
-	m = numberreplicates(Z)
-	Z = Flux.batch(Z)
-	Z, θ = Z |> device, θ |> device
-
-	# Compute gradients in such a way that the training loss is also saved.
-	# This is equivalent to: gradients = gradient(() -> loss(θ̂(Z), θ), γ)
-	ls, back = Zygote.pullback(() -> loss(θ̂(Z, m), θ), γ) # NB here we also pass m to θ̂, since Flux.batch() cannot be differentiated
 	gradients = back(one(ls))
 	update!(optimiser, γ, gradients)
 

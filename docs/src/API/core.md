@@ -31,12 +31,6 @@ PointEstimator
 
 IntervalEstimator
 
-IntervalEstimatorCompactPrior
-
-PointIntervalEstimator
-
-QuantileEstimator
-
 PiecewiseEstimator
 ```
 

@@ -699,7 +699,7 @@ end
 end
 
 
-@testset "IntervalEstimators" begin
+@testset "IntervalEstimator" begin
 	# Generate some toy data and a basic architecture
 	d = 2  # bivariate data
 	m = 64 # number of independent replicates
@@ -711,6 +711,7 @@ end
 
 	# IntervalEstimator
 	estimator = IntervalEstimator(arch)
+	estimator = IntervalEstimator(arch, arch)
 	θ̂ = estimator(Z)
 	@test size(θ̂) == (2p, 1)
 	@test all(θ̂[1:p] .< θ̂[(p+1):end])
@@ -718,11 +719,16 @@ end
 	ci = interval(estimator, Z, parameter_names = parameter_names)
 	@test size(ci[1]) == (p, 2)
 
-	# PointIntervalEstimator
-	estimator = PointIntervalEstimator(arch)
+	# IntervalEstimator with a compact prior
+	min_supp = [25, 0.5, -pi/2]
+	max_supp = [500, 2.5, 0]
+	estimator = IntervalEstimator(arch, min_supp, max_supp)
+	estimator = IntervalEstimator(arch, arch, min_supp, max_supp)
 	θ̂ = estimator(Z)
-	@test size(θ̂) == (3p, 1)
-	@test all(θ̂[(p+1):2p] .< θ̂[1:p] .< θ̂[(2p+1):end])
+	@test size(θ̂) == (2p, 1)
+	@test all(θ̂[1:p] .< θ̂[(p+1):end])
+	@test all(min_supp .< θ̂[1:p] .< max_supp)
+	@test all(min_supp .< θ̂[p+1:end] .< max_supp)
 	ci = interval(estimator, Z)
 	ci = interval(estimator, Z, parameter_names = parameter_names)
 	@test size(ci[1]) == (p, 2)
