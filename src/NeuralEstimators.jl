@@ -77,6 +77,7 @@ end
 # - Add helper functions for censored data and write an example in the documentation.
 # -	Plotting from Julia (which can dispatch on Assessment objects).
 # -	Add some figures to the examples in the documentation (e.g., show the sampling distribution in univariate example).
+# - I wonder if its possible to merge DeepSet and DeepSetExpert (would be a lot cleaner)
 
 # ---- long term:
 # - turn some document examples into "doctests"

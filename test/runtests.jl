@@ -496,6 +496,7 @@ w  = 32 # width of each layer
 qₓ = 2  # number of set-level covariates
 m  = 10 # default sample size
 
+
 @testset "Array data: $arch" for arch ∈ ["DeepSet" "DeepSetExpert"]
 	@testset "$covar" for covar ∈ ["no set-level covariates" "set-level covariates"]
 		q = w
@@ -509,6 +510,7 @@ m  = 10 # default sample size
 			ψ = Chain(Dense(n, w), Dense(w, w), Flux.flatten)
 			ϕ = Chain(Dense(q, w), Dense(w, p))
 			θ̂ = DeepSet(ψ, ϕ)
+			@test isa(DeepSetExpert(θ̂, ϕ, S), DeepSetExpert)
 		elseif arch == "DeepSetExpert"
 			ψ = Chain(Dense(n, w), Dense(w, w), Flux.flatten)
 			ϕ = Chain(Dense(q + 1, w), Dense(w, p))
@@ -529,6 +531,13 @@ m  = 10 # default sample size
 			@test size(θ̂(Z), 1) == p
 			@test size(θ̂(Z), 2) == K
 			@test isa(loss(θ̂(Z), θ), Number)
+
+			# Single data set methods
+			z = simulator(subsetparameters(parameters, 1), m) |> dvc
+			if covar == "set-level covariates"
+				z = (z[1][1], z[2][1])
+			end
+			θ̂(z) # @which θ̂(z)
 
 			# Test that we can update the neural-network parameters
 			optimiser = ADAM(0.01)

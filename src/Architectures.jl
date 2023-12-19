@@ -319,7 +319,7 @@ function (d::DeepSetExpert)(Z::V) where {V <: AbstractVector{A}} where {A <: Abs
 	d.ϕ(u)
 end
 
-# Multiple data sets with set-level covariates
+# Multiple data sets with set-level covariates 
 function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
 	Z = tup[1]
 	x = tup[2]
@@ -329,8 +329,7 @@ function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V�
 	stackarrays(d.ϕ.(u))
 end
 
-
-# Multiple data sets with set-level covariates: optimised version for array data.
+# Multiple data sets with set-level covariates: optimised version for array data + vector set-level covariates.
 function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
 
 	Z = tup[1]
