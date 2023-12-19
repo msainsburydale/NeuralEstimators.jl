@@ -136,7 +136,6 @@ end
 
 rangeparameter(l::WeightedGraphConv) = exp.(l.W3)
 
-#TODO 3D array version of this
 function (l::WeightedGraphConv)(g::GNNGraph, x::AbstractMatrix)
     check_num_nodes(g, x)
     r = rangeparameter(l)  # strictly positive range parameter
@@ -313,7 +312,7 @@ function adjacencymatrix(M::Mat, r::F; self_loops::Bool = false) where Mat <: Ab
 		V = Float64[]
 		for i ∈ 1:n
 
-			#TODO many ways to speed this up...
+			#NB many ways to speed this up...
 			#     For instance, we don't need to compute all distances, we can
 			#     immediately throw away some values if the difference between
 			#     any of their marginal coordinates is greater than r

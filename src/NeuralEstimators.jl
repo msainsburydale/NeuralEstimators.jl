@@ -68,18 +68,15 @@ include("bootstrap.jl")
 export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches
 include("utility.jl")
 
-export NeuralEM, removedata, encodedata # TODO unit testing for NeuralEM
+export NeuralEM, removedata, encodedata
 include("missingdata.jl")
 
 end
 
 #TODO
 # - Add helper functions for censored data and write an example in the documentation.
-# -	Plotting from Julia (which can act directly on the object of type assessment).
-# -	Examples:
-#   o	Add some figures to the examples in the documentation (e.g., show the sampling distribution in univariate example).
-#   o	Give the formula for how to compute the input channels dimension in the gridded example.
-
+# -	Plotting from Julia (which can dispatch on Assessment objects).
+# -	Add some figures to the examples in the documentation (e.g., show the sampling distribution in univariate example).
 
 # ---- long term:
 # - turn some document examples into "doctests"
@@ -89,7 +86,7 @@ end
 # - Get DeepSetExpert working optimally on the GPU (leaving this for now as we don't need it for the paper).
 # - With the fixed parameters method of train, there seems to be overhead with my current implementation of just-in-time simulation. When epochs_per_Z_refresh = 1, the run-time increases by a factor of 4 for the Gaussian process with m = 1. For now, I’ve added an argument simulate_on_the_fly::Bool, which allows us to switch off just-in-time simulation.
 
-# ---- once the software is properly polished:
+# ---- once the software is polished:
 # - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
 # -	Add NeuralEstimators.jl to https://github.com/smsharma/awesome-neural-sbi#code-packages-and-benchmarks.
 # -	Once NeuralEstimators is on the Julia package manager, add the following to index.md:

@@ -1,6 +1,6 @@
 using NeuralEstimators
 import NeuralEstimators: simulate
-using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ
+using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, _agg
 using CUDA
 using DataFrames
 using Distributions: Normal, Uniform, Product, cdf, logpdf, quantile
@@ -21,9 +21,6 @@ array(size...; T = Float64) = T.(reshape(1:prod(size), size...) ./ prod(size))
 arrayn(size...; T = Float64) = array(size..., T = T) .- mean(array(size..., T = T))
 verbose = false # verbose used in NeuralEstimators code (not @testset)
 
-oldstd = stdout
-redirect_stderr(devnull)
-
 if CUDA.functional()
 	@info "Testing on both the CPU and the GPU... "
 	CUDA.allowscalar(false)
@@ -37,6 +34,13 @@ end
 
 # Start testing low-level functions, which form the base of the dependency tree.
 @testset "UtilityFunctions" begin
+	@testset "nested_eltype" begin
+		@test nested_eltype([rand(5)]) == Float64
+	end
+	@testset "drop" begin
+		@test drop((a = 1, b = 2, c = 3, d = 4), :b) == (a = 1, c = 3, d = 4)
+		@test drop((a = 1, b = 2, c = 3), (:b, :d)) == (a = 1, c = 3)
+	end
 	@testset "expandgrid" begin
 		@test expandgrid(1:2, 0:3) == [1 0; 2 0; 1 1; 2 1; 1 2; 2 2; 1 3; 2 3]
 		@test expandgrid(1:2, 1:2) == expandgrid(2)
@@ -181,8 +185,6 @@ end
 	@test ndims(UW) == 4
 	@test size(UW) == (n, n, 2, m)
 end
-
-
 
 @testset "WeightedGraphConv" begin
 	# Construct a spatially-weighted adjacency matrix based on k-nearest neighbours
@@ -384,6 +386,7 @@ end
 		l = CholeskyCovariance(d) |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
+		@test length(l(θ[:, 1])) == p
 		@test all(θ̂[l.diag_idx, :] .> 0)
 		@test typeof(θ̂) == typeof(θ)
 		testbackprop(l, dvc, p, K, d)
@@ -393,6 +396,7 @@ end
 		l = CovarianceMatrix(d) |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
+		@test length(l(θ[:, 1])) == p
 		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0)
 		@test typeof(θ̂) == typeof(θ)
 		testbackprop(l, dvc, p, K, d)
@@ -408,6 +412,7 @@ end
 		l = CorrelationMatrix(d) |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
+		@test length(l(θ[:, 1])) == p
 		@test typeof(θ̂) == typeof(θ)
 		@test all(-1 .<= θ̂ .<= 1)
 
@@ -536,11 +541,15 @@ m  = 10 # default sample size
 
 				# train: single estimator
 				θ̂ = train(θ̂, Parameters, simulator, m = m, epochs = 2, use_gpu = use_gpu, verbose = verbose, ξ = ξ)
+				θ̂ = train(θ̂, Parameters, simulator, m = m, epochs = 2, use_gpu = use_gpu, verbose = verbose, ξ = ξ, savepath = "testing-path")
+				θ̂ = train(θ̂, Parameters, simulator, m = m, epochs = 2, use_gpu = use_gpu, verbose = verbose, ξ = ξ, simulate_just_in_time = true)
 				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 2, use_gpu = use_gpu, verbose = verbose)
+				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 2, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
 				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 2, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
 				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 2, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
 				Z_train = simulator(parameters, 2m);
 				Z_val   = simulator(parameters, m);
+				train(θ̂, parameters, parameters, Z_train, Z_val; epochs = 5, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
 				train(θ̂, parameters, parameters, Z_train, Z_val; epochs = 5, use_gpu = use_gpu, verbose = verbose)
 
 				# trainx: Multiple estimators
@@ -623,6 +632,15 @@ m  = 10 # default sample size
 		end
 	end
 end
+
+
+#### Small helper functions
+
+d = 5
+m = 10
+Z = rand(d, m)
+@test length(_agg("sum")(Z)) == d
+@test length(_agg("logsumexp")(Z)) == d
 
 
 #### Graph data
@@ -880,4 +898,11 @@ end
 	neuralem = NeuralEM(simulateconditional, neuralMAPestimator, θ₀)
 	neuralem(Z, ξ = ξ, nsims = H)
 	neuralem([Z, Z], ξ = ξ, nsims = H)
+
+	## Test edge cases (no missingness and complete missingness)
+	Z = simulate(θ, 1)[1]		# simulate a single gridded field
+	@test_warn "Data has been passed to the EM algorithm that contains no missing elements... the neural MAP estimator will be applied directly to the data" neuralem(Z, θ₀, ξ = ξ, nsims = H)
+	Z = Z[:, :]
+	Z = removedata(Z, 1.0)
+	@test_throws Exception neuralem(Z, θ₀, ξ = ξ, nsims = H)
 end

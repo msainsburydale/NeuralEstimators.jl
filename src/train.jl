@@ -1,14 +1,3 @@
-#NB This behaviour is important for the implementation of trainx() but unnecessary for the user to know.
-
-# If the number of replicates in `Z_train` is a multiple of the
-# number of replicates for each element of `Z_val`, the training data will be
-# recycled throughout training. For example, if each
-# element of `Z_train` consists of 50 replicates, and each
-# element of `Z_val` consists of 10 replicates, the first epoch will use the first
-# 10 replicates in `Z_train`, the second epoch uses the next 10 replicates, and so
-# on, until the sixth epoch again uses the first 10 replicates. Note that this
-# requires the data to be subsettable with the function `subsetdata`.
-
 """
 	train(θ̂, sampler::Function, simulator::Function; ...)
 	train(θ̂, θ_train::P, θ_val::P, simulator::Function; ...) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
@@ -88,6 +77,17 @@ Z_val   = simulate(θ_val, m)
 ```
 """
 function train end
+
+#NB This behaviour is important for the implementation of trainx() but unnecessary for the user to know.
+
+# If the number of replicates in `Z_train` is a multiple of the
+# number of replicates for each element of `Z_val`, the training data will be
+# recycled throughout training. For example, if each
+# element of `Z_train` consists of 50 replicates, and each
+# element of `Z_val` consists of 10 replicates, the first epoch will use the first
+# 10 replicates in `Z_train`, the second epoch uses the next 10 replicates, and so
+# on, until the sixth epoch again uses the first 10 replicates. Note that this
+# requires the data to be subsettable with the function `subsetdata`.
 
 function train(θ̂, sampler, simulator;
 	m,
@@ -445,9 +445,7 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 end
 
 
-# ---- Wrapper functions for training multiple estimators over a range of sample sizes ----
-
-#TODO reduce code repetition
+# ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 
 """
 	trainx(θ̂, sampler::Function, simulator::Function, m::Vector{Integer}; ...)
@@ -476,8 +474,7 @@ epochs for each estimator by providing `epochs = [epoch₁, epoch₂]`.
 """
 function trainx end
 
-
-function trainx(θ̂, P, simulator, M; args...)
+function _trainx(θ̂; sampler = nothing, simulator = nothing, M = nothing, θ_train = nothing, θ_val = nothing, Z_train = nothing, Z_val = nothing, args...)
 
 	@assert !(typeof(θ̂) <: Vector) # check that θ̂ is not a vector of estimators, which is common error if one calls trainx() on the output of a previous call to trainx()
 
@@ -506,98 +503,40 @@ function trainx(θ̂, P, simulator, M; args...)
 		end
 		kwargs = _modifyargs(kwargs, i, E)
 
-		# train
-		estimators[i] = train(estimators[i], P, simulator; m = mᵢ, kwargs...)
-	end
-
-	return estimators
-end
-
-
-function trainx(θ̂, θ_train::P, θ_val::P, simulator, M; args...)  where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-
-	@assert !(typeof(θ̂) <: Vector) # check that θ̂ is not a vector of estimators, which is common error if one calls trainx() on the output of a previous call to trainx()
-
-	kwargs = (;args...)
-	verbose = _checkargs_trainx(kwargs)
-
-	@assert all(M .> 0)
-	M = sort(M)
-	E = length(M) # number of estimators
-
-	# Create a copy of θ̂ each sample size
-	estimators = _deepcopyestimator(θ̂, kwargs, E)
-
-	for i ∈ eachindex(estimators)
-
-		mᵢ = M[i]
-		verbose && @info "training with m=$(mᵢ)"
-
-		# Pre-train if this is not the first estimator
-		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
-
-		# Modify/check the keyword arguments before passing them onto train
-		kwargs = (;args...)
-		if haskey(kwargs, :savepath) && kwargs.savepath != ""
-			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
+		# Train the estimator, dispatching based on the given arguments
+		if !isnothing(sampler)
+			estimators[i] = train(estimators[i], sampler, simulator; m = mᵢ, kwargs...)
+		elseif !isnothing(simulator)
+			estimators[i] = train(estimators[i], θ_train, θ_val, simulator; m = mᵢ, kwargs...)
+		else
+			Z_valᵢ = subsetdata(Z_val, 1:mᵢ) # subset the validation data to the current sample size
+			estimators[i] = train(estimators[i], θ_train, θ_val, Z_train, Z_valᵢ; kwargs...)
 		end
-		kwargs = _modifyargs(kwargs, i, E)
 
-		# train
-		estimators[i] = train(estimators[i], θ_train, θ_val, simulator; m = mᵢ, kwargs...)
 	end
 
 	return estimators
 end
 
+trainx(θ̂, sampler, simulator, M; args...) = _trainx(θ̂, sampler = sampler, simulator = simulator, M = M; args...)
+trainx(θ̂, θ_train::P, θ_val::P, simulator, M; args...)  where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _trainx(θ̂, θ_train = θ_train, θ_val = θ_val, simulator = simulator, M = M; args...)
 
-# This is for when the data CAN be easily subsetted
-function trainx(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...)  where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
-
-	@assert !(typeof(θ̂) <: Vector) # check that θ̂ is not a vector of estimators, which is common error if one calls trainx() on the output of a previous call to trainx()
+# This method is for when the data can be easily subsetted
+function trainx(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
 
 	@assert length(unique(numberreplicates(Z_val))) == 1 "The elements of `Z_val` should be equally replicated: check with `numberreplicates(Z_val)`"
 	@assert length(unique(numberreplicates(Z_train))) == 1 "The elements of `Z_train` should be equally replicated: check with `numberreplicates(Z_train)`"
 
-	kwargs = (;args...)
-	verbose = _checkargs_trainx(kwargs)
-
-	@assert all(M .> 0)
-	M = sort(M)
-	E = length(M) # number of estimators
-
-	# Create a copy of θ̂ each sample size
-	estimators = _deepcopyestimator(θ̂, kwargs, E)
-
-	for i ∈ eachindex(estimators)
-
-		mᵢ = M[i]
-		verbose && @info "training with m=$(mᵢ)"
-
-		# Pre-train if this is not the first estimator
-		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
-
-		# Modify/check the keyword arguments before passing them onto train
-		kwargs = (;args...)
-		if haskey(kwargs, :savepath) && kwargs.savepath != ""
-			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
-		end
-		kwargs = _modifyargs(kwargs, i, E)
-
-		# Subset the validation data to the current sample size, and then train
-		Z_valᵢ = subsetdata(Z_val, 1:mᵢ)
-		estimators[i] = train(estimators[i], θ_train, θ_val, Z_train, Z_valᵢ; kwargs...)
-	end
-
-	return estimators
+	_trainx(θ̂, θ_train = θ_train, θ_val = θ_val, Z_train = Z_train, Z_val = Z_val, M = M; args...)
 end
 
 # This method is for when the data CANNOT be easily subsetted, so another layer of vectors is needed
 function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: Union{V₁, Tuple{V₁, V₂}}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
 
+	@assert length(Z_train) == length(Z_val)
+
 	@assert !(typeof(θ̂) <: Vector) # check that θ̂ is not a vector of estimators, which is common error if one calls trainx() on the output of a previous call to trainx()
 
-	@assert length(Z_train) == length(Z_val)
 	E = length(Z_train) # number of estimators
 
 	kwargs = (;args...)
@@ -631,7 +570,7 @@ function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) whe
 		end
 		kwargs = _modifyargs(kwargs, i, E)
 
-		# train
+		# Train the estimator for the current sample size
 		estimators[i] = train(estimators[i], θ_train, θ_val, Z_trainᵢ, Z_valᵢ; kwargs...)
 	end
 
@@ -735,7 +674,6 @@ function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 	ls = ls * size(θ)[end]
 	return ls
 end
-
 
 # Wrapper function that returns simulated data and the true parameter values
 _simulate(simulator, params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (simulator(params, m), _extractθ(params))

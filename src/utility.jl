@@ -1,5 +1,3 @@
-#TODO document these functions (and add to online docs) and add unit testing
-
 nparams(model) = length(Flux.params(model)) > 0 ? sum(length, Flux.params(model)) : 0
 
 # Drop fields from NamedTuple: https://discourse.julialang.org/t/filtering-keys-out-of-named-tuples/73564/8

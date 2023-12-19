@@ -48,4 +48,4 @@ Jordan Richards, Matthew Sainsbury-Dale, Andrew Zammit-Mangion, Raphaël Huser (
 Matthew Sainsbury-Dale, Jordan Richards, Andrew Zammit-Mangion, Raphaël Huser (2023+)
 
 - **Modern extreme value statistics for Utopian extremes** [[paper]](https://arxiv.org/abs/2311.11054)\
-Jordan Richards, Noura Alotaibi, Daniela Cisneros, Yan Gong, Matheus B. Guerrero, Paolo Redondo, Xuanjie Shao
+Jordan Richards, Noura Alotaibi, Daniela Cisneros, Yan Gong, Matheus B. Guerrero, Paolo Redondo, Xuanjie Shao (2023)

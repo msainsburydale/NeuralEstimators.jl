@@ -1,4 +1,3 @@
-# TODO If there are no missing entries, try to just apply the neuralMAP estimator (give a warning).
 """
     NeuralEM(simulateconditional::Function, neuralMAP::NeuralPointEstimator, θ₀ = nothing)
 
@@ -78,6 +77,11 @@ end
 NeuralEM(simulateconditional, neuralMAP) = NeuralEM(simulateconditional, neuralMAP, nothing)
 @functor NeuralEM (NeuralMAP,)
 
+function (neuralem::NeuralEM)(Z::A, θ₀ = nothing; args...)  where {A <: AbstractArray{T, N}} where {T, N}
+	@warn "Data has been passed to the EM algorithm that contains no missing elements... the neural MAP estimator will be applied directly to the data"
+	neuralem.neuralMAP(Z)
+end
+
 function (neuralem::NeuralEM)(
 	Z::A, θ₀ = nothing;
 	niterations::Integer = 50,
@@ -90,9 +94,11 @@ function (neuralem::NeuralEM)(
 	)  where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 
 	if isnothing(θ₀)
-		@assert !isnothing(neuralem.θ₀) "Please provide initial estimates θ₀ in the function call when applying the NeuralEM object or in the NeuralEM object itself."
+		@assert !isnothing(neuralem.θ₀) "Please provide initial estimates θ₀ in the function call when applying the `NeuralEM` object, or in the `NeuralEM` object itself."
 		θ₀ = neuralem.θ₀
 	end
+
+	@assert !all(ismissing.(Z))  "The data `Z` consists of missing elements only"
 
 	device    = _checkgpu(use_gpu, verbose = verbose)
 	neuralMAP = neuralem.neuralMAP |> device
@@ -110,7 +116,7 @@ function (neuralem::NeuralEM)(
 		# Apply the nerual MAP estimator to the complete data
 		θₗ₊₁ = neuralMAP(Z̃)
 
-		# move back to the cpu (need to do this for simulateconditional in the next iteration)
+		# Move back to the cpu (need to do this for simulateconditional in the next iteration)
 		θₗ₊₁   = cpu(θₗ₊₁)
 		θ_all = hcat(θ_all, θₗ₊₁)
 
@@ -141,7 +147,7 @@ function (neuralem::NeuralEM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = noth
 		θ₀ = repeat(θ₀, 1, length(Z))
 	end
 
-	estimates = map(eachindex(Z)) do i # TODO should we use Folds.map()?
+	estimates = map(eachindex(Z)) do i # NB should we use Folds.map() or another parallel function?
 		neuralem(Z[i], θ₀[:, i]; args...)
 	end
 	estimates = hcat(estimates...)
@@ -151,54 +157,48 @@ end
 
 
 """
-	removedata(Z::A, p::Float; prevent_complete_missing = true) where {A <: AbstractArray{T, N}}
-	removedata(Z::A, p::Vector{Float}; prevent_complete_missing = true) where {A <: AbstractArray{T, N}}
-	removedata(Z::A, n::Integer; fixed_pattern = false, contiguous_pattern = false) where {A <: AbstractArray{T, N}}
-	removedata(Z::A, Iᵤ::V) where {A <: AbstractArray{T, N}, V <: AbstractVector{I}} where {T, N, I <: Integer}
+	removedata(Z::Array, Iᵤ::Vector{Integer})
+	removedata(Z::Array, p::Union{Float, Vector{Float}}; prevent_complete_missing = true)
+	removedata(Z::Array, n::Integer; fixed_pattern = false, contiguous_pattern = false, variable_proportion = false)
 
-Replaces some elements of `Z` with `missing`.
+Replaces elements of `Z` with `missing`.
 
-A vector of probabilities `p` may be given that specifies the probability for
-each element in the response vector: hence, `p` should have length equal to
-the dimension of the response vector. If a single probability is given, it
-will be replicated accordingly. If `prevent_complete_missing = true`, no
-replicates will contain 100% missingness: note that this can slightly modify
-the effective value of `p`.
-
-Alternatively, if a single integer `n` is provided, all replicates will contain `n` observations
-after the data are removed. If `fixed_pattern = true`, the missingness pattern is
-fixed for all replicates. If `contiguous_pattern = true`, the data will be
-removed in a contiguous block. If `variable_proportion = true`, the proportion
-of missingness will vary across replicates, with each replicate containing
-between 1 and `n` observations after data removal, sampled uniformly: note that
-`variable_proportion` overrides `fixed_pattern`.
-
-Alternatively, one may provide an array of integers `Iᵤ` that give the indices
+The simplest method accepts are of integers `Iᵤ` that give the specific indices
 of the data to be removed.
+
+Alterntivaly, there are two methods available to generate data that are
+missing completely at random (MCAR).
+
+First, a vector `p` may be given that specifies the proportion of missingness
+for each element in the response vector. Hence, `p` should have length equal to
+the dimension of the response vector. If a single proportion is given, it
+will be replicated accordingly. If `prevent_complete_missing = true`, no
+replicates will contain 100% missingness (note that this can slightly alter the
+effective values of `p`).
+
+Second, if an integer `n` is provided, all replicates will contain
+`n` observations after the data are removed. If `fixed_pattern = true`, the
+missingness pattern is fixed for all replicates. If `contiguous_pattern = true`,
+the data will be removed in a contiguous block. If `variable_proportion = true`,
+the proportion of missingness will vary across replicates, with each replicate containing
+between 1 and `n` observations after data removal, sampled uniformly (note that
+`variable_proportion` overrides `fixed_pattern`).
 
 The return type is `Array{Union{T, Missing}}`.
 
 # Examples
 ```
-d = 5     # dimension of each replicate
-n = 3     # number of observed elements of each replicate: must have n <= d
-m = 2000  # number of replicates
-Z = rand(d, m)
+d = 5           # dimension of each replicate
+m = 2000        # number of replicates
+Z = rand(d, m)  # simulated data
 
-removedata(Z, n)
-removedata(Z, n; fixed_pattern = true)
-removedata(Z, n; contiguous_pattern = true)
-removedata(Z, n, variable_proportion = true)
-removedata(Z, n; contiguous_pattern = true, fixed_pattern = true)
-removedata(Z, n; contiguous_pattern = true, variable_proportion = true)
-
-# Passing the proportion of missingness:
+# Passing a desired proportion of missingness
 p = rand(d)
 removedata(Z, p)
-# Check that the probability of missingness is roughly correct:
-mapslices(x -> sum(ismissing.(x))/length(x), removedata(Z, p), dims = 2)
-# Check that none of the replicates contain 100% missing:
-d ∈ unique(mapslices(x -> sum(ismissing.(x)), removedata(Z, p), dims = 1))
+
+# Passing a desired final sample size
+n = 3  # number of observed elements of each replicate: must have n <= d
+removedata(Z, n)
 ```
 """
 function removedata(Z::A, n::Integer;
@@ -271,6 +271,8 @@ function removedata(Z::A, p::Vector{F}; prevent_complete_missing::Bool = true) w
 	d = prod(size(Z)[1:end-1]) # dimension of each replicate  NB assumes a singleton channel dimension
 	@assert length(p) == d "The length of `p` should equal the dimenison d of each replicate"
 	multivariatebernoulli = Product([Bernoulli(p[i]) for i ∈ eachindex(p)])
+
+	if all(p .== 1) prevent_complete_missing = false end
 
 	if prevent_complete_missing
 		Iᵤ = map(1:m) do _
