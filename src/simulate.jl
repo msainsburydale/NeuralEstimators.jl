@@ -96,6 +96,9 @@ function simulategaussianprocess(obj::M, m::Integer) where M <: Union{AbstractMa
 	return y
 end
 
+# TODO This should really dispatch on LowerTriangular, Symmetric, and
+# UpperTriangular. For backwards compatability, we can keep the following
+# method for L::AbstractMatrix. 
 function simulategaussianprocess(L::M) where M <: AbstractMatrix{T} where T <: Number
 	L * randn(T, size(L, 1))
 end
@@ -104,6 +107,8 @@ function simulategaussianprocess(grf::GaussianRandomField)
 	vec(GaussianRandomFields.sample(grf))
 end
 
+
+# TODO add simulateGH()
 
 # ---- Schlather's max-stable model ----
 

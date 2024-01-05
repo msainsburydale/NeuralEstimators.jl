@@ -319,7 +319,7 @@ function (d::DeepSetExpert)(Z::V) where {V <: AbstractVector{A}} where {A <: Abs
 	d.ϕ(u)
 end
 
-# Multiple data sets with set-level covariates 
+# Multiple data sets with set-level covariates
 function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
 	Z = tup[1]
 	x = tup[2]
@@ -455,22 +455,41 @@ function (l::SplitApply)(x::AbstractArray)
 end
 
 
-# ---- Cholesky, Covariance, and Correlation matrices ----
+# ---- Layers to construct Covariance and Correlation matrices ----
+
+# Based on the approach described [here](https://stats.stackexchange.com/a/404453).
+# The mappping of `v` to the Cholesky factor is a well behaved diffeomorphism,
+# so it can be inverted; however, this inversion is not implemented.
+"""
+	vectocholesky(v::Vector; correlation::Bool = false)
+Transforms a vector `v` ∈ ℝᵈ, where d is a triangular number, into a valid
+Cholesky factor for either a correlation matrix or a covariance matrix.
+"""
+function vectocholesky(v; correlation::Bool = false)
+	if correlation
+		L = vectotril(v; strict = true)
+		L = unitdiagonal(L)
+	else
+		L = vectotril(v)
+	end
+	x = rowwisenorm(L)
+	L = L ./ x
+	LowerTriangular(L)
+end
+rowwisenorm(A,dims=2) = sqrt.(sum(abs2,A; dims = dims))
+unitdiagonal(A) = A - Diagonal(A[diagind(A)]) + I
 
 @doc raw"""
 	CorrelationMatrix(d)
 Layer for constructing the parameters of an unconstrained `d`×`d` correlation matrix.
 
-The layer transforms a `Matrix` with `d`(`d`-1)÷2 rows into a `Matrix` with
+The layer transforms a `Matrix` with (`d`-1)`d`÷2 rows into a `Matrix` with
 the same dimension.
 
-Internally, the layers uses the algorithm
-described [here](https://mc-stan.org/docs/reference-manual/cholesky-factors-of-correlation-matrices-1.html#cholesky-factor-of-correlation-matrix-inverse-transform)
-and [here](https://mc-stan.org/docs/reference-manual/correlation-matrix-transform.html#correlation-matrix-transform.section)
-to construct a valid Cholesky factor 𝐋, and then extracts the strict lower
-triangle from the positive-definite correlation matrix 𝐑 = 𝐋𝐋'. The strict lower
-triangle is extracted and vectorised in line with Julia's column-major ordering.
-For example, when modelling the correlation matrix,
+Internally, the layer constructs a valid Cholesky factor 𝐋 and then extracts
+the strict lower triangle from the positive-definite correlation matrix 𝐑 = 𝐋𝐋'.
+The lower triangle is extracted and vectorised in line with Julia's column-major
+ordering. For example, when modelling the correlation matrix
 
 ```math
 \begin{bmatrix}
@@ -480,15 +499,14 @@ R₃₁ & R₃₂ & 1\\
 \end{bmatrix},
 ```
 
-the rows of the matrix returned by a `CorrelationMatrix` layer will
-be ordered as
+the rows of the matrix returned by a `CorrelationMatrix` layer are ordered as
 
 ```math
 R₂₁, R₃₁, R₃₂,
 ```
 
 which means that the output can easily be transformed into the implied
-correlation matrices using the strict variant of [`vectotril`](@ref) and `Symmetric`.
+correlation matrices using [`vectotril`](@ref) and `Symmetric`.
 
 # Examples
 ```
@@ -521,98 +539,16 @@ function CorrelationMatrix(d::Integer)
 	return CorrelationMatrix(d, idx)
 end
 function (l::CorrelationMatrix)(x)
+	ArrayType = containertype(x)
 	p, K = size(x)
-	L = [vectocorrelationcholesky(x[:, k]) for k ∈ 1:K]
-	R = broadcast(x -> x*permutedims(x), L) # note that I replaced x' with permutedims(x) because Transpose/Adjoints don't work well with Zygote
+	L = [vectocholesky(x[:, k], correlation = true) for k ∈ 1:K]
+	R = broadcast(x -> x*permutedims(x), L) # permutedims(x) rather than x' because Transpose/Adjoints don't work well with Zygote
 	θ = broadcast(x -> x[l.idx], R)
-	return hcat(θ...)
+	θ = hcat(θ...)
+	θ = convert(ArrayType, θ)
+	return θ
 end
-function vectocorrelationcholesky(v)
-	ArrayType = containertype(v)
-	v = cpu(v)
-	z = tanh.(vectotril(v; strict=true))
-	n = length(v)
-	d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
-
-	L = [ correlationcholeskyterm(i, j, z)  for i ∈ 1:d, j ∈ 1:d ]
-	return convert(ArrayType, L)
-end
-function correlationcholeskyterm(i, j, z)
-	T = eltype(z)
-	if i < j
-		zero(T)
-	elseif 1 == i == j
-		one(T)
-	elseif 1 == j < i
-		z[i, j]
-	elseif 1 < j == i
-		prod(sqrt.(one(T) .- z[i, 1:j-i].^2))
-	else
-		z[i, j] * prod(sqrt.(one(T) .- z[i, 1:j-i].^2))
-	end
-end
-
-
-
-@doc raw"""
-	CholeskyCovariance(d)
-Layer for constructing the parameters of the lower Cholesky factor associated
-with an unconstrained `d`×`d` covariance matrix.
-
-The layer transforms a `Matrix` with `d`(`d`+1)÷2 rows into a `Matrix` of the
-same dimension, but with `d` rows constrained to be positive (corresponding to
-the diagonal elements of the Cholesky factor) and the remaining rows
-unconstrained.
-
-The ordering of the transformed `Matrix` aligns with Julia's column-major
-ordering. For example, when modelling the Cholesky factor,
-
-```math
-\begin{bmatrix}
-L₁₁ &     &     \\
-L₂₁ & L₂₂ &     \\
-L₃₁ & L₃₂ & L₃₃ \\
-\end{bmatrix},
-```
-
-the rows of the matrix returned by a `CholeskyCovariance` layer will
-be ordered as
-
-```math
-L₁₁, L₂₁, L₃₁, L₂₂, L₃₂, L₃₃,
-```
-
-which means that the output can easily be transformed into the implied
-Cholesky factors using [`vectotril`](@ref).
-
-# Examples
-```
-using NeuralEstimators
-
-d = 4
-p = d*(d+1)÷2
-θ = randn(p, 50)
-l = CholeskyCovariance(d)
-θ = l(θ)                              # returns matrix (used for Flux networks)
-L = [vectotril(y) for y ∈ eachcol(θ)] # convert matrix to Cholesky factors
-```
-"""
-struct CholeskyCovariance{T <: Integer, G}
-  d::T
-  diag_idx::G
-end
-function CholeskyCovariance(d::Integer)
-	diag_idx = [1]
-	for i ∈ 1:(d-1)
-		push!(diag_idx, diag_idx[i] + d-i+1)
-	end
-	CholeskyCovariance(d, diag_idx)
-end
-function (l::CholeskyCovariance)(x)
-	p, K = size(x)
-	y = [i ∈ l.diag_idx ? exp.(x[i, :]) : x[i, :] for i ∈ 1:p]
-	permutedims(reshape(vcat(y...), K, p))
-end
+(l::CorrelationMatrix)(x::AbstractVector) = l(reshape(x, :, 1))
 
 @doc raw"""
     CovarianceMatrix(d)
@@ -621,11 +557,10 @@ Layer for constructing the parameters of an unconstrained `d`×`d` covariance ma
 The layer transforms a `Matrix` with `d`(`d`+1)÷2 rows into a `Matrix` of the
 same dimension.
 
-Internally, it uses a `CholeskyCovariance` layer to construct a
-valid Cholesky factor 𝐋, and then extracts the lower triangle from the
-positive-definite covariance matrix 𝚺 = 𝐋𝐋'. The lower triangle is extracted
-and vectorised in line with Julia's column-major ordering. For example, when
-modelling the covariance matrix,
+Internally, the layer constructs a valid Cholesky factor 𝐋 and then extracts
+the lower triangle from the positive-definite covariance matrix 𝚺 = 𝐋𝐋'. The
+lower triangle is extracted and vectorised in line with Julia's column-major
+ordering. For example, when modelling the covariance matrix
 
 ```math
 \begin{bmatrix}
@@ -662,28 +597,20 @@ l = CovarianceMatrix(d)
 struct CovarianceMatrix{T <: Integer, G}
   d::T
   idx::G
-  choleskyparameters::CholeskyCovariance
 end
 function CovarianceMatrix(d::Integer)
 	idx = tril(trues(d, d))
 	idx = findall(vec(idx)) # convert to scalar indices
-	return CovarianceMatrix(d, idx, CholeskyCovariance(d))
+	return CovarianceMatrix(d, idx)
 end
-
 function (l::CovarianceMatrix)(x)
-	L = _constructL(l.choleskyparameters, x)
-	Σ = broadcast(x -> x*permutedims(x), L) # note that I replaced x' with permutedims(x) because Transpose/Adjoints don't work well with Zygote
+	ArrayType = containertype(x)
+	p, K = size(x)
+	L = [vectocholesky(x[:, k], correlation = false) for k ∈ 1:K]
+	Σ = broadcast(x -> x*permutedims(x), L) # permutedims(x) rather than x' because Transpose/Adjoints don't work well with Zygote
 	θ = broadcast(x -> x[l.idx], Σ)
-	return hcat(θ...)
+	θ = hcat(θ...)
+	θ = convert(ArrayType, θ)
+	return θ
 end
-
-function _constructL(l::CholeskyCovariance, x::Array)
-	Lθ = l(x)
-	K = size(Lθ, 2)
-	L = [vectotril(collect(view(Lθ, :, i))) for i ∈ 1:K]
-	L
-end
-
-(l::CholeskyCovariance)(x::AbstractVector) = l(reshape(x, :, 1))
 (l::CovarianceMatrix)(x::AbstractVector) = l(reshape(x, :, 1))
-(l::CorrelationMatrix)(x::AbstractVector) = l(reshape(x, :, 1))

@@ -41,7 +41,7 @@ function gaussiandensity(y::V, L::LT; logdensity::Bool = true) where {V <: Abstr
 end
 
 function gaussiandensity(y::A, L::LT; logdensity::Bool = true) where {A <: AbstractArray{T, N}, LT <: LowerTriangular} where {T, N}
-	l = mapslices(y -> gaussiandensity(vec(y), L, logdensity = logdensity), y, dims = 1:(N-1))
+	l = mapslices(y -> gaussiandensity(vec(y), L; logdensity = logdensity), y, dims = 1:(N-1))
 	return logdensity ? sum(l) : prod(l)
 end
 
@@ -50,6 +50,7 @@ function gaussiandensity(y::A, Σ::M; args...) where {A <: AbstractArray{T, N}, 
 	gaussiandensity(y, L; args...)
 end
 
+#TODO Add generalised-hyperbolic density once neural EM paper is finished.
 
 # ---- Bivariate density function for Schlather's model ----
 

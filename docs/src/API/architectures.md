@@ -35,8 +35,6 @@ neural estimator provides valid parameters.
 ```@docs
 Compress
 
-CholeskyCovariance
-
 CovarianceMatrix
 
 CorrelationMatrix

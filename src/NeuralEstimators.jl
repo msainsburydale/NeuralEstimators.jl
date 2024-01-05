@@ -35,9 +35,8 @@ include("loss.jl")
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
-export DeepSet, DeepSetExpert, Compress, SplitApply
-export CholeskyCovariance, CovarianceMatrix, CorrelationMatrix
-export vectotril, vectotriu
+export DeepSet, DeepSetExpert, Compress, SplitApply, CovarianceMatrix, CorrelationMatrix
+export vectotril, vectotriu, vectocholesky
 include("Architectures.jl")
 
 export NeuralEstimator, PointEstimator, IntervalEstimator, PiecewiseEstimator, initialise_estimator
@@ -72,6 +71,8 @@ export NeuralEM, removedata, encodedata
 include("missingdata.jl")
 
 end
+
+#TODO wonder if "Constrain" would be a better term than "Compress". Make it an alias for backwards compatability.
 
 #TODO
 # - Add helper functions for censored data and write an example in the documentation.

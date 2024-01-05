@@ -1,6 +1,6 @@
 using NeuralEstimators
 import NeuralEstimators: simulate
-using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, _agg
+using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, _agg, rowwisenorm, unitdiagonal
 using CUDA
 using DataFrames
 using Distributions: Normal, Uniform, Product, cdf, logpdf, quantile
@@ -138,8 +138,14 @@ end
 	d = 5     # dimension of each replicate
 	n = 3     # number of observed elements of each replicate: must have n <= d
 	m = 2000  # number of replicates
-	Z = rand(d, m)
+	p = rand(d)
 
+	Z = rand(d)
+	removedata(Z, n)
+	removedata(Z, p[1])
+	removedata(Z, p)
+
+	Z = rand(d, m)
 	removedata(Z, n)
 	removedata(Z, d)
 	removedata(Z, n; fixed_pattern = true)
@@ -147,9 +153,6 @@ end
 	removedata(Z, n, variable_proportion = true)
 	removedata(Z, n; contiguous_pattern = true, fixed_pattern = true)
 	removedata(Z, n; contiguous_pattern = true, variable_proportion = true)
-
-	# Passing the proportion of missingness
-	p = rand(d)
 	removedata(Z, p)
 	removedata(Z, p; prevent_complete_missing = false)
 	# Check that the probability of missingness is roughly correct:
@@ -313,7 +316,6 @@ simulate(parameters, m, 2)
 	@test gaussiandensity(hcat(y, y), Σ) ≈ 2 * gaussiandensity(y, L)
 end
 
-
 @testset "vectotri: $dvc" for dvc ∈ devices
 
 	d = 4
@@ -351,6 +353,19 @@ end
 
 end
 
+triangularnumber(d) = d*(d+1)÷2
+@testset "vectocholesky" begin
+	d = 3
+	n = triangularnumber(d)
+	v = collect(range(1, n))
+	L = vectocholesky(v, correlation = false)
+	@test size(L) == (d, d)
+	@test isposdef(L*L')
+	L = vectocholesky(v, correlation = true)
+	@test size(L) == (d + 1, d + 1)
+	@test isposdef(L*L')
+end
+
 
 # ---- Activation functions ----
 
@@ -382,22 +397,11 @@ end
 	p = d*(d+1)÷2
 	θ = arrayn(p, K) |> dvc
 
-	@testset "CholeskyCovariance" begin
-		l = CholeskyCovariance(d) |> dvc
-		θ̂ = l(θ)
-		@test size(θ̂) == (p, K)
-		@test length(l(θ[:, 1])) == p
-		@test all(θ̂[l.diag_idx, :] .> 0)
-		@test typeof(θ̂) == typeof(θ)
-		testbackprop(l, dvc, p, K, d)
-	end
-
 	@testset "CovarianceMatrix" begin
 		l = CovarianceMatrix(d) |> dvc
 		θ̂ = l(θ)
 		@test size(θ̂) == (p, K)
 		@test length(l(θ[:, 1])) == p
-		@test all(θ̂[l.choleskyparameters.diag_idx, :] .> 0)
 		@test typeof(θ̂) == typeof(θ)
 		testbackprop(l, dvc, p, K, d)
 
@@ -405,6 +409,13 @@ end
 		Σ = convert.(Matrix, Σ);
 		@test all(isposdef.(Σ))
 	end
+
+	A = rand(5,4)
+	@test rowwisenorm(A) == mapslices(norm, A; dims = 2)
+	@test_throws Exception unitdiagonal(A)
+	A = rand(5, 5)
+	@test all(unitdiagonal(A)[diagind(A)] .== 1)
+	@test unitdiagonal(A) == (A[diagind(A)] .= 1; A)
 
 	@testset "CorrelationMatrix" begin
 		p = d*(d-1)÷2

@@ -206,7 +206,7 @@ function removedata(Z::A, n::Integer;
 					contiguous_pattern::Bool = false,
 					variable_proportion::Bool = false
 					) where {A <: AbstractArray{T, N}} where {T, N}
-
+	if isa(Z, Vector) Z = reshape(Z, :, 1) end
 	m = size(Z)[end]           # number of replicates
 	d = prod(size(Z)[1:end-1]) # dimension of each replicate  NB assumes a singleton channel dimension
 
@@ -258,17 +258,26 @@ function removedata(Z::A, n::Integer;
 
 	return removedata(Z, Iᵤ)
 end
-
-function removedata(Z::A, p::F; prevent_complete_missing::Bool = true) where {A <: AbstractArray{T, N}} where {T, N, F <: AbstractFloat}
-	d = prod(size(Z)[1:end-1]) # dimension of each replicate  NB assumes a singleton channel dimension
-	p = repeat([p], d)
-	return removedata(Z, p; prevent_complete_missing = prevent_complete_missing)
+function removedata(Z::V, n::Integer; args...) where {V <: AbstractVector{T}} where {T}
+	removedata(reshape(Z, :, 1), n)[:]
 end
 
-function removedata(Z::A, p::Vector{F}; prevent_complete_missing::Bool = true) where {A <: AbstractArray{T, N}} where {T, N, F <: AbstractFloat}
 
+function removedata(Z::A, p::F; args...) where {A <: AbstractArray{T, N}} where {T, N, F <: AbstractFloat}
+	if isa(Z, Vector) Z = reshape(Z, :, 1) end
+	d = prod(size(Z)[1:end-1]) # dimension of each replicate  NB assumes singleton channel dimension
+	p = repeat([p], d)
+	return removedata(Z, p; args...)
+end
+function removedata(Z::V, p::F; args...) where {V <: AbstractVector{T}} where {T, F <: AbstractFloat}
+	removedata(reshape(Z, :, 1), p)[:]
+end
+
+
+function removedata(Z::A, p::Vector{F}; prevent_complete_missing::Bool = true) where {A <: AbstractArray{T, N}} where {T, N, F <: AbstractFloat}
+	if isa(Z, Vector) Z = reshape(Z, :, 1) end
 	m = size(Z)[end]           # number of replicates
-	d = prod(size(Z)[1:end-1]) # dimension of each replicate  NB assumes a singleton channel dimension
+	d = prod(size(Z)[1:end-1]) # dimension of each replicate  NB assumes singleton channel dimension
 	@assert length(p) == d "The length of `p` should equal the dimenison d of each replicate"
 	multivariatebernoulli = Product([Bernoulli(p[i]) for i ∈ eachindex(p)])
 
@@ -292,6 +301,9 @@ function removedata(Z::A, p::Vector{F}; prevent_complete_missing::Bool = true) w
 
 	return removedata(Z, Iᵤ)
 end
+function removedata(Z::V, p::Vector{F}; args...) where {V <: AbstractVector{T}} where {T, F <: AbstractFloat}
+	removedata(reshape(Z, :, 1), p)[:]
+end
 
 
 function removedata(Z::A, Iᵤ::V) where {A <: AbstractArray{T, N}, V <: AbstractVector{I}} where {T, N, I <: Integer}
@@ -304,6 +316,7 @@ function removedata(Z::A, Iᵤ::V) where {A <: AbstractArray{T, N}, V <: Abstrac
 
 	return Z₁
 end
+
 
 
 """
