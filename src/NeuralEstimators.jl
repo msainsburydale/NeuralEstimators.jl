@@ -35,7 +35,7 @@ include("loss.jl")
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
-export DeepSet, DeepSetExpert, Compress, SplitApply, CovarianceMatrix, CorrelationMatrix
+export DeepSet, DeepSetExpert, Compress, CovarianceMatrix, CorrelationMatrix
 export vectotril, vectotriu, vectocholesky
 include("Architectures.jl")
 

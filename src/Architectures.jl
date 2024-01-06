@@ -412,49 +412,6 @@ Compress(a, b) = Compress(a, b, ones(eltype(a), length(a)))
 Flux.@functor Compress
 Flux.trainable(l::Compress) =  ()
 
-# ---- SplitApply ----
-
-"""
-	SplitApply(layers, indices)
-Splits an array into multiple sub-arrays by subsetting the rows using
-the collection of `indices`, and then applies each layer in `layers` to the
-corresponding sub-array.
-
-Specifically, for each `i` = 1, …, ``n``, with ``n`` the number of `layers`,
-`SplitApply(x)` performs `layers[i](x[indices[i], :])`, and then vertically
-concatenates the resulting transformed arrays.
-
-# Examples
-```
-using NeuralEstimators
-
-d = 4
-K = 50
-p₁ = 2          # number of non-covariance matrix parameters
-p₂ = d*(d+1)÷2  # number of covariance matrix parameters
-p = p₁ + p₂
-
-a = [0.1, 4]
-b = [0.9, 9]
-l₁ = Compress(a, b)
-l₂ = CovarianceMatrix(d)
-l = SplitApply([l₁, l₂], [1:p₁, p₁+1:p])
-
-θ = randn(p, K)
-l(θ)
-```
-"""
-struct SplitApply{T,G}
-  layers::T
-  indices::G
-end
-Flux.@functor SplitApply (layers, )
-Flux.trainable(l::SplitApply) = ()
-function (l::SplitApply)(x::AbstractArray)
-	vcat([layer(x[idx, :]) for (layer, idx) in zip(l.layers, l.indices)]...)
-end
-
-
 # ---- Layers to construct Covariance and Correlation matrices ----
 
 # Based on the approach described [here](https://stats.stackexchange.com/a/404453).

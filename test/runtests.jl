@@ -436,25 +436,6 @@ end
 
 		testbackprop(l, dvc, p, K, d)
 	end
-
-	@testset "SplitApply" begin
-		p₁ = 2          # number of non-covariance matrix parameters
-		p₂ = d*(d+1)÷2  # number of covariance matrix parameters
-		p = p₁ + p₂
-
-		a = [0.1, 4]
-		b = [0.9, 9]
-		l₁ = Compress(a, b)
-		l₂ = CovarianceMatrix(d)
-		l = SplitApply([l₁, l₂], [1:p₁, p₁+1:p])
-
-		l = l            |> dvc
-		θ = arrayn(p, K) |> dvc
-		θ̂ = l(θ)
-		@test size(θ̂) == (p, K)
-		@test typeof(θ̂) == typeof(θ)
-		testbackprop(l, dvc, p, K, 20)
-	end
 end
 
 

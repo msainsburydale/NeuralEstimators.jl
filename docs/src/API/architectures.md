@@ -30,7 +30,7 @@ UniversalPool
 ## Output activation functions
 
 These layers can be used at the end of an architecture to ensure that the
-neural estimator provides valid parameters.
+neural estimator provides valid estimates.
 
 ```@docs
 Compress
@@ -38,6 +38,4 @@ Compress
 CovarianceMatrix
 
 CorrelationMatrix
-
-SplitApply
 ```
