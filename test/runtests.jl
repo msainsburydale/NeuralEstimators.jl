@@ -378,12 +378,14 @@ end
 		testbackprop(l, dvc, p, K, 20)
 	end
 
-	d = 4
-	K = 100
-	p = d*(d+1)÷2
-	θ = arrayn(p, K) |> dvc
 
 	@testset "CovarianceMatrix" begin
+
+		d = 4
+		K = 100
+		p = d*(d+1)÷2
+		θ = arrayn(p, K) |> dvc
+
 		l = CovarianceMatrix(d) |> dvc
 		θ̂ = l(θ)
 		@test_throws Exception l(vcat(θ, θ))
@@ -401,6 +403,8 @@ end
 	@test rowwisenorm(A) == mapslices(norm, A; dims = 2)
 
 	@testset "CorrelationMatrix" begin
+		d = 4
+		K = 100
 		p = d*(d-1)÷2
 		θ = arrayn(p, K) |> dvc
 		l = CorrelationMatrix(d) |> dvc

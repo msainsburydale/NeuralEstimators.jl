@@ -426,7 +426,7 @@ same dimension.
 Internally, the layer constructs a valid Cholesky factor 𝐋 and then extracts
 the lower triangle from the positive-definite covariance matrix 𝚺 = 𝐋𝐋'. The
 lower triangle is extracted and vectorised in line with Julia's column-major
-ordering. For example, when modelling the covariance matrix
+ordering: for example, when modelling the covariance matrix
 
 ```math
 \begin{bmatrix}
@@ -436,8 +436,7 @@ ordering. For example, when modelling the covariance matrix
 \end{bmatrix},
 ```
 
-the rows of the matrix returned by a `CovarianceMatrix` layer will
-be ordered as
+the rows of the matrix returned by a `CovarianceMatrix` are ordered as
 
 ```math
 Σ₁₁, Σ₂₁, Σ₃₁, Σ₂₂, Σ₃₂, Σ₃₃,
@@ -487,18 +486,17 @@ function (l::CovarianceMatrix)(v)
 	v = vcat([i ∈ l.diag_idx ? softplus.(v[i:i, :]) : v[i:i, :] for i ∈ 1:p]...)
 
 	# Insert zeros so that the input v can be transformed into Cholesky factors
-	zero_row = zero(v[1:1, :])
+	zero_mat = zero(v[1:d, :]) # NB Zygote does not like repeat()
 	x = d:-1:1      # number of rows to extract from v
-	y = 0:(d-1)     # number of zero rows to insert
 	j = cumsum(x)   # end points of the v ranges
 	k = j .- x .+ 1 # start point of the v ranges
-	L = vcat([vcat(repeat(zero_row, inner = (y[i], 1)), v[k[i]:j[i], :]) for i ∈ 1:d]...)
+	L = vcat(v[k[1]:j[1], :], [vcat(zero_mat[1:i.-1, :], v[k[i]:j[i], :]) for i ∈ 2:d]...)
 
 	# Reshape to a three-dimensional array of Cholesky factors
 	L = reshape(L, d, d, K)
 
 	# Batched multiplication and transpose to compute covariance matrices
-	Σ = L ⊠ batched_transpose(L)
+	Σ = L ⊠ batched_transpose(L) # can alternatively use PermutedDimsArray(L, (2,1,3)) or permutedims(L, (2, 1, 3))
 
 	# Extract the lower triangle of each matrix
 	θ = Σ[l.idx, :]
@@ -507,6 +505,14 @@ function (l::CovarianceMatrix)(v)
 end
 (l::CovarianceMatrix)(x::AbstractVector) = l(reshape(x, :, 1))
 
+# Example input data helpful for prototyping:
+# d = 4
+# K = 100
+# triangularnumber(d) = d*(d+1)÷2
+# p = triangularnumber(d)
+# v = collect(range(1, p*K))
+# v = reshape(v, p, K)
+
 @doc raw"""
     CorrelationMatrix(d)
 Layer for constructing the parameters of an unconstrained `d`×`d` correlation matrix.
@@ -514,13 +520,10 @@ Layer for constructing the parameters of an unconstrained `d`×`d` correlation m
 The layer transforms a `Matrix` with (`d`-1)d`÷2 rows into a `Matrix` of the
 same dimension.
 
-Internally, the layer constructs a valid Cholesky factor 𝐋 and then extracts
-the strict lower triangle from the positive-definite correlation matrix 𝐑 = 𝐋𝐋'.
-Internally, the layer constructs a valid covariance matrix 𝚺, computes the
-implied correlation matrix 𝐑 = 𝐃⁻¹𝚺𝐃⁻¹ where 𝐃 ≡ √diag(Σ) with square-root
-applied elementwise, and extracts the strict lower triangle from 𝐑. The lower
-triangle is extracted and vectorised in line with Julia's column-major
-ordering. For example, when modelling the correlation matrix
+Internally, the layer constructs a valid Cholesky factor 𝐋 for a correlation
+matrix, and then extracts the strict lower triangle from the correlation matrix
+𝐑 = 𝐋𝐋'. The lower triangle is extracted and vectorised in line with Julia's
+column-major ordering: for example, when modelling the correlation matrix
 
 ```math
 \begin{bmatrix}
@@ -572,18 +575,19 @@ function CorrelationMatrix(d::Integer)
 end
 function (l::CorrelationMatrix)(v)
 
+	# TODO can I find a reference that this transformation does indeed span all correlation matrices?
+
 	d = l.d
 	p, K = size(v)
 	@assert p == l.p "the number of rows must be the triangular number T(d-1) = (d-1)d÷2 = $(l.p)"
 
 	# Insert zeros so that the input v can be transformed into Cholesky factors
-	zero_row = zero(v[1:1, :])
+	zero_mat = zero(v[1:d, :]) # NB Zygote does not like repeat()
 	x = (d-1):-1:0           # number of rows to extract from v
-	y = 0:(d-1)              # number of zero rows to insert
 	j = cumsum(x[1:end-1])   # end points of the v ranges
 	k = j .- x[1:end-1] .+ 1 # start points of the v ranges
-	L = vcat([vcat(repeat(zero_row, inner = (y[i] + 1, 1)), v[k[i]:j[i], :]) for i ∈ 1:d-1]...)
-	L = vcat(L, repeat(zero_row, inner = (y[d] + 1, 1)))
+	L = vcat([vcat(zero_mat[1:i, :], v[k[i]:j[i], :]) for i ∈ 1:d-1]...)
+	L = vcat(L, zero_mat)
 
 	# Reshape to a three-dimensional array of Cholesky factors
 	L = reshape(L, d, d, K)
@@ -595,23 +599,15 @@ function (l::CorrelationMatrix)(v)
 	# Normalise the rows
 	L = L ./ rowwisenorm(L)
 
-	# Batched multiplication and transpose to compute correlation matrices
-	R = L ⊠ batched_transpose(L)
+	# Transpose and batched multiplication to compute correlation matrices
+	R = L ⊠ batched_transpose(L) # can alternatively use PermutedDimsArray(L, (2,1,3)) or permutedims(L, (2, 1, 3))
 
 	# Extract the lower triangle of each matrix
 	θ = R[l.idx, :]
 
-	return θ
+  return θ
 end
 (l::CorrelationMatrix)(x::AbstractVector) = l(reshape(x, :, 1))
 
 # TODO wonder if I should use the L1 norm, probably more numerically stable?
-# TODO can I find a reference that this transformation does indeed span all correlation matrices?
 rowwisenorm(A,dims=2) = sqrt.(sum(abs2,A; dims = dims))
-
-# Example data for testing:
-# d = 4
-# K = 100
-# p = triangularnumber(d-1)
-# v = collect(range(1, p*K))
-# v = reshape(v, p, K)
