@@ -414,98 +414,7 @@ Flux.trainable(l::Compress) =  ()
 
 # ---- Layers to construct Covariance and Correlation matrices ----
 
-# Based on the approach described [here](https://stats.stackexchange.com/a/404453).
-# The mappping of `v` to the Cholesky factor is a well behaved diffeomorphism,
-# so it can be inverted; however, this inversion is not implemented.
-"""
-	vectocholesky(v::Vector; correlation::Bool = false)
-Transforms a vector `v` ∈ ℝᵈ, where d is a triangular number, into a valid
-Cholesky factor for either a correlation matrix or a covariance matrix.
-"""
-function vectocholesky(v; correlation::Bool = false)
-	if correlation
-		L = vectotril(v; strict = true)
-		L = unitdiagonal(L)
-	else
-		L = vectotril(v)
-	end
-	x = rowwisenorm(L)
-	L = L ./ x
-	LowerTriangular(L)
-end
-rowwisenorm(A,dims=2) = sqrt.(sum(abs2,A; dims = dims))
-unitdiagonal(A) = A - Diagonal(A[diagind(A)]) + I
-
-@doc raw"""
-	CorrelationMatrix(d)
-Layer for constructing the parameters of an unconstrained `d`×`d` correlation matrix.
-
-The layer transforms a `Matrix` with (`d`-1)`d`÷2 rows into a `Matrix` with
-the same dimension.
-
-Internally, the layer constructs a valid Cholesky factor 𝐋 and then extracts
-the strict lower triangle from the positive-definite correlation matrix 𝐑 = 𝐋𝐋'.
-The lower triangle is extracted and vectorised in line with Julia's column-major
-ordering. For example, when modelling the correlation matrix
-
-```math
-\begin{bmatrix}
-1   & R₁₂ &  R₁₃ \\
-R₂₁ & 1   &  R₂₃\\
-R₃₁ & R₃₂ & 1\\
-\end{bmatrix},
-```
-
-the rows of the matrix returned by a `CorrelationMatrix` layer are ordered as
-
-```math
-R₂₁, R₃₁, R₃₂,
-```
-
-which means that the output can easily be transformed into the implied
-correlation matrices using [`vectotril`](@ref) and `Symmetric`.
-
-# Examples
-```
-using NeuralEstimators
-using LinearAlgebra
-
-d = 4
-p = d*(d-1)÷2
-l = CorrelationMatrix(d)
-θ = randn(p, 50)
-
-# returns a matrix of parameters
-θ = l(θ)
-
-# convert matrix of parameters to implied correlation matrices
-R = map(eachcol(θ)) do y
-	R = Symmetric(cpu(vectotril(y, strict = true)), :L)
-	R[diagind(R)] .= 1
-	R
-end
-```
-"""
-struct CorrelationMatrix{T <: Integer, Q}
-  d::T
-  idx::Q
-end
-function CorrelationMatrix(d::Integer)
-	idx = tril(trues(d, d), -1)
-	idx = findall(vec(idx)) # convert to scalar indices
-	return CorrelationMatrix(d, idx)
-end
-function (l::CorrelationMatrix)(x)
-	ArrayType = containertype(x)
-	p, K = size(x)
-	L = [vectocholesky(x[:, k], correlation = true) for k ∈ 1:K]
-	R = broadcast(x -> x*permutedims(x), L) # permutedims(x) rather than x' because Transpose/Adjoints don't work well with Zygote
-	θ = broadcast(x -> x[l.idx], R)
-	θ = hcat(θ...)
-	θ = convert(ArrayType, θ)
-	return θ
-end
-(l::CorrelationMatrix)(x::AbstractVector) = l(reshape(x, :, 1))
+triangularnumber(d) = d*(d+1)÷2
 
 @doc raw"""
     CovarianceMatrix(d)
@@ -543,31 +452,166 @@ using NeuralEstimators
 using LinearAlgebra
 
 d = 4
+l = CovarianceMatrix(d)
 p = d*(d+1)÷2
 θ = randn(p, 50)
 
-l = CovarianceMatrix(d)
+# returns a matrix of parameters
 θ = l(θ)
+
 Σ = [Symmetric(cpu(vectotril(y)), :L) for y ∈ eachcol(θ)]
 ```
 """
-struct CovarianceMatrix{T <: Integer, G}
-  d::T
-  idx::G
+struct CovarianceMatrix{T <: Integer, G, H}
+  d::T         # dimension of the matrix
+  p::T         # number of free parameters that in the covariance matrix, the triangular number T(d) = `d`(`d`+1)÷2
+  idx::G       # cartesian indices of lower triangle
+  diag_idx::H  # which of the T(d) rows correspond to the diagonal elements of the `d`×`d` covariance matrix
 end
 function CovarianceMatrix(d::Integer)
+	p = triangularnumber(d)
 	idx = tril(trues(d, d))
-	idx = findall(vec(idx)) # convert to scalar indices
-	return CovarianceMatrix(d, idx)
+	diag_idx = [1]
+	for i ∈ 1:(d-1)
+		push!(diag_idx, diag_idx[i] + d-i+1)
+	end
+	return CovarianceMatrix(d, p, idx, diag_idx)
 end
-function (l::CovarianceMatrix)(x)
-	ArrayType = containertype(x)
-	p, K = size(x)
-	L = [vectocholesky(x[:, k], correlation = false) for k ∈ 1:K]
-	Σ = broadcast(x -> x*permutedims(x), L) # permutedims(x) rather than x' because Transpose/Adjoints don't work well with Zygote
-	θ = broadcast(x -> x[l.idx], Σ)
-	θ = hcat(θ...)
-	θ = convert(ArrayType, θ)
+function (l::CovarianceMatrix)(v)
+
+	d = l.d
+	p, K = size(v)
+	@assert p == l.p "the number of rows must be the triangular number T(d) = d(d+1)÷2 = $(l.p)"
+
+	# Ensure that diagonal elements are positive
+	v = vcat([i ∈ l.diag_idx ? softplus.(v[i:i, :]) : v[i:i, :] for i ∈ 1:p]...)
+
+	# Insert zeros so that the input v can be transformed into Cholesky factors
+	zero_row = zero(v[1:1, :])
+	x = d:-1:1      # number of rows to extract from v
+	y = 0:(d-1)     # number of zero rows to insert
+	j = cumsum(x)   # end points of the v ranges
+	k = j .- x .+ 1 # start point of the v ranges
+	L = vcat([vcat(repeat(zero_row, inner = (y[i], 1)), v[k[i]:j[i], :]) for i ∈ 1:d]...)
+
+	# Reshape to a three-dimensional array of Cholesky factors
+	L = reshape(L, d, d, K)
+
+	# Batched multiplication and transpose to compute covariance matrices
+	Σ = L ⊠ batched_transpose(L)
+
+	# Extract the lower triangle of each matrix
+	θ = Σ[l.idx, :]
+
 	return θ
 end
 (l::CovarianceMatrix)(x::AbstractVector) = l(reshape(x, :, 1))
+
+@doc raw"""
+    CorrelationMatrix(d)
+Layer for constructing the parameters of an unconstrained `d`×`d` correlation matrix.
+
+The layer transforms a `Matrix` with (`d`-1)d`÷2 rows into a `Matrix` of the
+same dimension.
+
+Internally, the layer constructs a valid Cholesky factor 𝐋 and then extracts
+the strict lower triangle from the positive-definite correlation matrix 𝐑 = 𝐋𝐋'.
+Internally, the layer constructs a valid covariance matrix 𝚺, computes the
+implied correlation matrix 𝐑 = 𝐃⁻¹𝚺𝐃⁻¹ where 𝐃 ≡ √diag(Σ) with square-root
+applied elementwise, and extracts the strict lower triangle from 𝐑. The lower
+triangle is extracted and vectorised in line with Julia's column-major
+ordering. For example, when modelling the correlation matrix
+
+```math
+\begin{bmatrix}
+1   & R₁₂ &  R₁₃ \\
+R₂₁ & 1   &  R₂₃\\
+R₃₁ & R₃₂ & 1\\
+\end{bmatrix},
+```
+
+the rows of the matrix returned by a `CorrelationMatrix` layer are ordered as
+
+```math
+R₂₁, R₃₁, R₃₂,
+```
+
+which means that the output can easily be transformed into the implied
+correlation matrices using [`vectotril`](@ref) and `Symmetric`.
+
+# Examples
+```
+using NeuralEstimators
+using LinearAlgebra
+
+d = 4
+l = CorrelationMatrix(d)
+p = (d-1)*d÷2
+θ = randn(p, 5000)
+
+# returns a matrix of parameters
+θ = l(θ)
+
+# convert matrix of parameters to implied correlation matrices
+R = map(eachcol(θ)) do y
+	R = Symmetric(cpu(vectotril(y, strict = true)), :L)
+	R[diagind(R)] .= 1
+	R
+end
+```
+"""
+struct CorrelationMatrix{T <: Integer, G}
+  d::T         # dimension of the matrix
+  p::T         # number of free parameters that in the correlation matrix, the triangular number T(d-1) = (`d`-1)`d`÷2
+  idx::G       # cartesian indices of strict lower triangle
+end
+function CorrelationMatrix(d::Integer)
+	idx = tril(trues(d, d), -1)
+	p = triangularnumber(d-1)
+	return CorrelationMatrix(d, p, idx)
+end
+function (l::CorrelationMatrix)(v)
+
+	d = l.d
+	p, K = size(v)
+	@assert p == l.p "the number of rows must be the triangular number T(d-1) = (d-1)d÷2 = $(l.p)"
+
+	# Insert zeros so that the input v can be transformed into Cholesky factors
+	zero_row = zero(v[1:1, :])
+	x = (d-1):-1:0           # number of rows to extract from v
+	y = 0:(d-1)              # number of zero rows to insert
+	j = cumsum(x[1:end-1])   # end points of the v ranges
+	k = j .- x[1:end-1] .+ 1 # start points of the v ranges
+	L = vcat([vcat(repeat(zero_row, inner = (y[i] + 1, 1)), v[k[i]:j[i], :]) for i ∈ 1:d-1]...)
+	L = vcat(L, repeat(zero_row, inner = (y[d] + 1, 1)))
+
+	# Reshape to a three-dimensional array of Cholesky factors
+	L = reshape(L, d, d, K)
+
+	# Unit diagonal
+	one_matrix = one(L[:, :, 1])
+	L = L .+ one_matrix
+
+	# Normalise the rows
+	L = L ./ rowwisenorm(L)
+
+	# Batched multiplication and transpose to compute correlation matrices
+	R = L ⊠ batched_transpose(L)
+
+	# Extract the lower triangle of each matrix
+	θ = R[l.idx, :]
+
+	return θ
+end
+(l::CorrelationMatrix)(x::AbstractVector) = l(reshape(x, :, 1))
+
+# TODO wonder if I should use the L1 norm, probably more numerically stable?
+# TODO can I find a reference that this transformation does indeed span all correlation matrices?
+rowwisenorm(A,dims=2) = sqrt.(sum(abs2,A; dims = dims))
+
+# Example data for testing:
+# d = 4
+# K = 100
+# p = triangularnumber(d-1)
+# v = collect(range(1, p*K))
+# v = reshape(v, p, K)

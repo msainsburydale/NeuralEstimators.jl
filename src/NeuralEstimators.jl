@@ -36,7 +36,7 @@ export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
 export DeepSet, DeepSetExpert, Compress, CovarianceMatrix, CorrelationMatrix
-export vectotril, vectotriu, vectocholesky
+export vectotril, vectotriu
 include("Architectures.jl")
 
 export NeuralEstimator, PointEstimator, IntervalEstimator, PiecewiseEstimator, initialise_estimator

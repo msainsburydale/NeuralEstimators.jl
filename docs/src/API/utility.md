@@ -40,8 +40,6 @@ removedata
 stackarrays
 
 vectotril
-
-vectocholesky
 ```
 
 ## Other

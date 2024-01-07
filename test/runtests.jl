@@ -1,6 +1,6 @@
 using NeuralEstimators
 import NeuralEstimators: simulate
-using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, _agg, rowwisenorm, unitdiagonal
+using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, _agg, rowwisenorm
 using CUDA
 using DataFrames
 using Distributions: Normal, Uniform, Product, cdf, logpdf, quantile
@@ -353,20 +353,6 @@ end
 
 end
 
-triangularnumber(d) = d*(d+1)÷2
-@testset "vectocholesky" begin
-	d = 3
-	n = triangularnumber(d)
-	v = collect(range(1, n))
-	L = vectocholesky(v, correlation = false)
-	@test size(L) == (d, d)
-	@test isposdef(L*L')
-	L = vectocholesky(v, correlation = true)
-	@test size(L) == (d + 1, d + 1)
-	@test isposdef(L*L')
-end
-
-
 # ---- Activation functions ----
 
 function testbackprop(l, dvc, p::Integer, K::Integer, d::Integer)
@@ -400,6 +386,7 @@ end
 	@testset "CovarianceMatrix" begin
 		l = CovarianceMatrix(d) |> dvc
 		θ̂ = l(θ)
+		@test_throws Exception l(vcat(θ, θ))
 		@test size(θ̂) == (p, K)
 		@test length(l(θ[:, 1])) == p
 		@test typeof(θ̂) == typeof(θ)
@@ -412,16 +399,13 @@ end
 
 	A = rand(5,4)
 	@test rowwisenorm(A) == mapslices(norm, A; dims = 2)
-	@test_throws Exception unitdiagonal(A)
-	A = rand(5, 5)
-	@test all(unitdiagonal(A)[diagind(A)] .== 1)
-	@test unitdiagonal(A) == (A[diagind(A)] .= 1; A)
 
 	@testset "CorrelationMatrix" begin
 		p = d*(d-1)÷2
 		θ = arrayn(p, K) |> dvc
 		l = CorrelationMatrix(d) |> dvc
 		θ̂ = l(θ)
+		@test_throws Exception l(vcat(θ, θ))
 		@test size(θ̂) == (p, K)
 		@test length(l(θ[:, 1])) == p
 		@test typeof(θ̂) == typeof(θ)
