@@ -9,6 +9,11 @@ nested_eltype(x) = nested_eltype(typeof(x))
 nested_eltype(::Type{T}) where T <:AbstractArray = nested_eltype(eltype(T))
 nested_eltype(::Type{T}) where T = T
 
+"""
+	rowwisenorm(A)
+Computes the row-wise norm of a matrix `A`.
+"""
+rowwisenorm(A) = sqrt.(sum(abs2,A; dims = 2))
 
 # Original discussion: https://groups.google.com/g/julia-users/c/UARlZBCNlng
 vectotri_docs = """

@@ -37,6 +37,8 @@ loadbestweights
 
 removedata
 
+rowwisenorm
+
 stackarrays
 
 vectotril

@@ -64,7 +64,7 @@ include("plotting.jl")
 export bootstrap, interval
 include("bootstrap.jl")
 
-export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches
+export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches, rowwisenorm
 include("utility.jl")
 
 export NeuralEM, removedata, encodedata

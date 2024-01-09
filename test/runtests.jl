@@ -378,7 +378,6 @@ end
 		testbackprop(l, dvc, p, K, 20)
 	end
 
-
 	@testset "CovarianceMatrix" begin
 
 		d = 4
@@ -392,11 +391,16 @@ end
 		@test size(θ̂) == (p, K)
 		@test length(l(θ[:, 1])) == p
 		@test typeof(θ̂) == typeof(θ)
-		testbackprop(l, dvc, p, K, d)
 
-		Σ = [Symmetric(cpu(vectotril(y)), :L) for y ∈ eachcol(θ̂)]
+		Σ = [Symmetric(cpu(vectotril(x)), :L) for x ∈ eachcol(θ̂)]
 		Σ = convert.(Matrix, Σ);
 		@test all(isposdef.(Σ))
+
+		L = l(θ, true)
+		L = [LowerTriangular(cpu(vectotril(x))) for x ∈ eachcol(L)]
+		@test all(Σ .≈ L .* permutedims.(L))
+
+		testbackprop(l, dvc, p, K, d)
 	end
 
 	A = rand(5,4)
@@ -415,12 +419,23 @@ end
 		@test typeof(θ̂) == typeof(θ)
 		@test all(-1 .<= θ̂ .<= 1)
 
-		R = map(eachcol(l(θ))) do y
-			R = Symmetric(cpu(vectotril(y; strict=true)), :L)
+		R = map(eachcol(l(θ))) do x
+			R = Symmetric(cpu(vectotril(x; strict=true)), :L)
 			R[diagind(R)] .= 1
 			R
 		end
 		@test all(isposdef.(R))
+
+		L = l(θ, true)
+		L = map(eachcol(L)) do x
+			# Only the strict lower diagonal elements are returned
+			L = LowerTriangular(cpu(vectotril(x, strict = true)))
+
+			# Diagonal elements are determined under the constraint diag(L*L') = 𝟏
+			L[diagind(L)] .= sqrt.(1 .- rowwisenorm(L).^2)
+			L
+		end
+		@test all(R .≈ L .* permutedims.(L))
 
 		testbackprop(l, dvc, p, K, d)
 	end

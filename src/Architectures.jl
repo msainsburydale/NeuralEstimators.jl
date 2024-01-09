@@ -418,9 +418,13 @@ triangularnumber(d) = d*(d+1)÷2
 
 @doc raw"""
     CovarianceMatrix(d)
-Layer for constructing the parameters of an unconstrained `d`×`d` covariance matrix.
+Layer that transforms a vector 𝐯 ∈ Rᵈ to the parameters of an unconstrained
+`d`×`d` covariance matrix, or the lower Cholesky factor of a `d`×`d` covariance
+matrix.
 
-The layer transforms a `Matrix` with `d`(`d`+1)÷2 rows into a `Matrix` of the
+The expected input is a `Matrix` with T(`d`) = `d`(`d`+1)÷2 rows, where T(`d`)
+is the `d`th triangular number (the number of free parameters in an
+unconstrained `d`×`d` covariance matrix), and the output is a `Matrix` of the
 same dimension.
 
 Internally, the layer constructs a valid Cholesky factor 𝐋 and then extracts
@@ -445,9 +449,12 @@ the rows of the matrix returned by a `CovarianceMatrix` are ordered as
 which means that the output can easily be transformed into the implied
 covariance matrices using [`vectotril`](@ref) and `Symmetric`.
 
+The Cholesky factor 𝐋 can be obtained directly by passing `true` when applying the layer (see below).
+
 # Examples
 ```
 using NeuralEstimators
+using Flux
 using LinearAlgebra
 
 d = 4
@@ -455,69 +462,79 @@ l = CovarianceMatrix(d)
 p = d*(d+1)÷2
 θ = randn(p, 50)
 
-# returns a matrix of parameters
-θ = l(θ)
+# Returns a matrix of parameters, which can be converted to covariance matrices
+Σ = l(θ)
+Σ = [Symmetric(cpu(vectotril(x)), :L) for x ∈ eachcol(Σ)]
+Σ = [1]
 
-Σ = [Symmetric(cpu(vectotril(y)), :L) for y ∈ eachcol(θ)]
+# Obtain the Cholesky factor directly
+L = l(θ, true)
+L = [LowerTriangular(cpu(vectotril(x))) for x ∈ eachcol(L)]
+L[1]
+L[1] * L[1]'
 ```
 """
 struct CovarianceMatrix{T <: Integer, G, H}
-  d::T         # dimension of the matrix
-  p::T         # number of free parameters that in the covariance matrix, the triangular number T(d) = `d`(`d`+1)÷2
-  idx::G       # cartesian indices of lower triangle
-  diag_idx::H  # which of the T(d) rows correspond to the diagonal elements of the `d`×`d` covariance matrix
+  d::T          # dimension of the matrix
+  p::T          # number of free parameters that in the covariance matrix, the triangular number T(d) = `d`(`d`+1)÷2
+  tril_idx::G   # cartesian indices of lower triangle
+  diag_idx::H   # which of the T(d) rows correspond to the diagonal elements of the `d`×`d` covariance matrix (linear indices)
 end
 function CovarianceMatrix(d::Integer)
 	p = triangularnumber(d)
-	idx = tril(trues(d, d))
+	tril_idx = tril(trues(d, d))
 	diag_idx = [1]
 	for i ∈ 1:(d-1)
 		push!(diag_idx, diag_idx[i] + d-i+1)
 	end
-	return CovarianceMatrix(d, p, idx, diag_idx)
+	return CovarianceMatrix(d, p, tril_idx, diag_idx)
 end
-function (l::CovarianceMatrix)(v)
+function (l::CovarianceMatrix)(v, cholesky_only::Bool = false)
 
 	d = l.d
 	p, K = size(v)
 	@assert p == l.p "the number of rows must be the triangular number T(d) = d(d+1)÷2 = $(l.p)"
 
 	# Ensure that diagonal elements are positive
-	v = vcat([i ∈ l.diag_idx ? softplus.(v[i:i, :]) : v[i:i, :] for i ∈ 1:p]...)
+	L = vcat([i ∈ l.diag_idx ? softplus.(v[i:i, :]) : v[i:i, :] for i ∈ 1:p]...)
+	cholesky_only && return L
 
 	# Insert zeros so that the input v can be transformed into Cholesky factors
-	zero_mat = zero(v[1:d, :]) # NB Zygote does not like repeat()
+	zero_mat = zero(L[1:d, :]) # NB Zygote does not like repeat()
 	x = d:-1:1      # number of rows to extract from v
 	j = cumsum(x)   # end points of the v ranges
 	k = j .- x .+ 1 # start point of the v ranges
-	L = vcat(v[k[1]:j[1], :], [vcat(zero_mat[1:i.-1, :], v[k[i]:j[i], :]) for i ∈ 2:d]...)
+	L = vcat(L[k[1]:j[1], :], [vcat(zero_mat[1:i.-1, :], L[k[i]:j[i], :]) for i ∈ 2:d]...)
 
 	# Reshape to a three-dimensional array of Cholesky factors
 	L = reshape(L, d, d, K)
 
 	# Batched multiplication and transpose to compute covariance matrices
-	Σ = L ⊠ batched_transpose(L) # can alternatively use PermutedDimsArray(L, (2,1,3)) or permutedims(L, (2, 1, 3))
+	Σ = L ⊠ batched_transpose(L) # alternatively: PermutedDimsArray(L, (2,1,3)) or permutedims(L, (2, 1, 3))
 
 	# Extract the lower triangle of each matrix
-	θ = Σ[l.idx, :]
+	Σ = Σ[l.tril_idx, :]
 
-	return θ
+	return Σ
 end
-(l::CovarianceMatrix)(x::AbstractVector) = l(reshape(x, :, 1))
+(l::CovarianceMatrix)(v::AbstractVector) = l(reshape(v, :, 1))
 
 # Example input data helpful for prototyping:
-# d = 4
+# d = 3
 # K = 100
 # triangularnumber(d) = d*(d+1)÷2
-# p = triangularnumber(d)
+# p = triangularnumber(d-1)
 # v = collect(range(1, p*K))
 # v = reshape(v, p, K)
+# l = CorrelationMatrix(d)
 
 @doc raw"""
     CorrelationMatrix(d)
 Layer for constructing the parameters of an unconstrained `d`×`d` correlation matrix.
 
-The layer transforms a `Matrix` with (`d`-1)d`÷2 rows into a `Matrix` of the
+The expected input is a `Matrix` with T(`d`) = `d`(`d`+1)÷2 rows, where T(`d`)
+is the `d`th triangular number (the number of free parameters in an
+unconstrained `d`×`d` covariance matrix), and the output is a `Matrix` of the
 same dimension.
 
 Internally, the layer constructs a valid Cholesky factor 𝐋 for a correlation
@@ -542,40 +559,54 @@ R₂₁, R₃₁, R₃₂,
 which means that the output can easily be transformed into the implied
 correlation matrices using [`vectotril`](@ref) and `Symmetric`.
 
+The Cholesky factor 𝐋 can be obtained directly by passing `true` when applying the layer (see below).
+
 # Examples
 ```
 using NeuralEstimators
 using LinearAlgebra
+using Flux
 
-d = 4
-l = CorrelationMatrix(d)
-p = (d-1)*d÷2
-θ = randn(p, 5000)
+d  = 4
+l  = CorrelationMatrix(d)
+p  = (d-1)*d÷2
+θ  = randn(p, 100)
 
-# returns a matrix of parameters
-θ = l(θ)
-
-# convert matrix of parameters to implied correlation matrices
-R = map(eachcol(θ)) do y
-	R = Symmetric(cpu(vectotril(y, strict = true)), :L)
+# Returns a matrix of parameters, which can be converted to correlation matrices
+R = l(θ)
+R = map(eachcol(R)) do r
+	R = Symmetric(cpu(vectotril(r, strict = true)), :L)
 	R[diagind(R)] .= 1
 	R
 end
+R[1]
+
+# Obtain the Cholesky factor directly
+L = l(θ, true)
+L = map(eachcol(L)) do x
+	# Only the strict lower diagonal elements are returned
+	L = LowerTriangular(cpu(vectotril(x, strict = true)))
+
+	# Diagonal elements are determined under the constraint diag(L*L') = 𝟏
+	L[diagind(L)] .= sqrt.(1 .- rowwisenorm(L).^2)
+	L
+end
+L[1]
+L[1] * L[1]'
+R[1]
 ```
 """
 struct CorrelationMatrix{T <: Integer, G}
-  d::T         # dimension of the matrix
-  p::T         # number of free parameters that in the correlation matrix, the triangular number T(d-1) = (`d`-1)`d`÷2
-  idx::G       # cartesian indices of strict lower triangle
+  d::T                # dimension of the matrix
+  p::T                # number of free parameters that in the correlation matrix, the triangular number T(d-1) = (`d`-1)`d`÷2
+  tril_idx_strict::G  # cartesian indices of strict lower triangle
 end
 function CorrelationMatrix(d::Integer)
-	idx = tril(trues(d, d), -1)
+	tril_idx_strict = tril(trues(d, d), -1)
 	p = triangularnumber(d-1)
-	return CorrelationMatrix(d, p, idx)
+	return CorrelationMatrix(d, p, tril_idx_strict)
 end
-function (l::CorrelationMatrix)(v)
-
-	# TODO can I find a reference that this transformation does indeed span all correlation matrices?
+function (l::CorrelationMatrix)(v, cholesky_only::Bool = false)
 
 	d = l.d
 	p, K = size(v)
@@ -599,15 +630,14 @@ function (l::CorrelationMatrix)(v)
 	# Normalise the rows
 	L = L ./ rowwisenorm(L)
 
+	cholesky_only && return L[l.tril_idx_strict, :]
+
 	# Transpose and batched multiplication to compute correlation matrices
-	R = L ⊠ batched_transpose(L) # can alternatively use PermutedDimsArray(L, (2,1,3)) or permutedims(L, (2, 1, 3))
+	R = L ⊠ batched_transpose(L) # alternatively: PermutedDimsArray(L, (2,1,3)) or permutedims(L, (2, 1, 3))
 
 	# Extract the lower triangle of each matrix
-	θ = R[l.idx, :]
+	R = R[l.tril_idx_strict, :]
 
-  return θ
+  return R
 end
-(l::CorrelationMatrix)(x::AbstractVector) = l(reshape(x, :, 1))
-
-# TODO wonder if I should use the L1 norm, probably more numerically stable?
-rowwisenorm(A,dims=2) = sqrt.(sum(abs2,A; dims = dims))
+(l::CorrelationMatrix)(v::AbstractVector) = l(reshape(v, :, 1))
