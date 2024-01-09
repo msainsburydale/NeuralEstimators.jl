@@ -1,5 +1,6 @@
 """
     NeuralEM(simulateconditional::Function, neuralMAP::NeuralPointEstimator, θ₀ = nothing)
+	NeuralEM(neuralem::NeuralEM, θ₀)
 
 A type that implements the neural expectation-maximisation (EM) algorithm using
 a function for conditional simulation over the missing values
@@ -40,7 +41,7 @@ Once constructed, obects of type `NeuralEM` can be applied to data via the metho
 		verbose::Bool = false
 	)  where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 
-The key arguments are:
+The keyword arguments are:
 
 - `Z`: the complete-data vector containing the observed data Z₁ and `Missing` values in the missing component Z₂. The last dimension contains the replicates (if any); the other dimensions store the response variable.
 - `θ₀`: starting parameter values.
@@ -75,6 +76,7 @@ struct NeuralEM{F,T,S}
 	θ₀::S
 end
 NeuralEM(simulateconditional, neuralMAP) = NeuralEM(simulateconditional, neuralMAP, nothing)
+NeuralEM(neuralem::NeuralEM, θ₀) = NeuralEM(neuralem.simulateconditional, neuralem.neuralMAP, θ₀)
 @functor NeuralEM (NeuralMAP,)
 
 function (neuralem::NeuralEM)(Z::A, θ₀ = nothing; args...)  where {A <: AbstractArray{T, N}} where {T, N}
@@ -88,6 +90,7 @@ function (neuralem::NeuralEM)(
 	nsims::Integer = 1,
 	ϵ = 0.01,
 	ξ = nothing,
+	use_ξ_in_MAP::Bool = false,
 	use_gpu::Bool = true,
 	verbose::Bool = false,
 	return_iterates::Bool = false
@@ -113,8 +116,8 @@ function (neuralem::NeuralEM)(
 		Z̃ = isnothing(ξ) ? neuralem.simulateconditional(Z, θₗ, nsims = nsims) : neuralem.simulateconditional(Z, θₗ, ξ, nsims = nsims)
 		Z̃ = Z̃ |> device
 
-		# Apply the nerual MAP estimator to the complete data
-		θₗ₊₁ = neuralMAP(Z̃)
+		# Apply the neural MAP estimator to the complete data
+		θₗ₊₁ = use_ξ_in_MAP ? neuralMAP(Z̃, ξ) : neuralMAP(Z̃)
 
 		# Move back to the cpu (need to do this for simulateconditional in the next iteration)
 		θₗ₊₁   = cpu(θₗ₊₁)
@@ -133,13 +136,13 @@ function (neuralem::NeuralEM)(
 		verbose && @show θₗ
 	end
 
-    return_iterates ? (θₗ, θ_all) : θₗ
+    return_iterates ? θ_all : θₗ # note that θₗ is contained in θ_all
 end
 
 function (neuralem::NeuralEM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = nothing; args...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 
 	if isnothing(θ₀)
-		@assert !isnothing(neuralem.θ₀) "Please provide initial estimates θ₀ either in the function call or in the NeuralEM object."
+		@assert !isnothing(neuralem.θ₀) "Please provide initial estimates `θ₀` either in the function call or in the `NeuralEM` object."
 		θ₀ = neuralem.θ₀
 	end
 
