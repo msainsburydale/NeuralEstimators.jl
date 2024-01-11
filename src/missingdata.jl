@@ -1,17 +1,19 @@
 #TODO add example once I add simulateconditionalGP
-@doc raw"""
+#TODO Improve documentation (math display isn't the best here)
+"""
     EM(simulateconditional::Function, MAP::Function, θ₀ = nothing)
 A type that implements the Monte Carlo variant of the expectation-maximisation
-(EM) algorithm, which has $l$th iteration,
+(EM) algorithm, which at ``l``th iteration finds the value of 𝛉 that maximises
 
 ```math
-𝛉^{(l)} = \argmax_{𝛉} \sum_{h = 1}^H ℓ(𝛉;  𝐙₁,  𝐙₂^{(lh)}) + \log π^*(𝛉),
+Σₕᴴ ℓ(𝛉;  𝐙₁,  𝐙₂ˡʰ) + log πᴴ(𝛉),
 ```
 
-where $𝐙 ≡ (𝐙₁', 𝐙₂')'$ denotes the complete data with 𝐙₁ and 𝐙₂ the observed
-and missing components, respectively, $𝐙₂^{(lh)}$, $h = 1, …, H$, is sampled from
-the probability distribution of $𝐙₂ ∣ 𝐙₁, 𝛉^{(l-1)}$, and where
-$π^*(𝛉) ∝ \{π(𝛉)\}^H$ is a concentrated version of the original prior density.
+where ℓ(⋅) is the complete-data log-likelihood function, 𝐙 ≡ (𝐙₁', 𝐙₂')'
+denotes the complete data with 𝐙₁ and 𝐙₂ the observed and missing components,
+respectively, the replicate 𝐙₂ˡʰ, h = 1, …, H, is sampled from the conditional probability
+distribution of 𝐙₂ given 𝐙₁ and the previous estimates 𝛉ˡ⁻¹, and
+πᴴ(⋅) ≡ {π(⋅)}ᴴ  is a concentrated version of the original prior density.
 
 # Fields
 
@@ -26,13 +28,7 @@ architecture, then `Z` should be returned as a four-dimensional array.
 
 Note that the `MAP` estimator should return the *joint* posterior mode;
 therefore, a neural MAP estimator should be trained under (a surrogate for) the
-loss function,
-
-```math
-	L(𝛉, \hat{𝛉}) = 𝕀(𝛉 = \hat{𝛉}),
-```
-
-where 𝕀(⋅) denotes the indicator function. See [`kpowerloss`](@ref).
+joint 0-1 loss function (see [`kpowerloss`](@ref)).
 
 The starting values `θ₀` should be a vector, which can be provided either during
 construction of the `EM` object, or when applying the `EM` object to data
@@ -55,7 +51,7 @@ The keyword arguments are:
 - `ξ = nothing`: model information needed for conditional simulation (e.g., distance matrices) or in the MAP estimator.
 - `use_ξ_in_simulateconditional::Bool = false`: if set to `true`, the conditional simulator is called as `simulateconditional(Z, θ, ξ; nsims = nsims)`.
 - `use_ξ_in_MAP::Bool = false`: if set to `true`, the MAP estimator is applied to the conditionally-completed data as `MAP(Z, ξ)`.
-- `ϵ = 0.01`: tolerance used to assess convergence; The algorithm if the relative change in parameter values from successive iterations is less than `ϵ`, that is, if $max_k (|θ_k^{(l+1)} - θ_k^{(l)}| / |θ_k^{(l)}|) < ϵ$.
+- `ϵ = 0.01`: tolerance used to assess convergence; The algorithm if the relative change in parameter values from successive iterations is less than `ϵ`.
 - `return_iterates`: if `true`, the estimate at each iteration of the algorithm is returned; otherwise, only the final estimate is returned.
 - `use_gpu::Bool = true`
 - `verbose::Bool = false`
@@ -92,7 +88,7 @@ function (em::EM)(
 	end
 
 	if !isnothing(ξ)
-		if use_ξ_in_simulateconditional || use_ξ_in_MAP
+		if use_ξ_in_simulateconditional && use_ξ_in_MAP
 			@warn "`ξ` has been provided but it will not be used because `use_ξ_in_simulateconditional` and `use_ξ_in_MAP` are both `false`"
 		end
 	end
@@ -103,7 +99,7 @@ function (em::EM)(
 
 	@assert !all(ismissing.(Z))  "The data `Z` consists of missing elements only"
 
-	device    = _checkgpu(use_gpu, verbose = verbose)
+	device = _checkgpu(use_gpu, verbose = verbose)
 	MAP = em.MAP |> device
 
 	verbose && @show θ₀

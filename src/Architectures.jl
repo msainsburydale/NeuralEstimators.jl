@@ -24,7 +24,7 @@ end
     DeepSet(ψ, ϕ, a)
 	DeepSet(ψ, ϕ; a::String = "mean")
 
-The Deep Set representation,
+The DeepSets representation,
 
 ```math
 θ̂(𝐙) = ϕ(𝐓(𝐙)),	 	 𝐓(𝐙) = 𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\}),
@@ -418,14 +418,16 @@ triangularnumber(d) = d*(d+1)÷2
 
 @doc raw"""
     CovarianceMatrix(d)
-Layer that transforms a vector 𝐯 ∈ Rᵈ to the parameters of an unconstrained
-`d`×`d` covariance matrix, or the lower Cholesky factor of a `d`×`d` covariance
-matrix.
+	(object::CovarianceMatrix)(x::Matrix, cholesky::Bool = false)
+Transforms a vector 𝐯 ∈ ℝᵈ to the parameters of an unconstrained `d`×`d`
+covariance matrix or, if `cholesky = true`, the lower Cholesky factor of an
+unconstrained `d`×`d` covariance matrix.
 
 The expected input is a `Matrix` with T(`d`) = `d`(`d`+1)÷2 rows, where T(`d`)
 is the `d`th triangular number (the number of free parameters in an
 unconstrained `d`×`d` covariance matrix), and the output is a `Matrix` of the
-same dimension.
+same dimension. The columns of the input and output matrices correspond to
+independent parameter configurations (i.e., different covariance matrices).
 
 Internally, the layer constructs a valid Cholesky factor 𝐋 and then extracts
 the lower triangle from the positive-definite covariance matrix 𝚺 = 𝐋𝐋'. The
@@ -443,13 +445,20 @@ ordering: for example, when modelling the covariance matrix
 the rows of the matrix returned by a `CovarianceMatrix` are ordered as
 
 ```math
-Σ₁₁, Σ₂₁, Σ₃₁, Σ₂₂, Σ₃₂, Σ₃₃,
+\begin{bmatrix}
+Σ₁₁ \\
+Σ₂₁ \\
+Σ₃₁ \\
+Σ₂₂ \\
+Σ₃₂ \\
+Σ₃₃ \\
+\end{bmatrix},
 ```
 
 which means that the output can easily be transformed into the implied
 covariance matrices using [`vectotril`](@ref) and `Symmetric`.
 
-The Cholesky factor 𝐋 can be obtained directly by passing `true` when applying the layer (see below).
+See also [`CorrelationMatrix`](@ref).
 
 # Examples
 ```
@@ -465,12 +474,10 @@ p = d*(d+1)÷2
 # Returns a matrix of parameters, which can be converted to covariance matrices
 Σ = l(θ)
 Σ = [Symmetric(cpu(vectotril(x)), :L) for x ∈ eachcol(Σ)]
-Σ = [1]
 
 # Obtain the Cholesky factor directly
 L = l(θ, true)
 L = [LowerTriangular(cpu(vectotril(x))) for x ∈ eachcol(L)]
-L[1]
 L[1] * L[1]'
 ```
 """
@@ -530,12 +537,16 @@ end
 
 @doc raw"""
     CorrelationMatrix(d)
-Layer for constructing the parameters of an unconstrained `d`×`d` correlation matrix.
+	(object::CorrelationMatrix)(x::Matrix, cholesky::Bool = false)
+Transforms a vector 𝐯 ∈ ℝᵈ to the parameters of an unconstrained `d`×`d`
+correlation matrix or, if `cholesky = true`, the lower Cholesky factor of an
+unconstrained `d`×`d` correlation matrix.
 
-The expected input is a `Matrix` with T(`d`) = `d`(`d`+1)÷2 rows, where T(`d`)
-is the `d`th triangular number (the number of free parameters in an
-unconstrained `d`×`d` covariance matrix), and the output is a `Matrix` of the
-same dimension.
+The expected input is a `Matrix` with T(`d`-1) = (`d`-1)`d`÷2 rows, where T(`d`-1)
+is the (`d`-1)th triangular number (the number of free parameters in an
+unconstrained `d`×`d` correlation matrix), and the output is a `Matrix` of the
+same dimension. The columns of the input and output matrices correspond to
+independent parameter configurations (i.e., different correlation matrices).
 
 Internally, the layer constructs a valid Cholesky factor 𝐋 for a correlation
 matrix, and then extracts the strict lower triangle from the correlation matrix
@@ -553,13 +564,17 @@ R₃₁ & R₃₂ & 1\\
 the rows of the matrix returned by a `CorrelationMatrix` layer are ordered as
 
 ```math
-R₂₁, R₃₁, R₃₂,
+\begin{bmatrix}
+R₂₁ \\
+R₃₁ \\
+R₃₂ \\
+\end{bmatrix},
 ```
 
 which means that the output can easily be transformed into the implied
 correlation matrices using [`vectotril`](@ref) and `Symmetric`.
 
-The Cholesky factor 𝐋 can be obtained directly by passing `true` when applying the layer (see below).
+See also [`CovarianceMatrix`](@ref).
 
 # Examples
 ```
@@ -579,7 +594,6 @@ R = map(eachcol(R)) do r
 	R[diagind(R)] .= 1
 	R
 end
-R[1]
 
 # Obtain the Cholesky factor directly
 L = l(θ, true)
@@ -591,9 +605,7 @@ L = map(eachcol(L)) do x
 	L[diagind(L)] .= sqrt.(1 .- rowwisenorm(L).^2)
 	L
 end
-L[1]
 L[1] * L[1]'
-R[1]
 ```
 """
 struct CorrelationMatrix{T <: Integer, G}

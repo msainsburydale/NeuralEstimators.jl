@@ -33,7 +33,7 @@ contains independent and identically distributed (iid) replicates.
 
 The log-density is returned if the keyword argument `logdensity` is true (default).
 """
-function gaussiandensity(y::V, L::LT; logdensity::Bool = true) where {V <: AbstractVector{T}, LT <: LowerTriangular} where T
+function gaussiandensity(y::V, L::LT; logdensity::Bool = true) where {V <: AbstractVector, LT <: LowerTriangular}
 	n = length(y)
 	x = L \ y # solution to Lx = y. If we need non-zero μ in the future, use x = L \ (y - μ)
 	l = -0.5n*log(2π) -logdet(L) -0.5dot(x, x)
@@ -45,7 +45,7 @@ function gaussiandensity(y::A, L::LT; logdensity::Bool = true) where {A <: Abstr
 	return logdensity ? sum(l) : prod(l)
 end
 
-function gaussiandensity(y::A, Σ::M; args...) where {A <: AbstractArray{T, N}, M <: AbstractMatrix{T}} where {T, N}
+function gaussiandensity(y::A, Σ::M; args...) where {A <: AbstractArray, M <: AbstractMatrix} 
 	L = cholesky(Symmetric(Σ)).L
 	gaussiandensity(y, L; args...)
 end

@@ -12,6 +12,7 @@ using Distances
 using Distributions
 using Distributions: Bernoulli, Product
 import Distributions: cdf, logpdf, quantile, minimum, maximum, insupport, var, skewness
+using Folds
 using Flux
 using Flux: ofeltype, params, DataLoader, update!, glorot_uniform
 using Functors: @functor

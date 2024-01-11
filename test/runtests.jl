@@ -17,8 +17,8 @@ using Statistics
 using Statistics: mean, sum
 using Test
 using Zygote
-array(size...; T = Float64) = T.(reshape(1:prod(size), size...) ./ prod(size))
-arrayn(size...; T = Float64) = array(size..., T = T) .- mean(array(size..., T = T))
+array(size...; T = Float32) = T.(reshape(1:prod(size), size...) ./ prod(size))
+arrayn(size...; T = Float32) = array(size..., T = T) .- mean(array(size..., T = T))
 verbose = false # verbose used in NeuralEstimators code (not @testset)
 
 if CUDA.functional()
@@ -358,7 +358,8 @@ end
 function testbackprop(l, dvc, p::Integer, K::Integer, d::Integer)
 	Z = arrayn(d, K) |> dvc
 	θ = arrayn(p, K) |> dvc
-	θ̂ = Chain(Dense(d, p), l) |> dvc
+	dense = Dense(d, p)
+	θ̂ = Chain(dense, l) |> dvc
 	@test isa(gradient(() -> mae(θ̂(Z), θ), Flux.params(θ̂)), Zygote.Grads) # NB should probably use pullback() like I do in train().
 end
 
@@ -367,8 +368,8 @@ end
 	@testset "Compress" begin
 		p = 3
 		K = 10
-		a = [0.1, 4, 2]
-		b = [0.9, 9, 3]
+		a = Float32.([0.1, 4, 2])
+		b = Float32.([0.9, 9, 3])
 		l = Compress(a, b) |> dvc
 		θ = arrayn(p, K)   |> dvc
 		θ̂ = l(θ)
@@ -452,7 +453,7 @@ end
 Ω = Product([Normal(0, 1), Uniform(0.1, 1.5)])
 ξ = (Ω = Ω, parameter_names = parameter_names)
 K = 100
-Parameters(K::Integer, ξ) = Parameters(rand(ξ.Ω, K))
+Parameters(K::Integer, ξ) = Parameters(Float32.(rand(ξ.Ω, K)))
 parameters = Parameters(K, ξ)
 show(devnull, parameters)
 @test size(parameters) == (2, 100)
@@ -462,10 +463,10 @@ p = length(parameter_names)
 #### Array data
 
 n = 1  # univariate data
-simulatearray(parameters::Parameters, m) = [θ[1] .+ θ[2] .* randn(n, m) for θ ∈ eachcol(parameters.θ)]
+simulatearray(parameters::Parameters, m) = [θ[1] .+ θ[2] .* randn(Float32, n, m) for θ ∈ eachcol(parameters.θ)]
 function simulatorwithcovariates(parameters::Parameters, m)
 	Z = simulatearray(parameters, m)
-	x = [rand(qₓ) for _ ∈ eachindex(Z)]
+	x = [rand(Float32, qₓ) for _ ∈ eachindex(Z)]
 	(Z, x)
 end
 function simulatorwithcovariates(parameters, m, J::Integer)
@@ -679,8 +680,8 @@ Z = rand(d, m)
     # 2. a single graph with sub-graphs (corresponding to independent replicates), and
     # 3. a vector of graphs (corresponding to multiple spatial data sets, each
     #    possibly containing independent replicates).
-    g₁ = rand_graph(11, 30, ndata=rand(d, 11))
-    g₂ = rand_graph(13, 40, ndata=rand(d, 13))
+    g₁ = rand_graph(11, 30, ndata=rand(Float32, d, 11))
+    g₂ = rand_graph(13, 40, ndata=rand(Float32, d, 13))
     g₃ = batch([g₁, g₂])
     θ̂(g₁)
     θ̂(g₃)
@@ -725,7 +726,7 @@ end
 	# Generate some toy data and a basic architecture
 	d = 2  # bivariate data
 	m = 64 # number of independent replicates
-	Z = rand(d, m)
+	Z = rand(Float32, d, m)
 	parameter_names = ["ρ", "σ", "τ"]
 	p = length(parameter_names)
 	w = 8  # width of each layer
