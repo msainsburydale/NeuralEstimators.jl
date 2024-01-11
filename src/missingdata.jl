@@ -1,95 +1,85 @@
-"""
-    NeuralEM(simulateconditional::Function, neuralMAP::NeuralPointEstimator, θ₀ = nothing)
-	NeuralEM(neuralem::NeuralEM, θ₀)
+#TODO add example once I add simulateconditionalGP
+@doc raw"""
+    EM(simulateconditional::Function, MAP::Function, θ₀ = nothing)
+A type that implements the Monte Carlo variant of the expectation-maximisation
+(EM) algorithm, which has $l$th iteration,
 
-A type that implements the neural expectation-maximisation (EM) algorithm using
-a function for conditional simulation over the missing values
-(`simulateconditional`), a neural approximation of the MAP estimator
-(`neuralMAP`), and a vector of starting parameter values (`θ₀`).
+```math
+𝛉^{(l)} = \argmax_{𝛉} \sum_{h = 1}^H ℓ(𝛉;  𝐙₁,  𝐙₂^{(lh)}) + \log π^*(𝛉),
+```
 
-# Fields of `NeuralEM` objects
+where $𝐙 ≡ (𝐙₁', 𝐙₂')'$ denotes the complete data with 𝐙₁ and 𝐙₂ the observed
+and missing components, respectively, $𝐙₂^{(lh)}$, $h = 1, …, H$, is sampled from
+the probability distribution of $𝐙₂ ∣ 𝐙₁, 𝛉^{(l-1)}$, and where
+$π^*(𝛉) ∝ \{π(𝛉)\}^H$ is a concentrated version of the original prior density.
+
+# Fields
 
 The function `simulateconditional` should be of the form,
 
-	simulateconditional(Z::A, θ, ξ = nothing; nsims::Integer = 1) where {A <: AbstractArray{Union{Missing, T}}} where T
+	simulateconditional(Z::A, θ; nsims::Integer = 1) where {A <: AbstractArray{Union{Missing, T}}} where T
 
-The data `Z` should be returned in whatever form is amenable to the architecture
-of the neural MAP estimator. For instance, if the data
-are gridded and the neural MAP estimator is based on a CNN architecture, then
-`Z` should be returned as a four-dimensional array.
+and the completed-data `Z` should be returned in whatever form is
+appropriate to be passed to the MAP estimator as `MAP(Z)`. For example, if the
+data are gridded and the `MAP` is a neural MAP estimator based on a CNN
+architecture, then `Z` should be returned as a four-dimensional array.
 
-The `neuralMAP` estimator should be a neural point estimator trained to approximate
-the joint posterior mode.
+Note that the `MAP` estimator should return the *joint* posterior mode;
+therefore, a neural MAP estimator should be trained under (a surrogate for) the
+loss function,
 
-The starting value `θ₀` should be a vector, and it can be provided either during
-construction of the `NeuralEM` object, or when applying the `NeuralEM` object to
-data (see below). The starting values given in a function call take precedence
-over those stored in the object.
+```math
+	L(𝛉, \hat{𝛉}) = 𝕀(𝛉 = \hat{𝛉}),
+```
+
+where 𝕀(⋅) denotes the indicator function. See [`kpowerloss`](@ref).
+
+The starting values `θ₀` should be a vector, which can be provided either during
+construction of the `EM` object, or when applying the `EM` object to data
+(see below). The starting values given in a function call take precedence over
+those stored in the object.
 
 # Methods
 
-Once constructed, obects of type `NeuralEM` can be applied to data via the method,
+Once constructed, obects of type `EM` can be applied to data via the methods,
 
-	(neuralem::NeuralEM)(
-		Z::A, θ₀ = nothing;
-		niterations::Integer = 50,
-		nsims::Integer = 1,
-		ξ = nothing,
-		ϵ = 0.01,
-		return_iterates::Bool = false,
-		use_gpu::Bool = true,
-		verbose::Bool = false
-	)  where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
+	(em::EM)(Z::A, θ₀::Union{Nothing, Vector} = nothing; ...) where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
+	(em::EM)(Z::V, θ₀::Union{Nothing, Vector, Matrix} = nothing; ...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 
+where `Z` is the complete data containing the observed data and `Missing` values.
+Note that the second method caters for the case that one has multiple data sets.
 The keyword arguments are:
 
-- `Z`: the complete-data vector containing the observed data Z₁ and `Missing` values in the missing component Z₂. The last dimension contains the replicates (if any); the other dimensions store the response variable.
-- `θ₀`: starting parameter values.
-- `niterations`: the maximum number of iterations to apply the algorithm for.
-- `nsims`: the number of conditional replicates used to approximate the conditional expectation (should align with the number of replicates that was used during training of the neural MAP estimator).
-- `ξ`: model information needed for conditional simulation (e.g., distance matrices).
-- `ϵ`: tolerance used to assess convergence.
+- `niterations::Integer = 50`: the maximum number of iterations.
+- `nsims::Integer = 1`: the number of conditional replicates used to approximate the conditional expectation.
+- `ξ = nothing`: model information needed for conditional simulation (e.g., distance matrices) or in the MAP estimator.
+- `use_ξ_in_simulateconditional::Bool = false`: if set to `true`, the conditional simulator is called as `simulateconditional(Z, θ, ξ; nsims = nsims)`.
+- `use_ξ_in_MAP::Bool = false`: if set to `true`, the MAP estimator is applied to the conditionally-completed data as `MAP(Z, ξ)`.
+- `ϵ = 0.01`: tolerance used to assess convergence; The algorithm if the relative change in parameter values from successive iterations is less than `ϵ`, that is, if $max_k (|θ_k^{(l+1)} - θ_k^{(l)}| / |θ_k^{(l)}|) < ϵ$.
 - `return_iterates`: if `true`, the estimate at each iteration of the algorithm is returned; otherwise, only the final estimate is returned.
-
-The algorithm is stopped after `niterations` iterations or if the relative
-change in parameter values from successive iterations is sufficiently small,
-specifically, if
-
-```math
-max_k (|θ_k^{(l+1)} - θ_k^{(l)}| / |θ_k^{(l)}|) < ϵ.
-```
-
-The following wrapper can be used when one has multiple data sets:
-
-	(neuralem::NeuralEM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = nothing; args...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
-
-Here, the starting values `θ₀` will be repeated if given as a vector.
-
-# Examples
-```
-# Please see the example given in the main documentation.
-```
+- `use_gpu::Bool = true`
+- `verbose::Bool = false`
 """
-struct NeuralEM{F,T,S}
+struct EM{F,T,S}
 	simulateconditional::F
-	neuralMAP::T
+	MAP::T
 	θ₀::S
 end
-NeuralEM(simulateconditional, neuralMAP) = NeuralEM(simulateconditional, neuralMAP, nothing)
-NeuralEM(neuralem::NeuralEM, θ₀) = NeuralEM(neuralem.simulateconditional, neuralem.neuralMAP, θ₀)
-@functor NeuralEM (NeuralMAP,)
+EM(simulateconditional, MAP) = EM(simulateconditional, MAP, nothing)
+EM(em::EM, θ₀) = EM(em.simulateconditional, em.MAP, θ₀)
 
-function (neuralem::NeuralEM)(Z::A, θ₀ = nothing; args...)  where {A <: AbstractArray{T, N}} where {T, N}
-	@warn "Data has been passed to the EM algorithm that contains no missing elements... the neural MAP estimator will be applied directly to the data"
-	neuralem.neuralMAP(Z)
+function (em::EM)(Z::A, θ₀ = nothing; args...)  where {A <: AbstractArray{T, N}} where {T, N}
+	@warn "Data has been passed to the EM algorithm that contains no missing elements... the MAP estimator will be applied directly to the data"
+	em.MAP(Z)
 end
 
-function (neuralem::NeuralEM)(
+function (em::EM)(
 	Z::A, θ₀ = nothing;
 	niterations::Integer = 50,
 	nsims::Integer = 1,
 	ϵ = 0.01,
 	ξ = nothing,
+	use_ξ_in_simulateconditional::Bool = false,
 	use_ξ_in_MAP::Bool = false,
 	use_gpu::Bool = true,
 	verbose::Bool = false,
@@ -97,14 +87,24 @@ function (neuralem::NeuralEM)(
 	)  where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 
 	if isnothing(θ₀)
-		@assert !isnothing(neuralem.θ₀) "Please provide initial estimates θ₀ in the function call when applying the `NeuralEM` object, or in the `NeuralEM` object itself."
-		θ₀ = neuralem.θ₀
+		@assert !isnothing(em.θ₀) "Please provide initial estimates θ₀ in the function call when applying the `EM` object, or in the `EM` object itself."
+		θ₀ = em.θ₀
+	end
+
+	if !isnothing(ξ)
+		if use_ξ_in_simulateconditional || use_ξ_in_MAP
+			@warn "`ξ` has been provided but it will not be used because `use_ξ_in_simulateconditional` and `use_ξ_in_MAP` are both `false`"
+		end
+	end
+
+	if use_ξ_in_simulateconditional || use_ξ_in_MAP
+		@assert !isnothing(ξ) "`ξ` must be provided since `use_ξ_in_simulateconditional` or `use_ξ_in_MAP` is true"
 	end
 
 	@assert !all(ismissing.(Z))  "The data `Z` consists of missing elements only"
 
 	device    = _checkgpu(use_gpu, verbose = verbose)
-	neuralMAP = neuralem.neuralMAP |> device
+	MAP = em.MAP |> device
 
 	verbose && @show θ₀
     θₗ = θ₀
@@ -113,11 +113,11 @@ function (neuralem::NeuralEM)(
 
 		# "Complete" the data by simulating missing data conditionally on the
 		# incomplete observed data and the current parameters
-		Z̃ = isnothing(ξ) ? neuralem.simulateconditional(Z, θₗ, nsims = nsims) : neuralem.simulateconditional(Z, θₗ, ξ, nsims = nsims)
+		Z̃ = use_ξ_in_simulateconditional ? em.simulateconditional(Z, θₗ, ξ, nsims = nsims) : em.simulateconditional(Z, θₗ, nsims = nsims)
 		Z̃ = Z̃ |> device
 
-		# Apply the neural MAP estimator to the complete data
-		θₗ₊₁ = use_ξ_in_MAP ? neuralMAP(Z̃, ξ) : neuralMAP(Z̃)
+		# Apply the MAP estimator to the complete data
+		θₗ₊₁ = use_ξ_in_MAP ? MAP(Z̃, ξ) : MAP(Z̃)
 
 		# Move back to the cpu (need to do this for simulateconditional in the next iteration)
 		θₗ₊₁   = cpu(θₗ₊₁)
@@ -139,19 +139,19 @@ function (neuralem::NeuralEM)(
     return_iterates ? θ_all : θₗ # note that θₗ is contained in θ_all
 end
 
-function (neuralem::NeuralEM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = nothing; args...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
+function (em::EM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = nothing; args...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 
 	if isnothing(θ₀)
-		@assert !isnothing(neuralem.θ₀) "Please provide initial estimates `θ₀` either in the function call or in the `NeuralEM` object."
-		θ₀ = neuralem.θ₀
+		@assert !isnothing(em.θ₀) "Please provide initial estimates `θ₀` either in the function call or in the `EM` object."
+		θ₀ = em.θ₀
 	end
 
 	if isa(θ₀, Vector)
 		θ₀ = repeat(θ₀, 1, length(Z))
 	end
 
-	estimates = map(eachindex(Z)) do i # NB should we use Folds.map() or another parallel function?
-		neuralem(Z[i], θ₀[:, i]; args...)
+	estimates = Folds.map(eachindex(Z)) do i
+		em(Z[i], θ₀[:, i]; args...)
 	end
 	estimates = hcat(estimates...)
 
@@ -307,7 +307,6 @@ end
 function removedata(Z::V, p::Vector{F}; args...) where {V <: AbstractVector{T}} where {T, F <: AbstractFloat}
 	removedata(reshape(Z, :, 1), p)[:]
 end
-
 
 function removedata(Z::A, Iᵤ::V) where {A <: AbstractArray{T, N}, V <: AbstractVector{I}} where {T, N, I <: Integer}
 

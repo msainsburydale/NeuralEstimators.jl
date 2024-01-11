@@ -47,5 +47,5 @@ vectotril
 ## Other
 
 ```@docs
-NeuralEM
+EM
 ```

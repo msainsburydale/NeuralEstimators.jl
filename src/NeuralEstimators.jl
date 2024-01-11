@@ -67,12 +67,10 @@ include("bootstrap.jl")
 export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches, rowwisenorm
 include("utility.jl")
 
-export NeuralEM, removedata, encodedata
+export EM, removedata, encodedata
 include("missingdata.jl")
 
 end
-
-#TODO wonder if "Constrain" would be a better term than "Compress". Make it an alias for backwards compatability.
 
 #TODO
 # - Add helper functions for censored data and write an example in the documentation.

@@ -757,7 +757,7 @@ end
 end
 
 
-@testset "NeuralEM" begin
+@testset "EM" begin
 
 	# Set the prior distribution
 	Ω = (τ = Uniform(0.01, 0.3), ρ = Uniform(0.01, 0.3))
@@ -887,11 +887,11 @@ end
 	Z = removedata(Z, 0.25)			# remove 25% of the data
 
 	neuralMAPestimator = initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)], activation_output = exp)
-	neuralem = NeuralEM(simulateconditional, neuralMAPestimator)
+	neuralem = EM(simulateconditional, neuralMAPestimator)
 	θ₀ = mean.([Ω...]) 						# initial estimate, the prior mean
 	H = 5
-	θ̂   = neuralem(Z, θ₀, ξ = ξ, nsims = H)
-	θ̂2  = neuralem([Z, Z], θ₀, ξ = ξ, nsims = H)
+	θ̂   = neuralem(Z, θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
+	θ̂2  = neuralem([Z, Z], θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
 
 	@test size(θ̂)  == (2, 1)
 	@test size(θ̂2) == (2, 2)
@@ -899,14 +899,15 @@ end
 	## Test initial-value handling
 	@test_throws Exception neuralem(Z)
 	@test_throws Exception neuralem([Z, Z])
-	neuralem = NeuralEM(simulateconditional, neuralMAPestimator, θ₀)
-	neuralem(Z, ξ = ξ, nsims = H)
-	neuralem([Z, Z], ξ = ξ, nsims = H)
+	neuralem = EM(simulateconditional, neuralMAPestimator, θ₀)
+	neuralem(Z, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
+	neuralem([Z, Z], ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
 
 	## Test edge cases (no missingness and complete missingness)
 	Z = simulate(θ, 1)[1]		# simulate a single gridded field
-	@test_warn "Data has been passed to the EM algorithm that contains no missing elements... the neural MAP estimator will be applied directly to the data" neuralem(Z, θ₀, ξ = ξ, nsims = H)
+	@test_warn "Data has been passed to the EM algorithm that contains no missing elements... the MAP estimator will be applied directly to the data" neuralem(Z, θ₀, ξ = ξ, nsims = H)
 	Z = Z[:, :]
 	Z = removedata(Z, 1.0)
-	@test_throws Exception neuralem(Z, θ₀, ξ = ξ, nsims = H)
+	@test_throws Exception neuralem(Z, θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
+	@test_throws Exception neuralem(Z, θ₀, nsims = H, use_ξ_in_simulateconditional = true)
 end
