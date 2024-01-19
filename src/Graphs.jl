@@ -447,15 +447,16 @@ Base.show(io::IO, m::MIME"text/plain", D::UniversalPool) = print(io, D)
 # ---- GNN ----
 
 """
-	GNN(propagation, readout, ϕ, a)
-	GNN(propagation, readout, ϕ, a::String = "mean")
+	GNN(propagation, readout, ϕ, a; S = nothing)
+	GNN(propagation, readout, ϕ; a::String = "mean", S = nothing)
 
 A graph neural network (GNN) designed for parameter point estimation.
 
 The `propagation` module transforms graphical input data into a set of
 hidden-feature graphs; the `readout` module aggregates these feature graphs into
 a single hidden feature vector of fixed length; the function `a`(⋅) is a
-permutation-invariant aggregation function, and `ϕ` is a neural network.
+permutation-invariant aggregation function, and `ϕ` is a neural network. Expert,
+user-defined summary statistics `S` can also be utilised, as described in [`DeepSet`](@ref).
 
 The data should be stored as a `GNNGraph` or `Vector{GNNGraph}`, where
 each graph is associated with a single parameter vector. The graphs may contain
@@ -510,10 +511,10 @@ end
 @functor GNN
 
 # Constructors
-GNN(propagation, readout, ϕ, a) = GNN(propagation, readout, DeepSet(identity, ϕ, a))
-GNN(propagation, readout, ϕ; a::String = "mean") = GNN(propagation, readout, ϕ, _agg(a))
+GNN(propagation, readout, ϕ, a; S = nothing) = GNN(propagation, readout, DeepSet(identity, ϕ, a; S = S))
+GNN(propagation, readout, ϕ; a::String = "mean", S = nothing) = GNN(propagation, readout, ϕ, _agg(a); S = S)
 
-Base.show(io::IO, D::GNN) = print(io, "\nGNN estimator with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)\n\nAggregation function ($(nparams(D.deepset.a)) parameters):  $(D.deepset.a)\n\nMapping module ($(nparams(D.deepset.ϕ)) parameters):  $(D.deepset.ϕ)")
+Base.show(io::IO, D::GNN) = print(io, "\nGNN estimator with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)\n\nAggregation function ($(nparams(D.deepset.a)) parameters):  $(D.deepset.a)\n\nExpert summary statistics ($(nparams(D.deepset.S))) parameters):  $(D.deepset.S)\n\nMapping module ($(nparams(D.deepset.ϕ)) parameters):  $(D.deepset.ϕ)")
 Base.show(io::IO, m::MIME"text/plain", D::GNN) = print(io, D)
 
 dropsingleton(x::AbstractMatrix) = x
@@ -547,7 +548,7 @@ function (est::GNN)(v::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
 	# count the number of sub-graphs in each element of v for later use.
 	# Specifically, we need to keep track of the indices to determine which
 	# independent replicates are grouped together.
-	m = numberreplicates(v)
+	m = numberreplicates.(v)
 	g = Flux.batch(v)
 	# NB batch() causes array mutation, which means that this method
 	# cannot be used for computing gradients during training. As a work around,

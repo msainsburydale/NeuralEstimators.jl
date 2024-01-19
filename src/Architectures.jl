@@ -20,98 +20,137 @@ end
 
 # ---- DeepSet ----
 
-"""
-    DeepSet(ψ, ϕ, a)
-	DeepSet(ψ, ϕ; a::String = "mean")
+#TODO Optimised version with expert summary statistics that can be applied to replicates independently (i.e., they can be used like ψ). It might need some special functionality, where there is a second aggregation function associated with the expert summary statistics.
+#TODO In the constructor for DeepSet, check if Parallel appears in any layers of ψ. If it does, provide the information in the comment below:
 
+# Note that, internally, data stored as `Vector{Arrays}` are first
+# concatenated along the replicates dimension before being passed into the inner
+# neural network `ψ`; this means that `ψ` is applied to a single large array
+# rather than many small arrays, which can substantially improve computational
+# efficiency, particularly on the GPU.
+
+"""
+	(S::Vector{Function})(z)
+Method allows a vector of vector-valued functions to be applied to a single
+input `z` and then concatenated, which allows users to provide a vector of
+functions as a user-defined summary statistic in [`DeepSet`](@ref) objects.
+
+Examples
+```
+f(z) = rand(Float32, 2)
+g(z) = rand(Float32, 3) .+ z
+S = [f, g]
+S(1)
+```
+"""
+(S::Vector{Function})(z) = vcat([s(z) for s ∈ S]...)
+
+"""
+    DeepSet(ψ, ϕ, a; S = nothing)
+	DeepSet(ψ, ϕ; a::String = "mean", S = nothing)
 The DeepSets representation,
 
 ```math
 θ̂(𝐙) = ϕ(𝐓(𝐙)),	 	 𝐓(𝐙) = 𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\}),
 ```
 
-where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates from the model, `ψ` and `ϕ`
-are neural networks, and `a` is a permutation-invariant aggregation function.
+where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates from the statistical model,
+`ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant function.
+Expert summary statistics can be incorporated as,
 
-To make the architecture agnostic to the sample size ``m``, the aggregation
-function `a` must aggregate over the replicates. It can be specified as a
-positional argument of type `Function`, or as a keyword argument with
+```math
+θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)')'),
+```
+
+where `S` is a function that returns a vector of user-defined summary statistics.
+These user-defined summary statistics are typically provided either as a
+`Function` that returns a `Vector`, or a vector of such functions.
+
+To ensure that the architecture is agnostic to the sample size ``m``, the
+aggregation function `a` must aggregate over the replicates. It can be specified
+as a positional argument of type `Function`, or as a keyword argument with
 permissible values `"mean"`, `"sum"`, and `"logsumexp"`.
 
-`DeepSet` objects act on data stored as `Vector{A}`, where each
-element of the vector is associated with one parameter vector (i.e., one set of
-independent replicates), and where `A` depends on the form of the data and the
-chosen architecture for `ψ`. As a rule of thumb, when the data are stored as an
-array, the replicates are stored in the final dimension of the array. (This is
-usually the 'batch' dimension, but batching with `DeepSet`s is done at the set
-level, i.e., sets of replicates are batched together.) For example, with
-gridded spatial data and `ψ` a CNN, `A` should be
-a 4-dimensional array, with the replicates stored in the 4ᵗʰ dimension.
-
-Note that, internally, data stored as `Vector{Arrays}` are first
-concatenated along the replicates dimension before being passed into the inner
-neural network `ψ`; this means that `ψ` is applied to a single large array
-rather than many small arrays, which can substantially improve computational
-efficiency, particularly on the GPU.
+`DeepSet` objects act on data of type `Vector{A}`, where each
+element of the vector is associated with one data set (i.e., one set of
+independent replicates from the statistical model), and where the type `A`
+depends on the form of the data and the chosen architecture for `ψ`.
+As a rule of thumb, when `A` is an array, the replicates are stored in the final
+dimension. The final dimension is usually the 'batch' dimension, but batching with `DeepSet`
+objects is done at the data set level (i.e., sets of replicates are batched
+together). For example, with gridded spatial data and `ψ` a CNN, `A` should be a
+4-dimensional array, with the replicates stored in the 4ᵗʰ dimension.
 
 Set-level information, ``𝐱``, that is not a function of the data can be passed
 directly into the outer network `ϕ` in the following manner,
 
 ```math
-θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐱')'),	 	 𝐓(𝐙) = 𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\}),
+θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐱')'),	 	 
 ```
 
-This is done by providing a `Tuple{Vector{A}, Vector{B}}`, where
-the first element of the tuple contains the vector of data sets and the second
-element contains the vector of set-level information.
+or, in the case that expert summary statistics are also used,
+
+```math
+θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)', 𝐱')').	 
+```
+
+This is done by providing a `Tuple{Vector{A}, Vector{Vector}}`, where
+the first element of the tuple contains a vector of data sets and the second
+element contains a vector of set-level information (i.e., one vector for each
+data set).
 
 # Examples
 ```
 using NeuralEstimators
 using Flux
 
-n = 10 # number of observations in each realisation
+n = 10 # dimension of each replicate
 p = 4  # number of parameters in the statistical model
 
 # Construct the neural estimator
-w = 32 # width of each layer
-ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
-ϕ = Chain(Dense(w, w, relu), Dense(w, p));
-θ̂ = DeepSet(ψ, ϕ)
+S = samplesize
+qₛ = 1  # dimension of expert summary statistic
+qₜ = 16 # dimension of neural summary statistic
+w = 16 # width of each hidden layer
+ψ = Chain(Dense(n, w, relu), Dense(w, qₜ, relu));
+ϕ = Chain(Dense(qₜ + qₛ, w, relu), Dense(w, p));
+θ̂ = DeepSet(ψ, ϕ, S = S)
 
-# Apply the estimator
-Z₁ = rand(n, 3);                  # single set of 3 realisations
-Z₂ = [rand(n, m) for m ∈ (3, 3)]; # two sets each containing 3 realisations
-Z₃ = [rand(n, m) for m ∈ (3, 4)]; # two sets containing 3 and 4 realisations
-θ̂(Z₁)
-θ̂(Z₂)
-θ̂(Z₃)
+# Toy data
+Z = [rand(Float32, n, m) for m ∈ (3, 4)]; # two data sets containing 3 and 4 replicates
 
-# Repeat the above but with set-level information:
-qₓ = 2
-ϕ  = Chain(Dense(w + qₓ, w, relu), Dense(w, p));
-θ̂  = DeepSet(ψ, ϕ)
-x₁ = rand(qₓ)
-x₂ = [rand(qₓ) for _ ∈ eachindex(Z₂)]
-θ̂((Z₁, x₁))
-θ̂((Z₂, x₂))
-θ̂((Z₃, x₂))
+# Apply the data
+θ̂(Z)
+
+# Inference with set-level information
+qₓ = 2 # dimension of set-level vector
+ϕ  = Chain(Dense(qₜ + qₛ + qₓ, w, relu), Dense(w, p));
+θ̂  = DeepSet(ψ, ϕ; S = S)
+x  = [rand(Float32, qₓ) for _ ∈ eachindex(Z)]
+θ̂((Z, x))
 ```
 """
-struct DeepSet{T, F, G}
+struct DeepSet{T, F, G, K}
 	ψ::T
 	ϕ::G
 	a::F
+	S::K
 end
-DeepSet(ψ, ϕ; a::String = "mean") = DeepSet(ψ, ϕ, _agg(a))
 @functor DeepSet
-Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nOuter network:  $(D.ϕ)")
+Flux.trainable(d::DeepSet) = (d.ψ, d.ϕ)
+DeepSet(ψ, ϕ, a; S = nothing) = DeepSet(ψ, ϕ, a, S)
+DeepSet(ψ, ϕ; a::String = "mean", S = nothing) = DeepSet(ψ, ϕ, _agg(a), S)
+Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)")
 Base.show(io::IO, m::MIME"text/plain", D::DeepSet) = print(io, D)
-
 
 # Single data set
 function (d::DeepSet)(Z::A) where A
-	d.ϕ(d.a(d.ψ(Z)))
+	t = d.a(d.ψ(Z))
+	if !isnothing(d.S)
+		s = d.S(Z)
+		t = vcat(t, s)
+	end
+	d.ϕ(t)
 end
 
 # Single data set with set-level covariates
@@ -119,7 +158,12 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: Abstra
 	Z = tup[1]
 	x = tup[2]
 	t = d.a(d.ψ(Z))
-	d.ϕ(vcat(t, x))
+	if !isnothing(d.S)
+		s = d.S(Z)
+		t = vcat(t, s)
+	end
+	u = vcat(t, x)
+	d.ϕ(u)
 end
 
 # Multiple data sets: simple fallback method using broadcasting
@@ -130,25 +174,30 @@ end
 # Multiple data sets: optimised version for array data.
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
-	# Convert to a single large Array
+	# Convert to a single large array
 	z = stackarrays(Z)
 
 	# Apply the inner neural network
 	ψa = d.ψ(z)
 
 	# Compute the indices needed for aggregation and construct a tuple of colons
-	# used to subset all but the last dimension of ψa. Note that constructing
-	# colons in this manner makes the function agnostic to ndims(ψa).
+	# used to subset all but the last dimension of ψa.
 	indices = _getindices(Z)
 	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
 
-	# Aggregate each set of transformed features: The resulting vector from the
-	# list comprehension is a vector of arrays, where the last dimension of each
-	# array is of size 1. Then, stack this vector of arrays into one large array,
-	# where the last dimension of this large array has size equal to length(v).
-	# Note that we cannot pre-allocate and fill an array, since array mutation
-	# is not supported by Zygote (which is needed during training).
-	t = stackarrays([d.a(ψa[colons..., idx]) for idx ∈ indices])
+	# Construct the summary statistics
+	t = map(eachindex(Z)) do i
+		idx = indices[i]
+		t = d.a(ψa[colons..., idx])
+		if !isnothing(d.S)
+			s = d.S(Z[i])
+			t = vcat(t, s)
+		end
+		t
+	end
+
+	# Stack into a single array
+	t = stackarrays(t)
 
 	# Apply the outer network
 	θ̂ = d.ϕ(t)
@@ -161,18 +210,21 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	Z = tup[1]
 	x = tup[2]
 	t = d.a.(d.ψ.(Z))
-	u = vcat.(t, x)
-	stackarrays(d.ϕ.(u))
+	if !isnothing(d.S)
+		s = d.S.(Z)
+		t = vcat.(t, s)
+	end
+	t = vcat.(t, x)
+	stackarrays(d.ϕ.(t))
 end
 
 # Multiple data sets: optimised version for array data + vector set-level covariates.
+# (basically the same code as array method without covariates)
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
 
 	Z = tup[1]
 	X = tup[2]
 
-	# Almost exactly the same code as the method defined above, but here we also
-	# concatenate the covariates X before passing them into the outer network
 	z = stackarrays(Z)
 	ψa = d.ψ(z)
 	indices = _getindices(Z)
@@ -180,186 +232,20 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	u = map(eachindex(Z)) do i
 		idx = indices[i]
 		t = d.a(ψa[colons..., idx])
-		x = X[i]
-		u = vcat(t, x)
+		if !isnothing(d.S)
+			s = d.S(Z[i])
+			t = vcat(t, s)
+		end
+		u = vcat(t, X[i])
 		u
 	end
 	u = stackarrays(u)
-
-	# Apply the outer network
-	θ̂ = d.ϕ(u)
-
-	return θ̂
-end
-
-
-# ---- DeepSetExpert: DeepSet with expert summary statistics ----
-
-# Note that this struct is necessary because the Vector{Array} method of
-# `DeepSet` concatenates the arrays into a single large array before passing
-# the data into ψ.
-"""
-	DeepSetExpert(ψ, ϕ, S, a)
-	DeepSetExpert(ψ, ϕ, S; a::String = "mean")
-	DeepSetExpert(deepset::DeepSet, ϕ, S)
-
-Identical to `DeepSet`, but with additional expert summary statistics,
-
-```math
-θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)')'),	 	 𝐓(𝐙) = 𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\}),
-```
-
-where `S` is a function that returns a vector of expert summary statistics.
-
-The constructor `DeepSetExpert(deepset::DeepSet, ϕ, S)` inherits `ψ` and `a`
-from `deepset`.
-
-Similarly to `DeepSet`, set-level information can be incorporated by passing a
-`Tuple`, in which case we have
-
-```math
-θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)', 𝐱')'),	 	 𝐓(𝐙) = 𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\}).
-```
-
-# Examples
-```
-using NeuralEstimators
-using Flux
-
-n = 10 # number of observations in each realisation
-p = 4  # number of parameters in the statistical model
-
-# Construct the neural estimator
-S = samplesize
-qₛ = 1
-qₜ = 32
-w = 16
-ψ = Chain(Dense(n, w, relu), Dense(w, qₜ, relu));
-ϕ = Chain(Dense(qₜ + qₛ, w), Dense(w, p));
-θ̂ = DeepSetExpert(ψ, ϕ, S)
-
-# Apply the estimator
-Z₁ = rand(n, 3);                  # single set
-Z₂ = [rand(n, m) for m ∈ (3, 4)]; # two sets
-θ̂(Z₁)
-θ̂(Z₂)
-
-# Repeat the above but with set-level information:
-qₓ = 2
-ϕ  = Chain(Dense(qₜ + qₛ + qₓ, w, relu), Dense(w, p));
-θ̂  = DeepSetExpert(ψ, ϕ, S)
-x₁ = rand(qₓ)
-x₂ = [rand(qₓ) for _ ∈ eachindex(Z₂)]
-θ̂((Z₁, x₁))
-θ̂((Z₂, x₂))
-```
-"""
-struct DeepSetExpert{F, G, H, K}
-	ψ::G
-	ϕ::F
-	S::H
-	a::K
-end
-Flux.@functor DeepSetExpert
-Flux.trainable(d::DeepSetExpert) = (d.ψ, d.ϕ)
-DeepSetExpert(ψ, ϕ, S; a::String = "mean") = DeepSetExpert(ψ, ϕ, S, _agg(a))
-DeepSetExpert(deepset::DeepSet, ϕ, S) = DeepSetExpert(deepset.ψ, ϕ, S, deepset.a)
-Base.show(io::IO, D::DeepSetExpert) = print(io, "\nDeepSetExpert object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)")
-Base.show(io::IO, m::MIME"text/plain", D::DeepSetExpert) = print(io, D)
-
-# Single data set
-function (d::DeepSetExpert)(Z::A) where {A <: AbstractArray{T, N}} where {T, N}
-	t = d.a(d.ψ(Z))
-	s = d.S(Z)
-	u = vcat(t, s)
 	d.ϕ(u)
 end
 
-# Single data set with set-level covariates
-function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractVector{T}} where T
-	Z = tup[1]
-	x = tup[2]
-	t = d.a(d.ψ(Z))
-	s = d.S(Z)
-	u = vcat(t, s, x)
-	d.ϕ(u)
-end
 
-# Multiple data sets: simple fallback method using broadcasting
-function (d::DeepSetExpert)(Z::V) where {V <: AbstractVector{A}} where A
-  	stackarrays(d.(Z))
-end
+# ---- Activation functions -----
 
-
-# Multiple data sets: optimised version for array data.
-function (d::DeepSetExpert)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-
-	# Convert to a single large Array
-	z = stackarrays(Z)
-
-	# Apply the inner neural network to obtain the neural summary statistics
-	ψa = d.ψ(z)
-
-	# Compute the indices needed for aggregation and construct a tuple of colons
-	# used to subset all but the last dimension of ψa.
-	indices = _getindices(Z)
-	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
-
-	# Construct the combined neural and expert summary statistics
-	u = map(eachindex(Z)) do i
-		idx = indices[i]
-		t = d.a(ψa[colons..., idx])
-		s = d.S(Z[i])
-		u = vcat(t, s)
-		u
-	end
-	u = stackarrays(u)
-
-	# Apply the outer network
-	d.ϕ(u)
-end
-
-# Multiple data sets with set-level covariates
-function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
-	Z = tup[1]
-	x = tup[2]
-	t = d.a.(d.ψ.(Z))
-	s = d.S.(Z)
-	u = vcat.(t, s, x)
-	stackarrays(d.ϕ.(u))
-end
-
-# Multiple data sets with set-level covariates: optimised version for array data + vector set-level covariates.
-function (d::DeepSetExpert)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
-
-	Z = tup[1]
-	X = tup[2]
-
-	# Convert to a single large Array
-	z = stackarrays(Z)
-
-	# Apply the inner neural network to obtain the neural summary statistics
-	ψa = d.ψ(z)
-
-	# Compute the indices needed for aggregation and construct a tuple of colons
-	# used to subset all but the last dimension of ψa.
-	indices = _getindices(Z)
-	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
-
-	# concatenate the neural summary statistics with X
-	u = map(eachindex(Z)) do i
-		idx = indices[i]
-		t = d.a(ψa[colons..., idx])
-		s = d.S(Z[i])
-		x = X[i]
-		u = vcat(t, s, x)
-		u
-	end
-	u = stackarrays(u)
-
-	# Apply the outer network
-	d.ϕ(u)
-end
 
 @doc raw"""
     Compress(a, b, k = 1)
@@ -483,7 +369,7 @@ L[1] * L[1]'
 """
 struct CovarianceMatrix{T <: Integer, G, H}
   d::T          # dimension of the matrix
-  p::T          # number of free parameters that in the covariance matrix, the triangular number T(d) = `d`(`d`+1)÷2
+  p::T          # number of free parameters in the covariance matrix, the triangular number T(d) = `d`(`d`+1)÷2
   tril_idx::G   # cartesian indices of lower triangle
   diag_idx::H   # which of the T(d) rows correspond to the diagonal elements of the `d`×`d` covariance matrix (linear indices)
 end
@@ -525,15 +411,6 @@ function (l::CovarianceMatrix)(v, cholesky_only::Bool = false)
 	return Σ
 end
 (l::CovarianceMatrix)(v::AbstractVector) = l(reshape(v, :, 1))
-
-# Example input data helpful for prototyping:
-# d = 3
-# K = 100
-# triangularnumber(d) = d*(d+1)÷2
-# p = triangularnumber(d-1)
-# v = collect(range(1, p*K))
-# v = reshape(v, p, K)
-# l = CorrelationMatrix(d)
 
 @doc raw"""
     CorrelationMatrix(d)
@@ -610,7 +487,7 @@ L[1] * L[1]'
 """
 struct CorrelationMatrix{T <: Integer, G}
   d::T                # dimension of the matrix
-  p::T                # number of free parameters that in the correlation matrix, the triangular number T(d-1) = (`d`-1)`d`÷2
+  p::T                # number of free parameters in the correlation matrix, the triangular number T(d-1) = (`d`-1)`d`÷2
   tril_idx_strict::G  # cartesian indices of strict lower triangle
 end
 function CorrelationMatrix(d::Integer)
@@ -653,3 +530,13 @@ function (l::CorrelationMatrix)(v, cholesky_only::Bool = false)
   return R
 end
 (l::CorrelationMatrix)(v::AbstractVector) = l(reshape(v, :, 1))
+
+
+# Example input data helpful for prototyping:
+# d = 3
+# K = 100
+# triangularnumber(d) = d*(d+1)÷2
+# p = triangularnumber(d-1)
+# v = collect(range(1, p*K))
+# v = reshape(v, p, K)
+# l = CorrelationMatrix(d)

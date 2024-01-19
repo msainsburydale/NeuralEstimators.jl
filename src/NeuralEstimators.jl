@@ -36,7 +36,7 @@ include("loss.jl")
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
-export DeepSet, DeepSetExpert, Compress, CovarianceMatrix, CorrelationMatrix
+export DeepSet, Compress, CovarianceMatrix, CorrelationMatrix
 export vectotril, vectotriu
 include("Architectures.jl")
 
@@ -68,6 +68,9 @@ include("bootstrap.jl")
 export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches, rowwisenorm
 include("utility.jl")
 
+export samplesize, samplecorrelation, samplecovariance
+include("summarystatistics.jl")
+
 export EM, removedata, encodedata
 include("missingdata.jl")
 
@@ -77,14 +80,15 @@ end
 # - Add helper functions for censored data and write an example in the documentation.
 # -	Plotting from Julia (which can dispatch on Assessment objects).
 # -	Add some figures to the examples in the documentation (e.g., show the sampling distribution in univariate example).
-# - I wonder if its possible to merge DeepSet and DeepSetExpert (would be a lot cleaner)
+# - Get DeepSetExpert working optimally on the GPU (leaving this for now as we don't need it for the paper).
+# - Check that training with CorrelationMatrix works well.
+# - See if I can move WeightedGraphConv to GraphNeuralNetworks (bit untidy that it's in this package and not in the GNN package).
 
 # ---- long term:
 # - turn some document examples into "doctests"
 # - plotrisk and plotdistribution (wait until the R interface is finished)
 # - Add "AR(k) time series" example. (An example using partially exchangeable neural networks.)
 # - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. It seems very easy, just need to add precompile(f, (arg_types…)) to whatever methods I want to precompile.
-# - Get DeepSetExpert working optimally on the GPU (leaving this for now as we don't need it for the paper).
 # - With the fixed parameters method of train, there seems to be overhead with my current implementation of just-in-time simulation. When epochs_per_Z_refresh = 1, the run-time increases by a factor of 4 for the Gaussian process with m = 1. For now, I’ve added an argument simulate_on_the_fly::Bool, which allows us to switch off just-in-time simulation.
 
 # ---- once the software is polished:

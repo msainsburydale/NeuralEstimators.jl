@@ -21,8 +21,7 @@ The data should be stored as a `Vector{A}`, where each element of the vector is 
 
 ## Types of estimators
 
-See also [Architectures and activations functions](@ref) that are often used
-when constructing neural estimators, and the convenience constructor [`initialise_estimator`](@ref).
+See also [Architectures](@ref) that are often used when constructing neural estimators, and the convenience constructor [`initialise_estimator`](@ref).
 
 ```@docs
 NeuralEstimator

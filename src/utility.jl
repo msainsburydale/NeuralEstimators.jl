@@ -127,17 +127,6 @@ containertype(a::A) where A = containertype(A)
 containertype(::Type{A}) where A <: SubArray = containertype(A.types[1])
 
 """
-	samplesize(Z)
-
-Computes the sample size m for a set of independent realisations `Z`, often
-useful as an expert summary statistic in `DeepSetExpert` objects.
-
-Note that this function is a simple wrapper around `numberreplicates`, but this
-function returns the number of replicates as the eltype of `Z`.
-"""
-samplesize(Z) = eltype(Z)(numberreplicates(Z))
-
-"""
 	numberofreplicates(Z)
 
 Generic function that returns the number of replicates in a given object.
@@ -146,8 +135,17 @@ data stored as an `Array` or as a `GNNGraph`.
 """
 function numberreplicates end
 
-function numberreplicates(Z::A) where {A <: AbstractArray{T, N}} where {T, N}
+# fallback broadcasting method
+function numberreplicates(Z::V) where {V <: AbstractVector{A}} where A
+	numberreplicates.(Z)
+end
+
+# specific methods
+function numberreplicates(Z::A) where {A <: AbstractArray{T, N}} where {T <: Number, N}
 	size(Z, N)
+end
+function numberreplicates(Z::V) where {V <: AbstractVector{T}} where {T <: Number}
+	numberreplicates(reshape(Z, :, 1))
 end
 
 function numberreplicates(Z::G) where {G <: GNNGraph}
@@ -159,9 +157,7 @@ function numberreplicates(Z::G) where {G <: GNNGraph}
 	end
 end
 
-function numberreplicates(Z::V) where {V <: AbstractVector{A}} where A
-	numberreplicates.(Z)
-end
+
 
 function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
 	Z = tup[1]

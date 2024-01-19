@@ -94,6 +94,23 @@ end
 	@test isnothing(_check_sizes(1, 1))
 end
 
+
+using NeuralEstimators: triangularnumber
+@testset "summary statistics: $dvc" for dvc ∈ devices
+	d, m = 3, 5 # 5 independent replicates of a 3-dimensional vector
+	z = rand(d, m) |> dvc
+	@test samplesize(z) == m
+	@test length(samplecovariance(z)) == triangularnumber(d)
+	@test length(samplecorrelation(z)) == triangularnumber(d-1)
+
+	# vector input
+	z = rand(d) |> dvc
+	@test samplesize(z) == 1
+	@test_throws Exception samplecovariance(z)
+	@test_throws Exception samplecorrelation(z)
+end
+
+
 @testset "maternclusterprocess" begin
 
 	S = maternclusterprocess()
@@ -445,7 +462,7 @@ end
 
 # ---- Architectures ----
 
-S = samplesize # Expert summary statistic used in DeepSetExpert
+S = samplesize # Expert summary statistic used in DeepSet
 parameter_names = ["μ", "σ"]
 struct Parameters <: ParameterConfigurations
 	θ
@@ -492,8 +509,7 @@ w  = 32 # width of each layer
 qₓ = 2  # number of set-level covariates
 m  = 10 # default sample size
 
-
-@testset "Array data: $arch" for arch ∈ ["DeepSet" "DeepSetExpert"]
+@testset "DeepSet: array data" begin
 	@testset "$covar" for covar ∈ ["no set-level covariates" "set-level covariates"]
 		q = w
 		if covar == "set-level covariates"
@@ -502,16 +518,9 @@ m  = 10 # default sample size
 		else
 			simulator = simulatornocovariates
 		end
-		if arch == "DeepSet"
-			ψ = Chain(Dense(n, w), Dense(w, w), Flux.flatten)
-			ϕ = Chain(Dense(q, w), Dense(w, p))
-			θ̂ = DeepSet(ψ, ϕ)
-			@test isa(DeepSetExpert(θ̂, ϕ, S), DeepSetExpert)
-		elseif arch == "DeepSetExpert"
-			ψ = Chain(Dense(n, w), Dense(w, w), Flux.flatten)
-			ϕ = Chain(Dense(q + 1, w), Dense(w, p))
-			θ̂ = DeepSetExpert(ψ, ϕ, S)
-		end
+		ψ = Chain(Dense(n, w), Dense(w, w), Flux.flatten)
+		ϕ = Chain(Dense(q + 1, w), Dense(w, p))
+		θ̂ = DeepSet(ψ, ϕ, S = S)
 
 		show(devnull, θ̂)
 

@@ -32,7 +32,7 @@ The above strategies are facilitated with various methods of [`train`](@ref).
 
 ## Combining learned and expert summary statistics
 
-See [`DeepSetExpert`](@ref).
+See [`DeepSet`](@ref).
 
 ## Variable sample sizes
 
