@@ -131,8 +131,11 @@ end
 Using a collection of `estimators`, compute estimates from data `Z` simulated
 based on true parameter vectors stored in `θ`.
 
-If `Z` contains more data sets than parameter vectors, the parameter matrix will
-be recycled by horizontal concatenation.
+The data `Z` should be a `Vector`, with each element corresponding to a single
+simulated data set. If `Z` contains more data sets than parameter vectors, the
+parameter matrix `θ` will be recycled by horizontal concatenation via the call
+`θ = repeat(θ, outer = (1, J))` where `J = length(Z) ÷ K` is the number of
+simulated data sets and `K = size(θ, 2)` is the number of parameter vectors. 
 
 The output is of type `Assessment`; see `?Assessment` for details.
 
@@ -160,18 +163,18 @@ w = 32 # width of each layer
 
 # Generate testing parameters
 K = 100
-θ = rand(p, K)
+θ = rand(Float32, p, K)
 
 # Data for a single sample size
 m = 30
-Z = [rand(n, m) for _ ∈ 1:K];
-assessment = assess([θ̂], θ, Z);
+Z = [rand(Float32, n, m) for _ ∈ 1:K];
+assessment = assess(θ̂, θ, Z);
 risk(assessment)
 
 # Multiple data sets for each parameter vector
 J = 5
 Z = repeat(Z, J);
-assessment = assess([θ̂], θ, Z);
+assessment = assess(θ̂, θ, Z);
 risk(assessment)
 
 # With set-level information
@@ -179,13 +182,13 @@ qₓ = 2
 ϕ  = Chain(Dense(w + qₓ, w, relu), Dense(w, p));
 θ̂ = DeepSet(ψ, ϕ)
 x = [rand(qₓ) for _ ∈ eachindex(Z)]
-assessment = assess([θ̂], θ, (Z, x));
+assessment = assess(θ̂, θ, (Z, x));
 risk(assessment)
 ```
 """
 function assess(
 	estimators, θ::P, Z;
-	estimator_names::Vector{String} = ["estimator$i" for i ∈ eachindex(estimators)],
+	estimator_names::Union{Nothing, Vector{String}} = nothing,
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
 	ξ  = nothing, use_ξ  = false,
 	xi = nothing, use_xi = false,
@@ -202,7 +205,12 @@ function assess(
 
 	p, K = size(θ)
 	m = numberreplicates(Z)
-	KJ = length(m)
+	if !(typeof(m) <: Vector{Int}) # indicates that a vector of vectors has been given
+		# verbose && @warn "The data `Z` should be a a vector, with each element of the vector corresponding to a single simulated data set... attempted to convert `Z` to the correct format."
+		Z = vcat(Z...) # convert to a single vector
+		m = numberreplicates(Z)
+	end
+	KJ = length(m) # this should be the same as length(Z)... will leave it as is to avoid breaking backwards compatability
 	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors in `θ`"
 	J = KJ ÷ K
 	if J > 1
@@ -215,6 +223,8 @@ function assess(
 		parameter_names = ξ.parameter_names
 	end
 
+	if !(typeof(estimators) <: Vector) estimators = [estimators] end
+	if isnothing(estimator_names) estimator_names = ["estimator$i" for i ∈ eachindex(estimators)] end
 	E = length(estimators)
 	@assert length(estimator_names) == E
 	@assert length(parameter_names) == p

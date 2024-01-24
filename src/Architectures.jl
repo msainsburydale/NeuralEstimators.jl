@@ -395,8 +395,8 @@ function (l::CovarianceMatrix)(v, cholesky_only::Bool = false)
 	# Insert zeros so that the input v can be transformed into Cholesky factors
 	zero_mat = zero(L[1:d, :]) # NB Zygote does not like repeat()
 	x = d:-1:1      # number of rows to extract from v
-	j = cumsum(x)   # end points of the v ranges
-	k = j .- x .+ 1 # start point of the v ranges
+	j = cumsum(x)   # end points of the row-groups of v
+	k = j .- x .+ 1 # start point of the row-groups of v
 	L = vcat(L[k[1]:j[1], :], [vcat(zero_mat[1:i.-1, :], L[k[i]:j[i], :]) for i ∈ 2:d]...)
 
 	# Reshape to a three-dimensional array of Cholesky factors
@@ -504,8 +504,8 @@ function (l::CorrelationMatrix)(v, cholesky_only::Bool = false)
 	# Insert zeros so that the input v can be transformed into Cholesky factors
 	zero_mat = zero(v[1:d, :]) # NB Zygote does not like repeat()
 	x = (d-1):-1:0           # number of rows to extract from v
-	j = cumsum(x[1:end-1])   # end points of the v ranges
-	k = j .- x[1:end-1] .+ 1 # start points of the v ranges
+	j = cumsum(x[1:end-1])   # end points of the row-groups of v
+	k = j .- x[1:end-1] .+ 1 # start points of the row-groups of v
 	L = vcat([vcat(zero_mat[1:i, :], v[k[i]:j[i], :]) for i ∈ 1:d-1]...)
 	L = vcat(L, zero_mat)
 
@@ -532,11 +532,26 @@ end
 (l::CorrelationMatrix)(v::AbstractVector) = l(reshape(v, :, 1))
 
 
-# Example input data helpful for prototyping:
-# d = 3
+# # Example input data helpful for prototyping:
+# d = 4
 # K = 100
 # triangularnumber(d) = d*(d+1)÷2
+#
 # p = triangularnumber(d-1)
 # v = collect(range(1, p*K))
 # v = reshape(v, p, K)
 # l = CorrelationMatrix(d)
+# l(v) - l(v, true) # note that the first columns of a correlation matrix and its Cholesky factor will always be identical
+#
+# using LinearAlgebra
+# R = rand(d, d); R = R * R'
+# D = Diagonal(1 ./ sqrt.(R[diagind(R)]))
+# R = Symmetric(D * R *D)
+# L = cholesky(R).L
+# LowerTriangular(R) - L
+#
+# p = triangularnumber(d)
+# v = collect(range(1, p*K))
+# v = reshape(v, p, K)
+# l = CovarianceMatrix(d)
+# l(v) - l(v, true)

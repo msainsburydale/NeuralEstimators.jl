@@ -18,16 +18,17 @@ function sample(K)
 	μ = rand(Normal(0, 1), K)
 	σ = rand(Uniform(0.1, 1), K)
 	θ = hcat(μ, σ)'
+	θ = Float32.(θ)
 	return θ
 end
 ```
 
 Next, we implicitly define the statistical model with simulated data. In `NeuralEstimators`, the data are always stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and where `A` depends on the structure of the data. Since our data $Z_1, \dots, Z_m$ are replicated, we will use the [`DeepSet`](@ref) architecture. Since each replicate is univariate (i.e., the dimension $d$ of each replicate is equal to one), we will use a dense neural network (DNN) for the inner network of the DeepSets architecture (the outer network is always a DNN). Since the inner network is a DNN, `A` should be a `Matrix` with $d$ rows and $m$ columns.
 ```
-simulate(parameters, m) = [θ[1] .+ θ[2] .* randn(1, m) for θ ∈ eachcol(parameters)]
+simulate(parameters, m) = [θ[1] .+ θ[2] .* randn(Float32, 1, m) for θ ∈ eachcol(parameters)]
 ```
 
-We now design architectures for the inner and outer neural networks, $\boldsymbol{\psi}(\cdot)$ and $\boldsymbol{\phi}(\cdot)$ respectively, in the [`DeepSet`](@ref) framework, and initialise the neural estimator as a [`PointEstimator`](@ref) object. Note that this can be done directly using `Flux` code (as below), or with the helper function [`initialise_estimator`](@ref). 
+We now design architectures for the inner and outer neural networks, $\boldsymbol{\psi}(\cdot)$ and $\boldsymbol{\phi}(\cdot)$ respectively, in the [`DeepSet`](@ref) framework, and initialise the neural estimator as a [`PointEstimator`](@ref) object. Note that this can be done directly using `Flux` code (as below), or with the helper function [`initialise_estimator`](@ref).
 
 ```
 d = 1   # dimension of each replicate
@@ -50,22 +51,22 @@ m = 15
 
 To test the accuracy of the resulting neural Bayes estimator, we use the function [`assess`](@ref), which can be used to assess the performance of the estimator (or multiple estimators) over a range of sample sizes. Note that, in this example, we trained the neural estimator using a single sample size, $m = 15$, and hence the estimator will not necessarily be optimal for other sample sizes; see [Variable sample sizes](@ref) for approaches that one could adopt if data sets with varying sample size are envisaged.
 ```
-θ     = sample(1000)
-Z     = [simulate(θ, m) for m ∈ (5, 10, 15, 20, 30)]
-assessment = assess([θ̂], θ, Z)
+θ = sample(1000)
+Z = [simulate(θ, m) for m ∈ (5, 10, 15, 20, 30)]
+assessment = assess(θ̂, θ, Z)
 ```
 
 The returned object is an object of type [`Assessment`](@ref), which contains the true parameters and their corresponding estimates, and the time taken to compute the estimates for each sample size and each estimator. The risk function may be computed using the function [`risk`](@ref):
 ```
-risk(assessment)
+risk(assessment, average_over_sample_sizes = false)
 ```
 
-It is often helpful to visualise the empirical sampling distribution of an estimator for a particular parameter configuration and a particular sample size. This can be done by providing [`assess`](@ref) with $J$ data sets simulated under a particular parameter configuration (below facilitated with the pre-defined method `simulate(parameters, m, J)`, which wraps the method of `simulate` that we defined earlier), and then plotting the estimates contained in the long-form `DataFrame` in the resulting [`Assessment`](@ref) object:
+It is often helpful to visualise the empirical sampling distribution of an estimator for a single parameter configuration and a particular sample size. This can be done by providing [`assess`](@ref) with $J$ data sets simulated under a particular parameter configuration (below facilitated with the pre-defined method `simulate(parameters, m, J)`, which wraps the method of `simulate` that we defined earlier), and then plotting the estimates contained in the long-form `DataFrame` in the resulting [`Assessment`](@ref) object:
 ```
 J = 100
 θ = sample(1)
-Z = [simulate(θ, m, J)]
-assessment = assess([θ̂], θ, Z)  
+Z = simulate(θ, m, J)   # equivalent to:  Z = [simulate(θ, m)[1] for j ∈ 1:J]
+assess(θ̂, θ, Z)  
 ```
 
 Once the neural Bayes estimator has been assessed, it may then be applied to observed data, with parametric/non-parametric bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`interval`](@ref). Below, we use simulated data as a substitute for observed data:
