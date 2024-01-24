@@ -29,7 +29,7 @@ simulate(parameters, m)
 simulate(parameters, m, 2)
 ```
 """
-function simulate(parameters::P, m, J::Integer; args...) where P <: Union{Matrix, ParameterConfigurations}
+function simulate(parameters::P, m, J::Integer; args...) where P <: Union{AbstractMatrix, ParameterConfigurations}
 	v = [simulate(parameters, m; args...) for i ∈ 1:J]
 	if typeof(v[1]) <: Tuple
 		z = vcat([v[i][1] for i ∈ eachindex(v)]...)
@@ -98,7 +98,7 @@ end
 
 # TODO This should really dispatch on LowerTriangular, Symmetric, and
 # UpperTriangular. For backwards compatability, we can keep the following
-# method for L::AbstractMatrix. 
+# method for L::AbstractMatrix.
 function simulategaussianprocess(L::M) where M <: AbstractMatrix{T} where T <: Number
 	L * randn(T, size(L, 1))
 end
