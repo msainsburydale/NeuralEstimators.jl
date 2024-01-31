@@ -13,6 +13,8 @@ _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
 
 # ---- kpowerloss ----
 
+#TODO also implement other loss functions that can be used to approximate the 0-1 loss.
+
 """
     kpowerloss(θ̂, y, k; agg = mean, joint = true, safeorigin = true, ϵ = 0.1)
 
@@ -62,24 +64,22 @@ end
 
 # ---- quantile loss ----
 
+#TODO describe behaviour in multiparameter setting
+#TODO write the maths for when we have a vector τ
 """
-    quantileloss(θ̂, θ, q; agg = mean)
-    quantileloss(θ̂, θ, q::V; agg = mean) where {T, V <: AbstractVector{T}}
+    quantileloss(θ̂, θ, τ; agg = mean)
+    quantileloss(θ̂, θ, τ::Vector; agg = mean)
 
-The asymmetric loss function whose minimiser is the `q`th posterior quantile; namely,
+The asymmetric quantile loss function,
 ```math
-L(θ̂, θ, q) = (θ̂ - θ)(𝕀(θ̂ - θ > 0) - q),
+  L(θ̂, θ; τ) = (θ̂ - θ)(𝕀(θ̂ - θ > 0) - τ),
 ```
-where `q` ∈ (0, 1) and 𝕀(⋅) is the indicator function.
+where `τ` ∈ (0, 1) is a probability level and 𝕀(⋅) is the indicator function.
 
-The method that takes `q` as a vector is useful for jointly approximating
+The method that takes `τ` as a vector is useful for jointly approximating
 several quantiles of the posterior distribution. In this case, the number of
-rows in `θ̂` is assumed to be pr, where p is the number of parameters: then,
-`q` should be an r-vector.
-
-For further discussion on this loss function, see Equation (7) of
-Cressie, N. (2022), "Decisions, decisions, decisions in an uncertain
-environment", arXiv:2209.13157.
+rows in `θ̂` is assumed to be ``pr``, where ``p`` is the number of parameters and
+``r`` is the number probability levels in `τ` (i.e., the length of `τ`).
 
 # Examples
 ```

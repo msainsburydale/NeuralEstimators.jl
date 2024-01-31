@@ -45,7 +45,8 @@ where
 
 The prior support is defined either by the ``p``-dimensional vectors `min_supp`
 and `max_supp`, or a single ``p``-dimensional object of type [`Compress`](@ref).
-If these objects are not given, the range of the intervals will be unrestricted.
+If these objects are not given, the range of the intervals will be unrestricted
+(i.e., ``g(⋅)`` will be the identity function).
 
 Note that, in addition to ensuring that the interval remains in the prior support,
 this construction also ensures that the intervals are valid (i.e., it prevents
@@ -56,7 +57,7 @@ If only a single neural-network architecture is provided, it will be used
 for both `u` and `v`.
 
 The returned value is a matrix with ``2p`` rows, where the first and second ``p``
-rows correspond to estimates of the lower and upper bound, respectively.
+rows correspond to estimates of the lower and upper bounds, respectively.
 
 # Examples
 ```
@@ -231,6 +232,7 @@ function initialise_estimator(
 	weight_by_distance::Bool = false
     )
 
+	# "`kernel_size` should be a vector of integer tuples: see the documentation for details"
     @assert p > 0
     @assert d > 0
 	@assert architecture ∈ ["DNN", "CNN", "GNN"]
@@ -254,10 +256,12 @@ function initialise_estimator(
 	L = sum(depth) # total number of hidden layers
 
 	# mapping (outer) network
-	ϕ = Chain(
-		[Dense(width[l-1] => width[l], activation) for l ∈ (depth[1]+1):L]...,
-		Dense(width[L] => p, activation_output)
-		)
+	ϕ = []
+	if depth[2] > 1
+		push!(ϕ, [Dense(width[l-1] => width[l], activation) for l ∈ (depth[1]+1):(L-1)]...)
+	end
+	push!(ϕ, Dense(width[L-1] => p, activation_output))
+	ϕ = Chain(ϕ...)
 
 	# summary (inner) network
 	if architecture == "DNN"
