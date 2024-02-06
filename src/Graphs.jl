@@ -167,7 +167,7 @@ nearest neighbours of each location, or a fixed spatial radius of `r` units; if
 both `r` and `k` are provided, randomly selects `k` neighbours within a radius
 of `r` units.
 
-If `M` is a square matrix, is it treated as a distance matrix; otherwise, it
+If `M` is a square matrix, it is treated as a distance matrix; otherwise, it
 should be an n x d matrix, where n is the number of spatial sample locations
 and d is the spatial dimension (typically d = 2). In the latter case, the
 distance metric is taken to be the Euclidean distance.
@@ -175,8 +175,6 @@ distance metric is taken to be the Euclidean distance.
 All methods accept the keyword argument `self_loops` (default `false`); set to
 `true` nodes are considered to self connected, so that the diagonal of the
 adjacency matrix is non-zero.
-
-See also the package [`NearestNeighbors.jl`](https://github.com/KristofferC/NearestNeighbors.jl).
 
 # Examples
 ```
@@ -245,8 +243,6 @@ adjacencymatrix(M::Mat, k::Integer, r::F) where Mat <: AbstractMatrix{T} where {
 
 function adjacencymatrix(M::Mat, k::Integer; self_loops::Bool = false) where Mat <: AbstractMatrix{T} where T
 
-
-
 	@assert k > 0
 
 	I = Int64[]
@@ -255,29 +251,43 @@ function adjacencymatrix(M::Mat, k::Integer; self_loops::Bool = false) where Mat
 	n = size(M, 1)
 	m = size(M, 2)
 
-	for i ∈ 1:n
-
-		if m == n # square matrix, so assume M is a distance matrix
-			d = M[i, :]
-		else
-			# Compute distances between sᵢ and all other locations
-			d = colwise(Euclidean(), M', M[i, :])
-		end
-
-		if !self_loops
-			# Replace d(sᵢ) with Inf so that it's not included in the adjacency matrix
-			d[i] = Inf
-		end
-
-		# Find the neighbours of s
-		j, v = findneighbours(d, k)
-
-		push!(I, repeat([i], inner = k)...)
-		push!(J, j...)
-		push!(V, v...)
+	if m == n # square matrix, so assume M is a distance matrix
+		D = M
+	else      # otherwise, M is a matrix of spatial locations
+		S = M
 	end
 
-	return sparse(I,J,V,n,n)
+	if k >= n # more neighbours than observations: return a dense adjancy matrix
+		if m != n
+			D = pairwise(Euclidean(), S')
+		end
+		A = sparse(D)
+	else
+		for i ∈ 1:n
+
+			if m == n
+				d = D[i, :]
+			else
+				# Compute distances between sᵢ and all other locations
+				d = colwise(Euclidean(), S', S[i, :])
+			end
+
+			if !self_loops
+				# Replace d(sᵢ) with Inf so that it's not included in the adjacency matrix
+				d[i] = Inf
+			end
+
+			# Find the neighbours of s
+			j, v = findneighbours(d, k)
+
+			push!(I, repeat([i], inner = k)...)
+			push!(J, j...)
+			push!(V, v...)
+		end
+		A = sparse(I,J,V,n,n)
+	end
+
+	return A
 end
 
 function adjacencymatrix(M::Mat, r::F; self_loops::Bool = false) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
@@ -312,26 +322,42 @@ function adjacencymatrix(M::Mat, r::F; self_loops::Bool = false) where Mat <: Ab
 		V = Float64[]
 		for i ∈ 1:n
 
-			#NB many ways to speed this up...
-			#     For instance, we don't need to compute all distances, we can
-			#     immediately throw away some values if the difference between
-			#     any of their marginal coordinates is greater than r
+			#  We don't need to compute all distances, we can
+			#  immediately throw away some values if the difference between
+			#  any of their marginal coordinates is greater than r. Just
+			#  computing the distances seems faster though.
+			# a₁ = sᵢ[1] - r
+			# b₁ = sᵢ[1] + r
+			# a₂ = sᵢ[2] - r
+			# b₂ = sᵢ[2] + r
+			# a₁ .< S[:, 1] .< b₁
+			# a₂ .< S[:, 2] .< b₂
+
 			# Compute distances between s and all other locations
 			s = S[i, :]
 			d = colwise(Euclidean(), S', s)
-
 			if !self_loops
 				# Replace d(sᵢ) with Inf so that it's not included in the adjacency matrix
 				d[i] = Inf
 			end
-
 			# Find the r-neighbours of s
 			j = d .< r
 			j = findall(j)
-
 			push!(I, repeat([i], inner = length(j))...)
 			push!(J, j...)
 			push!(V, d[j]...)
+
+			# Alternative using NearestNeighbors (https://github.com/KristofferC/NearestNeighbors.jl)
+			# Didn't find this to be much faster, so sticking with my
+			# implementation so that I don't need to add a package dependency.
+			# tree = BallTree(S') # this is done once only, outside of the loop
+			# j = inrange(tree, sᵢ, r, true)
+			# if !self_loops j = j[j .!= i] end
+			# S_subset = S[:, j]
+			# d = colwise(Euclidean(), S_subset, sᵢ)
+			# push!(I, repeat([i], inner = length(j))...)
+			# push!(J, j...)
+			# push!(V, d...)
 		end
 		A = sparse(I,J,V,n,n)
 	end

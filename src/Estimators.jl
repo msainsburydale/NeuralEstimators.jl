@@ -206,6 +206,7 @@ they see fit using arbitrary `Flux` code; see
 - `width = 32`: a single integer or an integer vector of length `sum(depth)` specifying the width (or number of convolutional filters/channels) in each hidden layer.
 - `activation::Function = relu`: the (non-linear) activation function of each hidden layer.
 - `activation_output::Function = identity`: the activation function of the output layer.
+- `variance_stabiliser::Union{Nothing, Function} = nothing`: a function that will be applied directly to the input, usually to stabilise the variance. 
 - `kernel_size = nothing`: (applicable only to CNNs) a vector of length `depth[1]` containing integer tuples of length `D`, where `D` is the dimension of the convolution (e.g., `D = 2` for two-dimensional convolution).
 - `weight_by_distance::Bool = false`: (applicable only to GNNs) flag indicating whether the estimator will weight by spatial distance; if true, a `WeightedGraphConv` layer is used in the propagation module; otherwise, a regular `GraphConv` layer is used.
 
@@ -226,6 +227,7 @@ function initialise_estimator(
     estimator_type::String = "point",
     depth::Union{Integer, Vector{<:Integer}} = 3,
     width::Union{Integer, Vector{<:Integer}} = 32,
+	variance_stabiliser::Union{Nothing, Function} = nothing,
     activation::Function = relu,
     activation_output::Function = identity,
     kernel_size = nothing,
@@ -237,7 +239,7 @@ function initialise_estimator(
     @assert d > 0
 	@assert architecture ∈ ["DNN", "CNN", "GNN"]
     @assert estimator_type ∈ ["point", "interval"]
-    @assert all(depth .> 0)
+    @assert all(depth .>= 0)
     @assert length(depth) == 1 || length(depth) == 2
 	if isa(depth, Integer) depth = [depth] end
 	if length(depth) == 1 depth = repeat(depth, 2) end
@@ -256,11 +258,17 @@ function initialise_estimator(
 	L = sum(depth) # total number of hidden layers
 
 	# mapping (outer) network
+	# ϕ = []
+	# if depth[2] > 1
+	# 	push!(ϕ, [Dense(width[l-1] => width[l], activation) for l ∈ (depth[1]+1):(L-1)]...)
+	# end
+	# push!(ϕ, Dense(width[L-1] => p, activation_output))
+	# ϕ = Chain(ϕ...)
 	ϕ = []
-	if depth[2] > 1
-		push!(ϕ, [Dense(width[l-1] => width[l], activation) for l ∈ (depth[1]+1):(L-1)]...)
+	if depth[2] >= 1
+		push!(ϕ, [Dense(width[l-1] => width[l], activation) for l ∈ (depth[1]+1):L]...)
 	end
-	push!(ϕ, Dense(width[L-1] => p, activation_output))
+	push!(ϕ, Dense(width[L] => p, activation_output))
 	ϕ = Chain(ϕ...)
 
 	# summary (inner) network
@@ -288,6 +296,14 @@ function initialise_estimator(
 			[propagation(width[l-1] => width[l], relu, aggr = mean) for l ∈ 2:depth[1]]...,
 			GlobalPool(mean) # readout module
 			)
+	end
+
+	if variance_stabiliser != nothing
+		if architecture ∈ ["DNN", "CNN"]
+			ψ = Chain(variance_stabiliser, ψ...)
+		elseif architecture == "GNN"
+			ψ = GNNChain(variance_stabiliser, ψ...)
+		end
 	end
 
 	θ̂ = DeepSet(ψ, ϕ)

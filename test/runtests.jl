@@ -146,6 +146,15 @@ end
 	seed!(1); Ã₃ = adjacencymatrix(D, k, r)
 	@test Ã₃ ≈ A₃
 
+	# check for the case k > n
+	n = 3
+	d = 2
+	S = rand(n, d)
+	adjacencymatrix(S, k)
+	adjacencymatrix(S, r, k)
+	D = pairwise(Euclidean(), S, S, dims = 1)
+	adjacencymatrix(D, k)
+	adjacencymatrix(D, r, k)
 end
 
 
