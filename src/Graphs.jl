@@ -140,7 +140,7 @@ function (l::WeightedGraphConv)(g::GNNGraph, x::AbstractMatrix)
     check_num_nodes(g, x)
     r = rangeparameter(l)  # strictly positive range parameter
     d = g.graph[3]         # vector of spatial distances
-    w = exp.(-d ./ r)       # weights defined by exponentially decaying function of distance
+    w = exp.(-d ./ r)      # weights defined by exponentially decaying function of distance
     m = propagate(w_mul_xj, g, l.aggr, xj=x, e=w)
     x = l.σ.(l.W1 * x .+ l.W2 * m .+ l.bias)
     return x
@@ -157,29 +157,32 @@ end
 
 # ---- Adjacency matrices ----
 
+#TODO adjacencymatrix(M::Matrix, k::Integer; maxmin::Bool = false, moralise::Bool = true)
 """
 	adjacencymatrix(M::Matrix, k::Integer)
 	adjacencymatrix(M::Matrix, r::Float)
 	adjacencymatrix(M::Matrix, r::Float, k::Integer)
 
 Computes a spatially weighted adjacency matrix from `M` based on either the `k`
-nearest neighbours of each location, or a fixed spatial radius of `r` units; if
-both `r` and `k` are provided, randomly selects `k` neighbours within a radius
-of `r` units.
+nearest neighbours of each location; all nodes within a disc of radius `r`; or,
+if both `r` and `k` are provided, a random set of `k` neighbours with a disc of
+radius `r`.
 
 If `M` is a square matrix, it is treated as a distance matrix; otherwise, it
-should be an n x d matrix, where n is the number of spatial sample locations
-and d is the spatial dimension (typically d = 2). In the latter case, the
-distance metric is taken to be the Euclidean distance.
+should be an ``n`` x d matrix, where ``n`` is the number of spatial locations
+and ``d`` is the spatial dimension (typically ``d`` = 2). In the latter case,
+the distance metric is taken to be the Euclidean distance.
 
-All methods accept the keyword argument `self_loops` (default `false`); set to
-`true` nodes are considered to self connected, so that the diagonal of the
-adjacency matrix is non-zero.
+By convention, we consider a location to neighbour itself and, hence,
+`k`-neighbour methods will yield `k`+1 neighbours for each location. Note that
+one may use `dropzeros!()` to remove these self-loops from the constructed
+adjacency matrix (see below).
 
 # Examples
 ```
 using NeuralEstimators
 using Distances
+using SparseArrays
 
 n = 100
 d = 2
@@ -197,9 +200,12 @@ D = pairwise(Euclidean(), S, S, dims = 1)
 adjacencymatrix(D, k)
 adjacencymatrix(D, r)
 adjacencymatrix(D, r, k)
+
+# Removing self-loops so that a location is not its own neighbour
+adjacencymatrix(S, k) |> dropzeros!
 ```
 """
-function adjacencymatrix(M::Mat, r::F, k::Integer; self_loops::Bool = false) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
+function adjacencymatrix(M::Mat, r::F, k::Integer) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
 
 	@assert k > 0
 	@assert r > 0
@@ -213,8 +219,7 @@ function adjacencymatrix(M::Mat, r::F, k::Integer; self_loops::Bool = false) whe
 	for i ∈ 1:n
 		sᵢ = M[i, :]
 		kᵢ = 0
-		iter = self_loops ? (1:n) : Iterators.filter(j -> j != i, 1:n) # don't include sᵢ in the search list
-		iter = shuffle(collect(iter)) # randomly shuffle iter to prevent weighting observations based on their ordering in M
+		iter = shuffle(collect(1:n)) # shuffle to prevent weighting observations based on their ordering in M
 
 		for j ∈ iter
 
@@ -236,12 +241,14 @@ function adjacencymatrix(M::Mat, r::F, k::Integer; self_loops::Bool = false) whe
 
 	end
 
+	A = sparse(I,J,V,n,n)
 
-	return sparse(I,J,V,n,n)
+
+	return A
 end
 adjacencymatrix(M::Mat, k::Integer, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat} = adjacencymatrix(M, r, k)
 
-function adjacencymatrix(M::Mat, k::Integer; self_loops::Bool = false) where Mat <: AbstractMatrix{T} where T
+function adjacencymatrix(M::Mat, k::Integer) where Mat <: AbstractMatrix{T} where T
 
 	@assert k > 0
 
@@ -257,12 +264,13 @@ function adjacencymatrix(M::Mat, k::Integer; self_loops::Bool = false) where Mat
 		S = M
 	end
 
-	if k >= n # more neighbours than observations: return a dense adjancy matrix
+	if k >= n # more neighbours than observations: return a dense adjacency matrix
 		if m != n
 			D = pairwise(Euclidean(), S')
 		end
 		A = sparse(D)
 	else
+		k += 1 # each location neighbours itself, so increase k by 1
 		for i ∈ 1:n
 
 			if m == n
@@ -270,11 +278,6 @@ function adjacencymatrix(M::Mat, k::Integer; self_loops::Bool = false) where Mat
 			else
 				# Compute distances between sᵢ and all other locations
 				d = colwise(Euclidean(), S', S[i, :])
-			end
-
-			if !self_loops
-				# Replace d(sᵢ) with Inf so that it's not included in the adjacency matrix
-				d[i] = Inf
 			end
 
 			# Find the neighbours of s
@@ -290,7 +293,7 @@ function adjacencymatrix(M::Mat, k::Integer; self_loops::Bool = false) where Mat
 	return A
 end
 
-function adjacencymatrix(M::Mat, r::F; self_loops::Bool = false) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
+function adjacencymatrix(M::Mat, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
 
 	@assert r > 0
 
@@ -302,9 +305,6 @@ function adjacencymatrix(M::Mat, r::F; self_loops::Bool = false) where Mat <: Ab
 		D = M
 		# bit-matrix specifying which locations are d-neighbours
 		A = D .< r
-		if !self_loops
-			A[diagind(A)] .= 0 # remove the diagonal entries
-		end
 
 		# replace non-zero elements of A with the corresponding distance in D
 		indices = copy(A)
@@ -336,10 +336,7 @@ function adjacencymatrix(M::Mat, r::F; self_loops::Bool = false) where Mat <: Ab
 			# Compute distances between s and all other locations
 			s = S[i, :]
 			d = colwise(Euclidean(), S', s)
-			if !self_loops
-				# Replace d(sᵢ) with Inf so that it's not included in the adjacency matrix
-				d[i] = Inf
-			end
+
 			# Find the r-neighbours of s
 			j = d .< r
 			j = findall(j)
@@ -352,7 +349,6 @@ function adjacencymatrix(M::Mat, r::F; self_loops::Bool = false) where Mat <: Ab
 			# implementation so that I don't need to add a package dependency.
 			# tree = BallTree(S') # this is done once only, outside of the loop
 			# j = inrange(tree, sᵢ, r, true)
-			# if !self_loops j = j[j .!= i] end
 			# S_subset = S[:, j]
 			# d = colwise(Euclidean(), S_subset, sᵢ)
 			# push!(I, repeat([i], inner = length(j))...)
@@ -370,47 +366,6 @@ function findneighbours(d, k::Integer)
 	J = [findfirst(v .== d) for v ∈ V]
     return J, V
 end
-
-# NB investigate why I can't get this to work when I have more time (it's very
-# close). I think this approach will be more efficient than the above method.
-
-# See https://en.wikipedia.org/wiki/Heap_(data_structure) for a description
-# of the heap data structure, and see
-# https://juliacollections.github.io/DataStructures.jl/latest/heaps/
-# for a description of Julia's implementation of the heap data structure.
-
-#using DataStructures # heap data structure
-# function findneighbours(d, k::Integer)
-#
-# 	@assert length(d) > k
-#
-#     # Build a max heap of differences with first k elements
-# 	h = MutableBinaryMaxHeap(d[1:k])
-#
-#     # For every element starting from (k+1)-th element,
-#     for j ∈ (k+1):lastindex(d)
-#         # if the difference is less than the root of the heap, replace the root
-#         if d[j] < first(h)
-#             pop!(h)
-#             push!(h, d[j])
-#         end
-#     end
-#
-# 	# Extract the indices with respect to d and the corresponding distances
-# 	J = broadcast(x -> x.handle, h.nodes)
-# 	V = broadcast(x -> x.value, h.nodes)
-#
-# 	# # Sort by the index of the original vector d (this ordering may be necessary for constructing sparse arrays)
-# 	# perm = sortperm(J)
-# 	# J = J[perm]
-# 	# V = V[perm]
-#
-# 	perm = sortperm(V)
-# 	J = J[perm]
-# 	V = V[perm]
-#
-#     return J, V
-# end
 
 
 # ---- Universal pooling layer ----
