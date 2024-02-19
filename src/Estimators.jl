@@ -26,13 +26,12 @@ end
 # ---- IntervalEstimator for amortised credible intervals  ----
 
 """
-	IntervalEstimator(u)
-	IntervalEstimator(u, v)
-	IntervalEstimator(u, v, g::Compress)
-	IntervalEstimator(u, v, min_supp::Vector, max_supp::Vector)
+	IntervalEstimator(u, v = u; probs = [0.025, 0.975])
+	IntervalEstimator(u, g::Compress; probs = [0.025, 0.975])
+	IntervalEstimator(u, v, g::Compress; probs = [0.025, 0.975])
 
 A neural interval estimator which, given data ``Z``, jointly estimates credible
-intervals in the form,
+intervals based on the probability levels `probs` of the form,
 
 ```math
 [g(u(Z)), 	g(u(Z)) + \\mathrm{exp}(v(Z)))],
@@ -41,11 +40,10 @@ intervals in the form,
 where
 
 - ``u(⋅)`` and ``v(⋅)`` are neural networks, both of which should transform data into ``p``-dimensional vectors (with ``p`` the number of parameters in the statistical model);
-- ``g(⋅)`` is a logistic function that maps its input to the prior support.
+- ``g(⋅)`` is either the identity function or a logistic function that maps its input to the prior support.
 
-The prior support is defined either by the ``p``-dimensional vectors `min_supp`
-and `max_supp`, or a single ``p``-dimensional object of type [`Compress`](@ref).
-If these objects are not given, the range of the intervals will be unrestricted
+The prior support may be defined by a ``p``-dimensional object of type
+[`Compress`](@ref). Otherwise, the range of the intervals will be unrestricted
 (i.e., ``g(⋅)`` will be the identity function).
 
 Note that, in addition to ensuring that the interval remains in the prior support,
@@ -57,7 +55,7 @@ If only a single neural-network architecture is provided, it will be used
 for both `u` and `v`.
 
 The returned value is a matrix with ``2p`` rows, where the first and second ``p``
-rows correspond to estimates of the lower and upper bounds, respectively.
+rows correspond to the lower and upper bounds, respectively.
 
 # Examples
 ```
@@ -69,10 +67,11 @@ n = 2   # bivariate data
 m = 100 # number of independent replicates
 Z = rand(n, m)
 
-# prior support
+# prior
+p = 3  # number of parameters in the statistical model
 min_supp = [25, 0.5, -pi/2]
 max_supp = [500, 2.5, 0]
-p = length(min_supp)  # number of parameters in the statistical model
+g = Compress(min_supp, max_supp)
 
 # Create an architecture
 w = 8  # width of each layer
@@ -82,24 +81,24 @@ u = DeepSet(ψ, ϕ)
 v = deepcopy(u) # use the same architecture for both u and v
 
 # Initialise the interval estimator
-estimator = IntervalEstimator(u, v, min_supp, max_supp)
+estimator = IntervalEstimator(u, v, g)
 
-# Apply the interval estimator
+# Apply the (untrained) interval estimator
 estimator(Z)
 interval(estimator, Z)
 ```
 """
-struct IntervalEstimator{F, G} <: NeuralEstimator
+struct IntervalEstimator{F, G, H} <: NeuralEstimator
 	u::F
 	v::G
 	g::Union{Function,Compress}
+	probs::H
 	# IntervalEstimator(u, v, g) = any(isa.([u, v], PointEstimator)) ? error("Please do not construct IntervalEstimator objects with PointEstimators") : new(u, v, g)
+	#TODO should assert that probs is two-dimensional, and that they are increasing
 end
-IntervalEstimator(u) = IntervalEstimator(u, deepcopy(u), identity)
-IntervalEstimator(u, v) = IntervalEstimator(u, v, identity)
-IntervalEstimator(u, g::Compress) = IntervalEstimator(u, deepcopy(u), g)
-IntervalEstimator(u, min_supp, max_supp) = IntervalEstimator(u, Compress(min_supp, max_supp))
-IntervalEstimator(u, v, min_supp, max_supp) = IntervalEstimator(u, v, Compress(min_supp, max_supp))
+IntervalEstimator(u, v = deepcopy(u); probs = [0.025, 0.975]) = IntervalEstimator(u, v, identity, probs)
+IntervalEstimator(u, g::Compress; probs = [0.025, 0.975]) = IntervalEstimator(u, deepcopy(u), g, probs)
+IntervalEstimator(u, v, g::Compress; probs = [0.025, 0.975]) = IntervalEstimator(u, v, g, probs)
 @functor IntervalEstimator
 Flux.trainable(est::IntervalEstimator) = (est.u, est.v)
 function (est::IntervalEstimator)(Z)
@@ -188,6 +187,7 @@ Base.show(io::IO, m::MIME"text/plain", pe::PiecewiseEstimator) = print(io, pe)
 
 """
     initialise_estimator(p::Integer; ...)
+	initialise_estimator(p::Integer, data_type::String; ...)
 Initialise a neural estimator for a statistical model with `p` unknown parameters.
 
 The estimator is couched in the DeepSets framework (see [`DeepSet`](@ref)) so
@@ -198,6 +198,10 @@ Note also that the user is free to initialise their neural estimator however
 they see fit using arbitrary `Flux` code; see
 [here](https://fluxml.ai/Flux.jl/stable/models/layers/) for `Flux`'s API reference.
 
+Finally, the method with positional argument `data_type`is a wrapper that allows
+one to specify the type of their data (either "unstructured", "gridded", or
+"irregular_spatial").
+
 # Keyword arguments
 - `architecture::String`: for unstructured multivariate data, one may use a densely-connected neural network (`"DNN"`); for data collected over a grid, a convolutional neural network (`"CNN"`); and for graphical or irregular spatial data, a graphical neural network (`"GNN"`).
 - `d::Integer = 1`: for unstructured multivariate data (i.e., when `architecture = "DNN"`), the dimension of the data (e.g., `d = 3` for trivariate data); otherwise, if `architecture ∈ ["CNN", "GNN"]`, the argument `d` controls the number of input channels (e.g., `d = 1` for univariate spatial processes).
@@ -206,7 +210,7 @@ they see fit using arbitrary `Flux` code; see
 - `width = 32`: a single integer or an integer vector of length `sum(depth)` specifying the width (or number of convolutional filters/channels) in each hidden layer.
 - `activation::Function = relu`: the (non-linear) activation function of each hidden layer.
 - `activation_output::Function = identity`: the activation function of the output layer.
-- `variance_stabiliser::Union{Nothing, Function} = nothing`: a function that will be applied directly to the input, usually to stabilise the variance. 
+- `variance_stabiliser::Union{Nothing, Function} = nothing`: a function that will be applied directly to the input, usually to stabilise the variance.
 - `kernel_size = nothing`: (applicable only to CNNs) a vector of length `depth[1]` containing integer tuples of length `D`, where `D` is the dimension of the convolution (e.g., `D = 2` for two-dimensional convolution).
 - `weight_by_distance::Bool = false`: (applicable only to GNNs) flag indicating whether the estimator will weight by spatial distance; if true, a `WeightedGraphConv` layer is used in the propagation module; otherwise, a regular `GraphConv` layer is used.
 
@@ -313,6 +317,19 @@ function initialise_estimator(
 	end
 
 	return θ̂
+end
+
+function initialise_estimator(p::Integer, data_type::String; args...)
+	data_type = lowercase(data_type)
+	@assert data_type ∈ ["unstructured", "gridded", "irregular_spatial"]
+	architecture = if data_type == "unstructured"
+		"DNN"
+	elseif data_type == "gridded"
+		"CNN"
+	elseif data_type == "irregular_spatial"
+		"GNN"
+	end
+	initialise_estimator(p; architecture = architecture, args...)
 end
 
 coercetotuple(x) = (x...,)

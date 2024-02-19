@@ -89,7 +89,7 @@ function train end
 # on, until the sixth epoch again uses the first 10 replicates. Note that this
 # requires the data to be subsettable with the function `subsetdata`.
 
-function train(θ̂, sampler, simulator;
+function _train(θ̂, sampler, simulator;
 	m,
 	ξ = nothing, xi = nothing,
 	epochs_per_θ_refresh::Integer = 1, epochs_per_theta_refresh::Integer = 1,
@@ -226,7 +226,7 @@ function train(θ̂, sampler, simulator;
 end
 
 
-function train(θ̂, θ_train::P, θ_val::P, simulator;
+function _train(θ̂, θ_train::P, θ_val::P, simulator;
 		m,
 		batchsize::Integer = 32,
 		epochs_per_Z_refresh::Integer = 1,
@@ -341,7 +341,7 @@ function train(θ̂, θ_train::P, θ_val::P, simulator;
 end
 
 
-function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
+function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
@@ -444,6 +444,40 @@ function train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     return θ̂
 end
 
+# General fallback:
+train(args...; kwargs...) = _train(args...; kwargs...)
+
+# Wrapper functions for specific estimator types
+function train(θ̂::IntervalEstimator, args...; kwargs...)
+
+	# Get the key word arguments
+	kwargs = (;kwargs...)
+
+	# Define the loss function based on the given probabiltiy levels
+	probs = Float32.(θ̂.probs)
+	# Determine if we need to move probs to the GPU
+	use_gpu = haskey(kwargs, :use_gpu) ? kwargs.use_gpu : true
+	device  = _checkgpu(use_gpu, verbose = false)
+	probs   = device(probs)
+	# Define the loss function
+	qloss = (θ̂, θ) -> quantileloss(θ̂, θ, probs)
+
+	# Notify the user if "loss" is in the keyword arguments
+	if haskey(kwargs, :loss)
+		@info "The user has provided the loss function to `train()`, but this not necessary when training an `IntervalEstimator`, since the loss function is always the quantile loss."
+	end
+	# Add our quantile loss to the list of keyword arguments
+	kwargs = merge(kwargs, (loss = qloss,))
+
+	# Train the estimator
+	_train(θ̂, args...; kwargs..., loss = qloss)
+end
+
+# function f(x...; kwargs...)
+# kwargs = (;kwargs...)
+# kwargs = merge(kwargs, (k = 10, ))
+# println(kwargs)
+# end
 
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 

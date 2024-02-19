@@ -15,6 +15,8 @@ with columns:
 - `k`:         the index of the parameter vector in the test set
 - `j`:         the index of the data set
 
+Note that if `estimator` is an `IntervalEstimator`, the column `estimate` will be replaced by the columns `lower` and `upper`, containing the lower and upper bounds of the interval, respectively.
+
 Multiple `Assessment` objects can be combined with `merge()`.
 """
 struct Assessment
@@ -123,10 +125,38 @@ function rmse(df::DataFrame; args...)
 	return df
 end
 
+"""
+	coverage(assessment::Assessment; ...)
+
+Computes a Monte Carlo approximation of an interval estimator's expected coverage.
+
+# Keyword arguments
+- `average_over_parameters::Bool = true`: if true, the coverage is averaged over all parameters; otherwise (default), the coverage is averaged over each parameter separately.
+- `average_over_sample_sizes::Bool = true`: if true (default), the coverage is averaged over all sample sizes ``m``; otherwise, the coverage is averaged over each sample size separately.
+"""
+function coverage(assessment::Assessment;
+				  average_over_parameters::Bool = false,
+				  average_over_sample_sizes::Bool = true)
+
+	df = assessment.df
+
+	@assert all(["lower", "truth", "upper"] .∈ Ref(names(df))) "The assessment object should be derived from an IntervalEstimator, so that the dataframe contains the columns `lower`, `upper`, and `truth`"
+
+	grouping_variables = [:estimator]
+	if !average_over_parameters push!(grouping_variables, :parameter) end
+	if !average_over_sample_sizes push!(grouping_variables, :m) end
+	df = groupby(df, grouping_variables)
+	df = combine(df, [:lower, :truth, :upper] => ((x, y, z) -> x .<= y .< z) => :within, ungroup = false)
+	df = combine(df, :within => mean => :coverage)
+
+	return df
+end
+
+
 # ---- assess() ----
 
 """
-	assess(estimators, θ, Z; <keyword args>)
+	assess(estimators, θ, Z)
 
 Using a collection of `estimators`, compute estimates from data `Z` simulated
 based on true parameter vectors stored in `θ`.
@@ -135,7 +165,7 @@ The data `Z` should be a `Vector`, with each element corresponding to a single
 simulated data set. If `Z` contains more data sets than parameter vectors, the
 parameter matrix `θ` will be recycled by horizontal concatenation via the call
 `θ = repeat(θ, outer = (1, J))` where `J = length(Z) ÷ K` is the number of
-simulated data sets and `K = size(θ, 2)` is the number of parameter vectors. 
+simulated data sets and `K = size(θ, 2)` is the number of parameter vectors.
 
 The output is of type `Assessment`; see `?Assessment` for details.
 
@@ -218,9 +248,11 @@ function assess(
 		θ = repeat(θ, outer = (1, J))
 	end
 
-	# Extract the parameter names from ξ if it was provided
+	# Extract the parameter names from ξ or θ, if provided
 	if !isnothing(ξ) && haskey(ξ, :parameter_names)
 		parameter_names = ξ.parameter_names
+	elseif typeof(θ) <: NamedMatrix
+		parameter_names = names(θ, 1)
 	end
 
 	if !(typeof(estimators) <: Vector) estimators = [estimators] end
@@ -228,6 +260,13 @@ function assess(
 	E = length(estimators)
 	@assert length(estimator_names) == E
 	@assert length(parameter_names) == p
+
+	if any(typeof.(estimators) .<: IntervalEstimator)
+		@assert all(typeof.(estimators) .<: IntervalEstimator) "IntervalEstimators can only be assessed alongside other IntervalEstimators"
+		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = 2)
+	else
+		estimate_names = parameter_names
+	end
 
 	# Use ξ if it was provided alongside only a single estimator
 	if E == 1 && !isnothing(ξ)
@@ -269,35 +308,93 @@ function assess(
 
 	# Convert to DataFrame and add estimator information
 	θ̂ = hcat(θ̂...)
-	θ̂ = DataFrame(θ̂', parameter_names)
+	θ̂ = DataFrame(θ̂', estimate_names)
 	θ̂[!, "estimator"] = repeat(estimator_names, inner = nrow(θ̂) ÷ E)
 	θ̂[!, "m"] = repeat(m, E)
 	θ̂[!, "k"] = repeat(1:K, E * J)
 	θ̂[!, "j"] = repeat(repeat(1:J, inner = K), E) # NB "j" used to be "replicate"
-	θ̂[!, "replicate"] = repeat(repeat(1:J, inner = K), E) # NB "replicate" included for backwards compatability; I will remove it eventually
+	θ̂[!, "replicate"] = repeat(repeat(1:J, inner = K), E) # NB same as "j"
 
-	# Also provide the true θ for comparison with the estimates
-	assessment = Assessment(_merge(DataFrame(θ', parameter_names), θ̂), runtime)
-
-	return assessment
-end
-
-
-# Given a set of true parameters θ and corresponding estimates θ̂ resulting
-# from a call to assess(), merge θ and θ̂ into a single long-form DataFrame.
-function _merge(θ, θ̂)
-
+	# Dataframe containing the true parameters
+	θ = convert(Matrix, θ) # this shouldn't really be necessary, but for some reason plot(::IntervalEstimator) doesn't like it when θ here is stored as a NamedArray
+	θ = DataFrame(θ', parameter_names)
 	# Replicate θ to match the number of rows in θ̂. Note that the parameter
 	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
 	# in an outer fashion.
 	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
-
-	# Transform θ and θ̂ to long form:
+	# Transform θ to long form
 	θ = stack(θ, variable_name = :parameter, value_name = :truth)
-	θ̂ = stack(θ̂, Not([:estimator, :m, :k, :j, :replicate]), variable_name = :parameter, value_name = :estimate)
 
-	# Merge θ and θ̂: All we have to do is add :truth column to θ̂
+	# Merge true parameters and estimates
+	if any(typeof.(estimators) .<: IntervalEstimator)
+		df = _mergeIntervalEstimator(θ, θ̂)
+	else
+		df = _merge(θ, θ̂)
+	end
+
+	return Assessment(df, runtime)
+end
+
+function _mergeIntervalEstimator(θ, θ̂)
+
+
+	# Convert θ̂ into appropriate form
+	# Lower bounds:
+	df = copy(θ̂)
+	select!(df, Not(contains.(names(df), "upper")))
+	df = stack(df, Not([:estimator, :m, :k, :j, :replicate]), variable_name = :parameter, value_name = :lower)
+	df.parameter = replace.(df.parameter, r"_lower$"=>"")
+	df1 = df
+	# Upper bounds:
+	df = copy(θ̂)
+	select!(df, Not(contains.(names(df), "lower")))
+	df = stack(df, Not([:estimator, :m, :k, :j, :replicate]), variable_name = :parameter, value_name = :upper)
+	df.parameter = replace.(df.parameter, r"_upper$"=>"")
+	df2 = df
+	# Join lower and upper bounds:
+	θ̂ = innerjoin(df1, df2, on = [:estimator, :m, :k, :j, :replicate, :parameter])
+
+	# Merge θ and θ̂ by adding true parameters to θ̂
 	θ̂[!, :truth] = θ[:, :truth]
 
 	return θ̂
 end
+
+function _merge(θ, θ̂)
+
+	# Transform θ̂ to long form
+	θ̂ = stack(θ̂, Not([:estimator, :m, :k, :j, :replicate]), variable_name = :parameter, value_name = :estimate)
+
+	# Merge θ and θ̂ by adding true parameters to θ̂
+	θ̂[!, :truth] = θ[:, :truth]
+
+	return θ̂
+end
+
+
+# NB might want to include both point estimates and interval estimates in the same plot (e.g., as a result of joining two assessment.df objects)... could simply add bounds if "upper" and "lower" are detected
+function plot(assessment::Assessment)
+
+  df = assessment.df
+  num_estimators = length(unique(df.estimator))
+
+  if all(["lower", "upper"] .∈ Ref(names(df)))
+	  # Need line from (truth, lower) to (truth, upper). To do this, we need to
+	  # merge lower and upper into a single column and then group by k.
+	  df = stack(df, [:lower, :upper], variable_name = :bound, value_name = :interval)
+	  figure =  data(df) * mapping(:truth, :interval, group = :k => nonnumeric, layout = :parameter) * visual(Lines, color = :black)
+	  figure += data(df) * mapping(:truth, :interval, layout = :parameter) * visual(Scatter, color = :black, marker = '⎯')
+  elseif num_estimators > 1
+	  colors = [unique(df.estimator)[i] => ColorSchemes.Set1_4.colors[i] for i ∈ 1:num_estimators]
+	  figure = data(df) * mapping(:truth, :estimate, color = :estimator, layout = :parameter) * visual(palettes=(color=colors,), alpha = 0.5)
+  else
+	  figure = data(df) * mapping(:truth, :estimate, layout = :parameter) * visual(color = :black, alpha = 0.5)
+  end
+
+  figure += mapping([0], [1]) * visual(ABLines, color=:red, linestyle=:dash)
+  figure = draw(figure, facet=(; linkxaxes=:none, linkyaxes=:none)) #, axis=(; aspect=1)) # NB couldn't fix the aspect ratio without messing up the positioning of the titles
+  return figure
+end
+# figure = plot(assessment)
+# save("docs/src/assets/figures/univariate_point.png", figure, px_per_unit = 3, size = (600, 300))
+# save("docs/src/assets/figures/univariate_uq.png", figure, px_per_unit = 3, size = (600, 300))

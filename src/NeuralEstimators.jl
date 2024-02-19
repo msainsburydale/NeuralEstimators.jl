@@ -1,17 +1,19 @@
 module NeuralEstimators
 
+using AlgebraOfGraphics
 using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
 import Base: merge, show, size
 using BSON: @save, load
+using CairoMakie
 using ChainRulesCore: @non_differentiable, @ignore_derivatives
+using ColorSchemes
 using CUDA
 using CSV
 using DataFrames
 using Distances
 using Distributions
 using Distributions: Bernoulli, Product
-import Distributions: cdf, logpdf, quantile, minimum, maximum, insupport, var, skewness
 using Folds
 using Flux
 using Flux: ofeltype, params, DataLoader, update!, glorot_uniform
@@ -20,8 +22,10 @@ using GraphNeuralNetworks
 using GraphNeuralNetworks: check_num_nodes
 using GaussianRandomFields
 using Graphs
+using InvertedIndices
 using LinearAlgebra
 using NamedArrays
+using NearestNeighbors
 using Random: randexp, shuffle
 using RecursiveArrayTools: VectorOfArray, convert
 using SparseArrays
@@ -56,11 +60,8 @@ include("densities.jl")
 export train, trainx, subsetdata
 include("train.jl")
 
-export assess, Assessment, merge, risk, bias, rmse
+export assess, Assessment, merge, risk, bias, rmse, coverage, plot
 include("assess.jl")
-
-export plotrisk, plotdistribution
-include("plotting.jl")
 
 export bootstrap, interval
 include("bootstrap.jl")
@@ -76,20 +77,35 @@ include("missingdata.jl")
 
 end
 
+#NB this commit:
+# - Diagnostic plots
+# - Improved user-friendliness of IntervaLEstimator
+# - assess() wrapper for θ̂::IntervalEstimator
+# - coverage()
+# - Documentation
+# - Infer parameter_names by saving parameters as a named matrix
+# - maxmin ordering in adjacencymatrix()
+
 #TODO
+# - Clean up my handling of GNN: do we really need a separate object for it, or can we just use DeepSet with the inner network a GNN?
+# - Examples: in the univariate example, might be better to show an inversegamma prior for σ: a broader support for σ will hide some of the issues
+# - Examples: show a plot of a single data set within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
+# - Add functionality for storing and plotting the training-validation risk in the NeuralEstimator. This will involve changing _train() to return both the estimator and the risk, and then defining train(::NeuralEstimator) to update the slot containing the risk. We will also need _train() to take the argument "loss_vs_epoch", so that we can "continue training". Oncce I do this, I can then add a plotting method for plotting the risk.
+# - Might also be useful to store the parameter_names in NeuralEstimator: if they are present in the estimator, they can be compared to other sources of parameter_names as a sanity check, and they can be used in bootstrap() so that the bootstrap estimates and resulting intervals are given informative names.
+# - General purpose quantile estimator of the form (9) in the manuscript. Also look into monotonic networks.
 # - Add helper functions for censored data and write an example in the documentation.
-# -	Plotting from Julia (which can dispatch on Assessment objects).
-# -	Add some figures to the examples in the documentation (e.g., show the sampling distribution in univariate example).
-# - Get DeepSetExpert working optimally on the GPU (leaving this for now as we don't need it for the paper).
 # - Check that training with CorrelationMatrix works well.
 # - See if I can move WeightedGraphConv to GraphNeuralNetworks (bit untidy that it's in this package and not in the GNN package).
 
+
 # ---- long term:
 # - turn some document examples into "doctests"
-# - plotrisk and plotdistribution (wait until the R interface is finished)
-# - Add "AR(k) time series" example. (An example using partially exchangeable neural networks.)
+# - Add "AR(k) time series" example, or a Ricker model. (An example using partially exchangeable neural networks.)
 # - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. It seems very easy, just need to add precompile(f, (arg_types…)) to whatever methods I want to precompile.
 # - With the fixed parameters method of train, there seems to be overhead with my current implementation of just-in-time simulation. When epochs_per_Z_refresh = 1, the run-time increases by a factor of 4 for the Gaussian process with m = 1. For now, I’ve added an argument simulate_on_the_fly::Bool, which allows us to switch off just-in-time simulation.
+# - Optimise DeepSetExpert on the GPU
+# - NeuralRatioEstimator
+# - Explicit learning of summary statistics
 
 # ---- once the software is polished:
 # - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/

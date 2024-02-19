@@ -157,21 +157,28 @@ end
 
 # ---- Adjacency matrices ----
 
-#TODO adjacencymatrix(M::Matrix, k::Integer; maxmin::Bool = false, moralise::Bool = true)
 """
-	adjacencymatrix(M::Matrix, k::Integer)
+	adjacencymatrix(M::Matrix, k::Integer; maxmin::Bool = false)
 	adjacencymatrix(M::Matrix, r::Float)
 	adjacencymatrix(M::Matrix, r::Float, k::Integer)
 
-Computes a spatially weighted adjacency matrix from `M` based on either the `k`
-nearest neighbours of each location; all nodes within a disc of radius `r`; or,
-if both `r` and `k` are provided, a random set of `k` neighbours with a disc of
-radius `r`.
+Computes a spatially weighted adjacency matrix from `M` based on either the
+`k`-nearest neighbours of each location; all nodes within a disc of radius `r`;
+or, if both `r` and `k` are provided, a random set of `k` neighbours with a disc
+of radius `r`.
+
+If `maxmin=false` (default) the `k`-nearest neighbours are chosen based on all points in
+the graph. If `maxmin=true`, a so-called maxmin ordering is applied,
+whereby an initial point is selected, and each subsequent point is selected to
+maximise the minimum distance to those points that have already been selected.
+Then, the neighbours of each point are defined as the `k`-nearest neighbours
+amongst the points that have already appeared in the ordering.
 
 If `M` is a square matrix, it is treated as a distance matrix; otherwise, it
 should be an ``n`` x d matrix, where ``n`` is the number of spatial locations
 and ``d`` is the spatial dimension (typically ``d`` = 2). In the latter case,
-the distance metric is taken to be the Euclidean distance.
+the distance metric is taken to be the Euclidean distance. Note that the maxmin
+ordering currently requires a set of spatial locations (not a distance matrix).
 
 By convention, we consider a location to neighbour itself and, hence,
 `k`-neighbour methods will yield `k`+1 neighbours for each location. Note that
@@ -194,6 +201,7 @@ r = 0.3
 adjacencymatrix(S, k)
 adjacencymatrix(S, r)
 adjacencymatrix(S, r, k)
+adjacencymatrix(S, k; maxmin = true)
 
 # Construct from full distance matrix D
 D = pairwise(Euclidean(), S, S, dims = 1)
@@ -248,7 +256,8 @@ function adjacencymatrix(M::Mat, r::F, k::Integer) where Mat <: AbstractMatrix{T
 end
 adjacencymatrix(M::Mat, k::Integer, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat} = adjacencymatrix(M, r, k)
 
-function adjacencymatrix(M::Mat, k::Integer) where Mat <: AbstractMatrix{T} where T
+#NB would be good to add the keyword argument initialise_centre::Bool = true that makes the starting point fixed to the centre of the spatial domain. This point could just be the closest point to the average of the spatial coordinates.
+function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Bool = false) where Mat <: AbstractMatrix{T} where T
 
 	@assert k > 0
 
@@ -269,7 +278,7 @@ function adjacencymatrix(M::Mat, k::Integer) where Mat <: AbstractMatrix{T} wher
 			D = pairwise(Euclidean(), S')
 		end
 		A = sparse(D)
-	else
+	elseif !maxmin
 		k += 1 # each location neighbours itself, so increase k by 1
 		for i ∈ 1:n
 
@@ -288,6 +297,26 @@ function adjacencymatrix(M::Mat, k::Integer) where Mat <: AbstractMatrix{T} wher
 			push!(V, v...)
 		end
 		A = sparse(I,J,V,n,n)
+	else
+		@assert m != n "`adjacencymatrix` with maxmin-ordering requires a matrix of spatial locations, not a distance matrix"
+		ord     = ordermaxmin(S)          # calculate ordering
+		Sord    = S[ord, :]               # re-order locations
+		NNarray = findorderednn(Sord, k)  # find k nearest neighbours/"parents"
+		R = builddag(NNarray)             # build DAG
+		A = moralise ?  R' * R : R        # moralise
+
+		# Add distances to A
+		# TODO Think this is inefficient, especially for large n; only optimise if we find that this approach works well and this is a bottleneck
+		D = pairwise(Euclidean(), Sord')
+		I, J, V = findnz(A)
+		indices = collect(zip(I,J))
+		indices = CartesianIndex.(indices)
+		A.nzval .= D[indices]
+
+		# "unorder" back to the original ordering
+		# Sanity check: Sord[sortperm(ord), :] == S
+		# Sanity check: D[sortperm(ord), sortperm(ord)] == pairwise(Euclidean(), S')
+		A = A[sortperm(ord), sortperm(ord)]
 	end
 
 	return A
@@ -301,10 +330,8 @@ function adjacencymatrix(M::Mat, r::F) where Mat <: AbstractMatrix{T} where {T, 
 	m = size(M, 2)
 
 	if m == n # square matrix, so assume M is a distance matrix, D:
-
 		D = M
-		# bit-matrix specifying which locations are d-neighbours
-		A = D .< r
+		A = D .< r # bit-matrix specifying which locations are d-neighbours
 
 		# replace non-zero elements of A with the corresponding distance in D
 		indices = copy(A)
@@ -314,25 +341,11 @@ function adjacencymatrix(M::Mat, r::F) where Mat <: AbstractMatrix{T} where {T, 
 		# convert to sparse matrix
 		A = sparse(A)
 	else
-
 		S = M
-
 		I = Int64[]
 		J = Int64[]
 		V = Float64[]
 		for i ∈ 1:n
-
-			#  We don't need to compute all distances, we can
-			#  immediately throw away some values if the difference between
-			#  any of their marginal coordinates is greater than r. Just
-			#  computing the distances seems faster though.
-			# a₁ = sᵢ[1] - r
-			# b₁ = sᵢ[1] + r
-			# a₂ = sᵢ[2] - r
-			# b₂ = sᵢ[2] + r
-			# a₁ .< S[:, 1] .< b₁
-			# a₂ .< S[:, 2] .< b₂
-
 			# Compute distances between s and all other locations
 			s = S[i, :]
 			d = colwise(Euclidean(), S', s)
@@ -343,17 +356,6 @@ function adjacencymatrix(M::Mat, r::F) where Mat <: AbstractMatrix{T} where {T, 
 			push!(I, repeat([i], inner = length(j))...)
 			push!(J, j...)
 			push!(V, d[j]...)
-
-			# Alternative using NearestNeighbors (https://github.com/KristofferC/NearestNeighbors.jl)
-			# Didn't find this to be much faster, so sticking with my
-			# implementation so that I don't need to add a package dependency.
-			# tree = BallTree(S') # this is done once only, outside of the loop
-			# j = inrange(tree, sᵢ, r, true)
-			# S_subset = S[:, j]
-			# d = colwise(Euclidean(), S_subset, sᵢ)
-			# push!(I, repeat([i], inner = length(j))...)
-			# push!(J, j...)
-			# push!(V, d...)
 		end
 		A = sparse(I,J,V,n,n)
 	end
@@ -367,6 +369,147 @@ function findneighbours(d, k::Integer)
     return J, V
 end
 
+function getknn(S, s, k; args...)
+  tree = KDTree(S; args...)
+  nn_index, nn_dist = knn(tree, s, k, true)
+  nn_index = hcat(nn_index...) |> permutedims # nn_index = stackarrays(nn_index, merge = false)'
+  nn_dist  = hcat(nn_dist...)  |> permutedims # nn_dist  = stackarrays(nn_dist, merge = false)'
+  nn_index, nn_dist
+end
+
+function ordermaxmin(S)
+
+  # get number of locs
+  n = size(S, 1)
+  k = isqrt(n)
+  # k is number of neighbors to search over
+  # get the past and future nearest neighbors
+  NNall = getknn(S', S', k)[1]
+  # pick a random ordering
+  index_in_position = [sample(1:n, n, replace = false)..., repeat([missing],1*n)...]
+  position_of_index = sortperm(index_in_position[1:n])
+  # loop over the first n/4 locations
+  # move an index to the end if it is a
+  # near neighbor of a previous location
+  curlen = n
+  nmoved = 0
+  for j ∈ 2:2n
+	nneigh = round(min(k, n /(j-nmoved+1)))
+    nneigh = Int(nneigh)
+   if !ismissing(index_in_position[j])
+      neighbors = NNall[index_in_position[j], 1:nneigh]
+      if minimum(skipmissing(position_of_index[neighbors])) < j
+        nmoved += 1
+        curlen += 1
+        position_of_index[ index_in_position[j] ] = curlen
+        rassign(index_in_position, curlen, index_in_position[j])
+        index_in_position[j] = missing
+    	end
+  	end
+  end
+  ord = collect(skipmissing(index_in_position))
+
+  return ord
+end
+
+# rowMins(X) = vec(mapslices(minimum, X, dims = 2))
+# colMeans(X) = vec(mapslices(mean, X, dims = 1))
+# function ordermaxmin_slow(S)
+# 	n = size(S, 1)
+# 	D = pairwise(Euclidean(), S')
+# 	## Vecchia sequence based on max-min ordering: start with most central location
+#   	vecchia_seq = [argmin(D[argmin(colMeans(D)), :])]
+#   	for j in 2:n
+#     	vecchia_seq_new = (1:n)[Not(vecchia_seq)][argmax(rowMins(D[Not(vecchia_seq), vecchia_seq, :]))]
+# 		rassign(vecchia_seq, j, vecchia_seq_new)
+# 	end
+#   return vecchia_seq
+# end
+
+function rassign(v::AbstractVector, index::Integer, x)
+	@assert index > 0
+	if index <= length(v)
+		v[index] = x
+	elseif index == length(v)+1
+		push!(v, x)
+	else
+		v = [v..., fill(missing, index - length(v) - 1)..., x]
+	end
+	return v
+end
+
+function findorderednnbrute(S, k::Integer)
+  # find the k+1 nearest neighbors to S[j,] in S[1:j,]
+  # by convention, this includes S[j,], which is distance 0
+  n = size(S, 1)
+  k = min(k,n-1)
+  NNarray = Matrix{Union{Integer, Missing}}(missing, n, k+1)
+  for j ∈ 1:n
+	d = colwise(Euclidean(), S[1:j, :]', S[j, :])
+    NNarray[j, 1:min(k+1,j)] = sortperm(d)[1:min(k+1,j)]
+  end
+  return NNarray
+end
+
+function findorderednn(S, k::Integer)
+
+  # number of locations
+  n = size(S, 1)
+  k = min(k,n-1)
+  mult = 2
+
+  # to store the nearest neighbor indices
+  NNarray = Matrix{Union{Integer, Missing}}(missing, n, k+1)
+
+  # find neighbours of first mult*k+1 locations by brute force
+  maxval = min( mult*k + 1, n )
+  NNarray[1:maxval, :] = findorderednnbrute(S[1:maxval, :],k)
+
+  query_inds = min( maxval+1, n):n
+  data_inds = 1:n
+  ksearch = k
+  while length(query_inds) > 0
+    ksearch = min(maximum(query_inds), 2ksearch)
+    data_inds = 1:min(maximum(query_inds), n)
+	NN = getknn(S[data_inds, :]', S[query_inds, :]', ksearch)[1]
+
+    less_than_l = hcat([NN[l, :] .<= query_inds[l] for l ∈ 1:size(NN, 1)]...) |> permutedims
+	sum_less_than_l = vec(mapslices(sum, less_than_l, dims = 2))
+    ind_less_than_l = findall(sum_less_than_l .>= k+1)
+	NN_k = hcat([NN[l,:][less_than_l[l,:]][1:(k+1)] for l ∈ ind_less_than_l]...) |> permutedims
+    NNarray[query_inds[ind_less_than_l], :] = NN_k
+
+    query_inds = query_inds[Not(ind_less_than_l)]
+  end
+
+  return NNarray
+end
+
+function builddag(NNarray)
+  n, k = size(NNarray)
+  I = [1]
+  J = [1]
+  V = Float64[1.0]
+  for j in 2:n
+    i = NNarray[j, :]
+    i = collect(skipmissing(i))
+    push!(J, repeat([j], length(i))...)
+    push!(I, i...)
+	push!(V, repeat([1], length(i))...)
+  end
+  R = sparse(I,J,V,n,n)
+  return R
+end
+
+
+# n=100
+# S = rand(n, 2)
+# k=5
+# ord = ordermaxmin(S)              # calculate maxmin ordering
+# Sord = S[ord, :];                 # reorder locations
+# NNarray = findorderednn(Sord, k)  # find k nearest neighbours/"parents"
+# R = builddag(NNarray)             # build the DAG
+# Q = R' * R                        # moralise
 
 # ---- Universal pooling layer ----
 

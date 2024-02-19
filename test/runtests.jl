@@ -129,6 +129,8 @@ end
 	# Memory efficient constructors (avoids constructing the full distance matrix D)
 	A₁ = adjacencymatrix(S, k)
 	A₂ = adjacencymatrix(S, r)
+	A = adjacencymatrix(S, k, maxmin = true)
+	A = adjacencymatrix(S, k, maxmin = true, moralise = true)
 
 	# Construct from full distance matrix D
 	D = pairwise(Euclidean(), S, S, dims = 1)
@@ -610,6 +612,8 @@ m  = 10 # default sample size
 				rmse(assessment; average_over_sample_sizes = false)
 				rmse(assessment; average_over_parameters = false, average_over_sample_sizes = false)
 
+				figure = plot(assessment)
+
 				# J == 5 > 1
 				Z_test = simulator(parameters, m, 5)
 				assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
@@ -717,6 +721,9 @@ end
 	initialise_estimator(p, architecture = "DNN")
 	initialise_estimator(p, architecture = "GNN")
 	initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)])
+	initialise_estimator(p, "unstructured")
+	initialise_estimator(p, "irregular_spatial")
+	initialise_estimator(p, "gridded", kernel_size = [(10, 10), (5, 5), (3, 3)])
 
 	@test typeof(initialise_estimator(p, architecture = "DNN", estimator_type = "interval")) <: IntervalEstimator
 	@test typeof(initialise_estimator(p, architecture = "GNN", estimator_type = "interval")) <: IntervalEstimator
@@ -763,8 +770,9 @@ end
 	# IntervalEstimator with a compact prior
 	min_supp = [25, 0.5, -pi/2]
 	max_supp = [500, 2.5, 0]
-	estimator = IntervalEstimator(arch, min_supp, max_supp)
-	estimator = IntervalEstimator(arch, arch, min_supp, max_supp)
+	g = Compress(min_supp, max_supp)
+	estimator = IntervalEstimator(arch, g)
+	estimator = IntervalEstimator(arch, arch, g)
 	θ̂ = estimator(Z)
 	@test size(θ̂) == (2p, 1)
 	@test all(θ̂[1:p] .< θ̂[(p+1):end])
@@ -773,6 +781,9 @@ end
 	ci = interval(estimator, Z)
 	ci = interval(estimator, Z, parameter_names = parameter_names)
 	@test size(ci[1]) == (p, 2)
+
+
+	#TODO test IntervaLEstimator with assess().  Also apply coverage() to this assessment object.
 end
 
 
