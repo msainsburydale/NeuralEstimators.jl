@@ -77,15 +77,6 @@ include("missingdata.jl")
 
 end
 
-#NB this commit:
-# - Diagnostic plots
-# - Improved user-friendliness of IntervaLEstimator
-# - assess() wrapper for θ̂::IntervalEstimator
-# - coverage()
-# - Documentation
-# - Infer parameter_names by saving parameters as a named matrix
-# - maxmin ordering in adjacencymatrix()
-
 #TODO
 # - Clean up my handling of GNN: do we really need a separate object for it, or can we just use DeepSet with the inner network a GNN?
 # - Examples: in the univariate example, might be better to show an inversegamma prior for σ: a broader support for σ will hide some of the issues
