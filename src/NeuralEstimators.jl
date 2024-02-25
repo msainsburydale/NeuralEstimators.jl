@@ -77,11 +77,6 @@ include("missingdata.jl")
 
 end
 
-# This commit:
-# - assess() split into two methods (single estimator and multiple estimators)
-# - join(assessment::Assessment)
-# - Added bootstrapping in assess()
-# - improved coverage()
 
 #TODO
 # - Examples: Gridded spatial data. Give the example that we use in the ARSIA paper (single parameter that can be run in just a few minutes on a laptop). This will likely use a parametric bootstrap (I've added code there already).
