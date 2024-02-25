@@ -591,6 +591,7 @@ m  = 10 # default sample size
 				# J == 1
 				Z_test = simulator(parameters, m)
 				assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
+				assessment = assess(θ̂, parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
 				@test typeof(assessment)         == Assessment
 				@test typeof(assessment.df)      == DataFrame
 				@test typeof(assessment.runtime) == DataFrame
@@ -765,7 +766,7 @@ end
 	@test all(θ̂[1:p] .< θ̂[(p+1):end])
 	ci = interval(estimator, Z)
 	ci = interval(estimator, Z, parameter_names = parameter_names)
-	@test size(ci[1]) == (p, 2)
+	@test size(ci) == (p, 2)
 
 	# IntervalEstimator with a compact prior
 	min_supp = [25, 0.5, -pi/2]
@@ -780,10 +781,11 @@ end
 	@test all(min_supp .< θ̂[p+1:end] .< max_supp)
 	ci = interval(estimator, Z)
 	ci = interval(estimator, Z, parameter_names = parameter_names)
-	@test size(ci[1]) == (p, 2)
+	@test size(ci) == (p, 2)
 
-
-	#TODO test IntervaLEstimator with assess().  Also apply coverage() to this assessment object.
+	# assess()
+	# assessment = assess(estimator, rand(p, 2), [Z, Z]) # not sure why this isn't working
+	# coverage(assessment)
 end
 
 

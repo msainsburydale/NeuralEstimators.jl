@@ -96,9 +96,9 @@ struct IntervalEstimator{F, G, H} <: NeuralEstimator
 	# IntervalEstimator(u, v, g) = any(isa.([u, v], PointEstimator)) ? error("Please do not construct IntervalEstimator objects with PointEstimators") : new(u, v, g)
 	#TODO should assert that probs is two-dimensional, and that they are increasing
 end
-IntervalEstimator(u, v = deepcopy(u); probs = [0.025, 0.975]) = IntervalEstimator(u, v, identity, probs)
-IntervalEstimator(u, g::Compress; probs = [0.025, 0.975]) = IntervalEstimator(u, deepcopy(u), g, probs)
-IntervalEstimator(u, v, g::Compress; probs = [0.025, 0.975]) = IntervalEstimator(u, v, g, probs)
+IntervalEstimator(u, v = u; probs = [0.025, 0.975]) = IntervalEstimator(deepcopy(u), deepcopy(v), identity, probs)
+IntervalEstimator(u, g::Compress; probs = [0.025, 0.975]) = IntervalEstimator(deepcopy(u), deepcopy(u), g, probs)
+IntervalEstimator(u, v, g::Compress; probs = [0.025, 0.975]) = IntervalEstimator(deepcopy(u), deepcopy(v), g, probs)
 @functor IntervalEstimator
 Flux.trainable(est::IntervalEstimator) = (est.u, est.v)
 function (est::IntervalEstimator)(Z)

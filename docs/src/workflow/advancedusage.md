@@ -1,21 +1,33 @@
 # Advanced usage
 
-In this section, we discuss practical considerations on how to construct neural estimators most effectively.
+## Saving and loading neural estimators
 
-## Loading pre-trained neural estimators
-
-As training is by far the most computationally demanding part of the workflow, one typically trains an estimator and then saves it for later use. More specifically, one usually saves the *parameters* of the neural estimator (e.g., the weights and biases of the neural networks); then, to load the neural estimator at a later time, one initialises an estimator with the same architecture used during training, and then loads the saved parameters into this estimator.
-
-If the argument `savepath` is specified, [`train`](@ref) automatically saves the neural estimator's parameters; to load them, one may use the following code, or similar:
+As training is by far the most computationally demanding part of the workflow, one often trains an estimator and then saves it for later use. As discussed in the [`Flux` documentation](https://fluxml.ai/Flux.jl/stable/saving/), there are a number of ways to do this. Perhaps the simplest approach is to save the parameters of the neural estimator (e.g., the weights and biases of the neural networks) in a BSON file:
 
 ```
-using Flux: loadparams!
-
-θ̂ = architecture()
-loadparams!(θ̂, loadbestweights(savepath))
+using Flux
+using BSON: @save, @load
+model_state = Flux.state(θ̂)
+@save "estimator.bson" model_state
 ```
 
-Above, `architecture()` is a user-defined function that returns a neural estimator with the same architecture as the estimator that we wish to load, but with randomly initialised parameters, and the function `loadparams!` loads the parameters of the best (as determined by [`loadbestweights`](@ref)) neural estimator saved in `savepath`.
+Then, to load the neural estimator at a later time, one initialises an estimator with the same architecture used during training, and then loads the saved parameters into this estimator:
+
+```
+@load "estimator.bson" model_state
+Flux.loadmodel!(θ̂, model_state)
+```
+
+Note that the estimator `θ̂` must be already defined (i.e., only the network parameters are saved, not the architecture). That is, the saved model state should be loaded into a neural estimator with the same architecture as the estimator that we wish to load. 
+
+As a convenience, the function [`train`](@ref) allows for the automatic saving of the neural-network parameters during the training stage, via the argument `savepath`. Specifically, if `savepath` is specified, [`train`](@ref) automatically saves the neural estimator's parameters in the folder `savepath`; to load them, one may use the following code:
+
+```
+using NeuralEstimators
+Flux.loadparams!(θ̂, loadbestweights(savepath))
+```
+
+Above, the function `loadparams!` loads the parameters of the best (as determined by [`loadbestweights`](@ref)) neural estimator saved in `savepath`.
 
 
 ## Storing expensive intermediate objects for data simulation

@@ -3,7 +3,7 @@ module NeuralEstimators
 using AlgebraOfGraphics
 using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
-import Base: merge, show, size
+import Base: join, merge, show, size
 using BSON: @save, load
 using CairoMakie
 using ChainRulesCore: @non_differentiable, @ignore_derivatives
@@ -60,7 +60,7 @@ include("densities.jl")
 export train, trainx, subsetdata
 include("train.jl")
 
-export assess, Assessment, merge, risk, bias, rmse, coverage, plot
+export assess, Assessment, merge, join, risk, bias, rmse, coverage, plot
 include("assess.jl")
 
 export bootstrap, interval
@@ -77,19 +77,38 @@ include("missingdata.jl")
 
 end
 
+# This commit:
+# - assess() split into two methods (single estimator and multiple estimators)
+# - join(assessment::Assessment)
+# - Added bootstrapping in assess()
+# - improved coverage()
+
+#TODO
+# - Examples: Gridded spatial data. Give the example that we use in the ARSIA paper (single parameter that can be run in just a few minutes on a laptop). This will likely use a parametric bootstrap (I've added code there already).
+# - Examples: show a plot of a single data set within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
+
 #TODO
 # - Clean up my handling of GNN: do we really need a separate object for it, or can we just use DeepSet with the inner network a GNN?
-# - Examples: in the univariate example, might be better to show an inversegamma prior for σ: a broader support for σ will hide some of the issues
-# - Examples: show a plot of a single data set within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
-# - Add functionality for storing and plotting the training-validation risk in the NeuralEstimator. This will involve changing _train() to return both the estimator and the risk, and then defining train(::NeuralEstimator) to update the slot containing the risk. We will also need _train() to take the argument "loss_vs_epoch", so that we can "continue training". Oncce I do this, I can then add a plotting method for plotting the risk.
-# - Might also be useful to store the parameter_names in NeuralEstimator: if they are present in the estimator, they can be compared to other sources of parameter_names as a sanity check, and they can be used in bootstrap() so that the bootstrap estimates and resulting intervals are given informative names.
+# - Examples: Add functionality for storing and plotting the training-validation risk in the NeuralEstimator. This will involve changing _train() to return both the estimator and the risk, and then defining train(::NeuralEstimator) to update the slot containing the risk. We will also need _train() to take the argument "loss_vs_epoch", so that we can "continue training". Oncce I do this, I can then add a plotting method for plotting the risk.
+# - Examples: discrete parameter.
 # - General purpose quantile estimator of the form (9) in the manuscript. Also look into monotonic networks.
 # - Add helper functions for censored data and write an example in the documentation.
 # - Check that training with CorrelationMatrix works well.
-# - See if I can move WeightedGraphConv to GraphNeuralNetworks (bit untidy that it's in this package and not in the GNN package).
 
+# More/better ways to assess intervals. For example, from Efron (2003):
+    # Coverage, even appropriately defined, is not the end of the story. Stability
+    # of the intervals, in length and location, is also important. Here is an example.
+    # Suppose we are in a standard normal situation where the exact interval is
+    # Student’s t with 10 degrees of freedom. Method A produces the exact 90%
+    # interval except shortened by a factor of 0.90; method B produces the exact
+    # 90% interval either shortened by a factor of 2/3 or lengthened by a factor of
+    # 3/2, with equal probability. Both methods provide about 86% coverage, but
+    # the intervals in method B will always be substantially misleading.
 
 # ---- long term:
+# - Might also be useful to store the parameter_names in NeuralEstimator: if they are present in the estimator, they can be compared to other sources of parameter_names as a sanity check, and they can be used in bootstrap() so that the bootstrap estimates and resulting intervals are given informative names.
+# - Would be good if interval(θ̂::IntervalEstimator, Z) and interval(bs) also displayed the parameter names... this could be done if the estimator stores the parameter names.
+# - See if I can move WeightedGraphConv to GraphNeuralNetworks (bit untidy that it's in this package and not in the GNN package).
 # - turn some document examples into "doctests"
 # - Add "AR(k) time series" example, or a Ricker model. (An example using partially exchangeable neural networks.)
 # - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. It seems very easy, just need to add precompile(f, (arg_types…)) to whatever methods I want to precompile.

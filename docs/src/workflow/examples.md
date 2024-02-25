@@ -10,14 +10,14 @@ using NamedArrays
 
 ## Univariate data
 
-Here we develop a neural Bayes estimator for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $Z_1, \dots, Z_m$ that are independent and identically distributed realisations from the distribution $N(\mu, \sigma^2)$. We assume that the parameters are independent a priori and we adopt the marginal priors $\mu \sim N(0, 1)$ and $\sigma \sim U(0, 1)$.
+Here we develop a neural Bayes estimator for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $Z_1, \dots, Z_m$ that are independent and identically distributed realisations from the distribution $N(\mu, \sigma^2)$.
 
-First, we define a function to sample parameters from the prior. The sampled parameters are stored as $p \times K$ matrices, with $p$ the number of parameters in the model and $K$ the number of sampled parameter vectors. Note that below we store the parameters as a named matrix for convenience, but this is not a requirement of the package.
+First, we define a function to sample parameters from the prior. Here, we assume that the parameters are independent a priori and we adopt the marginal priors $\mu \sim N(0, 1)$ and $\sigma \sim IG(3, 1)$. The sampled parameters are stored as $p \times K$ matrices, with $p$ the number of parameters in the model and $K$ the number of sampled parameter vectors.  Note that below we store the parameters as a named matrix for convenience, but this is not a requirement of the package:
 
 ```
 function sample(K)
 	μ = rand(Normal(0, 1), K)
-	σ = rand(Uniform(0, 1), K)
+	σ = rand(InverseGamma(3, 1), K)
 	θ = hcat(μ, σ)'
 	θ = Float32.(θ)
 	θ = NamedArray(θ)
@@ -28,13 +28,14 @@ end
 
 Next, we implicitly define the statistical model with simulated data. In `NeuralEstimators`, the data are always stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and where the type `A` depends on the multivariate structure of the data. Since each replicate $Z_1, \dots, Z_m$ is univariate, `A` should be a `Matrix` with $d=1$ rows and $m$ columns.
 
+Below, we define our simulator given a single parameter vector, and given a matrix of parameter vectors (which simply applies the simulator to each column):
+
 ```
-function simulate(parameters, m)
-	[θ["μ"] .+ θ["σ"] .* randn(Float32, 1, m) for θ ∈ eachcol(parameters)]
-end
+simulate(θ::AbstractVector, m) = θ["μ"] .+ θ["σ"] .* randn(Float32, 1, m)
+simulate(θ::AbstractMatrix, m) = [simulate(x, m) for x ∈ eachcol(θ)]
 ```
 
-We now design a neural-network architecture. Since our data $Z_1, \dots, Z_m$ are replicated, we will use the [`DeepSet`](@ref) architecture. The outer network (also known as the inference network) is always a fully-connected network. However, the architecture of the inner network (also known as the summary network) depends on the multivariate structure of the data: with unstructured data (i.e., when there is no spatial or temporal correlation within a replicate), we use a fully-connected neural network. This architecture is then used to initialise a [`PointEstimator`](@ref) object. Note that the architecture can be defined using raw `Flux` code (see below) or with the helper function [`initialise_estimator`](@ref).
+We now design a neural-network architecture. Since our data $Z_1, \dots, Z_m$ are replicated, we will use the [`DeepSet`](@ref) architecture. The outer network (also known as the inference network) is always a fully-connected network. However, the architecture of the inner network (also known as the summary network) depends on the multivariate structure of the data: with unstructured data (i.e., when there is no spatial or temporal correlation within a replicate), we use a fully-connected neural network. This architecture is then used to initialise a [`PointEstimator`](@ref) object. Note that the architecture can be defined using raw `Flux` code (see below) or with the helper function [`initialise_estimator`](@ref):
 
 ```
 d = 1   # dimension of each replicate
@@ -48,63 +49,54 @@ architecture = DeepSet(ψ, ϕ)
 ```
 
 Next, we train the neural estimator using [`train`](@ref), here using the default absolute-error loss. We'll train the estimator using 50 independent replicates per parameter configuration. Below, we pass our user-defined functions for sampling parameters and simulating data, but one may also pass parameter or data instances, which will be held fixed during training:
+
 ```
 m = 50
 θ̂ = train(θ̂, sample, simulate, m = m)
 ```
 
-The function [`assess`](@ref) can be used to assess the trained estimator:
+Since the training stage can be computationally demanding, one may wish to save a trained estimator and load it in later sessions: see [Saving and loading neural estimators](@ref) for details on how this can be done.
+
+The function [`assess`](@ref) can be used to assess the trained point estimator. Parametric and non-parametric bootstrap-based uncertainty quantification are facilitated by [`bootstrap`](@ref) and [`interval`](@ref), and this can also be included in the assessment stage through the keyword argument `boot`:
 
 ```
 θ_test = sample(1000)
 Z_test = simulate(θ_test, m)
-assessment = assess(θ̂, θ_test, Z_test)
+assessment = assess(θ̂, θ_test, Z_test, boot = true)
 ```
 
-An [`Assessment`](@ref) object contains the true parameters and their corresponding estimates, and the time taken to compute the estimates. This object can be used to compute various diagnostics:
+An [`Assessment`](@ref) object contains the sampled parameters, the corresponding point estimates, and the corresponding lower and upper bounds of the bootstrap intervals. This object can be used to compute various diagnostics:
 
 ```
 bias(assessment)
 rmse(assessment)
 risk(assessment)
-plot(assessment)
-```
-
-![Estimates vs. true values for the univariate Gaussian example](../assets/figures/univariate_point.png)
-
-Once the estimator is calibrated, it may be applied to observed data. Below, we use simulated data as a substitute for observed data:
-
-```
-θ = sample(1)          # true parameters
-Z = simulate(θ, m)     # "observed" data
-θ̂(Z)                   # point estimates
-```
-
-Parametric and non-parametric bootstrap-based uncertainty quantification is facilitated by [`bootstrap`](@ref) and [`interval`](@ref).
-
-```
-θ̃ = bootstrap(θ̂, Z)   # non-parametric bootstrap estimates
-interval(θ̃)           # bootstrap intervals
-```
-
-Alternatively, we can approximate marginal posterior quantiles by training a neural Bayes estimator under the [`quantileloss`](@ref) function, which allows one to generate approximate marginal posterior credible intervals. This is facilitated with [`IntervalEstimator`](@ref) which, by default, targets 95% central credible intervals. Below, we use the same base architecture used for point estimation, which is wrapped in a :
-
-```
-θ̂_interval = IntervalEstimator(deepcopy(architecture))
-θ̂_interval = train(θ̂_interval, sample, simulate; m = m)
-```
-
-The resulting credible-interval estimator can also be assessed using empirical simulation-based methods:
-
-```
-assessment = assess(θ̂_interval, θ_test, Z_test)
 coverage(assessment)
 plot(assessment)
 ```
 
-![Credible intervals vs. true values for the univariate Gaussian example](../assets/figures/univariate_uq.png)
+![Estimates vs. true values for the univariate Gaussian example](../assets/figures/univariate.png)
 
+As an alternative form of uncertainty quantification, one may approximate a set of marginal posterior quantiles by training a second neural Bayes estimator under the [`quantileloss`](@ref) function, which allows one to generate approximate marginal posterior credible intervals. This is facilitated with [`IntervalEstimator`](@ref) which, by default, targets 95% central credible intervals. Below, we use the same base architecture used for point estimation, which is wrapped in a more complex architecture that ensures that the estimated credible intervals are valid (i.e., that the estimated lower bound is always less than the estimated upper bound):
 
+```
+θ̂₂ = IntervalEstimator(architecture)
+θ̂₂ = train(θ̂₂, sample, simulate, m = m)
+```
+
+The resulting posterior credible-interval estimator can also be assessed with empirical simulation-based methods using the function [`assess`](@ref), as we did above for the point estimator. Often, these intervals have better coverage than bootstrap-based intervals.
+
+Once a neural Bayes estimator is calibrated, it may be applied to observed data. Below, we use simulated data as a substitute for observed data:
+
+```
+θ = sample(1)               # true parameters
+Z = simulate(θ, m)          # "observed" data
+θ̂(Z)                        # point estimates
+interval(bootstrap(θ̂, Z))   # 95% non-parametric bootstrap intervals
+interval(θ̂₂, Z)             # 95% marginal posterior credible intervals
+```
+
+Note that one may utilise the GPU above by calling `Z = gpu(Z)` before applying the estimator.
 
 ## Multivariate data
 
@@ -119,8 +111,6 @@ For spatial data measured on a regular grid, the estimator is typically based on
 
 ```
 p = 2    # number of parameters in the statistical model
-w = 32   # number of neurons in each layer
-d = 2    # dimension of the response variable
 
 ψ = Chain(
 	Conv((10, 10), 1 => 32,  relu),
@@ -132,6 +122,15 @@ d = 2    # dimension of the response variable
 architecture = DeepSet(ψ, ϕ)
 ```
 
+Parametric bootstrap:
+
+```
+θ_test = sample(100)
+Z_test = simulate(θ_test, m)
+B = 400
+Z_boot = [[simulate(θ, m) for b ∈ 1:B] for θ ∈ eachcol(θ_test)]
+assessment = assess(θ̂, θ_test, Z_test, boot = Z_boot)
+```
 
 ## Irregular spatial data
 

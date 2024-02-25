@@ -1,12 +1,12 @@
 """
-	interval(θ̃::Matrix; probs = [0.05, 0.95], parameter_names = nothing)
+	interval(bs::Matrix; probs = [0.05, 0.95], parameter_names = nothing)
 	interval(estimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu = true)
 
-Compute a confidence interval based on a p × B matrix of bootstrap estimates, `θ̃`,
+Compute a confidence interval based on a p × B matrix of bootstrap estimates, `bs`,
 where p is the number of parameters in the model, or from an `IntervalEstimator`
 and data `Z`.
 
-The bootstrap-based interval is constructed by taking the quantiles of `θ̃`,
+The bootstrap-based interval is constructed by taking the quantiles of `bs`,
 where the quantile levels are controlled by the keyword argument `probs`.
 
 The return type is a p × 2 matrix, whose first and second columns respectively
@@ -18,17 +18,17 @@ be named by passing a vector of strings to the keyword argument `parameter_names
 using NeuralEstimators
 p = 3
 B = 50
-θ̃ = rand(p, B)
+bs = rand(p, B)
 θ̂ = rand(p)
-interval(θ̃)
+interval(bs)
 ```
 """
-function interval(θ̃; probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 1:size(θ̃, 1)])
+function interval(bs; probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 1:size(bs, 1)])
 
-	p, B = size(θ̃)
+	p, B = size(bs)
 
 	# Compute the quantiles
-	ci = mapslices(x -> quantile(x, probs), θ̃, dims = 2)
+	ci = mapslices(x -> quantile(x, probs), bs, dims = 2)
 
 	# Add labels to the confidence intervals
 	l = ci[:, 1]
@@ -53,7 +53,11 @@ function interval(estimator::IntervalEstimator, Z; parameter_names = nothing, us
 		@assert length(parameter_names) == p
 	end
 
-	labelinterval(ci, parameter_names)
+	intervals = labelinterval(ci, parameter_names)
+	if length(intervals) == 1
+		intervals = intervals[1]
+	end
+	return intervals
 end
 
 
@@ -80,7 +84,7 @@ function labelinterval(ci::M, parameter_names = ["θ$i" for i ∈ (size(ci, 1) �
 	[labelinterval(ci[:, k], parameter_names) for k ∈ 1:K]
 end
 
-# ---- Parameteric bootstrap ----
+# ---- Parametric bootstrap ----
 
 """
 	bootstrap(θ̂, parameters::P, Z) where P <: Union{AbstractMatrix, ParameterConfigurations}
@@ -122,15 +126,15 @@ function bootstrap(θ̂, parameters::P, simulator, m::Integer; B::Integer = 400,
 		v = vcat(v...)
 	end
 
-	θ̃ = estimateinbatches(θ̂, v, use_gpu = use_gpu)
-	return θ̃
+	bs = estimateinbatches(θ̂, v, use_gpu = use_gpu)
+	return bs
 end
 
 function bootstrap(θ̂, parameters::P, Z̃; use_gpu::Bool = true) where P <: Union{AbstractMatrix, ParameterConfigurations}
 	K = size(parameters, 2)
 	@assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
-	θ̃ = estimateinbatches(θ̂, Z̃, use_gpu = use_gpu)
-	return θ̃
+	bs = estimateinbatches(θ̂, Z̃, use_gpu = use_gpu)
+	return bs
 end
 
 
@@ -146,16 +150,16 @@ function bootstrap(θ̂, Z; B::Integer = 400, use_gpu::Bool = true, blocks = not
 		Z̃ = [subsetdata(Z, rand(1:m, m)) for _ in 1:B]
 	end
 	# Estimate the parameters for each bootstrap sample
-	θ̃ = estimateinbatches(θ̂, Z̃, use_gpu = use_gpu)
+	bs = estimateinbatches(θ̂, Z̃, use_gpu = use_gpu)
 
-	return θ̃
+	return bs
 end
 
 # simple wrapper to handle the common case that the user forgot to extract the
 # array from the single-element vector returned by a simulator
 function bootstrap(θ̂, Z::V; args...) where {V <: AbstractVector{A}} where A
 
-	@assert length(Z) == 1
+	@assert length(Z) == 1 "bootstrap() is designed for a single data set only"
 	Z = Z[1]
 	return bootstrap(θ̂, Z; args...)
 end

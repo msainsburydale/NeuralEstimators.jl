@@ -11,28 +11,102 @@ with columns:
 - `parameter`: the name of the parameter
 - `truth`:     the true value of the parameter
 - `estimate`:  the estimated value of the parameter
-- `m`:         the sample size (number of iid replicates)
-- `k`:         the index of the parameter vector in the test set
-- `j`:         the index of the data set
+- `m`:         the sample size (number of iid replicates) for the given data set
+- `k`:         the index of the parameter vector
+- `j`:         the index of the data set (in the case that multiple data sets are associated with each parameter vector)
 
 Note that if `estimator` is an `IntervalEstimator`, the column `estimate` will be replaced by the columns `lower` and `upper`, containing the lower and upper bounds of the interval, respectively.
 
-Multiple `Assessment` objects can be combined with `merge()`.
+Multiple `Assessment` objects can be combined with `merge()`
+(used for combining assessments from multiple point estimators) or `join()`
+(used for combining assessments from a point estimator and an interval estimator).
 """
 struct Assessment
 	df::DataFrame
 	runtime::DataFrame
 end
 
+
 function merge(assessment::Assessment, assessments::Assessment...)
 	df   = assessment.df
 	runtime = assessment.runtime
+	# Add "estimator" column if it doesn't exist
+	estimator_counter = 0
+	if "estimator" ∉ names(df)
+		estimator_counter += 1
+		df[:, :estimator] .= "estimator$estimator_counter"
+		runtime[:, :estimator] .= "estimator$estimator_counter"
+	end
 	for x in assessments
-		df   = vcat(df,   x.df)
-		runtime = vcat(runtime, x.runtime)
+		df2 = x.df
+		runtime2 = x.runtime
+		# Add "estimator" column if it doesn't exist
+		if "estimator" ∉ names(df2)
+			estimator_counter += 1
+			df2[:, :estimator] .= "estimator$estimator_counter"
+			runtime2[:, :estimator] .= "estimator$estimator_counter"
+		end
+		df = vcat(df, df2)
+		runtime = vcat(runtime, runtime2)
 	end
 	Assessment(df, runtime)
 end
+
+
+#TODO unit testing
+function join(assessment::Assessment, assessments::Assessment...)
+	df   = assessment.df
+	runtime = assessment.runtime
+	estimator_flag = "estimator" ∈ names(df)
+	if estimator_flag
+		select!(df, Not(:estimator))
+		select!(runtime, Not(:estimator))
+	end
+	for x in assessments
+		df2 = x.df
+		runtime2 = x.runtime
+		if estimator_flag
+			select!(df2, Not(:estimator))
+			select!(runtime2, Not(:estimator))
+		end
+		df = innerjoin(df, df2, on = [:m, :k, :j, :parameter, :truth])
+		runtime = runtime .+ runtime2
+	end
+	Assessment(df, runtime)
+end
+
+function plot(assessment::Assessment)
+
+  df = assessment.df
+  num_estimators = "estimator" ∉ names(df) ? 1 : length(unique(df.estimator))
+
+  # figure needs to be created first so that we can add to it below
+  figure = mapping([0], [1]) * visual(ABLines, color=:red, linestyle=:dash)
+
+  if all(["lower", "upper"] .∈ Ref(names(df)))
+	  # Need line from (truth, lower) to (truth, upper). To do this, we need to
+	  # merge lower and upper into a single column and then group by k.
+	  df = stack(df, [:lower, :upper], variable_name = :bound, value_name = :interval)
+	  figure += data(df) * mapping(:truth, :interval, group = :k => nonnumeric, layout = :parameter) * visual(Lines, color = :black)
+	  figure += data(df) * mapping(:truth, :interval, layout = :parameter) * visual(Scatter, color = :black, marker = '⎯')
+  end
+
+  if "estimate" ∈ names(df)
+	  if num_estimators > 1
+		colors = [unique(df.estimator)[i] => ColorSchemes.Set1_4.colors[i] for i ∈ 1:num_estimators]
+		figure += data(df) * mapping(:truth, :estimate, color = :estimator, layout = :parameter) * visual(palettes=(color=colors,), alpha = 0.75)
+	  else
+		figure += data(df) * mapping(:truth, :estimate, layout = :parameter) * visual(color = :black, alpha = 0.75)
+	  end
+  end
+
+  figure += mapping([0], [1]) * visual(ABLines, color=:red, linestyle=:dash)
+  figure = draw(figure, facet=(; linkxaxes=:none, linkyaxes=:none)) #, axis=(; aspect=1)) # couldn't fix the aspect ratio without messing up the positioning of the titles
+  return figure
+end
+# figure = plot(assessment)
+# save("docs/src/assets/figures/univariate_point.png", figure, px_per_unit = 3, size = (600, 300))
+# save("docs/src/assets/figures/univariate_uq.png", figure, px_per_unit = 3, size = (600, 300))
 
 @doc raw"""
 	risk(assessment::Assessment; ...)
@@ -60,7 +134,9 @@ function risk(df::DataFrame;
 			  average_over_parameters::Bool = true,
 			  average_over_sample_sizes::Bool = true)
 
-	grouping_variables = [:estimator]
+	#TODO the default loss should change if we have an IntervalEstimator/QuantileEstimator
+
+	grouping_variables = "estimator" ∈ names(df) ? [:estimator] : []
 	if !average_over_parameters push!(grouping_variables, :parameter) end
 	if !average_over_sample_sizes push!(grouping_variables, :m) end
 	df = groupby(df, grouping_variables)
@@ -125,6 +201,7 @@ function rmse(df::DataFrame; args...)
 	return df
 end
 
+#TODO document the lower and upper tail assessment
 """
 	coverage(assessment::Assessment; ...)
 
@@ -140,26 +217,30 @@ function coverage(assessment::Assessment;
 
 	df = assessment.df
 
-	@assert all(["lower", "truth", "upper"] .∈ Ref(names(df))) "The assessment object should be derived from an IntervalEstimator, so that the dataframe contains the columns `lower`, `upper`, and `truth`"
+	@assert all(["lower", "truth", "upper"] .∈ Ref(names(df))) "The assessment object should contain the columns `lower`, `upper`, and `truth`"
 
-	grouping_variables = [:estimator]
+	grouping_variables = "estimator" ∈ names(df) ? [:estimator] : []
 	if !average_over_parameters push!(grouping_variables, :parameter) end
 	if !average_over_sample_sizes push!(grouping_variables, :m) end
 	df = groupby(df, grouping_variables)
-	df = combine(df, [:lower, :truth, :upper] => ((x, y, z) -> x .<= y .< z) => :within, ungroup = false)
-	df = combine(df, :within => mean => :coverage)
+	df = combine(df,
+				[:lower, :truth, :upper] => ((x, y, z) -> x .<= y .< z) => :within,
+				[:lower, :truth] => ((x, y) -> y .< x) => :below,
+				[:truth, :upper] => ((y, z) -> y .> z) => :above,
+				ungroup = false)
+	df = combine(df,
+				:within => mean => :coverage,
+				:below => mean => :below_lower,
+				:above => mean => :above_upper)
 
 	return df
 end
 
-
-# ---- assess() ----
-
 """
 	assess(estimators, θ, Z)
 
-Using a collection of `estimators`, compute estimates from data `Z` simulated
-based on true parameter vectors stored in `θ`.
+Using a collection of `estimators`, compute estimates from data `Z`
+simulated based on true parameter vectors stored in `θ`.
 
 The data `Z` should be a `Vector`, with each element corresponding to a single
 simulated data set. If `Z` contains more data sets than parameter vectors, the
@@ -217,34 +298,45 @@ risk(assessment)
 ```
 """
 function assess(
-	estimators, θ::P, Z;
-	estimator_names::Union{Nothing, Vector{String}} = nothing,
+	estimator, θ::P, Z;
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
-	ξ  = nothing, use_ξ  = false,
-	xi = nothing, use_xi = false,
-	use_gpu = true,
-	verbose::Bool = true
+	estimator_name::Union{Nothing, String} = nothing,
+	estimator_names::Union{Nothing, String} = nothing, # for backwards compatibility
+	ξ  = nothing,
+    xi = nothing,
+	use_gpu::Bool = true,
+	verbose::Bool = false, # for backwards compatibility
+	boot = false,           # TODO document and test
+	probs = [0.025, 0.975], # TODO document and test
+	B::Integer = 400        # TODO document and test
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
 	# Check duplicated arguments that are needed so that the R interface uses ASCII characters only
 	@assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
 	if !isnothing(xi) ξ = xi end
-	if use_xi != false use_ξ = use_xi end  # note that here we check "use_xi != false" since use_xi might be a vector of bools, so it can't be used directly on the if statement
 
+	if typeof(estimator) <: IntervalEstimator
+		@assert isa(boot, Bool) && !boot "Although one could obtain the bootstrap distribution of an `IntervalEstimator`, it is currently not implemented with `assess()`. Please contact the package maintainer."
+	end
+
+	# Extract the matrix of parameters
 	θ = _extractθ(θ)
-
 	p, K = size(θ)
+
+	# Check the size of the test data conforms with θ
 	m = numberreplicates(Z)
 	if !(typeof(m) <: Vector{Int}) # indicates that a vector of vectors has been given
-		# verbose && @warn "The data `Z` should be a a vector, with each element of the vector corresponding to a single simulated data set... attempted to convert `Z` to the correct format."
+		# The data `Z` should be a a vector, with each element of the vector
+		# corresponding to a single simulated data set... attempted to convert `Z` to the correct format
 		Z = vcat(Z...) # convert to a single vector
 		m = numberreplicates(Z)
 	end
-	KJ = length(m) # this should be the same as length(Z)... will leave it as is to avoid breaking backwards compatability
+	KJ = length(m) # note that this can be different to length(Z) when we have set-level information (in which case length(Z) = 2)
 	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors in `θ`"
 	J = KJ ÷ K
 	if J > 1
-		# verbose && @info "There are more simulated data sets than unique parameter vectors: the parameter matrix will be recycled by horizontal concatenation."
+		# There are more simulated data sets than unique parameter vectors: the
+		# parameter matrix will be recycled by horizontal concatenation.
 		θ = repeat(θ, outer = (1, J))
 	end
 
@@ -254,25 +346,154 @@ function assess(
 	elseif typeof(θ) <: NamedMatrix
 		parameter_names = names(θ, 1)
 	end
-
-	if !(typeof(estimators) <: Vector) estimators = [estimators] end
-	if isnothing(estimator_names) estimator_names = ["estimator$i" for i ∈ eachindex(estimators)] end
-	E = length(estimators)
-	@assert length(estimator_names) == E
 	@assert length(parameter_names) == p
 
-	if any(typeof.(estimators) .<: IntervalEstimator)
-		@assert all(typeof.(estimators) .<: IntervalEstimator) "IntervalEstimators can only be assessed alongside other IntervalEstimators"
+	if typeof(estimator) <: IntervalEstimator
 		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = 2)
 	else
 		estimate_names = parameter_names
 	end
 
-	# Use ξ if it was provided alongside only a single estimator
-	if E == 1 && !isnothing(ξ)
-		use_ξ = true
+	if !isnothing(ξ)
+		runtime = @elapsed θ̂ = estimator(Z, ξ) # note that the gpu is never used in this case
+	else
+		runtime = @elapsed θ̂ = estimateinbatches(estimator, Z, use_gpu = use_gpu)
+	end
+	θ̂ = convert(Matrix, θ̂) # sometimes estimator returns vectors rather than matrices, which can mess things up
+
+	# Convert to DataFrame and add information
+	runtime = DataFrame(runtime = runtime)
+	θ̂ = DataFrame(θ̂', estimate_names)
+	θ̂[!, "m"] = m
+	θ̂[!, "k"] = repeat(1:K, J)
+	θ̂[!, "j"] = repeat(1:J, inner = K)
+
+	# Add estimator name if it was provided
+	# Deprecation coercion
+	if !isnothing(estimator_names)
+		estimator_name = estimator_names
+	end
+	if !isnothing(estimator_name)
+		θ̂[!, "estimator"] .= estimator_name
+		runtime[!, "estimator"] .= estimator_name
 	end
 
+	# Dataframe containing the true parameters
+	θ = convert(Matrix, θ)
+	θ = DataFrame(θ', parameter_names)
+	# Replicate θ to match the number of rows in θ̂. Note that the parameter
+	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
+	# in an outer fashion.
+	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
+	θ = stack(θ, variable_name = :parameter, value_name = :truth) # transform to long form
+
+	# Merge true parameters and estimates
+	if typeof(estimator) <: IntervalEstimator
+		df = _merge2(θ, θ̂)
+	else
+		df = _merge(θ, θ̂)
+	end
+
+	if boot != false
+		if boot == true
+			verbose && println("	Computing $((probs[2] - probs[1]) * 100)% non-parametric bootstrap intervals...")
+			# bootstrap estimates
+			bs = bootstrap.(Ref(estimator), Z, use_gpu = use_gpu, B = B)
+		else # if boot is not a Bool, we will assume it is a bootstrap data set. # TODO probably should add some checks on boot in this case (length should be equal to K, for example)
+			verbose && println("	Computing $((probs[2] - probs[1]) * 100)% parametric bootstrap intervals...")
+			# bootstrap estimates
+			dummy_θ̂ = rand(p, 1) # dummy parameters needed for parameteric bootstrap (this requirement should really be removed). Might be necessary to define a function parametricbootstrap().
+			bs = bootstrap.(Ref(estimator), Ref(dummy_θ̂), boot, use_gpu = use_gpu)
+		end
+		# compute bootstrap intervals and convert to same format returned by IntervalEstimator
+		intervals = stackarrays(vec.(interval.(bs, probs = probs)), merge = false)
+		# convert to dataframe and merge
+		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = 2)
+		intervals = DataFrame(intervals', estimate_names)
+		intervals[!, "m"] = m
+		intervals[!, "k"] = repeat(1:K, J)
+		intervals[!, "j"] = repeat(1:J, inner = K)
+		intervals = _merge2(θ, intervals)
+		df[:, "lower"] = intervals[:, "lower"]
+		df[:, "upper"] = intervals[:, "upper"]
+	end
+
+	# # This code can be used if we want to allow both parametric and
+	# # non-parametric bootstrapping. For now, it's simpler to allow only one.
+	#
+	# if boot
+	# 	verbose && println("	Computing $((probs[2] - probs[1]) * 100)% non-parametric bootstrap intervals...")
+	# 	# bootstrap estimates
+	# 	bs = bootstrap.(Ref(estimator), Z, use_gpu = use_gpu, B = B)
+	# 	# compute bootstrap intervals and convert to same format returned by IntervalEstimator
+	# 	intervals = stackarrays(vec.(interval.(bs, probs = probs)), merge = false)
+	# 	# convert to dataframe and merge
+	# 	estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = 2)
+	# 	intervals = DataFrame(intervals', estimate_names)
+	# 	intervals[!, "m"] = m
+	# 	intervals[!, "k"] = repeat(1:K, J)
+	# 	intervals[!, "j"] = repeat(1:J, inner = K)
+	# 	intervals = _merge2(θ, intervals)
+	# 	df[:, "lower"] = intervals[:, "lower"]
+	# 	df[:, "upper"] = intervals[:, "upper"]
+	# end
+	#
+	# if !isnothing(Z_boot)
+	#
+	# 	# if we did nonparametric bootstrapping, then lower and upper already
+	# 	# exist in the data frame, and will be overwritten below. Here, we save a
+	# 	# copy of these interval estimates to add back into the dataframe later.
+	# 	if boot
+	# 		nonparam_lower = df[:, "lower"]
+	# 		nonparam_upper = df[:, "upper"]
+	# 	end
+	#
+	# 	verbose && println("	Computing $((probs[2] - probs[1]) * 100)% parametric bootstrap intervals...")
+	# 	# bootstrap estimates
+	# 	dummy_θ̂ = rand(p, 1) # dummy parameters needed for parameteric bootstrap (this requirement should really be removed). Might be necessary to define a function parametricbootstrap().
+	# 	bs = bootstrap.(Ref(estimator), Ref(dummy_θ̂), Z_boot, use_gpu = use_gpu)
+	# 	# compute bootstrap intervals and convert to same format returned by IntervalEstimator
+	# 	intervals = stackarrays(vec.(interval.(bs, probs = probs)), merge = false)
+	# 	# convert to dataframe and merge
+	# 	estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = 2)
+	# 	intervals = DataFrame(intervals', estimate_names)
+	# 	intervals[!, "m"] = m
+	# 	intervals[!, "k"] = repeat(1:K, J)
+	# 	intervals[!, "j"] = repeat(1:J, inner = K)
+	# 	intervals = _merge2(θ, intervals)
+	# 	df[:, "lower"] = intervals[:, "lower"]
+	# 	df[:, "upper"] = intervals[:, "upper"]
+	#
+	# 	if boot
+	# 		rename!(df, :lower => :lower_parametric)
+	# 		rename!(df, :upper => :upper_parametric)
+	# 		df[:, "lower_nonparametric"] = nonparam_lower
+	# 		df[:, "upper_nonparametric"] = nonparam_upper
+	# 	end
+	#
+	# end
+
+	return Assessment(df, runtime)
+end
+
+function assess(
+	estimators::Vector, θ::P, Z;
+	estimator_names::Union{Nothing, Vector{String}} = nothing,
+	use_xi = false,
+	use_ξ = false,
+	ξ  = nothing,
+	xi = nothing,
+	use_gpu::Bool = true,
+	verbose::Bool = true,
+	kwargs...
+	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+	E = length(estimators)
+	if isnothing(estimator_names) estimator_names = ["estimator$i" for i ∈ eachindex(estimators)] end
+	@assert length(estimator_names) == E
+
+	# use_ξ and use_gpu are allowed to be vectors
+	if use_xi != false use_ξ = use_xi end  # note that here we check "use_xi != false" since use_xi might be a vector of bools, so it can't be used directly in the if-statement
 	@assert eltype(use_ξ) == Bool
 	@assert eltype(use_gpu) == Bool
 	if typeof(use_ξ) == Bool use_ξ = repeat([use_ξ], E) end
@@ -280,121 +501,63 @@ function assess(
 	@assert length(use_ξ) == E
 	@assert length(use_gpu) == E
 
-	# Initialise a DataFrame to record the run times
-	runtime = DataFrame(estimator = String[], time = Float64[])
-
-	θ̂ = map(eachindex(estimators)) do i
-
+	# run the estimators
+	assessments = map(1:E) do i
 		verbose && println("	Running estimator $(estimator_names[i])...")
-
 		if use_ξ[i]
-			# pass ξ to the estimator by passing a closure to estimateinbatches().
-			# This approach allows the estimator to use the gpu, and provides a
-			# consistent format of the estimates regardless of whether or not
-			# ξ is used. NB this doesn't work because some elements of ξ may need to
-			# be subsetted when batching... So, at the moment, we cannot use
-			# ξ and the gpu, unless we are willing to move the entire data
-			# set and ξ to the gpu.
-			# time = @elapsed θ̂ = estimateinbatches(z -> estimators[i](z, ξ), Z, use_gpu = use_gpu[i])
-			time = @elapsed θ̂ = estimators[i](Z, ξ)
+			assess(estimators[i], θ, Z, ξ = ξ, use_gpu = use_gpu[i], estimator_name = estimator_names[i], kwargs...)
 		else
-			time = @elapsed θ̂ = estimateinbatches(estimators[i], Z, use_gpu = use_gpu[i])
+			assess(estimators[i], θ, Z, use_gpu = use_gpu[i], estimator_name = estimator_names[i], kwargs...)
 		end
-		θ̂ = convert(Matrix, θ̂) # sometimes estimators return vectors rather than matrices, which can mess things up
-
-		push!(runtime, [estimator_names[i], time])
-		θ̂
 	end
 
-	# Convert to DataFrame and add estimator information
-	θ̂ = hcat(θ̂...)
-	θ̂ = DataFrame(θ̂', estimate_names)
-	θ̂[!, "estimator"] = repeat(estimator_names, inner = nrow(θ̂) ÷ E)
-	θ̂[!, "m"] = repeat(m, E)
-	θ̂[!, "k"] = repeat(1:K, E * J)
-	θ̂[!, "j"] = repeat(repeat(1:J, inner = K), E) # NB "j" used to be "replicate"
-	θ̂[!, "replicate"] = repeat(repeat(1:J, inner = K), E) # NB same as "j"
-
-	# Dataframe containing the true parameters
-	θ = convert(Matrix, θ) # this shouldn't really be necessary, but for some reason plot(::IntervalEstimator) doesn't like it when θ here is stored as a NamedArray
-	θ = DataFrame(θ', parameter_names)
-	# Replicate θ to match the number of rows in θ̂. Note that the parameter
-	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
-	# in an outer fashion.
-	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
-	# Transform θ to long form
-	θ = stack(θ, variable_name = :parameter, value_name = :truth)
-
-	# Merge true parameters and estimates
+	# Combine the assessment objects
 	if any(typeof.(estimators) .<: IntervalEstimator)
-		df = _mergeIntervalEstimator(θ, θ̂)
+		assessment = join(assessments...)
 	else
-		df = _merge(θ, θ̂)
+		assessment = merge(assessments...)
 	end
 
-	return Assessment(df, runtime)
+	return assessment
 end
 
-function _mergeIntervalEstimator(θ, θ̂)
+function _merge(θ, θ̂)
 
+	non_measure_vars = [:m, :k, :j]
+	if "estimator" ∈ names(θ̂) push!(non_measure_vars, :estimator) end
+
+	# Transform θ̂ to long form
+	θ̂ = stack(θ̂, Not(non_measure_vars), variable_name = :parameter, value_name = :estimate)
+
+	# Merge θ and θ̂ by adding true parameters to θ̂
+	θ̂[!, :truth] = θ[:, :truth]
+
+	return θ̂
+end
+
+function _merge2(θ, θ̂)
+
+	non_measure_vars = [:m, :k, :j]
+	if "estimator" ∈ names(θ̂) push!(non_measure_vars, :estimator) end
 
 	# Convert θ̂ into appropriate form
 	# Lower bounds:
 	df = copy(θ̂)
 	select!(df, Not(contains.(names(df), "upper")))
-	df = stack(df, Not([:estimator, :m, :k, :j, :replicate]), variable_name = :parameter, value_name = :lower)
+	df = stack(df, Not(non_measure_vars), variable_name = :parameter, value_name = :lower)
 	df.parameter = replace.(df.parameter, r"_lower$"=>"")
 	df1 = df
 	# Upper bounds:
 	df = copy(θ̂)
 	select!(df, Not(contains.(names(df), "lower")))
-	df = stack(df, Not([:estimator, :m, :k, :j, :replicate]), variable_name = :parameter, value_name = :upper)
+	df = stack(df, Not(non_measure_vars), variable_name = :parameter, value_name = :upper)
 	df.parameter = replace.(df.parameter, r"_upper$"=>"")
 	df2 = df
 	# Join lower and upper bounds:
-	θ̂ = innerjoin(df1, df2, on = [:estimator, :m, :k, :j, :replicate, :parameter])
+	θ̂ = innerjoin(df1, df2, on = [non_measure_vars..., :parameter])
 
 	# Merge θ and θ̂ by adding true parameters to θ̂
 	θ̂[!, :truth] = θ[:, :truth]
 
 	return θ̂
 end
-
-function _merge(θ, θ̂)
-
-	# Transform θ̂ to long form
-	θ̂ = stack(θ̂, Not([:estimator, :m, :k, :j, :replicate]), variable_name = :parameter, value_name = :estimate)
-
-	# Merge θ and θ̂ by adding true parameters to θ̂
-	θ̂[!, :truth] = θ[:, :truth]
-
-	return θ̂
-end
-
-
-# NB might want to include both point estimates and interval estimates in the same plot (e.g., as a result of joining two assessment.df objects)... could simply add bounds if "upper" and "lower" are detected
-function plot(assessment::Assessment)
-
-  df = assessment.df
-  num_estimators = length(unique(df.estimator))
-
-  if all(["lower", "upper"] .∈ Ref(names(df)))
-	  # Need line from (truth, lower) to (truth, upper). To do this, we need to
-	  # merge lower and upper into a single column and then group by k.
-	  df = stack(df, [:lower, :upper], variable_name = :bound, value_name = :interval)
-	  figure =  data(df) * mapping(:truth, :interval, group = :k => nonnumeric, layout = :parameter) * visual(Lines, color = :black)
-	  figure += data(df) * mapping(:truth, :interval, layout = :parameter) * visual(Scatter, color = :black, marker = '⎯')
-  elseif num_estimators > 1
-	  colors = [unique(df.estimator)[i] => ColorSchemes.Set1_4.colors[i] for i ∈ 1:num_estimators]
-	  figure = data(df) * mapping(:truth, :estimate, color = :estimator, layout = :parameter) * visual(palettes=(color=colors,), alpha = 0.5)
-  else
-	  figure = data(df) * mapping(:truth, :estimate, layout = :parameter) * visual(color = :black, alpha = 0.5)
-  end
-
-  figure += mapping([0], [1]) * visual(ABLines, color=:red, linestyle=:dash)
-  figure = draw(figure, facet=(; linkxaxes=:none, linkyaxes=:none)) #, axis=(; aspect=1)) # NB couldn't fix the aspect ratio without messing up the positioning of the titles
-  return figure
-end
-# figure = plot(assessment)
-# save("docs/src/assets/figures/univariate_point.png", figure, px_per_unit = 3, size = (600, 300))
-# save("docs/src/assets/figures/univariate_uq.png", figure, px_per_unit = 3, size = (600, 300))
