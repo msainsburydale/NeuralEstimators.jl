@@ -1,5 +1,3 @@
-# ---- Assessment ----
-
 """
 	Assessment(df::DataFrame, runtime::DataFrame)
 
@@ -105,8 +103,7 @@ function plot(assessment::Assessment)
   return figure
 end
 # figure = plot(assessment)
-# save("docs/src/assets/figures/univariate_point.png", figure, px_per_unit = 3, size = (600, 300))
-# save("docs/src/assets/figures/univariate_uq.png", figure, px_per_unit = 3, size = (600, 300))
+# save("docs/src/assets/figures/gridded.png", figure, px_per_unit = 3, size = (600, 300))
 
 @doc raw"""
 	risk(assessment::Assessment; ...)
@@ -349,7 +346,7 @@ function assess(
 	@assert length(parameter_names) == p
 
 	if typeof(estimator) <: IntervalEstimator
-		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = 2)
+		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = p)
 	else
 		estimate_names = parameter_names
 	end
@@ -408,7 +405,7 @@ function assess(
 		# compute bootstrap intervals and convert to same format returned by IntervalEstimator
 		intervals = stackarrays(vec.(interval.(bs, probs = probs)), merge = false)
 		# convert to dataframe and merge
-		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = 2)
+		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = p)
 		intervals = DataFrame(intervals', estimate_names)
 		intervals[!, "m"] = m
 		intervals[!, "k"] = repeat(1:K, J)
@@ -417,61 +414,6 @@ function assess(
 		df[:, "lower"] = intervals[:, "lower"]
 		df[:, "upper"] = intervals[:, "upper"]
 	end
-
-	# # This code can be used if we want to allow both parametric and
-	# # non-parametric bootstrapping. For now, it's simpler to allow only one.
-	#
-	# if boot
-	# 	verbose && println("	Computing $((probs[2] - probs[1]) * 100)% non-parametric bootstrap intervals...")
-	# 	# bootstrap estimates
-	# 	bs = bootstrap.(Ref(estimator), Z, use_gpu = use_gpu, B = B)
-	# 	# compute bootstrap intervals and convert to same format returned by IntervalEstimator
-	# 	intervals = stackarrays(vec.(interval.(bs, probs = probs)), merge = false)
-	# 	# convert to dataframe and merge
-	# 	estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = 2)
-	# 	intervals = DataFrame(intervals', estimate_names)
-	# 	intervals[!, "m"] = m
-	# 	intervals[!, "k"] = repeat(1:K, J)
-	# 	intervals[!, "j"] = repeat(1:J, inner = K)
-	# 	intervals = _merge2(θ, intervals)
-	# 	df[:, "lower"] = intervals[:, "lower"]
-	# 	df[:, "upper"] = intervals[:, "upper"]
-	# end
-	#
-	# if !isnothing(Z_boot)
-	#
-	# 	# if we did nonparametric bootstrapping, then lower and upper already
-	# 	# exist in the data frame, and will be overwritten below. Here, we save a
-	# 	# copy of these interval estimates to add back into the dataframe later.
-	# 	if boot
-	# 		nonparam_lower = df[:, "lower"]
-	# 		nonparam_upper = df[:, "upper"]
-	# 	end
-	#
-	# 	verbose && println("	Computing $((probs[2] - probs[1]) * 100)% parametric bootstrap intervals...")
-	# 	# bootstrap estimates
-	# 	dummy_θ̂ = rand(p, 1) # dummy parameters needed for parameteric bootstrap (this requirement should really be removed). Might be necessary to define a function parametricbootstrap().
-	# 	bs = bootstrap.(Ref(estimator), Ref(dummy_θ̂), Z_boot, use_gpu = use_gpu)
-	# 	# compute bootstrap intervals and convert to same format returned by IntervalEstimator
-	# 	intervals = stackarrays(vec.(interval.(bs, probs = probs)), merge = false)
-	# 	# convert to dataframe and merge
-	# 	estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = 2)
-	# 	intervals = DataFrame(intervals', estimate_names)
-	# 	intervals[!, "m"] = m
-	# 	intervals[!, "k"] = repeat(1:K, J)
-	# 	intervals[!, "j"] = repeat(1:J, inner = K)
-	# 	intervals = _merge2(θ, intervals)
-	# 	df[:, "lower"] = intervals[:, "lower"]
-	# 	df[:, "upper"] = intervals[:, "upper"]
-	#
-	# 	if boot
-	# 		rename!(df, :lower => :lower_parametric)
-	# 		rename!(df, :upper => :upper_parametric)
-	# 		df[:, "lower_nonparametric"] = nonparam_lower
-	# 		df[:, "upper_nonparametric"] = nonparam_upper
-	# 	end
-	#
-	# end
 
 	return Assessment(df, runtime)
 end
@@ -505,9 +447,9 @@ function assess(
 	assessments = map(1:E) do i
 		verbose && println("	Running estimator $(estimator_names[i])...")
 		if use_ξ[i]
-			assess(estimators[i], θ, Z, ξ = ξ, use_gpu = use_gpu[i], estimator_name = estimator_names[i], kwargs...)
+			assess(estimators[i], θ, Z, ξ = ξ; use_gpu = use_gpu[i], estimator_name = estimator_names[i], kwargs...)
 		else
-			assess(estimators[i], θ, Z, use_gpu = use_gpu[i], estimator_name = estimator_names[i], kwargs...)
+			assess(estimators[i], θ, Z; use_gpu = use_gpu[i], estimator_name = estimator_names[i], kwargs...)
 		end
 	end
 

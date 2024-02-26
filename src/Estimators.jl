@@ -9,6 +9,7 @@ abstract type NeuralEstimator end
 
 # ---- PointEstimator  ----
 
+#TODO document g
 """
     PointEstimator(arch)
 
@@ -17,11 +18,12 @@ parameter space, defined by the given neural-network architecture `arch`.
 """
 struct PointEstimator{F} <: NeuralEstimator
 	arch::F
+	g::Union{Function,Compress}
 	# PointEstimator(arch) = isa(arch, PointEstimator) ? error("Please do not construct PointEstimator objects with another PointEstimator") : new(arch)
 end
+PointEstimator(arch) = PointEstimator(arch, identity)
 @functor PointEstimator (arch,)
-(est::PointEstimator)(Z) = est.arch(Z)
-
+(est::PointEstimator)(Z) = est.g(est.arch(Z))
 
 # ---- IntervalEstimator for amortised credible intervals  ----
 

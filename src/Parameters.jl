@@ -74,6 +74,10 @@ function subsetparameters(parameters::M, indices) where {M <: AbstractMatrix}
 	return parameters[:, indices]
 end
 
+# wrapper that allows for indices to be a single Integer
+subsetparameters(θ::P, indices::Integer) where {P <: ParameterConfigurations} = subsetparameters(θ, indices:indices)
+subsetparameters(θ::M, indices::Integer) where {M <: AbstractMatrix} = subsetparameters(θ, indices:indices)
+
 
 # ---- _ParameterLoader: Analogous to DataLoader for ParameterConfigurations objects ----
 

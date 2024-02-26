@@ -75,7 +75,7 @@ coverage(assessment)
 plot(assessment)
 ```
 
-![Estimates vs. true values for the univariate Gaussian example](../assets/figures/univariate.png)
+![Univariate Gaussian example: Estimates vs. truth](../assets/figures/univariate.png)
 
 As an alternative form of uncertainty quantification, one may approximate a set of marginal posterior quantiles by training a second neural Bayes estimator under the [`quantileloss`](@ref) function, which allows one to generate approximate marginal posterior credible intervals. This is facilitated with [`IntervalEstimator`](@ref) which, by default, targets 95% central credible intervals. Below, we use the same base architecture used for point estimation, which is wrapped in a more complex architecture that ensures that the estimated credible intervals are valid (i.e., that the estimated lower bound is always less than the estimated upper bound):
 
@@ -105,31 +105,118 @@ Suppose now that our data consists of $m$ replicates of a $d$-dimensional multiv
 Note that, when estimating a full covariance matrix, one may wish to constrain the neural estimator to only produce parameters that imply a valid (i.e., positive definite) covariance matrix. This can be achieved by appending a  [`CovarianceMatrix`](@ref) layer to the end of the outer network of the DeepSets representation. However, the estimator will often learn to provide valid estimates, even if not constrained to do so.
 
 
-## Gridded spatial data
+## Gridded data
 
-For spatial data measured on a regular grid, the estimator is typically based on a convolutional neural network (CNN), and each data set is stored as a four-dimensional array, where the first three dimensions correspond to the width, height, and channels dimensions, and the fourth dimension stores the independent replicates. Note that, for univariate spatial processes, the channels dimension is simply equal to 1. For a 16x16 spatial grid, a possible architecture is given below.
+For data collected over a regular grid, the neural Bayes estimator is based on a convolutional neural network (CNN).
+
+In these settings, each data set must be stored as a ($D + 2$)-dimensional array, where $D$ is the dimension of the grid (e.g., $D = 1$ for time series, $D = 2$ for two-dimensional spatial grids, etc.). The first $D$ dimensions of the array correspond to the dimensions of the grid; the penultimate dimension stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes, etc.); and the final dimension stores the independent replicates. For example, to store 50 independent replicates of a bivariate spatial process measured over a 10x15 grid, one would construct an array of dimension 10x15x2x50.
+
+Below, we develop a neural Bayes estimator for the spatial Gaussian process model with exponential covariance function and unknown range parameter. The spatial domain is taken to be the unit square and we adopt the prior $\theta \sim U(0, 0.6)$.
 
 ```
-p = 2    # number of parameters in the statistical model
+function sample(K)
+	θ = rand(Uniform(0, 0.6), K)
+	θ = Float32.(θ')
+	return θ
+end
+```
 
+Below, we give example code for simulating from the statistical model, where the data is collected over a 16x16 grid:
+
+```
+using Distances
+using LinearAlgebra
+
+function simulate(θ, m = 1)
+
+	# Spatial locations
+	pts = range(0, 1, length = 16)
+	S = expandgrid(pts, pts)
+	n = size(S, 1)
+
+	# Distance matrix, covariance matrix, and Cholesky factor
+	D = pairwise(Euclidean(), S, dims = 1)
+	Σ = exp.(-D ./ θ)
+	L = cholesky(Symmetric(Σ)).L
+
+	# Spatial field
+	Z = L * randn(n)
+
+	# Reshape to 16x16 image and convert to Float32 for efficiency
+	Z = reshape(Z, 16, 16, 1, 1)
+	Z = Float32.(Z)
+
+	return Z
+end
+simulate(θ::AbstractMatrix, m) = [simulate(x, m) for x ∈ eachcol(θ)]
+```
+
+For data collected over a regular grid, the neural Bayes estimator is based on a convolutional neural network (CNN). For a useful introduction to CNNs, see, for example, [Dumoulin and Visin (2016)](https://arxiv.org/abs/1603.07285). For a 16x16 grid, one possible architecture is as follows:
+
+```
+p = 1 # number of parameters in the statistical model
+
+# Summary network
 ψ = Chain(
-	Conv((10, 10), 1 => 32,  relu),
-	Conv((5, 5),  32 => 64,  relu),
-	Conv((3, 3),  64 => 128, relu),
-	Flux.flatten
+	Conv((3, 3), 1 => 32, relu),
+	MaxPool((2, 2)),
+	Conv((3, 3),  32 => 64, relu),
+	MaxPool((2, 2)),
+	flatten
 	)
-ϕ = Chain(Dense(128, 512, relu), Dense(512, p))
+
+# Inference network
+ϕ = Chain(Dense(256, 64, leakyrelu), Dense(64, p))
+
+# DeepSet
 architecture = DeepSet(ψ, ϕ)
 ```
 
-Parametric bootstrap:
+Next, we initialise a point estimator and a posterior credible-interval estimator using our architecture defined above:
+
+```
+g  = Compress(0.0, 0.6) # optional function to ensure estimates fall within the prior support
+θ̂  = PointEstimator(architecture, g)
+θ̂₂ = IntervalEstimator(architecture, g)
+```
+
+Now we train the estimators. Since simulation from this statistical model involves Cholesky factorisation, which is moderately expensive with $n=256$ spatial locations, here we used fixed parameter and data instances during training. See [Storing expensive intermediate objects for data simulation](@ref) for methods that allow one to avoid repeated Cholesky factorisation when performing [On-the-fly and just-in-time simulation](@ref):
+
+```
+K = 20000
+θ_train = sample(K)
+θ_val   = sample(K ÷ 10)
+Z_train = simulate(θ_train)
+Z_val   = simulate(θ_val)
+
+θ̂  = train(θ̂,  θ_train, θ_val, Z_train, Z_val)
+θ̂₂ = train(θ̂₂, θ_train, θ_val, Z_train, Z_val)
+```
+
+Once the estimators have been trained, we assess them using empirical simulation-based methods:
 
 ```
 θ_test = sample(100)
 Z_test = simulate(θ_test, m)
-B = 400
-Z_boot = [[simulate(θ, m) for b ∈ 1:B] for θ ∈ eachcol(θ_test)]
-assessment = assess(θ̂, θ_test, Z_test, boot = Z_boot)
+assessment = assess([θ̂, θ̂₂], θ_test, Z_test)
+
+bias(assessment)
+rmse(assessment)
+coverage(assessment)
+plot(assessment)
+```
+
+![Gridded spatial Gaussian process example: Estimates vs. truth](../assets/figures/gridded.png)
+
+Finally, we can apply our neural Bayes estimators to observed data. Note that when we have a single replicate only (which is often the case in spatial statistics), non-parametric bootstrap is not possible, and we instead use parametric bootstrap:
+
+```
+θ = sample(1)                          # true parameter
+Z = simulate(θ, m)                     # "observed" data
+θ̂(Z)                                   # point estimates
+interval(θ̂₂, Z)                        # 95% marginal posterior credible intervals
+bs = bootstrap(θ̂, θ̂(Z), simulate, m)   # parametric bootstrap intervals
+interval(bs)                           # 95% parametric bootstrap intervals
 ```
 
 ## Irregular spatial data

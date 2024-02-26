@@ -79,8 +79,16 @@ end
 
 
 #TODO
-# - Examples: Gridded spatial data. Give the example that we use in the ARSIA paper (single parameter that can be run in just a few minutes on a laptop). This will likely use a parametric bootstrap (I've added code there already).
 # - Examples: show a plot of a single data set within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
+# - Examples: Bivariate data in multivariate section. 
+# - Examples: Gridded spatial data. Parametric bootstrap:
+
+# ```
+# θ̂_test = estimateinbatches(θ̂, Z_test)
+# B = 200
+# Z_boot = [[simulate(θ, m) for b ∈ 1:B] for θ ∈ eachcol(θ̂_test)]
+# assessment = assess(θ̂, θ_test, Z_test, boot = Z_boot)
+# ```
 
 #TODO
 # - Clean up my handling of GNN: do we really need a separate object for it, or can we just use DeepSet with the inner network a GNN?

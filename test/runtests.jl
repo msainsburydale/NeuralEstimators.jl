@@ -75,6 +75,7 @@ end
 		@test parameters_subset.θ     == parameters.θ[:, indices]
 		@test parameters_subset.chols == parameters.chols[:, :, indices]
 		@test parameters_subset.v     == parameters.v[indices]
+		@test size(subsetparameters(parameters, 2), 2) == 1
 
 		## Parameters stored as a simple matrix
 		parameters = rand(3, K)
@@ -82,6 +83,8 @@ end
 		parameters_subset = subsetparameters(parameters, indices)
 		@test size(parameters_subset) == (3, 2)
 		@test parameters_subset       == parameters[:, indices]
+		@test size(subsetparameters(parameters, 2), 2) == 1
+
 	end
 	@testset "containertype" begin
 		a = rand(3, 4)
@@ -394,6 +397,7 @@ end
 @testset "Activation functions: $dvc" for dvc ∈ devices
 
 	@testset "Compress" begin
+		Compress(1, 2)
 		p = 3
 		K = 10
 		a = Float32.([0.1, 4, 2])

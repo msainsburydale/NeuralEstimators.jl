@@ -246,7 +246,6 @@ end
 
 # ---- Activation functions -----
 
-
 @doc raw"""
     Compress(a, b, k = 1)
 Layer that compresses its input to be within the range `a` and `b`, where each
@@ -290,8 +289,10 @@ struct Compress{T}
   a::T
   b::T
   k::T
+  # TODO should check that b > a
 end
-Compress(a, b) = Compress(a, b, ones(eltype(a), length(a)))
+Compress(a, b) = Compress(float.(a), float.(b), ones(eltype(float.(a)), length(a)))
+Compress(a::Number, b::Number) = Compress([float(a)], [float(b)])
 
 (l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-l.k .* θ))
 
