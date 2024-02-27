@@ -31,7 +31,7 @@ Next, we implicitly define the statistical model with simulated data. In `Neural
 Below, we define our simulator given a single parameter vector, and given a matrix of parameter vectors (which simply applies the simulator to each column):
 
 ```
-simulate(θ::AbstractVector, m) = θ["μ"] .+ θ["σ"] .* randn(Float32, 1, m)
+function simulate(θ::AbstractVector, m) = θ["μ"] .+ θ["σ"] .* randn(Float32, 1, m)
 simulate(θ::AbstractMatrix, m) = [simulate(x, m) for x ∈ eachcol(θ)]
 ```
 
@@ -72,6 +72,7 @@ bias(assessment)
 rmse(assessment)
 risk(assessment)
 coverage(assessment)
+intervalscore(assessment)
 plot(assessment)
 ```
 

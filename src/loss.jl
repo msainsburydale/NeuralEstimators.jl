@@ -150,17 +150,20 @@ end
 """
     intervalscore(l, u, θ, α; agg = mean)
     intervalscore(θ̂, θ, α; agg = mean)
+    intervalscore(assessment::Assessment; average_over_parameters::Bool = false, average_over_sample_sizes::Bool = true)
 
-Given a 100×(1-`α`)% confidence interval [`l`, `u`] with true value `θ`, the
+Given an interval [`l`, `u`] with nominal coverage 100×(1-`α`)%  and true value `θ`, the
 interval score is defined by
+
 ```math
 S(l, u, θ; α) = (u - l) + 2α⁻¹(l - θ)𝕀(θ < l) + 2α⁻¹(θ - u)𝕀(θ > u),
 ```
+
 where `α` ∈ (0, 1) and 𝕀(⋅) is the indicator function.
 
-The method that takes a single value `θ̂` assumes that `θ̂` is a matrix with 2p rows,
-where p is the number of parameters in the statistical model. Then, the first
-and second set of p rows will be used as `l` and `u`, respectively.
+The method that takes a single value `θ̂` assumes that `θ̂` is a matrix with ``2p`` rows,
+where ``p`` is the number of parameters in the statistical model. Then, the first
+and second set of ``p`` rows will be used as `l` and `u`, respectively.
 
 For further discussion, see Section 6 of Gneiting, T. and Raftery, A. E. (2007),
 "Strictly proper scoring rules, prediction, and estimation",

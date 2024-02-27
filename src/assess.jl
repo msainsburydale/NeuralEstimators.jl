@@ -121,14 +121,14 @@ prior and, for each ``k``, data ``\boldsymbol{Z}^{(k)}`` are simulated from the 
 
 # Keyword arguments
 - `loss = (x, y) -> abs(x - y)`: a binary operator defining the loss function (default absolute-error loss).
-- `average_over_parameters::Bool = true`: if true (default), the loss is averaged over all parameters; otherwise, the loss is averaged over each parameter separately.
+- `average_over_parameters::Bool = false`: if true, the loss is averaged over all parameters; otherwise (default), the loss is averaged over each parameter separately.
 - `average_over_sample_sizes::Bool = true`: if true (default), the loss is averaged over all sample sizes ``m``; otherwise, the loss is averaged over each sample size separately.
 """
 risk(assessment::Assessment; args...) = risk(assessment.df; args...)
 
 function risk(df::DataFrame;
 			  loss = (x, y) -> abs(x - y),
-			  average_over_parameters::Bool = true,
+			  average_over_parameters::Bool = false,
 			  average_over_sample_sizes::Bool = true)
 
 	#TODO the default loss should change if we have an IntervalEstimator/QuantileEstimator
@@ -198,6 +198,7 @@ function rmse(df::DataFrame; args...)
 	return df
 end
 
+#TODO improve documentation (define more precisly what the coverage means here).
 #TODO document the lower and upper tail assessment
 """
 	coverage(assessment::Assessment; ...)
@@ -205,8 +206,8 @@ end
 Computes a Monte Carlo approximation of an interval estimator's expected coverage.
 
 # Keyword arguments
-- `average_over_parameters::Bool = true`: if true, the coverage is averaged over all parameters; otherwise (default), the coverage is averaged over each parameter separately.
-- `average_over_sample_sizes::Bool = true`: if true (default), the coverage is averaged over all sample sizes ``m``; otherwise, the coverage is averaged over each sample size separately.
+- `average_over_parameters::Bool = false`: if true, the coverage is averaged over all parameters; otherwise (default), it is computed over each parameter separately.
+- `average_over_sample_sizes::Bool = true`: if true (default), the coverage is averaged over all sample sizes ``m``; otherwise, it is computed over each sample size separately.
 """
 function coverage(assessment::Assessment;
 				  average_over_parameters::Bool = false,
@@ -232,6 +233,67 @@ function coverage(assessment::Assessment;
 
 	return df
 end
+
+
+# TODO add unit testing
+function intervalscore(assessment::Assessment;
+				  	   average_over_parameters::Bool = false,
+				  	   average_over_sample_sizes::Bool = true)
+
+	df = assessment.df
+
+	@assert all(["lower", "truth", "upper"] .∈ Ref(names(df))) "The assessment object should contain the columns `lower`, `upper`, and `truth`"
+	@assert "α" ∈ names(df) "The assessment object should contain the column `α` specifying the nominal coverage of the interval"
+	α = df[1, :α]
+
+	grouping_variables = "estimator" ∈ names(df) ? [:estimator] : []
+	if !average_over_parameters push!(grouping_variables, :parameter) end
+	if !average_over_sample_sizes push!(grouping_variables, :m) end
+	truth = df[:, :truth]
+	lower = df[:, :lower]
+	upper = df[:, :upper]
+	df[:, :interval_score] = (upper - lower) + (2/α) * (lower - truth) * (truth < lower) + (2/α) * (truth - upper) * (truth > upper)
+	df = groupby(df, grouping_variables)
+	df = combine(df, :interval_score => mean => :interval_score)
+
+	return df
+end
+
+#TODO unit testing, and add this to the examples (in place of current calls to multiple different diagnostics). Also in the examples it would be good to display a table using markdown tables. 
+"""
+	diagnostics(assessment::Assessment; args...)
+Computes all applicable diagnostics.
+
+For a [`PointEstimator`](@ref), the relevant diagnostics are the estimator's
+[`bias`](@ref), [`rmse`](@ref), and [`risk`](@ref), while for an
+[`IntervalEstimator`](@ref) the relevant diagnostics are the [`coverage`](@ref)
+and [`intervalscore`](@ref).
+"""
+function diagnostics(assessment::Assessment; args...)
+
+	df = []
+
+	if "estimate" ∈ names(assessment.df)
+		push!(df, bias(assessment; args...))
+		push!(df, rmse(assessment; args...))
+		push!(df, risk(assessment; args...))
+	end
+
+	if all(["lower", "upper"] .∈ Ref(names(assessment.df)))
+		push!(df, intervalscore(assessment; args...))
+		push!(df, coverage(assessment; args...))
+	end
+
+	intx = intersect(names.(df))
+	if intx == String[]
+		df = hcat(df...)
+	else
+		df = innerjoin(df...; on = intx)
+	end
+
+	return df
+end
+
 
 """
 	assess(estimators, θ, Z)
@@ -413,6 +475,12 @@ function assess(
 		intervals = _merge2(θ, intervals)
 		df[:, "lower"] = intervals[:, "lower"]
 		df[:, "upper"] = intervals[:, "upper"]
+		df[:, "α"] .= probs[2] - probs[1]
+	end
+
+	if typeof(estimator) <: IntervalEstimator
+		probs = estimator.probs
+		df[:, "α"] .= probs[2] - probs[1]
 	end
 
 	return Assessment(df, runtime)

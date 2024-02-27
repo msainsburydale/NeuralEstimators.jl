@@ -51,11 +51,15 @@ assess
 
 Assessment
 
+diagnostics
+
 risk
 
 bias
 
 rmse
+
+coverage
 ```
 
 ## Uncertainty quantification
