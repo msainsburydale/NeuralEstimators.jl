@@ -194,14 +194,15 @@ using SparseArrays
 n = 100
 d = 2
 S = rand(n, d)
-k = 5
-r = 0.3
+k = 10
+r = 0.1
 
 # Memory efficient constructors (avoids constructing the full distance matrix D)
 adjacencymatrix(S, k)
+adjacencymatrix(S, k; maxmin = true)
 adjacencymatrix(S, r)
 adjacencymatrix(S, r, k)
-adjacencymatrix(S, k; maxmin = true)
+
 
 # Construct from full distance matrix D
 D = pairwise(Euclidean(), S, S, dims = 1)
@@ -306,7 +307,8 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 		A = moralise ?  R' * R : R        # moralise
 
 		# Add distances to A
-		# TODO Think this is inefficient, especially for large n; only optimise if we find that this approach works well and this is a bottleneck
+		# TODO This is memory inefficient, especially for large n;
+		# only optimise if we find that this approach works well and this is a bottleneck
 		D = pairwise(Euclidean(), Sord')
 		I, J, V = findnz(A)
 		indices = collect(zip(I,J))
@@ -321,6 +323,25 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 
 	return A
 end
+
+# using NeuralEstimators
+# using Distances
+# using SparseArrays
+#
+# n = 5000
+# d = 2
+# S = rand(n, d)
+# k = 10
+# import NeuralEstimators: adjacencymatrix, ordermaxmin, findorderednn, builddag, findneighbours
+#
+# @elapsed adjacencymatrix(S, k; maxmin = true) # 10 seconds
+# @elapsed adjacencymatrix(S, k) # 0.3 seconds
+#
+# @elapsed ord = ordermaxmin(S) # 0.57 seconds
+# Sord    = S[ord, :]
+# @elapsed NNarray = findorderednn(Sord, k) # 9 seconds... this is the bottleneck
+# @elapsed R = builddag(NNarray)  # 0.02 seconds
+
 
 function adjacencymatrix(M::Mat, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
 
@@ -369,6 +390,7 @@ function findneighbours(d, k::Integer)
     return J, V
 end
 
+# TODO this function is much, much slower than the R version... need to optimise
 function getknn(S, s, k; args...)
   tree = KDTree(S; args...)
   nn_index, nn_dist = knn(tree, s, k, true)

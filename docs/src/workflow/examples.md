@@ -31,7 +31,7 @@ Next, we implicitly define the statistical model with simulated data. In `Neural
 Below, we define our simulator given a single parameter vector, and given a matrix of parameter vectors (which simply applies the simulator to each column):
 
 ```
-function simulate(θ::AbstractVector, m) = θ["μ"] .+ θ["σ"] .* randn(Float32, 1, m)
+simulate(θ, m) = θ["μ"] .+ θ["σ"] .* randn(Float32, 1, m)
 simulate(θ::AbstractMatrix, m) = [simulate(x, m) for x ∈ eachcol(θ)]
 ```
 
@@ -163,11 +163,11 @@ p = 1 # number of parameters in the statistical model
 	MaxPool((2, 2)),
 	Conv((3, 3),  32 => 64, relu),
 	MaxPool((2, 2)),
-	flatten
+	Flux.flatten
 	)
 
 # Inference network
-ϕ = Chain(Dense(256, 64, leakyrelu), Dense(64, p))
+ϕ = Chain(Dense(256, 64, relu), Dense(64, p))
 
 # DeepSet
 architecture = DeepSet(ψ, ϕ)
@@ -176,9 +176,8 @@ architecture = DeepSet(ψ, ϕ)
 Next, we initialise a point estimator and a posterior credible-interval estimator using our architecture defined above:
 
 ```
-g  = Compress(0.0, 0.6) # optional function to ensure estimates fall within the prior support
-θ̂  = PointEstimator(architecture, g)
-θ̂₂ = IntervalEstimator(architecture, g)
+θ̂  = PointEstimator(architecture)
+θ̂₂ = IntervalEstimator(architecture)
 ```
 
 Now we train the estimators. Since simulation from this statistical model involves Cholesky factorisation, which is moderately expensive with $n=256$ spatial locations, here we used fixed parameter and data instances during training. See [Storing expensive intermediate objects for data simulation](@ref) for methods that allow one to avoid repeated Cholesky factorisation when performing [On-the-fly and just-in-time simulation](@ref):

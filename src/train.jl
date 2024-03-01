@@ -38,41 +38,41 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 ```
 using NeuralEstimators
 using Flux
-import NeuralEstimators: simulate
 
 # parameter sampler
 function sampler(K)
 	μ = randn(K) # Gaussian prior
 	σ = rand(K)  # Uniform prior
 	θ = hcat(μ, σ)'
+	θ = Float32.(θ)
 	return θ
 end
 
 # data simulator
-simulator(θ_matrix, m) = [θ[1] .+ θ[2] * randn(1, m) for θ ∈ eachcol(θ_matrix)]
+simulator(θ_matrix, m) = [θ[1] .+ θ[2] * randn(Float32, 1, m) for θ ∈ eachcol(θ_matrix)]
 
 # architecture
-p = length(Ω)   # number of parameters in the statistical model
-w = 32          # width of each layer
-ψ = Chain(Dense(1, w, relu), Dense(w, w, relu))
-ϕ = Chain(Dense(w, w, relu), Dense(w, p))
+d = 1   # dimension of each replicate
+p = 2   # number of parameters in the statistical model
+ψ = Chain(Dense(1, 32, relu), Dense(32, 32, relu))
+ϕ = Chain(Dense(32, 32, relu), Dense(32, p))
 θ̂ = DeepSet(ψ, ϕ)
 
 # number of independent replicates to use during training
 m = 15
 
 # training: full simulation on-the-fly
-θ̂ = train(θ̂, sampler, simulate, m = m, epochs = 5)
+θ̂ = train(θ̂, sampler, simulator, m = m, epochs = 5)
 
 # training: simulation on-the-fly with fixed parameters
 K = 10000
 θ_train = sampler(K)
 θ_val   = sampler(K ÷ 5)
-θ̂ 		 = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 5)
+θ̂ 		 = train(θ̂, θ_train, θ_val, simulator, m = m, epochs = 5)
 
 # training: fixed parameters and fixed data
-Z_train = simulate(θ_train, m)
-Z_val   = simulate(θ_val, m)
+Z_train = simulator(θ_train, m)
+Z_val   = simulator(θ_val, m)
 θ̂ 		 = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 5)
 ```
 """

@@ -110,6 +110,7 @@ end
     # the intervals in method B will always be substantially misleading.
 
 # ---- long term:
+# - Regularisation (see advanced usage for a start; think I have to modernise the training function to use the approach that is currently recommended by Flux, rather than the "implicit" approach that they previously recommended)
 # - Might also be useful to store the parameter_names in NeuralEstimator: if they are present in the estimator, they can be compared to other sources of parameter_names as a sanity check, and they can be used in bootstrap() so that the bootstrap estimates and resulting intervals are given informative names.
 # - Would be good if interval(θ̂::IntervalEstimator, Z) and interval(bs) also displayed the parameter names... this could be done if the estimator stores the parameter names.
 # - See if I can move WeightedGraphConv to GraphNeuralNetworks (bit untidy that it's in this package and not in the GNN package).
@@ -131,3 +132,24 @@ end
 # ```
 # using Pkg; Pkg.add("NeuralEstimators")
 # ```
+
+
+
+
+
+
+
+# TODO add this when I've got it working
+# ## Regularisation and dropout
+#
+# The term *regularisation* refers to a variety of techniques aimed to reduce overfitting when training a neural network.
+#
+# Some regularisation techniques are implemented by simply modifying the loss function. For instance, L₂ regularisation (sometimes called ridge regression) adds to the loss a penalty based on the square of the neural-network parameters, and is intended to discourage complex models. It can be implemented manually through the loss function (i.e., using [`params`](https://fluxml.ai/Flux.jl/stable/training/reference/#Flux.params) to extract the neural-network parameters and incorporating them in the loss function), or by providing a custom optimiser to [`train`](@ref) that includes a [`WeightDecay`](https://fluxml.ai/Flux.jl/stable/training/optimisers/#Flux.Optimise.WeightDecay). For instance, to perform L₂ regularisation with penalty 0.001, one may define the optimiser as:
+#
+# ```
+# optimiser = Flux.setup(OptimiserChain(WeightDecay(0.001), Adam()), θ̂)
+# ```
+#
+# See the [`Flux` documentation](https://fluxml.ai/Flux.jl/stable/training/training/#Regularisation) for further details.
+#
+# Another common regularisation technique is known as dropout, implemented in the [`Dropout`](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dropout) layer. This "turns off" some outputs of the previous layer during training, thereby inducing sparsity in the neural network.

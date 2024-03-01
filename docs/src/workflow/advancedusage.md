@@ -18,7 +18,7 @@ Then, to load the neural estimator at a later time, one initialises an estimator
 Flux.loadmodel!(θ̂, model_state)
 ```
 
-Note that the estimator `θ̂` must be already defined (i.e., only the network parameters are saved, not the architecture). That is, the saved model state should be loaded into a neural estimator with the same architecture as the estimator that we wish to load. 
+Note that the estimator `θ̂` must be already defined (i.e., only the network parameters are saved, not the architecture). That is, the saved model state should be loaded into a neural estimator with the same architecture as the estimator that we wish to load.
 
 As a convenience, the function [`train`](@ref) allows for the automatic saving of the neural-network parameters during the training stage, via the argument `savepath`. Specifically, if `savepath` is specified, [`train`](@ref) automatically saves the neural estimator's parameters in the folder `savepath`; to load them, one may use the following code:
 
