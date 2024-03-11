@@ -146,6 +146,17 @@ function (l::WeightedGraphConv)(g::GNNGraph, x::AbstractMatrix)
     return x
 end
 
+function (l::WeightedGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
+    check_num_nodes(g, x)
+	r = rangeparameter(l)  # strictly positive range parameter
+	d = g.graph[3]         # vector of spatial distances
+	w = exp.(-d ./ r)      # weights defined by exponentially decaying function of distance
+	m = propagate(w_mul_xj, g, l.aggr, xj=x, e=w)
+	x = l.σ.(l.W1 ⊠ x .+ l.W2 ⊠ m .+ l.bias) # ⊠ is shorthand for batched_mul
+	return x
+end
+
+
 function Base.show(io::IO, l::WeightedGraphConv)
     in_channel  = size(l.W1, ndims(l.W1))
     out_channel = size(l.W1, ndims(l.W1)-1)
@@ -202,7 +213,6 @@ adjacencymatrix(S, k)
 adjacencymatrix(S, k; maxmin = true)
 adjacencymatrix(S, r)
 adjacencymatrix(S, r, k)
-
 
 # Construct from full distance matrix D
 D = pairwise(Euclidean(), S, S, dims = 1)

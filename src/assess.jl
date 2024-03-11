@@ -259,7 +259,7 @@ function intervalscore(assessment::Assessment;
 	return df
 end
 
-#TODO unit testing, and add this to the examples (in place of current calls to multiple different diagnostics). Also in the examples it would be good to display a table using markdown tables. 
+#TODO unit testing, and add this to the examples (in place of current calls to multiple different diagnostics). Also in the examples it would be good to display a table using markdown tables.
 """
 	diagnostics(assessment::Assessment; args...)
 Computes all applicable diagnostics.
@@ -475,12 +475,12 @@ function assess(
 		intervals = _merge2(θ, intervals)
 		df[:, "lower"] = intervals[:, "lower"]
 		df[:, "upper"] = intervals[:, "upper"]
-		df[:, "α"] .= probs[2] - probs[1]
+		df[:, "α"] .= 1 - (probs[2] - probs[1])
 	end
 
 	if typeof(estimator) <: IntervalEstimator
 		probs = estimator.probs
-		df[:, "α"] .= probs[2] - probs[1]
+		df[:, "α"] .= 1 - (probs[2] - probs[1])
 	end
 
 	return Assessment(df, runtime)

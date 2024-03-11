@@ -167,12 +167,14 @@ function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁
 	numberreplicates.(Z)
 end
 
-
+#TODO Recall that I set the code up to have ndata as a 3D array; with this format,
+#     non-parametric bootstrap would be exceedingly fast (since we can subset the array data, I think).
+#TODO not clear what m is here. Change documentation to be more like: https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.getgraph-Tuple{GNNGraph,%20Int64}
 """
-Generic function for subsetting replicates from a data set. Default methods are:
-
+	subsetdata(Z::V, m) where {V <: AbstractArray{A}} where {A <: Any}
 	subsetdata(Z::A, m) where {A <: AbstractArray{T, N}} where {T, N}
 	subsetdata(Z::G, m) where {G <: AbstractGraph}
+Subsets `m` replicates from data `Z`.
 
 Note that `subsetdata` is slow for graphical data, and one should consider using
 a method of `train` that does not require the data to be subsetted when working
@@ -189,43 +191,73 @@ using NeuralEstimators
 using GraphNeuralNetworks
 using Flux: batch
 
-n = 5  # number of observations in each realisation
-m = 6  # number of replicates for each parameter vector
 d = 1  # dimension of the response variable
-K = 2  # number of parameter vectors
+n = 5  # number of observations in each realisation
+m = 6  # number of replicates in each data set
+K = 2  # number of data sets
 
 # Array data
 Z = [rand(n, d, m) for k ∈ 1:K]
-subsetdata(Z, 1:3) # extract first 3 replicates for each parameter vector
+subsetdata(Z, 1:3) # extract first 3 replicates from each data set
 
 # Graphical data
 e = 8 # number of edges
 Z = [batch([rand_graph(n, e, ndata = rand(d, n)) for _ ∈ 1:m]) for k ∈ 1:K]
-subsetdata(Z, 1:3) # extract first 3 replicates for each parameter vector
+subsetdata(Z, 1:3) # extract first 3 replicates from each data set
 ```
 """
 function subsetdata end
 
-function subsetdata(Z::V, m) where {V <: AbstractVector{A}} where A
-	subsetdata.(Z, Ref(m))
+
+# ---- Test code ----
+
+# n = 250  # number of observations in each realisation
+# m = 100  # number of replicates in each data set
+# d = 1    # dimension of the response variable
+# K = 1000  # number of data sets
+#
+# # Array data
+# Z = [rand(n, d, m) for k ∈ 1:K]
+# @elapsed subsetdata(Z_array, 1:3) # ≈ 0.03 seconds
+#
+# # Graphical data
+# e = 100 # number of edges
+# Z = [batch([rand_graph(n, e, ndata = rand(d, n)) for _ ∈ 1:m]) for k ∈ 1:K]
+# @elapsed subsetdata(Z, 1:3) # ≈ 2.5 seconds
+#
+# # Graphical data: efficient storage
+# Z2 = [rand_graph(n, e, ndata = rand(d, m, n)) for k ∈ 1:K]
+# @elapsed subsetdata(Z2, 1:3) # ≈ 0.13 seconds
+
+# ---- End test code ----
+
+# Wrapper to ensure that the number of dimensions in the subsetted Z is preserved
+subsetdata(Z, i::Int) = subsetdata(Z, i:i)
+
+function subsetdata(Z::V, i) where {V <: AbstractVector{A}} where A
+	subsetdata.(Z, Ref(i))
 end
 
-function subsetdata(tup::Tup, m) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
+function subsetdata(tup::Tup, i) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
 	Z = tup[1]
 	X = tup[2]
 	@assert length(Z) == length(X)
 
-	(subsetdata(Z, m), X) # NB X is not subsetted because it is set-level information
+	(subsetdata(Z, i), X) # NB X is not subsetted because it is set-level information
 end
 
-function subsetdata(Z::A, m) where {A <: AbstractArray{T, N}} where {T, N}
+function subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
 	colons  = ntuple(_ -> (:), N - 1)
-	Z[colons..., m]
+	Z[colons..., i]
 end
 
-function subsetdata(Z::G, m) where {G <: AbstractGraph}
-	 # @warn "`subsetdata()` is slow for graphical data: consider using a method of `train` that does not require the data data to be subsetted. Use `numberreplicates()` to check that the training and validation data sets are equally replicated, which prevents the invocation of `subsetdata()`."
-	 getgraph(Z, m)
+function subsetdata(Z::G, i) where {G <: AbstractGraph}
+	if ndims(Z.ndata[:x]) == 3
+		GNNGraph(Z; ndata = Z.ndata[:x][:, i, :])
+	else
+		# @warn "`subsetdata()` is slow for graphical data."
+		getgraph(Z, i)
+	end
 end
 
 function _quietDataLoader(data, batchsize::Integer; shuffle = true, partial = false)
