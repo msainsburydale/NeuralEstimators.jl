@@ -704,6 +704,9 @@ function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
 	gradients = back(one(ls))
 	update!(optimiser, γ, gradients)
 
+	# New explicit form:
+	# gradients = Flux.gradient(θ̂ -> loss(θ̂(Z), θ), θ̂) 
+
 	# Assuming that loss returns an average, convert it to a sum.
 	ls = ls * size(θ)[end]
 	return ls

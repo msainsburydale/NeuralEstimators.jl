@@ -42,6 +42,12 @@ One may also regularly refresh $\vartheta_{\text{train}}$, and doing so leads to
 
 The above strategies are facilitated with various methods of [`train`](@ref).
 
+## Regularisation
+
+The term *regularisation* refers to a variety of techniques aimed to reduce overfitting when training a neural network.
+
+One common regularisation technique is known as dropout [(Srivastava et al., 2014)](https://jmlr.org/papers/v15/srivastava14a.html), implemented in Flux's [`Dropout`](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dropout) layer. Dropout involves temporarily dropping ("turn off") a randomly selected set of neurons (along with their connections) at each iteration of the training stage, and this results in a computationally-efficient form of model (neural network) averaging. 
+
 ## Combining learned and expert summary statistics
 
 See [`DeepSet`](@ref).

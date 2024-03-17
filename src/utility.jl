@@ -252,11 +252,19 @@ function subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
 end
 
 function subsetdata(Z::G, i) where {G <: AbstractGraph}
-	if ndims(Z.ndata[:x]) == 3
-		GNNGraph(Z; ndata = Z.ndata[:x][:, i, :])
+
+	sym = collect(keys(Z.ndata))[1]
+
+	if ndims(Z.ndata[sym]) == 3
+		GNNGraph(Z; ndata = Z.ndata[sym][:, i, :])
 	else
 		# @warn "`subsetdata()` is slow for graphical data."
-		getgraph(Z, i)
+		# TODO getgraph() doesn't currently work with the GPU: see https://github.com/CarloLucibello/GraphNeuralNetworks.jl/issues/161
+		flag = Z.ndata[sym] isa CuArray
+		Z = cpu(Z)
+		Z = getgraph(Z, i)
+		if flag Z = gpu(Z) end
+		Z
 	end
 end
 
