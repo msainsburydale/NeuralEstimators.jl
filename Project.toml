@@ -1,7 +1,7 @@
 name = "NeuralEstimators"
 uuid = "38f6df31-6b4a-4144-b2af-7ace2da57606"
 authors = ["Matthew Sainsbury-Dale <msdale@uow.edu.au> and contributors"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"

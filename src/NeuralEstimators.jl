@@ -17,8 +17,7 @@ using Distributions
 using Distributions: Bernoulli, Product
 using Folds
 using Flux
-using Flux: ofeltype, params, DataLoader, update!, glorot_uniform
-using Functors: @functor
+using Flux: @layer, ofeltype, params, DataLoader, update!, glorot_uniform
 using GraphNeuralNetworks
 using GraphNeuralNetworks: check_num_nodes
 using GaussianRandomFields
@@ -78,7 +77,6 @@ include("missingdata.jl")
 
 end
 
-
 #TODO
 # - Incorporate the following package to very easily add a lot of bootstrap functionality: https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
 # - Examples: show a plot of a single data set within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
@@ -92,7 +90,9 @@ end
 # assessment = assess(θ̂, θ_test, Z_test, boot = Z_boot)
 # ```
 
+
 #TODO
+# - ProgressMeter? (see https://fluxml.ai/Flux.jl/stable/models/quickstart/)
 # - Clean up my handling of GNN: do we really need a separate object for it, or can we just use DeepSet with the inner network a GNN?
 # - Examples: Add functionality for storing and plotting the training-validation risk in the NeuralEstimator. This will involve changing _train() to return both the estimator and the risk, and then defining train(::NeuralEstimator) to update the slot containing the risk. We will also need _train() to take the argument "loss_vs_epoch", so that we can "continue training". Oncce I do this, I can then add a plotting method for plotting the risk.
 # - Examples: discrete parameter.
@@ -132,14 +132,3 @@ end
 # ```
 # using Pkg; Pkg.add("NeuralEstimators")
 # ```
-
-
-#TODO # - L2 Regularisation. Think I have to "modernise" the training function to use the approach that is currently recommended by Flux, rather than the "implicit" approach that they previously recommended.
-#TODO add this to "advanced usage (regularisation)" when I get it working
-# Another class of regularisation techniques are implemented by modifying the loss function. For instance, L₂ regularisation (sometimes called ridge regression) adds to the loss a penalty based on the square of the neural-network parameters, and is intended to discourage complex models. It can be implemented manually through the loss function (i.e., using [`params`](https://fluxml.ai/Flux.jl/stable/training/reference/#Flux.params) to extract the neural-network parameters and incorporating them in the loss function), or by providing a custom optimiser to [`train`](@ref) that includes a [`WeightDecay`](https://fluxml.ai/Flux.jl/stable/training/optimisers/#Flux.Optimise.WeightDecay). For instance, to perform L₂ regularisation with penalty 0.001, one may define the optimiser as:
-#
-# ```
-# optimiser = Flux.setup(OptimiserChain(WeightDecay(0.001), Adam()), θ̂)
-# ```
-#
-# See the [`Flux` documentation](https://fluxml.ai/Flux.jl/stable/training/training/#Regularisation) for further details.

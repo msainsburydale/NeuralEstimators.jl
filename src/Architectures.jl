@@ -1,6 +1,3 @@
-using Functors: @functor
-using RecursiveArrayTools: VectorOfArray, convert
-
 # ---- Aggregation (pooling) and misc functions ----
 
 elementwise_mean(X::A) where {A <: AbstractArray{T, N}} where {T, N} = mean(X, dims = N)
@@ -136,12 +133,10 @@ struct DeepSet{T, F, G, K}
 	a::F
 	S::K
 end
-@functor DeepSet
-Flux.trainable(d::DeepSet) = (d.ψ, d.ϕ)
+@layer DeepSet
 DeepSet(ψ, ϕ, a; S = nothing) = DeepSet(ψ, ϕ, a, S)
 DeepSet(ψ, ϕ; a::String = "mean", S = nothing) = DeepSet(ψ, ϕ, _agg(a), S)
 Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)")
-Base.show(io::IO, m::MIME"text/plain", D::DeepSet) = print(io, D)
 
 # Single data set
 function (d::DeepSet)(Z::A) where A
@@ -186,7 +181,11 @@ function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractA
 	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
 
 	# Construct the summary statistics
-	t = map(eachindex(Z)) do i
+	# NB for some reason, with the new "explicit" gradient() required by
+	# Flux/Zygote, an error is caused if one uses the same variable name outside
+	# and inside a broadcast like this. For instance, if for the object "stats"
+	# below we had called it "t", then error would be thrown by gradient().
+	stats = map(eachindex(Z)) do i
 		idx = indices[i]
 		t = d.a(ψa[colons..., idx])
 		if !isnothing(d.S)
@@ -196,13 +195,8 @@ function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractA
 		t
 	end
 
-	# Stack into a single array
-	t = stackarrays(t)
-
-	# Apply the outer network
-	θ̂ = d.ϕ(t)
-
-	return θ̂
+	# Stack into a single array and apply the outer network
+	return d.ϕ(stackarrays(stats))
 end
 
 # Multiple data sets with set-level covariates
@@ -229,7 +223,7 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	ψa = d.ψ(z)
 	indices = _getindices(Z)
 	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
-	u = map(eachindex(Z)) do i
+	stats = map(eachindex(Z)) do i
 		idx = indices[i]
 		t = d.a(ψa[colons..., idx])
 		if !isnothing(d.S)
@@ -239,8 +233,7 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 		u = vcat(t, X[i])
 		u
 	end
-	u = stackarrays(u)
-	d.ϕ(u)
+	d.ϕ(stackarrays(stats))
 end
 
 
@@ -296,7 +289,7 @@ Compress(a::Number, b::Number) = Compress([float(a)], [float(b)])
 
 (l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-l.k .* θ))
 
-Flux.@functor Compress
+Flux.@layer Compress
 Flux.trainable(l::Compress) =  ()
 
 # ---- Layers to construct Covariance and Correlation matrices ----
@@ -390,6 +383,7 @@ function (l::CovarianceMatrix)(v, cholesky_only::Bool = false)
 	@assert p == l.p "the number of rows must be the triangular number T(d) = d(d+1)÷2 = $(l.p)"
 
 	# Ensure that diagonal elements are positive
+	#TODO the solution might be to replace the comprehension with map(): see https://github.com/FluxML/Flux.jl/issues/2187
 	L = vcat([i ∈ l.diag_idx ? softplus.(v[i:i, :]) : v[i:i, :] for i ∈ 1:p]...)
 	cholesky_only && return L
 

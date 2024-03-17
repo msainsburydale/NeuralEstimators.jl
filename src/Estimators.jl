@@ -1,5 +1,3 @@
-using Functors: @functor
-
 """
 	NeuralEstimator
 
@@ -22,7 +20,7 @@ struct PointEstimator{F} <: NeuralEstimator
 	# PointEstimator(arch) = isa(arch, PointEstimator) ? error("Please do not construct PointEstimator objects with another PointEstimator") : new(arch)
 end
 PointEstimator(arch) = PointEstimator(arch, identity)
-@functor PointEstimator (arch,)
+@layer PointEstimator
 (est::PointEstimator)(Z) = est.g(est.arch(Z))
 
 # ---- IntervalEstimator for amortised credible intervals  ----
@@ -95,14 +93,13 @@ struct IntervalEstimator{F, G, H} <: NeuralEstimator
 	v::G
 	g::Union{Function,Compress}
 	probs::H
-	# IntervalEstimator(u, v, g) = any(isa.([u, v], PointEstimator)) ? error("Please do not construct IntervalEstimator objects with PointEstimators") : new(u, v, g)
-	#TODO should assert that probs is two-dimensional, and that they are increasing
+	# note that Flux warns against the use of inner constructors: see https://fluxml.ai/Flux.jl/stable/models/basics/#Flux.@layer
 end
 IntervalEstimator(u, v = u; probs = [0.025, 0.975]) = IntervalEstimator(deepcopy(u), deepcopy(v), identity, probs)
 IntervalEstimator(u, g::Compress; probs = [0.025, 0.975]) = IntervalEstimator(deepcopy(u), deepcopy(u), g, probs)
 IntervalEstimator(u, v, g::Compress; probs = [0.025, 0.975]) = IntervalEstimator(deepcopy(u), deepcopy(v), g, probs)
-@functor IntervalEstimator
-Flux.trainable(est::IntervalEstimator) = (est.u, est.v)
+@layer IntervalEstimator
+Flux.trainable(est::IntervalEstimator) = (u = est.u, v = est.v)
 function (est::IntervalEstimator)(Z)
 	bₗ = est.u(Z)              # lower bound
 	bᵤ = bₗ .+ exp.(est.v(Z))  # upper bound
@@ -163,8 +160,7 @@ struct PiecewiseEstimator <: NeuralEstimator
 		end
 	end
 end
-@functor PiecewiseEstimator (estimators,)
-
+@layer PiecewiseEstimator
 function (pe::PiecewiseEstimator)(Z)
 	# Note that this is an inefficient implementation, analogous to the inefficient
 	# DeepSet implementation. A more efficient approach would be to subset Z based
@@ -179,10 +175,7 @@ function (pe::PiecewiseEstimator)(Z)
 	end
 	return stackarrays(θ̂)
 end
-
-# Clean printing:
 Base.show(io::IO, pe::PiecewiseEstimator) = print(io, "\nPiecewise estimator with $(length(pe.estimators)) estimators and sample size change-points: $(pe.breaks)")
-Base.show(io::IO, m::MIME"text/plain", pe::PiecewiseEstimator) = print(io, pe)
 
 
 # ---- Helper function for initialising an estimator ----

@@ -18,7 +18,7 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 - `loss = mae`
 - `epochs::Integer = 100`
 - `batchsize::Integer = 32`
-- `optimiser = ADAM(1e-4)`
+- `optimiser = Flux.setup(Adam(), θ̂)`
 - `savepath::String = ""`: path to save the neural-network weights during training (as `bson` files) and other information, such as the risk vs epoch (the risk function evaluated over the training and validation sets are saved in the first and second columns of `loss_per_epoch.csv`). If `savepath` is an empty string (default), nothing is saved.
 - `stopping_epochs::Integer = 5`: cease training if the risk doesn't improve in this number of epochs.
 - `use_gpu::Bool = true`
@@ -96,7 +96,7 @@ function _train(θ̂, sampler, simulator;
 	epochs_per_Z_refresh::Integer = 1,
 	simulate_just_in_time::Bool = false,
 	loss = Flux.Losses.mae,
-	optimiser          = ADAM(1e-4),
+	optimiser          = Flux.setup(Adam(), θ̂),
     batchsize::Integer = 32,
     epochs::Integer    = 100,
 	savepath::String   = "",
@@ -127,7 +127,6 @@ function _train(θ̂, sampler, simulator;
 
 	device = _checkgpu(use_gpu, verbose = verbose)
     θ̂ = θ̂ |> device
-    γ = Flux.params(θ̂)
 
 	verbose && println("Sampling the validation set...")
 	θ_val   = isnothing(ξ) ? sampler(K ÷ 5 + 1) : sampler(K ÷ 5 + 1, ξ)
@@ -182,7 +181,7 @@ function _train(θ̂, sampler, simulator;
 
 			# For each batch, update θ̂ and compute the training loss
 			epoch_time = @elapsed for (Z, θ) in train_set
-			   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+			   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 			end
 
 		else
@@ -192,7 +191,7 @@ function _train(θ̂, sampler, simulator;
 				parameters = isnothing(ξ) ? sampler(batchsize) : sampler(batchsize, ξ)
 				Z = simulator(parameters, m)
 				θ = _extractθ(parameters)
-				train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+				train_loss += _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 			end
 		end
 
@@ -232,7 +231,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 		epochs_per_Z_refresh::Integer = 1,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		optimiser        = ADAM(1e-4),
+		optimiser        = Flux.setup(Adam(), θ̂),
 		savepath::String = "",
 		simulate_just_in_time::Bool = false,
 		stopping_epochs::Integer = 5,
@@ -252,7 +251,6 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 
 	device = _checkgpu(use_gpu, verbose = verbose)
     θ̂ = θ̂ |> device
-    γ = Flux.params(θ̂)
 
 	verbose && println("Simulating validation data...")
 	val_set = _constructset(simulator, θ_val, m, batchsize)
@@ -293,7 +291,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 
 			# For each batch, update θ̂ and compute the training loss
 			epoch_time = @elapsed for (Z, θ) in train_set
-			   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+			   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 			end
 
 		else
@@ -304,7 +302,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 			for parameters ∈ _ParameterLoader(θ_train, batchsize = batchsize)
 				epoch_time_simulate += @elapsed Z = simulator(parameters, m)
 				θ = _extractθ(parameters)
-				epoch_time += @elapsed train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+				epoch_time += @elapsed train_loss += _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 			end
 			verbose && println("Total time spent simulating data: $(round(epoch_time_simulate, digits = 3)) seconds")
 			epoch_time += epoch_time_simulate
@@ -345,7 +343,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		optimiser        = ADAM(1e-4),
+		optimiser        = Flux.setup(Adam(), θ̂),
 		savepath::String = "",
 		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
@@ -385,7 +383,6 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
 	device = _checkgpu(use_gpu, verbose = verbose)
     θ̂ = θ̂ |> device
-    γ = Flux.params(θ̂)
 
 	verbose && print("Computing the initial validation risk...")
 	val_set = _quietDataLoader((Z_val, _extractθ(θ_val)), batchsize)
@@ -412,7 +409,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		train_set = subsetbool ? subsetdata(Z_train, replicates[epoch]) : Z_train
 		train_set = _quietDataLoader((train_set, _extractθ(θ_train)), batchsize)
 		epoch_time = @elapsed for (Z, θ) in train_set
-		   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+		   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 		end
 		train_loss = train_loss / size(θ_train, 2)
 
@@ -612,7 +609,6 @@ function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) whe
 end
 
 
-
 # ---- Helper functions ----
 
 function _deepcopyestimator(θ̂, kwargs, E)
@@ -671,7 +667,6 @@ function _lossdataloader(loss, data_loader::DataLoader, θ̂, device)
     return cpu(ls / num)
 end
 
-
 function _saveweights(θ̂, savepath, epoch = "")
 	if !ispath(savepath) mkpath(savepath) end
 	weights = Flux.params(cpu(θ̂)) # return to cpu before serialization
@@ -694,21 +689,22 @@ function _saveinfo(loss_per_epoch, train_time, savepath::String; verbose::Bool =
 	CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
 end
 
-function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+function _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 
 	Z, θ = Z |> device, θ |> device
 
-	# Compute gradients in such a way that the training loss is also saved.
-	# This is equivalent to: gradients = gradient(() -> loss(θ̂(Z), θ), γ)
-	ls, back = Zygote.pullback(() -> loss(θ̂(Z), θ), γ)
-	gradients = back(one(ls))
-	update!(optimiser, γ, gradients)
+	# "Implicit" style used by Flux <= 0.14.
+	# γ = Flux.params(θ̂)
+	# ls, ∇ = Flux.withgradient(() -> loss(θ̂(Z), θ), γ)
+	# update!(optimiser, γ, ∇)
 
-	# New explicit form:
-	# gradients = Flux.gradient(θ̂ -> loss(θ̂(Z), θ), θ̂) 
+	# "Explicit" style required by Flux >= 0.15.
+	ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
+	update!(optimiser, θ̂, ∇[1])
 
-	# Assuming that loss returns an average, convert it to a sum.
+	# Assuming that loss returns an average, convert to a sum
 	ls = ls * size(θ)[end]
+
 	return ls
 end
 
