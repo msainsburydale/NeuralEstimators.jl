@@ -55,7 +55,7 @@ m = 50
 θ̂ = train(θ̂, sample, simulate, m = m)
 ```
 
-Since the training stage can be computationally demanding, one may wish to save a trained estimator and load it in later sessions: see [Saving and loading neural estimators](@ref) for details on how this can be done.
+Since the training stage can be computationally demanding, one may wish to save a trained estimator and load it in later sessions: see [Saving and loading neural estimators](@ref) for details on how this can be done. See also the [Regularisation](@ref) methods that can be easily applied when constructing neural Bayes estimators. 
 
 The function [`assess`](@ref) can be used to assess the trained point estimator. Parametric and non-parametric bootstrap-based uncertainty quantification are facilitated by [`bootstrap`](@ref) and [`interval`](@ref), and this can also be included in the assessment stage through the keyword argument `boot`:
 
