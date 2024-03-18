@@ -44,7 +44,7 @@ export DeepSet, Compress, CovarianceMatrix, CorrelationMatrix
 export vectotril, vectotriu
 include("Architectures.jl")
 
-export NeuralEstimator, PointEstimator, IntervalEstimator, PiecewiseEstimator, initialise_estimator
+export NeuralEstimator, PointEstimator, IntervalEstimator, QuantileEstimator, PiecewiseEstimator, initialise_estimator
 include("Estimators.jl")
 
 export GNN, UniversalPool, adjacencymatrix, WeightedGraphConv, maternclusterprocess

@@ -41,6 +41,7 @@ S(1)
 ```
 """
 (S::Vector{Function})(z) = vcat([s(z) for s ∈ S]...)
+# (S::Vector)(z) = vcat([s(z) for s ∈ S]...) # can use a more general construction like this to allow for vectors of NeuralEstimators to be called in this way
 
 """
     DeepSet(ψ, ϕ, a; S = nothing)

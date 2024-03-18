@@ -18,7 +18,7 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 - `loss = mae`
 - `epochs::Integer = 100`
 - `batchsize::Integer = 32`
-- `optimiser`: An Optimiser.jl optimisation rule, using `Adam()` by default. When the training data and/or parameters are held fixed, the default is to use L₂ regularisation with penalty coefficient λ=0.0001, so that `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂)`. Otherwise, when the training data and parameters are simulated "on the fly", by default no regularisation is used, so that `optimiser = Flux.setup(Adam(), θ̂)`. 
+- `optimiser`: An Optimisers.jl optimisation rule, using `Adam()` by default. When the training data and/or parameters are held fixed, the default is to use L₂ regularisation with penalty coefficient λ=1e-4, so that `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂)`. Otherwise, when the training data and parameters are simulated "on the fly", by default no regularisation is used, so that `optimiser = Flux.setup(Adam(), θ̂)`.
 - `savepath::String = ""`: path to save the neural-network weights during training (as `bson` files) and other information, such as the risk vs epoch (the risk function evaluated over the training and validation sets are saved in the first and second columns of `loss_per_epoch.csv`). If `savepath` is an empty string (default), nothing is saved.
 - `stopping_epochs::Integer = 5`: cease training if the risk doesn't improve in this number of epochs.
 - `use_gpu::Bool = true`
@@ -445,7 +445,7 @@ end
 train(args...; kwargs...) = _train(args...; kwargs...)
 
 # Wrapper functions for specific estimator types
-function train(θ̂::IntervalEstimator, args...; kwargs...)
+function train(θ̂::Union{IntervalEstimator, QuantileEstimator}, args...; kwargs...)
 
 	# Get the key word arguments
 	kwargs = (;kwargs...)

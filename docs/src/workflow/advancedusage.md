@@ -87,7 +87,7 @@ optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂)
 train(θ̂, θ_train, θ_val, Z_train, Z_val; optimiser = optimiser)
 ```
 
-Note that when the training data and/or parameters are held fixed during training, L₂ regularisation with penalty coefficient $\lambda = 10^{-4}$ is applied by default. 
+Note that when the training data and/or parameters are held fixed during training, L₂ regularisation with penalty coefficient $\lambda = 10^{-4}$, like that demonstrated above, is applied by default. 
 
 ## Combining learned and expert summary statistics
 

@@ -54,7 +54,7 @@ lower bound).
 If only a single neural-network architecture is provided, it will be used
 for both `u` and `v`.
 
-The returned value is a matrix with ``2p`` rows, where the first and second ``p``
+The return value is a matrix with ``2p`` rows, where the first and second ``p``
 rows correspond to the lower and upper bounds, respectively.
 
 # Examples
@@ -106,6 +106,123 @@ function (est::IntervalEstimator)(Z)
 	vcat(est.g(bₗ), est.g(bᵤ))
 end
 
+# ---- QuantileEstimator for amortised credible intervals  ----
+
+@doc raw"""
+	QuantileEstimator(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus)
+
+A neural estimator that jointly estimates a fixed set of marginal posterior
+quantiles with probability levels $\{\tau_1, \dots, \tau_T\}$, controlled by the
+keyword argument `probs`. 
+
+The estimator employs a representation the prevents quantile crossing, namely,
+
+```math
+\begin{aligned}
+\hat{\mathbf{q}}^{(\tau_1)}(\mathbf{Z}) &= \mathbf{v}^{(\tau_1)}(\mathbf{Z}),\\
+\hat{\mathbf{q}}^{(\tau_t)}(\mathbf{Z}) &= \mathbf{v}^{(\tau_1)}(\mathbf{Z}) + \sum_{j=2}^t g(\mathbf{v}^{(\tau_j)}(\mathbf{Z})), \quad t = 2, \dots, T,
+\end{aligned}
+```
+where $\mathbf{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$, are unconstrained neural
+networks that transform data into $p$-dimensional vectors, and $g(\cdot)$ is a
+monotonically increasing function (e.g., exponential or softplus) applied
+elementwise to its arguments. In this implementation, the same neural-network
+architecture `v` is used for each $\mathbf{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$.
+
+The return value is a matrix with ``pT`` rows, where the first set of ``T``
+rows corresponds to the estimated quantiles for the first parameter, the second
+set of ``T`` rows corresponds to the estimated quantiles for the second
+parameter, and so on.
+
+# Examples
+```
+using Distributions
+using Flux
+using NeuralEstimators
+
+# Generate data from the model Z ~ N(θ, 1) and θ ~ N(0, 1)
+p = 1       # number of unknown parameters in the statistical model
+m = 30      # number of independent replicates
+d = 1       # dimension of each independent replicate
+K = 3000    # number of training samples
+prior(K) = randn(Float32, 1, K)
+simulate(θ, m) = [μ .+ randn(Float32, 1, m) for μ ∈ eachcol(θ_train)]
+θ_train = prior(K)
+θ_val   = prior(K)
+Z_train = simulate(θ_train, m)
+Z_val   = simulate(θ_val, m)
+
+# Architecture
+ψ = Chain(Dense(d, 32, relu), Dense(32, 32, relu))
+ϕ = Chain(Dense(32, 32, relu), Dense(32, p))
+v = DeepSet(ψ, ϕ)
+
+# Initialise the quantile estimator
+θ̂ = QuantileEstimator(v)
+
+# Train the estimator
+train(θ̂, θ_train, θ_val, Z_train, Z_val)
+
+# Use the quantile estimator with test data
+θ = prior(K)
+Z = simulate(θ, m)
+θ̂(Z)
+
+# Compute the closed-form posterior quantiles for comparison
+function posteriorquantiles(Z)
+	# Prior hyperparameters
+	σ₀  = 1
+	σ₀² = σ₀^2
+	μ₀  = 0
+
+	# Known variance
+    σ  = 1
+	σ² = σ^2
+
+	# Posterior parameters
+	μ̃ = (1/σ₀² + length(Z)/σ²)^-1 * (μ₀/σ₀² + sum(Z)/σ²)
+	σ̃ = sqrt((1/σ₀² + length(Z)/σ²)^-1)
+
+	# Posterior
+	Normal(μ̃, σ̃)
+end
+true_quantiles = quantile.(posterior.(Z), Ref([0.05, 0.25, 0.5, 0.75, 0.95]))
+true_quantiles = hcat(true_quantiles...)
+
+# Compare the estimates to the true values
+θ̂(Z) - true_quantiles
+```
+"""
+struct QuantileEstimator{V, P} <: NeuralEstimator
+	v::V
+	probs::P
+	g::Function
+	# note that Flux warns against the use of inner constructors: see https://fluxml.ai/Flux.jl/stable/models/basics/#Flux.@layer
+end
+QuantileEstimator(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus) = QuantileEstimator(deepcopy.(repeat([v], length(probs))), probs, g)
+@layer QuantileEstimator
+Flux.trainable(est::QuantileEstimator) = (v = est.v, )
+function (est::QuantileEstimator)(Z)
+
+	# Approach that ensures monotonicity
+	# # Apply each neural network to Z
+	# v = map(est.v) do v
+	# 	v(Z)
+	# end
+	# # Apply the monotonically increasing transformation to all but the first result
+	# gv = broadcast.(est.g, v[2:end])
+	# # Combine
+	# q = [v[1], gv...]
+	# # q = cumsum(q) # TODO the problem lies in this call to cumsum... better way to do it?
+
+	# Simple approach: does not ensure monotonicity
+	# Apply each neural network to Z
+	q = map(est.v) do v
+		v(Z)
+	end
+
+	vcat(q...)
+end
 
 # ---- PiecewiseEstimator ----
 
