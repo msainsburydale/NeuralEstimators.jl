@@ -634,7 +634,7 @@ propagation = GNNChain(GraphConv(d => nh), GraphConv(nh => nh), GraphConv(nh => 
 # Readout module (using "universal pooling")
 nt = 64   # dimension of the summary vector for each node
 no = 128  # dimension of the final summary vector for each graph
-readout = UniversalPool(Dense(nh, nt), Dense(nt, nt))
+readout = UniversalPool(Dense(nh, nt), Dense(nt, no))
 
 # Alternative readout module (using the elementwise average)
 # readout = GlobalPool(mean); no = nh
