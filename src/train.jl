@@ -338,7 +338,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
     return θ̂
 end
 
-
+# TODO now that we have NRE, we might be better off calling the argument "output_train" and "input_train", etc.
 function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
@@ -348,7 +348,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
 		verbose::Bool    = true
-		) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
+		) where {T, P <: Union{Tuple, AbstractMatrix, ParameterConfigurations}}
 
 	@assert batchsize > 0
 	@assert epochs > 0
@@ -461,20 +461,60 @@ function train(θ̂::Union{IntervalEstimator, QuantileEstimator}, args...; kwarg
 
 	# Notify the user if "loss" is in the keyword arguments
 	if haskey(kwargs, :loss)
-		@info "The user has provided the loss function to `train()`, but this not necessary when training an `IntervalEstimator`, since the loss function is always the quantile loss."
+		@info "The keyword argument `loss` has been provided to `train()`, but this not necessary when training a $(typeof(θ̂)), since the loss function is always the quantile loss."
 	end
 	# Add our quantile loss to the list of keyword arguments
 	kwargs = merge(kwargs, (loss = qloss,))
 
 	# Train the estimator
-	_train(θ̂, args...; kwargs..., loss = qloss)
+	_train(θ̂, args...; kwargs...)
 end
 
-# function f(x...; kwargs...)
-# kwargs = (;kwargs...)
-# kwargs = merge(kwargs, (k = 10, ))
-# println(kwargs)
-# end
+#TODO other methods that take a function... It's a bit complicated though.
+function train(θ̂::RatioEstimator, θ_train::AbstractMatrix, θ_val::AbstractMatrix, Z_train, Z_val; kwargs...)
+
+	# Get the key word arguments and assign the loss function
+	kwargs = (;kwargs...)
+	if haskey(kwargs, :loss)
+		@info "The keyword argument `loss` has been provided to `train()`, but this not necessary when training a $(typeof(θ̂)), since the loss function is always the binary cross-entropy loss."
+	end
+	kwargs = merge(kwargs, (loss = Flux.logitbinarycrossentropy,))
+
+	input_train, output_train = _processinputs(Z_train, θ_train)
+	input_val, output_val = _processinputs(Z_val, θ_val)
+
+	# Train the estimator
+	# Note that we train on the linear scale for numerical stability
+	_train(θ̂.deepset, output_train, output_val, input_train, input_val; kwargs...)
+end
+function _processinputs(Z, θ)
+
+	# Size of data set
+	K = length(Z) # should equal size(θ, 2)
+
+	# Create independent pairs
+	θ₀ = subsetparameters(θ, shuffle(1:K))
+	Z₀ = Z # NB memory inefficient to replicate the data in this way, would be better to use a view or similar
+
+	# Combine dependent and independent pairs
+	Z = vcat(Z, Z₀)
+	θ = hcat(θ, θ₀)
+
+	# Create class labels for output
+	labels = [:dependent, :independent]
+	output = onehotbatch(repeat(labels, inner = K), labels)[1:1, :]
+
+	# Shuffle everything incase batching isn't shuffled downstrean
+	idx = shuffle(1:2K)
+	Z = Z[idx]
+	θ = θ[:, idx]
+	output = output[1:1, idx]
+
+	# Combine data and parameters into a single tuple
+	input = (Z, θ)
+
+	return input, output
+end
 
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 

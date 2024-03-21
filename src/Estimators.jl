@@ -7,7 +7,7 @@ abstract type NeuralEstimator end
 
 # ---- PointEstimator  ----
 
-#TODO document g
+#TODO document g (and change it to c)
 """
     PointEstimator(arch)
 
@@ -23,8 +23,11 @@ PointEstimator(arch) = PointEstimator(arch, identity)
 @layer PointEstimator
 (est::PointEstimator)(Z) = est.g(est.arch(Z))
 
-# ---- IntervalEstimator for amortised credible intervals  ----
+# ---- IntervalEstimator  ----
 
+#TODO change documentation to use c instead of g for compress
+#TODO allow keyword argument g in the same way as QuantileEstimator
+#TODO seealso: QuantileEstimator (and acknowledge that this is a special case).
 """
 	IntervalEstimator(u, v = u; probs = [0.025, 0.975])
 	IntervalEstimator(u, g::Compress; probs = [0.025, 0.975])
@@ -106,14 +109,15 @@ function (est::IntervalEstimator)(Z)
 	vcat(est.g(bₗ), est.g(bᵤ))
 end
 
-# ---- QuantileEstimator for amortised credible intervals  ----
+# ---- QuantileEstimator  ----
 
+# TODO c::Compress?
 @doc raw"""
 	QuantileEstimator(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus)
 
 A neural estimator that jointly estimates a fixed set of marginal posterior
 quantiles with probability levels $\{\tau_1, \dots, \tau_T\}$, controlled by the
-keyword argument `probs`. 
+keyword argument `probs`.
 
 The estimator employs a representation the prevents quantile crossing, namely,
 
@@ -136,15 +140,15 @@ parameter, and so on.
 
 # Examples
 ```
+using NeuralEstimators
 using Distributions
 using Flux
-using NeuralEstimators
 
-# Generate data from the model Z ~ N(θ, 1) and θ ~ N(0, 1)
+# Generate data from the model Z|θ ~ N(θ, 1) and θ ~ N(0, 1)
 p = 1       # number of unknown parameters in the statistical model
 m = 30      # number of independent replicates
 d = 1       # dimension of each independent replicate
-K = 3000    # number of training samples
+K = 30000   # number of training samples
 prior(K) = randn(Float32, 1, K)
 simulate(θ, m) = [μ .+ randn(Float32, 1, m) for μ ∈ eachcol(θ_train)]
 θ_train = prior(K)
@@ -157,19 +161,19 @@ Z_val   = simulate(θ_val, m)
 ϕ = Chain(Dense(32, 32, relu), Dense(32, p))
 v = DeepSet(ψ, ϕ)
 
-# Initialise the quantile estimator
+# Initialise the estimator
 θ̂ = QuantileEstimator(v)
 
 # Train the estimator
 train(θ̂, θ_train, θ_val, Z_train, Z_val)
 
-# Use the quantile estimator with test data
+# Use the estimator with test data
 θ = prior(K)
 Z = simulate(θ, m)
 θ̂(Z)
 
-# Compute the closed-form posterior quantiles for comparison
-function posteriorquantiles(Z)
+# Compare to the closed-form posterior
+function posterior(Z)
 	# Prior hyperparameters
 	σ₀  = 1
 	σ₀² = σ₀^2
@@ -187,9 +191,9 @@ function posteriorquantiles(Z)
 	Normal(μ̃, σ̃)
 end
 true_quantiles = quantile.(posterior.(Z), Ref([0.05, 0.25, 0.5, 0.75, 0.95]))
-true_quantiles = hcat(true_quantiles...)
+true_quantiles = reduce(hcat, true_quantiles)
 
-# Compare the estimates to the true values
+# Compare estimates to true values
 θ̂(Z) - true_quantiles
 ```
 """
@@ -204,25 +208,132 @@ QuantileEstimator(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus) =
 Flux.trainable(est::QuantileEstimator) = (v = est.v, )
 function (est::QuantileEstimator)(Z)
 
-	# Approach that ensures monotonicity
-	# # Apply each neural network to Z
-	# v = map(est.v) do v
-	# 	v(Z)
-	# end
-	# # Apply the monotonically increasing transformation to all but the first result
-	# gv = broadcast.(est.g, v[2:end])
-	# # Combine
-	# q = [v[1], gv...]
-	# # q = cumsum(q) # TODO the problem lies in this call to cumsum... better way to do it?
-
-	# Simple approach: does not ensure monotonicity
-	# Apply each neural network to Z
-	q = map(est.v) do v
+	# Apply to each neural network to Z
+	v = map(est.v) do v
 		v(Z)
 	end
 
-	vcat(q...)
+	# Simple approach: does not ensure monotonicity
+	# return vcat(q...)
+
+	# Monotonic approach:
+	# Apply the monotonically increasing transformation to all but the first result
+	gv = broadcast.(est.g, v[2:end])
+	# Combine
+	q = [v[1], gv...]
+	reduce(vcat, cumsum(q))
 end
+#TODO In the docs example, why does the risk increase during training?
+#     Is it because I'm computing the risk in different ways before vs. during the training loop?
+
+# ---- RatioEstimator  ----
+
+#TODO unit testing
+#TODO add more mathematical details from the ARSIA paper. See also the docs for LAMPE for a nice concise way to present the approach: https://github.com/probabilists/lampe/blob/master/lampe/inference/nre.py
+#TODO show the example with m = 30 replicates
+#TODO add key references (Cranmer, Hermans, Walchessen)
+#TODO need to properly describe the learning task, so that "class probability" makes sense
+@doc raw"""
+	RatioEstimator(deepset::DeepSet)
+
+A neural estimator that estimates the likelihood-to-evidence ratio,
+
+```math
+r(\mathbf{Z}, \mathbf{\theta}) \equiv p(\mathbf{Z} \mid \mathbf{\theta})/p(\mathbf{Z}),
+```
+
+where $p(\mathbf{Z} \mid \mathbf{\theta})$ is the likelihood and $p(\mathbf{Z})$
+is the marginal likelihood, also known as the model evidence.
+
+The construction is based on the [`DeepSet`](@ref) architecture. The only
+requirement is that number of neurons in the first layer of the inference
+network (also known as the outer network) is equal to the number of neurons in
+the final layer of the summary network plus the number of parameters in the
+statistical model (i.e., the dimension of $\mathbf{\theta}$).
+
+For numerical stability, training is done on the log-scale using
+$\log r(\mathbf{Z}, \mathbf{\theta}) = \text{logit}(c(\mathbf{Z}, \mathbf{\theta}))$.
+
+Given $K$ data sets, the return value is a $1\times K$ matrix which by default
+contains estimates of the likelihood-to-evidence ratio $r(\cdot, \cdot)$.
+Alternatively, setting `classifier=true` will yield the corresponding class
+probability estimates, $c(\cdot, \cdot) = \frac{r(\cdot, \cdot)}{1 + r(\cdot, \cdot)}$.
+
+# Examples
+```
+using NeuralEstimators
+using Distributions
+using Flux
+
+# Generate data from Z|θ ~ N(θ, s²) with θ ~ U(0, 1) and s = 0.2 known
+p = 1        # number of unknown parameters in the statistical model
+m = 1        # number of independent replicates
+d = 1        # dimension of each independent replicate
+K = 100000   # number of training samples
+s = 0.2f0    # known standard deviation
+
+prior(K) = rand(Float32, 1, K)
+simulate(θ, m) = [μ .+ s * randn(Float32, 1, m) for μ ∈ eachcol(θ_train)]
+θ_train = prior(K)
+θ_val   = prior(K)
+Z_train = simulate(θ_train, m)
+Z_val   = simulate(θ_val, m)
+
+# Architecture
+w = 64
+ψ = Chain(
+	Dense(d, w, relu),
+	Dropout(0.3),
+	Dense(w, w, relu),
+	Dropout(0.3),
+	Dense(w, w, relu),
+	Dropout(0.3)
+	)
+ϕ = Chain(
+	Dense(w + p, w, relu),
+	Dropout(0.3),
+	Dense(w, w, relu),
+	Dropout(0.3),
+	Dense(w, 1)
+	)
+deepset = DeepSet(ψ, ϕ)
+
+# Initialise the estimator
+r̂ = RatioEstimator(deepset)
+
+# Train the estimator
+train(r̂, θ_train, θ_val, Z_train, Z_val)
+
+# Use the estimator with test data
+θ = prior(K)
+Z = simulate(θ, m)
+r̂(Z, θ)                      # likelihood-to-evidence ratio estimates
+r̂(Z, θ; classifier = true)   # class probability estimates
+
+# Compare to closed-form solution
+function r(Z, θ; classifier = false)
+	# assumes a single independent replicate in Z and θ ~ U(0, 1)
+	likelihood = pdf(Normal(θ, s), Z)
+	evidence = cdf(Normal(Z, s), 1) - cdf(Normal(Z, s), 0)
+	c = likelihood / (likelihood + evidence)
+	classifier ? c : c ./ (1 .- c)
+end
+[r(Z[k][1], θ[k]) for k ∈ 1:K]'                     # true likelihood-to-evidence ratios
+[r(Z[k][1], θ[k]; classifier = true) for k ∈ 1:K]'  # true class probabilities
+```
+"""
+struct RatioEstimator <: NeuralEstimator
+	deepset::DeepSet
+end
+@layer RatioEstimator
+function (est::RatioEstimator)(Z, θ; kwargs...)
+	est((Z, θ); kwargs...) # "Tupleise" the input and pass to Tuple method
+end
+function (est::RatioEstimator)(Zθ::Tuple; classifier::Bool = false)
+	c = σ(est.deepset(Zθ))
+	classifier ? c : c ./ (1 .- c)
+end
+
 
 # ---- PiecewiseEstimator ----
 
@@ -234,7 +345,7 @@ than the number of `estimators`.
 
 Any estimator can be included in `estimators`, including any of the subtypes of
 `NeuralEstimator` exported with the package `NeuralEstimators` (e.g., `PointEstimator`,
-`IntervalEstimator`, etc.).
+`QuantileEstimator`, etc.).
 
 # Examples
 ```

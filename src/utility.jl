@@ -147,7 +147,6 @@ end
 function numberreplicates(Z::V) where {V <: AbstractVector{T}} where {T <: Number}
 	numberreplicates(reshape(Z, :, 1))
 end
-
 function numberreplicates(Z::G) where {G <: GNNGraph}
 	x = Z.ndata.x
 	if ndims(x) == 3
@@ -156,15 +155,17 @@ function numberreplicates(Z::G) where {G <: GNNGraph}
 		Z.num_graphs
 	end
 end
-
-
-
 function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
 	Z = tup[1]
 	X = tup[2]
 	@assert length(Z) == length(X)
-
-	numberreplicates.(Z)
+	numberreplicates(Z)
+end
+function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, M}} where {V₁ <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
+	Z = tup[1]
+	X = tup[2]
+	@assert length(Z) == size(X, 2)
+	numberreplicates(Z)
 end
 
 #TODO Recall that I set the code up to have ndata as a 3D array; with this format,
@@ -260,6 +261,7 @@ function subsetdata(Z::G, i) where {G <: AbstractGraph}
 	else
 		# @warn "`subsetdata()` is slow for graphical data."
 		# TODO getgraph() doesn't currently work with the GPU: see https://github.com/CarloLucibello/GraphNeuralNetworks.jl/issues/161
+		# TODO getgraph() doesn’t return duplicates. So subsetdata(Z, [1, 1]) returns just a single graph
 		flag = Z.ndata[sym] isa CuArray
 		Z = cpu(Z)
 		Z = getgraph(Z, i)

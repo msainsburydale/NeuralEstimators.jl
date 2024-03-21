@@ -161,6 +161,15 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: Abstra
 	u = vcat(t, x)
 	d.ϕ(u)
 end
+function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractMatrix{T}} where T
+	# Catches the case that the user accidentally passed an NxK matrix rather
+	# than a K-dimensional vector of N-vector.
+	# Also used by RatioEstimator.
+	@assert size(tup[2], 2) == 1
+	d((tup[1], vec(tup[2])))
+end
+
+
 
 # Multiple data sets: simple fallback method using broadcasting
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where A
@@ -211,6 +220,15 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	end
 	t = vcat.(t, x)
 	stackarrays(d.ϕ.(t))
+end
+function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractMatrix{T}} where {A, T}
+	# Catches the case that the user accidentally passed an NxK matrix rather
+	# than a K-dimensional vector of N-vectors.
+	# Also used by RatioEstimator.
+	Z = tup[1]
+	x = tup[2]
+	@assert size(x, 2) == length(Z)
+	d((Z, eachcol(x)))
 end
 
 # Multiple data sets: optimised version for array data + vector set-level covariates.

@@ -32,6 +32,8 @@ IntervalEstimator
 
 QuantileEstimator
 
+RatioEstimator
+
 PiecewiseEstimator
 ```
 
