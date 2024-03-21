@@ -17,7 +17,8 @@ using Distributions
 using Distributions: Bernoulli, Product
 using Folds
 using Flux
-using Flux: @layer, ofeltype, params, DataLoader, update!, glorot_uniform, onehotbatch
+using Flux: ofeltype, params, DataLoader, update!, glorot_uniform, onehotbatch # @layer
+using Flux: @functor; var"@layer" = var"@functor" # NB did this because even semi-recent versions of Flux do not include @layer
 using GraphNeuralNetworks
 using GraphNeuralNetworks: check_num_nodes
 using GaussianRandomFields
