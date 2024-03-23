@@ -7,7 +7,7 @@ abstract type NeuralEstimator end
 
 # ---- PointEstimator  ----
 
-#TODO document g (and change it to c)
+#TODO document g (and change it to c)... wait, why do we even need this when Compress can just be added to the network?
 """
     PointEstimator(arch)
 
@@ -109,17 +109,16 @@ function (est::IntervalEstimator)(Z)
 	vcat(est.g(bₗ), est.g(bᵤ))
 end
 
-# ---- QuantileEstimator  ----
+# ---- QuantileEstimatorDiscrete  ----
 
-# TODO c::Compress?
 @doc raw"""
-	QuantileEstimator(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus)
+	QuantileEstimatorDiscrete(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus)
 
 A neural estimator that jointly estimates a fixed set of marginal posterior
 quantiles with probability levels $\{\tau_1, \dots, \tau_T\}$, controlled by the
 keyword argument `probs`.
 
-The estimator employs a representation the prevents quantile crossing, namely,
+The estimator employs a representation that prevents quantile crossing, namely,
 
 ```math
 \begin{aligned}
@@ -162,7 +161,7 @@ Z_val   = simulate(θ_val, m)
 v = DeepSet(ψ, ϕ)
 
 # Initialise the estimator
-θ̂ = QuantileEstimator(v)
+θ̂ = QuantileEstimatorDiscrete(v)
 
 # Train the estimator
 train(θ̂, θ_train, θ_val, Z_train, Z_val)
@@ -197,18 +196,18 @@ true_quantiles = reduce(hcat, true_quantiles)
 θ̂(Z) - true_quantiles
 ```
 """
-struct QuantileEstimator{V, P} <: NeuralEstimator
+struct QuantileEstimatorDiscrete{V, P} <: NeuralEstimator
 	v::V
 	probs::P
 	g::Function
 	# note that Flux warns against the use of inner constructors: see https://fluxml.ai/Flux.jl/stable/models/basics/#Flux.@layer
 end
-QuantileEstimator(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus) = QuantileEstimator(deepcopy.(repeat([v], length(probs))), probs, g)
-@layer QuantileEstimator
-Flux.trainable(est::QuantileEstimator) = (v = est.v, )
-function (est::QuantileEstimator)(Z)
+QuantileEstimatorDiscrete(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus) = QuantileEstimatorDiscrete(deepcopy.(repeat([v], length(probs))), probs, g)
+@layer QuantileEstimatorDiscrete
+Flux.trainable(est::QuantileEstimatorDiscrete) = (v = est.v, )
+function (est::QuantileEstimatorDiscrete)(Z)
 
-	# Apply to each neural network to Z
+	# Apply each neural network to Z
 	v = map(est.v) do v
 		v(Z)
 	end
@@ -225,6 +224,183 @@ function (est::QuantileEstimator)(Z)
 end
 #TODO In the docs example, why does the risk increase during training?
 #     Is it because I'm computing the risk in different ways before vs. during the training loop?
+
+"""
+	DensePositive(layer::Dense, g::Function)
+	DensePositive(layer::Dense; g::Function = Flux.relu)
+Same as standard
+[dense layer](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dense)
+but ensures positive weights (biases are unconstrained).
+
+# Examples
+```
+using NeuralEstimators
+using Flux
+
+layer = DensePositive(Dense(5 => 2))
+x = rand32(5, 64)
+layer(x)
+```
+"""
+struct DensePositive
+	layer::Dense
+	g::Function
+	last_only::Bool
+end
+DensePositive(layer::Dense; g::Function = Flux.relu, last_only::Bool = false) = DensePositive(layer, g, last_only)
+@layer DensePositive
+# Simple version of forward pass:
+# (d::DensePositive)(x) = d.layer.σ.(Flux.softplus(d.layer.weight) * x .+ d.layer.bias)
+# Complex version of forward pass based on Flux's Dense code:
+function (d::DensePositive)(x::AbstractVecOrMat)
+  a = d.layer # extract the underlying fully-connected layer
+  _size_check(a, x, 1 => size(a.weight, 2))
+  σ = NNlib.fast_act(a.σ, x) # replaces tanh => tanh_fast, etc
+  xT = _match_eltype(a, x)   # fixes Float64 input, etc.
+  if d.last_only
+	  weight = d.g.(hcat(a.weight[:, 1:end-1], a.weight[:, end:end]))
+  else
+	  weight = d.g.(a.weight)
+  end
+  σ.(weight * xT .+ a.bias)
+end
+function (a::DensePositive)(x::AbstractArray)
+  a = d.layer # extract the underlying fully-connected layer
+  _size_check(a, x, 1 => size(a.weight, 2))
+  reshape(a(reshape(x, size(x,1), :)), :, size(x)[2:end]...)
+end
+
+#TODO test with bivariate example (e.g., normal unknown mean and variance)
+#TODO add note in docs here and QuantileEstimatorDiscrete that one may also use
+#     a simple PointEstimator and the quantileloss to target a specific quantile
+#TODO unit testing and documentation
+#TODO describe more the architecture (dimension of input, dimension of output, the use of DensePositive)
+#TODO add reference to Cannon (2018) and others
+#TODO write out the maths:
+# The estimator prevents quantile crossing by employing a functional form ensures
+# monotonicity with respect to $\tau$, namely,
+#
+# ```math
+# \begin{aligned}
+# ...
+# \end{aligned}
+# ```
+# where ...
+@doc raw"""
+	QuantileEstimator(deepset::DeepSet)
+
+A neural estimator that estimates the marginal posterior quantiles given as
+input the desired probability level $\tau ∈ (0, 1)$.
+
+The construction is based on the [`DeepSet`](@ref) architecture. The only
+requirement is that number of neurons in the first layer of the inference
+network (also known as the outer network) is one greater than the number of
+neurons in the final layer of the summary network.
+
+The return value is a matrix with ``p`` rows, corresponding to the estimated
+marginal posterior quantiles for each parameter in the statistical model.
+
+# Examples
+```
+using NeuralEstimators
+using Distributions
+using Flux
+
+# Generate data from the model Z|θ ~ N(θ, 1) and θ ~ N(0, 1)
+d = 1       # dimension of each independent replicate
+m = 30      # number of independent replicates
+p = 1       # number of unknown parameters in the statistical model
+K = 100000  # number of training samples
+prior(K) = randn32(1, K)
+simulateZ(θ, m) = [μ .+ randn32(1, m) for μ ∈ eachcol(θ_train)]
+simulateτ(K) = [rand32(1) for _ in 1:K]
+simulate(θ, m) = (simulateZ(θ, m), simulateτ(size(θ, 2)))
+θ_train  = prior(K)
+θ_val    = prior(K)
+Zτ_train = simulate(θ_train, m)
+Zτ_val   = simulate(θ_val, m)
+
+# Architecture
+w = 128
+q = 3
+ψ = Chain(
+	Dense(d, w, relu),
+	Dropout(0.3),
+	Dense(w, w, relu),
+	Dropout(0.3),
+	Dense(w, q, relu)
+	)
+ϕ = Chain(
+	DensePositive(Dense(q + 1, w, relu); last_only = true),
+	DensePositive(Dense(w, w, relu)),
+	Dropout(0.3),
+	DensePositive(Dense(w, p))
+	)
+deepset = DeepSet(ψ, ϕ)
+
+# Initialise the estimator
+θ̂ = QuantileEstimator(deepset)
+
+# Train the estimator
+train(θ̂, θ_train, θ_val, Zτ_train, Zτ_val) # training with fixed instances
+
+# Use the estimator with test data
+θ = prior(K)
+Z = simulateZ(θ, m)
+τ = 0.1f0
+θ̂(Z[1], τ)
+θ̂(Z, τ)
+
+# Compare to closed-form posterior
+function posterior(Z)
+	# Prior hyperparameters
+	σ₀  = 1
+	σ₀² = σ₀^2
+	μ₀  = 0
+
+	# Known variance
+    σ  = 1
+	σ² = σ^2
+
+	# Posterior parameters
+	μ̃ = (1/σ₀² + length(Z)/σ²)^-1 * (μ₀/σ₀² + sum(Z)/σ²)
+	σ̃ = sqrt((1/σ₀² + length(Z)/σ²)^-1)
+
+	# Posterior
+	Normal(μ̃, σ̃)
+end
+
+# Many data sets, single quantile:
+quantile.(posterior.(Z), τ)'
+θ̂(Z, τ)
+
+# Single data set, range of quantiles:
+τ = [0.1, 0.25, 0.5, 0.75, 0.9]
+quantile.(posterior(Z[1]), τ)'
+reduce(hcat, θ̂.(Ref(Z[1]), τ))
+```
+"""
+struct QuantileEstimator <: NeuralEstimator
+	deepset::DeepSet
+end
+@layer QuantileEstimator
+function (est::QuantileEstimator)(Z::A, τ::Number) where A
+	est(Z, [τ])
+end
+function (est::QuantileEstimator)(Z::V, τ::Number) where V <: AbstractVector{A} where A
+	est(Z, repeat([[τ]], length(Z)))
+end
+(est::QuantileEstimator)(Z, τ) = est((Z, τ)) # "Tupleise" input and pass to Tuple method
+(est::QuantileEstimator)(Zτ::Tuple) = est.deepset(Zτ)
+#TODO why is the validation risk so large (why is there so much overfitting, at least as measured by validation risk)?
+#TODO train(θ̂, prior, simulate, m = m)  # training with "on-the-fly" simulation
+#TODO why is the initial training risk different to the previous final training risk?
+# train(θ̂, θ_train, θ_train, Zτ_train, Zτ_train)
+# train(θ̂, θ_train, θ_train, Zτ_train, Zτ_train)
+#TODO add the following to unit testing:
+# # Check monotonicty
+# using Test
+# @test all(θ̂(Z, 0.1f0) .<= θ̂(Z, 0.11f0) .<= θ̂(Z, 0.9f0) .<= θ̂(Z, 0.91f0))
 
 # ---- RatioEstimator  ----
 
@@ -245,11 +421,13 @@ r(\mathbf{Z}, \mathbf{\theta}) \equiv p(\mathbf{Z} \mid \mathbf{\theta})/p(\math
 where $p(\mathbf{Z} \mid \mathbf{\theta})$ is the likelihood and $p(\mathbf{Z})$
 is the marginal likelihood, also known as the model evidence.
 
-The construction is based on the [`DeepSet`](@ref) architecture. The only
-requirement is that number of neurons in the first layer of the inference
-network (also known as the outer network) is equal to the number of neurons in
-the final layer of the summary network plus the number of parameters in the
-statistical model (i.e., the dimension of $\mathbf{\theta}$).
+The construction is based on the [`DeepSet`](@ref) architecture, which is
+subject to two requirements. First, the number of neurons in the first layer of
+the inference network (also known as the outer network) is equal to the number
+of neurons in the final layer of the summary network plus the number of
+parameters in the statistical model (i.e., the dimension of $\mathbf{\theta}$).
+Second, the number of neurons in the final layer of the inference network must
+be equal to one.
 
 For numerical stability, training is done on the log-scale using
 $\log r(\mathbf{Z}, \mathbf{\theta}) = \text{logit}(c(\mathbf{Z}, \mathbf{\theta}))$.
@@ -266,9 +444,9 @@ using Distributions
 using Flux
 
 # Generate data from Z|θ ~ N(θ, s²) with θ ~ U(0, 1) and s = 0.2 known
-p = 1        # number of unknown parameters in the statistical model
-m = 1        # number of independent replicates
 d = 1        # dimension of each independent replicate
+m = 1        # number of independent replicates
+p = 1        # number of unknown parameters in the statistical model
 K = 100000   # number of training samples
 s = 0.2f0    # known standard deviation
 

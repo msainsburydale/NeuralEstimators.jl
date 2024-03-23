@@ -270,7 +270,7 @@ function subsetdata(Z::G, i) where {G <: AbstractGraph}
 	end
 end
 
-function _quietDataLoader(data, batchsize::Integer; shuffle = true, partial = false)
+function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
 	oldstd = stdout
 	redirect_stderr(devnull)
 	data_loader = DataLoader(data, batchsize = batchsize, shuffle = shuffle, partial = partial)
@@ -380,7 +380,7 @@ function estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = tru
 		ŷ = θ̂(z)
 		ŷ = ŷ |> cpu
 	else
-		data_loader = _quietDataLoader(z, batchsize, shuffle=false, partial=true)
+		data_loader = _DataLoader(z, batchsize, shuffle=false, partial=true)
 		ŷ = map(data_loader) do zᵢ
 			zᵢ = zᵢ |> device
 			ŷ = θ̂(zᵢ)

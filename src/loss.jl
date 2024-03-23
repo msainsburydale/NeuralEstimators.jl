@@ -66,6 +66,7 @@ end
 
 #TODO describe behaviour in multiparameter setting
 #TODO write the maths for when we have a vector τ
+#TODO have to clean this up...
 """
     quantileloss(θ̂, θ, τ; agg = mean)
     quantileloss(θ̂, θ, τ::Vector; agg = mean)
@@ -101,47 +102,54 @@ quantileloss(θ̂, θ, 0.1)
 quantileloss(θ̂, θ, [0.1, 0.5, 0.9])
 ```
 """
-function quantileloss(θ̂, θ, q; agg = mean)
+function quantileloss(θ̂, θ, τ; agg = mean)
   _check_sizes(θ̂, θ)
   d = θ̂ .- θ
   b = d .> 0
   b̃ = .!b
-  L₁ = d[b] * (1 - q)
-  L₂ = -q * d[b̃]
+  L₁ = d[b] * (1 - τ)
+  L₂ = -τ * d[b̃]
   L = vcat(L₁, L₂)
   agg(L)
 end
 
 
-function quantileloss(θ̂, θ, q::M; agg = mean) where {T, M <: AbstractMatrix{T}}
+function quantileloss(θ̂, θ, τ::M; agg = mean) where {T, M <: AbstractMatrix{T}}
 
   d = θ̂ .- θ
   b = d .> 0
   b̃ = .!b
-  L₁ = d[b] .* (1 .- q[b])
-  L₂ = -q[b̃] .* d[b̃]
+  L₁ = d[b] .* (1 .- τ[b])
+  L₂ = -τ[b̃] .* d[b̃]
   L = vcat(L₁, L₂)
   agg(L)
 end
 
-function quantileloss(θ̂, θ, q::V; agg = mean) where {T, V <: AbstractVector{T}}
+function quantileloss(θ̂, θ, τ::V; agg = mean) where {T, V <: AbstractVector{T}}
 
-  q = convert(containertype(θ̂), q) # convert q to the gpu (this line means that users don't need to manually move q to the gpu)
+  τ = convert(containertype(θ̂), τ) # convert τ to the gpu (this line means that users don't need to manually move τ to the gpu)
 
   # Check that the sizes match
   @assert size(θ̂, 2) == size(θ, 2)
   p, K = size(θ)
-  rp = size(θ̂, 1)
-  @assert rp % p == 0
-  r = rp ÷ p
-  @assert length(q) == r
 
-  # repeat the arrays to facilitate broadcasting and indexing
-  # note that repeat() cannot be differentiated by Zygote
-  @ignore_derivatives q = repeat(q, inner = (p, 1), outer = (1, K))
-  @ignore_derivatives θ = repeat(θ, r)
+  if length(τ) == K # different τ for each training sample => must be training continuous quantile estimator with τ as input
+    @ignore_derivatives τ = repeat(τ', p) # just repeat τ to match the number of parameters in the statistical model
+    quantileloss(θ̂, θ, τ; agg = agg)
+  else # otherwise, we must training a discrete quantile estimator for some fixed set of probability levels
 
-  quantileloss(θ̂, θ, q; agg = agg)
+    rp = size(θ̂, 1)
+    @assert rp % p == 0
+    r = rp ÷ p
+    @assert length(τ) == r
+
+    # repeat the arrays to facilitate broadcasting and indexing
+    # note that repeat() cannot be differentiated by Zygote
+    @ignore_derivatives τ = repeat(τ, inner = (p, 1), outer = (1, K))
+    @ignore_derivatives θ = repeat(θ, r)
+
+    quantileloss(θ̂, θ, τ; agg = agg)
+  end
 end
 
 

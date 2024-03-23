@@ -130,7 +130,7 @@ function _train(θ̂, sampler, simulator;
 
 	verbose && println("Sampling the validation set...")
 	θ_val   = isnothing(ξ) ? sampler(K ÷ 5 + 1) : sampler(K ÷ 5 + 1, ξ)
-	val_set = _quietDataLoader((simulator(θ_val, m), _extractθ(θ_val)), batchsize)
+	val_set = _DataLoader((simulator(θ_val, m), _extractθ(θ_val)), batchsize)
 
 	# Initialise the loss per epoch matrix.
 	verbose && print("Computing the initial validation risk...")
@@ -385,13 +385,13 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     θ̂ = θ̂ |> device
 
 	verbose && print("Computing the initial validation risk...")
-	val_set = _quietDataLoader((Z_val, _extractθ(θ_val)), batchsize)
+	val_set = _DataLoader((Z_val, _extractθ(θ_val)), batchsize)
 	initial_val_risk = _lossdataloader(loss, val_set, θ̂, device)
 	verbose && println(" Initial validation risk = $initial_val_risk")
 
 	verbose && print("Computing the initial training risk...")
 	tmp = subsetbool ? subsetdata(Z_train, 1:m) : Z_train
-	tmp = _quietDataLoader((tmp, _extractθ(θ_train)), batchsize)
+	tmp = _DataLoader((tmp, _extractθ(θ_train)), batchsize)
 	initial_train_risk = _lossdataloader(loss, tmp, θ̂, device)
 	verbose && println(" Initial training risk = $initial_train_risk")
 
@@ -407,7 +407,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
 		# For each batch update θ̂ and compute the training loss
 		train_set = subsetbool ? subsetdata(Z_train, replicates[epoch]) : Z_train
-		train_set = _quietDataLoader((train_set, _extractθ(θ_train)), batchsize)
+		train_set = _DataLoader((train_set, _extractθ(θ_train)), batchsize)
 		epoch_time = @elapsed for (Z, θ) in train_set
 		   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 		end
@@ -441,27 +441,27 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     return θ̂
 end
 
-# General fallback:
+# General fallback
 train(args...; kwargs...) = _train(args...; kwargs...)
 
-# Wrapper functions for specific estimator types
-function train(θ̂::Union{IntervalEstimator, QuantileEstimator}, args...; kwargs...)
+# Wrapper functions for specific types of neural estimators
+function train(θ̂::Union{IntervalEstimator, QuantileEstimatorDiscrete}, args...; kwargs...)
 
 	# Get the key word arguments
 	kwargs = (;kwargs...)
 
 	# Define the loss function based on the given probabiltiy levels
-	probs = Float32.(θ̂.probs)
+	τ = Float32.(θ̂.probs)
 	# Determine if we need to move probs to the GPU
 	use_gpu = haskey(kwargs, :use_gpu) ? kwargs.use_gpu : true
 	device  = _checkgpu(use_gpu, verbose = false)
 	probs   = device(probs)
 	# Define the loss function
-	qloss = (θ̂, θ) -> quantileloss(θ̂, θ, probs)
+	qloss = (θ̂, θ) -> quantileloss(θ̂, θ, τ)
 
 	# Notify the user if "loss" is in the keyword arguments
 	if haskey(kwargs, :loss)
-		@info "The keyword argument `loss` has been provided to `train()`, but this not necessary when training a $(typeof(θ̂)), since the loss function is always the quantile loss."
+		@info "The keyword argument `loss` is not required when training a $(typeof(θ̂)), since in this case the quantile loss is always used"
 	end
 	# Add our quantile loss to the list of keyword arguments
 	kwargs = merge(kwargs, (loss = qloss,))
@@ -470,21 +470,31 @@ function train(θ̂::Union{IntervalEstimator, QuantileEstimator}, args...; kwarg
 	_train(θ̂, args...; kwargs...)
 end
 
-#TODO other methods that take a function... It's a bit complicated though.
+function train(θ̂::QuantileEstimator, args...; kwargs...)
+	# We define the loss function in the methods _lossdataloader(θ̂::QuantileEstimator...) and _updatebatch!(θ̂::QuantileEstimator...)
+	# Here, just notify the user if they've assigned a loss function
+	kwargs = (;kwargs...)
+	if haskey(kwargs, :loss)
+		@info "The keyword argument `loss` is not required when training a $(typeof(θ̂)), since in this case the quantile loss is always used"
+	end
+	_train(θ̂, args...; kwargs...)
+end
+
+#TODO methods that take a function instead of fixed data/parameter instances
+#TODO with some small work, think we can replace "AbstractMatrix" with P <: Union{Tuple, AbstractMatrix, ParameterConfigurations}
 function train(θ̂::RatioEstimator, θ_train::AbstractMatrix, θ_val::AbstractMatrix, Z_train, Z_val; kwargs...)
 
 	# Get the key word arguments and assign the loss function
 	kwargs = (;kwargs...)
 	if haskey(kwargs, :loss)
-		@info "The keyword argument `loss` has been provided to `train()`, but this not necessary when training a $(typeof(θ̂)), since the loss function is always the binary cross-entropy loss."
+		@info "The keyword argument `loss` is not required when training a $(typeof(θ̂)), since in this case the binary cross-entropy (log) loss is always used"
 	end
 	kwargs = merge(kwargs, (loss = Flux.logitbinarycrossentropy,))
 
 	input_train, output_train = _processinputs(Z_train, θ_train)
 	input_val, output_val = _processinputs(Z_val, θ_val)
 
-	# Train the estimator
-	# Note that we train on the linear scale for numerical stability
+	# Train the estimator (note that we train on the linear scale for numerical stability)
 	_train(θ̂.deepset, output_train, output_val, input_train, input_val; kwargs...)
 end
 function _processinputs(Z, θ)
@@ -493,12 +503,12 @@ function _processinputs(Z, θ)
 	K = length(Z) # should equal size(θ, 2)
 
 	# Create independent pairs
-	θ₀ = subsetparameters(θ, shuffle(1:K))
-	Z₀ = Z # NB memory inefficient to replicate the data in this way, would be better to use a view or similar
+	θ̃ = subsetparameters(θ, shuffle(1:K))
+	Z̃ = Z # NB memory inefficient to replicate the data in this way, would be better to use a view or similar
 
 	# Combine dependent and independent pairs
-	Z = vcat(Z, Z₀)
-	θ = hcat(θ, θ₀)
+	Z = vcat(Z, Z̃)
+	θ = hcat(θ, θ̃)
 
 	# Create class labels for output
 	labels = [:dependent, :independent]
@@ -691,21 +701,7 @@ function _checkargs_trainx(kwargs)
 	return verbose
 end
 
-# Computes the loss function in a memory-safe manner
-function _lossdataloader(loss, data_loader::DataLoader, θ̂, device)
-    ls  = 0.0f0
-    num = 0
-    for (Z, θ) in data_loader
-        Z, θ = Z |> device, θ |> device
 
-		# Assuming loss returns an average, convert it to a sum
-		b = length(Z)
-        ls  += loss(θ̂(Z), θ) * b
-        num +=  b
-    end
-
-    return cpu(ls / num)
-end
 
 function _saveweights(θ̂, savepath, epoch = "")
 	if !ispath(savepath) mkpath(savepath) end
@@ -729,6 +725,20 @@ function _saveinfo(loss_per_epoch, train_time, savepath::String; verbose::Bool =
 	CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
 end
 
+# Computes the loss function in a memory-safe manner
+function _lossdataloader(loss, data_loader::DataLoader, θ̂, device)
+    ls  = 0.0f0
+    K = 0
+    for (Z, θ) in data_loader
+        Z, θ = Z |> device, θ |> device
+		# Assuming loss returns an average, convert it to a sum
+		k = size(θ, 2)
+        ls  += loss(θ̂(Z), θ) * k
+        K +=  k
+    end
+
+    return cpu(ls / K)
+end
 function _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 
 	Z, θ = Z |> device, θ |> device
@@ -743,11 +753,44 @@ function _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 	update!(optimiser, θ̂, ∇[1])
 
 	# Assuming that loss returns an average, convert to a sum
-	ls = ls * size(θ)[end]
+	ls = ls * size(θ, 2)
 
 	return ls
 end
 
+# Need custom functions for QuantileEstimator because τ is required both as
+# input to the neural estimator and in the loss function itself.
+# Note that the positional argument "loss" is still defined but not called
+function _lossdataloader(loss, data_loader::DataLoader, θ̂::QuantileEstimator, device)
+    ls = 0
+    K = 0
+    for (Zτ, θ) in data_loader
+		Zτ, θ = Zτ |> device, θ |> device
+		τ = reduce(vcat, Zτ[2]) # convert from vector of vectors to single vector
+		# Assuming loss returns an average, convert it to a sum
+		k = size(θ, 2)
+        ls += quantileloss(θ̂(Zτ), θ, τ) * k
+        K +=  k
+    end
+
+    return cpu(ls / K)
+end
+function _updatebatch!(θ̂::QuantileEstimator, Zτ::Tuple, θ, device, loss, optimiser)
+	Zτ, θ = Zτ |> device, θ |> device
+	τ = reduce(vcat, Zτ[2]) # convert from vector of vectors to single vector
+
+	# "Explicit" style required by Flux >= 0.15.
+	ls, ∇ = Flux.withgradient(θ̂ -> quantileloss(θ̂(Zτ), θ, τ), θ̂)
+	update!(optimiser, θ̂, ∇[1])
+
+	# Assuming that loss returns an average, convert to a sum
+	ls = ls * size(θ, 2)
+
+	return ls
+end
+
+
+
 # Wrapper function that returns simulated data and the true parameter values
 _simulate(simulator, params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (simulator(params, m), _extractθ(params))
-_constructset(simulator, params::P, m, batchsize)  where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _quietDataLoader(_simulate(simulator, params, m), batchsize)
+_constructset(simulator, params::P, m, batchsize)  where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _DataLoader(_simulate(simulator, params, m), batchsize)

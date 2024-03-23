@@ -162,8 +162,8 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: Abstra
 	d.ϕ(u)
 end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractMatrix{T}} where T
-	# Catches the case that the user accidentally passed an NxK matrix rather
-	# than a K-dimensional vector of N-vector.
+	# Catches the case that the user accidentally passed an Nx1 matrix rather
+	# than an N-dimensional vector.
 	# Also used by RatioEstimator.
 	@assert size(tup[2], 2) == 1
 	d((tup[1], vec(tup[2])))
@@ -222,8 +222,8 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	stackarrays(d.ϕ.(t))
 end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractMatrix{T}} where {A, T}
-	# Catches the case that the user accidentally passed an NxK matrix rather
-	# than a K-dimensional vector of N-vectors.
+	# Catches the case that the user accidentally passed an NxM matrix rather
+	# than an M-dimensional vector of N-vectors.
 	# Also used by RatioEstimator.
 	Z = tup[1]
 	x = tup[2]

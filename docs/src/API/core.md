@@ -28,9 +28,11 @@ NeuralEstimator
 
 PointEstimator
 
-IntervalEstimator
-
 QuantileEstimator
+
+QuantileEstimatorDiscrete
+
+IntervalEstimator
 
 RatioEstimator
 
