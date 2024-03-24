@@ -305,11 +305,32 @@ struct Compress{T}
 end
 Compress(a, b) = Compress(float.(a), float.(b), ones(eltype(float.(a)), length(a)))
 Compress(a::Number, b::Number) = Compress([float(a)], [float(b)])
-
 (l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-l.k .* θ))
-
 Flux.@layer Compress
 Flux.trainable(l::Compress) =  ()
+
+
+#TODO documentation and unit testing
+export TruncateSupport
+struct TruncateSupport
+	a
+	b
+	p::Integer
+end
+function (l::TruncateSupport)(θ::AbstractMatrix)
+	p = l.p
+	m = size(θ, 1)
+	@assert m ÷ p == m/p "Number of rows in the input must be a multiple of the number of parameters in the statistical model"
+	r = m ÷ p
+	idx = repeat(1:p, inner = r)
+	y = [tuncatesupport.(θ[i:i, :], Ref(l.a[idx[i]]), Ref(l.b[idx[i]])) for i in eachindex(idx)]
+	reduce(vcat, y)
+end
+TruncateSupport(a, b) = TruncateSupport(float.(a), float.(b), length(a))
+TruncateSupport(a::Number, b::Number) = TruncateSupport([float(a)], [float(b)], 1)
+Flux.@functor TruncateSupport
+Flux.trainable(l::TruncateSupport) = ()
+tuncatesupport(θ, a, b) = min(max(θ, a), b)
 
 # ---- Layers to construct Covariance and Correlation matrices ----
 
