@@ -450,8 +450,13 @@ p = 1        # number of unknown parameters in the statistical model
 K = 100000   # number of training samples
 s = 0.2f0    # known standard deviation
 
-prior(K) = rand(Float32, 1, K)
+prior(K) = rand32(p, K)
 simulate(θ, m) = [μ .+ s * randn(Float32, 1, m) for μ ∈ eachcol(θ_train)]
+
+# prior(K) = rand32(p, K)
+# simulate(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
+# simulate(θ::AbstractMatrix, m) = [simulate(x, m) for x ∈ eachcol(θ)]
+
 θ_train = prior(K)
 θ_val   = prior(K)
 Z_train = simulate(θ_train, m)
@@ -480,7 +485,7 @@ deepset = DeepSet(ψ, ϕ)
 r̂ = RatioEstimator(deepset)
 
 # Train the estimator
-train(r̂, θ_train, θ_val, Z_train, Z_val)
+r̂ = train(r̂, θ_train, θ_val, Z_train, Z_val)
 
 # Use the estimator with test data
 θ = prior(K)
@@ -498,6 +503,10 @@ function r(Z, θ; classifier = false)
 end
 [r(Z[k][1], θ[k]) for k ∈ 1:K]'                     # true likelihood-to-evidence ratios
 [r(Z[k][1], θ[k]; classifier = true) for k ∈ 1:K]'  # true class probabilities
+
+# Sampling
+theta_grid = permutedims(range(0.0f0,0.6f0, 750))
+sample(r̂, Z[1]; theta_grid = theta_grid)
 ```
 """
 struct RatioEstimator <: NeuralEstimator
@@ -512,6 +521,32 @@ function (est::RatioEstimator)(Zθ::Tuple; classifier::Bool = false)
 	classifier ? c : c ./ (1 .- c)
 end
 
+# NB this will be easily extended to NLE and NPE (whatever methods offer a posterior density)
+using StatsBase: wsample
+function sample(est::RatioEstimator, Z, N::Integer = 1000; method::String = "IS", theta_grid = nothing)
+	# We only need to evaluate the summary-statistic network once (this can lead
+	# to enormous savings, e.g., when theta_grid is extremely large)
+	# TODO would be better to have a summary(θ̂::DeepSet, Z) that applies the
+	# summary network to Z and returns the summary statistics
+	t = est.deepset.a(est.deepset.ψ(Z))
+	if !isnothing(est.deepset.S)
+		s = d.S(Z)
+		t = vcat(t, s)
+	end
+
+	if method == "IS"
+		# Example code:
+		# theta_grid = permutedims(expandgrid(range(0.0,0.6, 750), range(0.5, 3.0, 750)))
+		# theta_grid = permutedims(range(0.0f0,0.6f0, 750))
+		tθ = vcat(repeat(t, 1, size(theta_grid, 2)), theta_grid)
+		c = σ(est.deepset.ϕ(tθ))
+		r = c ./ (1 .- c) # Santiy check: reduce(vcat, est.(Ref(Z), eachcol(theta_grid)))
+		density = vec(r) # TODO In the general case (non-uniform prior), we also need to multiply the density by the prior distribution
+		StatsBase.wsample(theta_grid, density, N; replace = true)
+	else
+		@error "Only `method = 'IS'` (inverse-transform sampling) is currently implemented"
+	end
+end
 
 # ---- PiecewiseEstimator ----
 

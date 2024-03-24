@@ -495,7 +495,10 @@ function train(θ̂::RatioEstimator, θ_train::AbstractMatrix, θ_val::AbstractM
 	input_val, output_val = _processinputs(Z_val, θ_val)
 
 	# Train the estimator (note that we train on the linear scale for numerical stability)
-	_train(θ̂.deepset, output_train, output_val, input_train, input_val; kwargs...)
+	deepset = _train(θ̂.deepset, output_train, output_val, input_train, input_val; kwargs...)
+
+	# Rebuild the ratio estimator
+	RatioEstimator(deepset)
 end
 function _processinputs(Z, θ)
 

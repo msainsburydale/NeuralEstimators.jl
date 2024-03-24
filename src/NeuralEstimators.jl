@@ -33,6 +33,7 @@ using SparseArrays
 using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum
 using StatsBase
+import StatsBase: sample
 using Zygote
 
 export kpowerloss, intervalscore, quantileloss
