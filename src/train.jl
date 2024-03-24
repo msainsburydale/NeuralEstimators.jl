@@ -452,10 +452,10 @@ function train(θ̂::Union{IntervalEstimator, QuantileEstimatorDiscrete}, args..
 
 	# Define the loss function based on the given probabiltiy levels
 	τ = Float32.(θ̂.probs)
-	# Determine if we need to move probs to the GPU
+	# Determine if we need to move τ to the GPU
 	use_gpu = haskey(kwargs, :use_gpu) ? kwargs.use_gpu : true
 	device  = _checkgpu(use_gpu, verbose = false)
-	probs   = device(probs)
+	τ = device(τ)
 	# Define the loss function
 	qloss = (θ̂, θ) -> quantileloss(θ̂, θ, τ)
 
