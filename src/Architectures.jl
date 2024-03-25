@@ -141,35 +141,38 @@ Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network
 
 # Single data set
 function (d::DeepSet)(Z::A) where A
+	d.ϕ(summary(d, Z))
+end
+function summary(d::DeepSet, Z::A) where A
 	t = d.a(d.ψ(Z))
 	if !isnothing(d.S)
 		s = d.S(Z)
 		t = vcat(t, s)
 	end
-	d.ϕ(t)
+	return t
 end
 
 # Single data set with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractVector{T}} where T
-	Z = tup[1]
-	x = tup[2]
-	t = d.a(d.ψ(Z))
-	if !isnothing(d.S)
-		s = d.S(Z)
-		t = vcat(t, s)
-	end
+	Z, x = tup
+	t = summary(d, Z)
 	u = vcat(t, x)
 	d.ϕ(u)
 end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractMatrix{T}} where T
-	# Catches the case that the user accidentally passed an Nx1 matrix rather
-	# than an N-dimensional vector.
-	# Also used by RatioEstimator.
-	@assert size(tup[2], 2) == 1
-	d((tup[1], vec(tup[2])))
+	Z, x = tup
+	if size(x, 2) == 1
+		# Catches the simple case that the user accidentally passed an Nx1 matrix
+		# rather than an N-dimensional vector. Also used by RatioEstimator.
+		d((Z, vec(x)))
+	else
+		# Designed for situations where we have a fixed data set and want to
+		# evaluate the deepset object for many different set-level information
+		t = summary(d, Z) # summary statistics only need to be computed once
+		tx = vcat(repeat(t, 1, size(x, 2)), x)
+		d.ϕ(tx) # Sanity check: stackarrays([d((Z, vec(x̃))) for x̃ in eachcol(x)])
+	end
 end
-
-
 
 # Multiple data sets: simple fallback method using broadcasting
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where A
@@ -218,6 +221,7 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 		s = d.S.(Z)
 		t = vcat.(t, s)
 	end
+	# TODO can the above be replaced by?: t = summary.(Ref(d), Z)
 	t = vcat.(t, x)
 	stackarrays(d.ϕ.(t))
 end
@@ -254,6 +258,8 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	end
 	d.ϕ(stackarrays(stats))
 end
+
+
 
 
 # ---- Activation functions -----

@@ -404,11 +404,9 @@ end
 
 # ---- RatioEstimator  ----
 
-#TODO unit testing
+#TODO documentation and unit testing. Need to properly describe the learning task, so that "class probability" makes sense
 #TODO add more mathematical details from the ARSIA paper. See also the docs for LAMPE for a nice concise way to present the approach: https://github.com/probabilists/lampe/blob/master/lampe/inference/nre.py
-#TODO show the example with m = 30 replicates
 #TODO add key references (Cranmer, Hermans, Walchessen)
-#TODO need to properly describe the learning task, so that "class probability" makes sense
 @doc raw"""
 	RatioEstimator(deepset::DeepSet)
 
@@ -443,19 +441,15 @@ using NeuralEstimators
 using Distributions
 using Flux
 
-# Generate data from Z|θ ~ N(θ, s²) with θ ~ U(0, 1) and s = 0.2 known
+# Generate data from Z|μ,σ ~ N(μ, σ²) with μ, σ ~ U(0, 1)
+p = 2        # number of unknown parameters in the statistical model
 d = 1        # dimension of each independent replicate
-m = 1        # number of independent replicates
-p = 1        # number of unknown parameters in the statistical model
+m = 100      # number of independent replicates
 K = 100000   # number of training samples
-s = 0.2f0    # known standard deviation
 
 prior(K) = rand32(p, K)
-simulate(θ, m) = [μ .+ s * randn(Float32, 1, m) for μ ∈ eachcol(θ_train)]
-
-# prior(K) = rand32(p, K)
-# simulate(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
-# simulate(θ::AbstractMatrix, m) = [simulate(x, m) for x ∈ eachcol(θ)]
+simulate(θ, m) = θ[1] .+ θ[2] .* randn32(d, m)
+simulate(θ::AbstractMatrix, m) = [simulate(x, m) for x ∈ eachcol(θ)]
 
 θ_train = prior(K)
 θ_val   = prior(K)
@@ -487,26 +481,22 @@ r̂ = RatioEstimator(deepset)
 # Train the estimator
 r̂ = train(r̂, θ_train, θ_val, Z_train, Z_val)
 
-# Use the estimator with test data
-θ = prior(K)
-Z = simulate(θ, m)
-r̂(Z, θ)                      # likelihood-to-evidence ratio estimates
-r̂(Z, θ; classifier = true)   # class probability estimates
+# Estimate ratio for many data sets and parameter vectors
+θ = prior(K); Z = simulate(θ, m) # simulated parameters and data sets
+r̂(Z, θ)                          # likelihood-to-evidence ratio estimates
+r̂(Z, θ; classifier = true)       # class probability estimates
 
-# Compare to closed-form solution
-function r(Z, θ; classifier = false)
-	# assumes a single independent replicate in Z and θ ~ U(0, 1)
-	likelihood = pdf(Normal(θ, s), Z)
-	evidence = cdf(Normal(Z, s), 1) - cdf(Normal(Z, s), 0)
-	c = likelihood / (likelihood + evidence)
-	classifier ? c : c ./ (1 .- c)
-end
-[r(Z[k][1], θ[k]) for k ∈ 1:K]'                     # true likelihood-to-evidence ratios
-[r(Z[k][1], θ[k]; classifier = true) for k ∈ 1:K]'  # true class probabilities
-
-# Sampling
-theta_grid = permutedims(range(0.0f0,0.6f0, 750))
-sample(r̂, Z[1]; theta_grid = theta_grid)
+# Inference with single data set
+θ = prior(1)
+z = simulate(θ, m)[1]
+supp1 = range(0f0, 1f0, 1000) # support for θ₁
+supp2 = range(0f0, 1f0, 1000) # support for θ₂
+θ_grid = expandgrid(supp1, supp2)'
+r̂(z, θ_grid)                            # likelihood-to-evidence ratio estimates
+r̂(z, θ_grid; classifier = true)         # class probability estimates
+θ̃ = sample(r̂, z; theta_grid = θ_grid)   # posterior samples
+mean(θ̃; dims = 2)                       # posterior mean
+interval(θ̃; probs = [0.05, 0.95])       # posterior credible intervals
 ```
 """
 struct RatioEstimator <: NeuralEstimator
@@ -520,33 +510,34 @@ function (est::RatioEstimator)(Zθ::Tuple; classifier::Bool = false)
 	c = σ(est.deepset(Zθ))
 	classifier ? c : c ./ (1 .- c)
 end
-
-# NB this will be easily extended to NLE and NPE (whatever methods offer a posterior density)
-using StatsBase: wsample
-function sample(est::RatioEstimator, Z, N::Integer = 1000; method::String = "IS", theta_grid = nothing)
-	# We only need to evaluate the summary-statistic network once (this can lead
-	# to enormous savings, e.g., when theta_grid is extremely large)
-	# TODO would be better to have a summary(θ̂::DeepSet, Z) that applies the
-	# summary network to Z and returns the summary statistics
-	t = est.deepset.a(est.deepset.ψ(Z))
-	if !isnothing(est.deepset.S)
-		s = d.S(Z)
-		t = vcat(t, s)
-	end
-
+function sample(est::RatioEstimator, Z, N::Integer = 10000; method::String = "IS", theta_grid = nothing)
+	# NB this will be easily extended to NLE and NPE (whatever methods offer a posterior density)
 	if method == "IS"
-		# Example code:
-		# theta_grid = permutedims(expandgrid(range(0.0,0.6, 750), range(0.5, 3.0, 750)))
-		# theta_grid = permutedims(range(0.0f0,0.6f0, 750))
-		tθ = vcat(repeat(t, 1, size(theta_grid, 2)), theta_grid)
-		c = σ(est.deepset.ϕ(tθ))
-		r = c ./ (1 .- c) # Santiy check: reduce(vcat, est.(Ref(Z), eachcol(theta_grid)))
-		density = vec(r) # TODO In the general case (non-uniform prior), we also need to multiply the density by the prior distribution
-		StatsBase.wsample(theta_grid, density, N; replace = true)
+		# Code is based on this idea:
+		# a = rand(2, 3)
+		# w = [0.1, 0.9, 0.1]
+		# reduce(hcat, wsample(eachcol(a), w, 10))
+		@assert !isnothing(theta_grid) "`theta_grid` must be given when `method = 'IS'`"
+		theta_grid = Float32.(theta_grid) # convert for efficiency and to avoid warnings
+		r = vec(est(Z, theta_grid)) # Santiy check: reduce(vcat, est.(Ref(Z), eachcol(theta_grid)))
+		density = r # TODO in the general case (non-uniform prior), we also need to multiply the density by the prior distribution
+		θ = StatsBase.wsample(eachcol(theta_grid), density, N; replace = true)
+		reduce(hcat, θ)
 	else
 		@error "Only `method = 'IS'` (inverse-transform sampling) is currently implemented"
 	end
 end
+
+# # Compare to closed-form solution
+# function r(Z, θ; classifier = false)
+# 	# assumes a single independent replicate in Z and θ ~ U(0, 1)
+# 	likelihood = pdf(Normal(θ, s), Z)
+# 	evidence = cdf(Normal(Z, s), 1) - cdf(Normal(Z, s), 0)
+# 	c = likelihood / (likelihood + evidence)
+# 	classifier ? c : c ./ (1 .- c)
+# end
+# [r(Z[k][1], θ[k]) for k ∈ 1:K]'                     # true likelihood-to-evidence ratios
+# [r(Z[k][1], θ[k]; classifier = true) for k ∈ 1:K]'  # true class probabilities
 
 # ---- PiecewiseEstimator ----
 
