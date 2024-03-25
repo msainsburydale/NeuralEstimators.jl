@@ -169,7 +169,7 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: Abstra
 		# Designed for situations where we have a fixed data set and want to
 		# evaluate the deepset object for many different set-level information
 		t = summary(d, Z) # summary statistics only need to be computed once
-		tx = vcat(repeat(t, 1, size(x, 2)), x)
+		tx = vcat(repeat(t, 1, size(x, 2)), x) # NB ideally we'd avoid copying t so many times here, using @view
 		d.ϕ(tx) # Sanity check: stackarrays([d((Z, vec(x̃))) for x̃ in eachcol(x)])
 	end
 end
@@ -214,8 +214,7 @@ end
 
 # Multiple data sets with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
-	Z = tup[1]
-	x = tup[2]
+	Z, x = tup
 	t = d.a.(d.ψ.(Z))
 	if !isnothing(d.S)
 		s = d.S.(Z)
@@ -226,22 +225,23 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	stackarrays(d.ϕ.(t))
 end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractMatrix{T}} where {A, T}
-	# Catches the case that the user accidentally passed an NxM matrix rather
-	# than an M-dimensional vector of N-vectors.
-	# Also used by RatioEstimator.
-	Z = tup[1]
-	x = tup[2]
-	@assert size(x, 2) == length(Z)
-	d((Z, eachcol(x)))
+	Z, x = tup
+	if size(x, 2) == length(Z)
+		# Catches the simple case that the user accidentally passed an NxM matrix
+		# rather than an M-dimensional vector of N-vector.
+		# Also used by RatioEstimator.
+		d((Z, eachcol(x)))
+	else
+		# Designed for situations where we have a several data sets and we want
+		# to evaluate the deepset object for many different set-level information
+		[d((z, x)) for z in Z]
+	end
 end
 
 # Multiple data sets: optimised version for array data + vector set-level covariates.
 # (basically the same code as array method without covariates)
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
-
-	Z = tup[1]
-	X = tup[2]
-
+	Z, X = tup
 	z = stackarrays(Z)
 	ψa = d.ψ(z)
 	indices = _getindices(Z)

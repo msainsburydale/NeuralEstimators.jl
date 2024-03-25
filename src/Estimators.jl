@@ -445,11 +445,11 @@ using Flux
 p = 2        # number of unknown parameters in the statistical model
 d = 1        # dimension of each independent replicate
 m = 100      # number of independent replicates
-K = 100000   # number of training samples
+K = 10000    # number of training samples
 
 prior(K) = rand32(p, K)
 simulate(θ, m) = θ[1] .+ θ[2] .* randn32(d, m)
-simulate(θ::AbstractMatrix, m) = [simulate(x, m) for x ∈ eachcol(θ)]
+simulate(θ::AbstractMatrix, m) = simulate.(eachcol(θ), m)
 
 θ_train = prior(K)
 θ_val   = prior(K)
@@ -458,16 +458,17 @@ Z_val   = simulate(θ_val, m)
 
 # Architecture
 w = 64
+q = 2p
 ψ = Chain(
 	Dense(d, w, relu),
 	Dropout(0.3),
 	Dense(w, w, relu),
 	Dropout(0.3),
-	Dense(w, w, relu),
+	Dense(w, q, relu),
 	Dropout(0.3)
 	)
 ϕ = Chain(
-	Dense(w + p, w, relu),
+	Dense(q + p, w, relu),
 	Dropout(0.3),
 	Dense(w, w, relu),
 	Dropout(0.3),
@@ -482,21 +483,30 @@ r̂ = RatioEstimator(deepset)
 r̂ = train(r̂, θ_train, θ_val, Z_train, Z_val)
 
 # Estimate ratio for many data sets and parameter vectors
-θ = prior(K); Z = simulate(θ, m) # simulated parameters and data sets
-r̂(Z, θ)                          # likelihood-to-evidence ratio estimates
-r̂(Z, θ; classifier = true)       # class probability estimates
+θ = prior(K)
+Z = simulate(θ, m)
+r̂(Z, θ)                            # likelihood-to-evidence ratio
+r̂(Z, θ; classifier = true)         # class probabilities
 
 # Inference with single data set
 θ = prior(1)
 z = simulate(θ, m)[1]
-supp1 = range(0f0, 1f0, 1000) # support for θ₁
-supp2 = range(0f0, 1f0, 1000) # support for θ₂
+supp1 = range(0f0, 1f0, 100)         # support of θ₁
+supp2 = range(0f0, 1f0, 100)         # support of θ₂
 θ_grid = expandgrid(supp1, supp2)'
-r̂(z, θ_grid)                            # likelihood-to-evidence ratio estimates
-r̂(z, θ_grid; classifier = true)         # class probability estimates
-θ̃ = sample(r̂, z; theta_grid = θ_grid)   # posterior samples
-mean(θ̃; dims = 2)                       # posterior mean
-interval(θ̃; probs = [0.05, 0.95])       # posterior credible intervals
+r̂(z, θ_grid)                                  # likelihood-to-evidence ratio
+samples = sample(r̂, z; theta_grid = θ_grid)   # posterior samples
+mean(samples; dims = 2)                       # posterior mean
+interval(samples; probs = [0.05, 0.95])       # posterior credible intervals
+
+# Inference with multiple data sets
+θ = prior(10)
+z = simulate(θ, m)
+r̂(z, θ_grid)                                  # likelihood-to-evidence ratio
+samples = sample(r̂, z; theta_grid = θ_grid)   # posterior samples
+θ̄ = mean.(samples; dims = 2)                  # posterior means
+reduce(hcat, θ̄)                               # posterior means as single matrix
+interval.(samples; probs = [0.05, 0.95])      # posterior credible intervals
 ```
 """
 struct RatioEstimator <: NeuralEstimator
@@ -508,24 +518,10 @@ function (est::RatioEstimator)(Z, θ; kwargs...)
 end
 function (est::RatioEstimator)(Zθ::Tuple; classifier::Bool = false)
 	c = σ(est.deepset(Zθ))
-	classifier ? c : c ./ (1 .- c)
-end
-function sample(est::RatioEstimator, Z, N::Integer = 10000; method::String = "IS", theta_grid = nothing)
-	# NB this will be easily extended to NLE and NPE (whatever methods offer a posterior density)
-	if method == "IS"
-		# Code is based on this idea:
-		# a = rand(2, 3)
-		# w = [0.1, 0.9, 0.1]
-		# reduce(hcat, wsample(eachcol(a), w, 10))
-		@assert !isnothing(theta_grid) "`theta_grid` must be given when `method = 'IS'`"
-		theta_grid = Float32.(theta_grid) # convert for efficiency and to avoid warnings
-		r = vec(est(Z, theta_grid)) # Santiy check: reduce(vcat, est.(Ref(Z), eachcol(theta_grid)))
-		density = r # TODO in the general case (non-uniform prior), we also need to multiply the density by the prior distribution
-		θ = StatsBase.wsample(eachcol(theta_grid), density, N; replace = true)
-		reduce(hcat, θ)
-	else
-		@error "Only `method = 'IS'` (inverse-transform sampling) is currently implemented"
+	if typeof(c) <: AbstractVector
+		c = reduce(vcat, c)
 	end
+	classifier ? c : c ./ (1 .- c)
 end
 
 # # Compare to closed-form solution

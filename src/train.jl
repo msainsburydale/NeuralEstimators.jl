@@ -149,6 +149,7 @@ function _train(θ̂, sampler, simulator;
 	# For loops create a new scope for the variables that are not present in the
 	# enclosing scope, and such variables get a new binding in each iteration of
 	# the loop; circumvent this by declaring local variables.
+	local θ̂_best = θ̂
 	local θ_train
 	local train_set
 	local min_val_risk = initial_val_risk # minimum validation loss, monitored for early stopping
@@ -210,6 +211,7 @@ function _train(θ̂, sampler, simulator;
 			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = current_val_risk
 			early_stopping_counter = 0
+			θ̂_best = θ̂
 		else
 			early_stopping_counter += 1
 			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
@@ -221,7 +223,7 @@ function _train(θ̂, sampler, simulator;
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	savebool && _savebestweights(savepath)
 
-    return θ̂
+    return θ̂_best
 end
 
 
@@ -271,6 +273,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 	# Either way, store this decision in a variable.
 	store_entire_train_set = !simulate_just_in_time || epochs_per_Z_refresh != 1
 
+	local θ̂_best = θ̂
 	local train_set
 	local min_val_risk = initial_val_risk
 	local early_stopping_counter = 0
@@ -324,6 +327,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = current_val_risk
 			early_stopping_counter = 0
+			θ̂_best = θ̂
 		else
 			early_stopping_counter += 1
 			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
@@ -335,7 +339,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	savebool && _savebestweights(savepath)
 
-    return θ̂
+    return θ̂_best
 end
 
 # TODO now that we have NRE, we might be better off calling the argument "output_train" and "input_train", etc.
@@ -399,6 +403,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	loss_per_epoch = [initial_train_risk initial_val_risk;]
 	savebool && _saveweights(θ̂, savepath, 0)
 
+	local θ̂_best = θ̂
 	local min_val_risk = initial_val_risk
 	local early_stopping_counter = 0
 	train_time = @elapsed for epoch in 1:epochs
@@ -427,6 +432,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = current_val_risk
 			early_stopping_counter = 0
+			θ̂_best = θ̂
 		else
 			early_stopping_counter += 1
 			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
@@ -438,7 +444,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	savebool && _savebestweights(savepath)
 
-    return θ̂
+    return θ̂_best
 end
 
 # General fallback

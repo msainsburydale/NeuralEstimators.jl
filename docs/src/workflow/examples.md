@@ -31,8 +31,8 @@ Next, we implicitly define the statistical model with simulated data. In `Neural
 Below, we define our simulator given a single parameter vector, and given a matrix of parameter vectors (which simply applies the simulator to each column):
 
 ```
-simulate(θ, m) = θ["μ"] .+ θ["σ"] .* randn(Float32, 1, m)
-simulate(θ::AbstractMatrix, m) = [simulate(x, m) for x ∈ eachcol(θ)]
+simulate(θ, m) = θ["μ"] .+ θ["σ"] .* randn32(1, m)
+simulate(θ::AbstractMatrix, m) = simulate.(eachcol(θ), m)
 ```
 
 We now design a neural-network architecture. Since our data $Z_1, \dots, Z_m$ are replicated, we will use the [`DeepSet`](@ref) architecture. The outer network (also known as the inference network) is always a fully-connected network. However, the architecture of the inner network (also known as the summary network) depends on the multivariate structure of the data: with unstructured data (i.e., when there is no spatial or temporal correlation within a replicate), we use a fully-connected neural network. This architecture is then used to initialise a [`PointEstimator`](@ref) object. Note that the architecture can be defined using raw `Flux` code (see below) or with the helper function [`initialise_estimator`](@ref):
@@ -55,7 +55,7 @@ m = 50
 θ̂ = train(θ̂, sample, simulate, m = m)
 ```
 
-Since the training stage can be computationally demanding, one may wish to save a trained estimator and load it in later sessions: see [Saving and loading neural estimators](@ref) for details on how this can be done. See also the [Regularisation](@ref) methods that can be easily applied when constructing neural Bayes estimators. 
+Since the training stage can be computationally demanding, one may wish to save a trained estimator and load it in later sessions: see [Saving and loading neural estimators](@ref) for details on how this can be done. See also the [Regularisation](@ref) methods that can be easily applied when constructing neural Bayes estimators.
 
 The function [`assess`](@ref) can be used to assess the trained point estimator. Parametric and non-parametric bootstrap-based uncertainty quantification are facilitated by [`bootstrap`](@ref) and [`interval`](@ref), and this can also be included in the assessment stage through the keyword argument `boot`:
 

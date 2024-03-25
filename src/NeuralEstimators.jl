@@ -50,6 +50,9 @@ include("Architectures.jl")
 export NeuralEstimator, PointEstimator, IntervalEstimator, QuantileEstimator, DensePositive, QuantileEstimatorDiscrete, RatioEstimator, PiecewiseEstimator, initialise_estimator
 include("Estimators.jl")
 
+export sample
+include("inference.jl")
+
 export GNN, UniversalPool, adjacencymatrix, WeightedGraphConv, maternclusterprocess
 include("Graphs.jl")
 
@@ -81,7 +84,6 @@ include("missingdata.jl")
 end
 
 #TODO
-# - I wonder if we can return from train() the optimal neural network, not the last epoch version?
 # - assess(est::QuantileEstimatorDiscrete). Here, we can use simulation-based calibration (e.g., qq plots).
 # - Incorporate the following package to very easily add a lot of bootstrap functionality: https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
 # - Examples: show a plot of a single data set within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
