@@ -84,7 +84,9 @@ include("missingdata.jl")
 end
 
 #TODO
+# - See if there are any other places I can use reduce(vcat, x) instead of vcat(x…).
 # - assess(est::QuantileEstimatorDiscrete). Here, we can use simulation-based calibration (e.g., qq plots).
+# - assess(est::RatioEstimator). Here, we can use simulation-based calibration (e.g., qq plots).
 # - Incorporate the following package to very easily add a lot of bootstrap functionality: https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
 # - Examples: show a plot of a single data set within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
 # - Examples: Bivariate data in multivariate section.

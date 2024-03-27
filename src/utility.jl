@@ -351,23 +351,34 @@ end
 
 
 """
-	estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = true)
+	estimateinbatches(θ̂, z, θ = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
 
-Apply the estimator `θ̂` on minibatches of `z` of size `batchsize`, to avoid
-memory issues that can occur when `z` is very large.
+Apply the estimator `θ̂` on minibatches of `z` (and optionally parameter vectors
+or other set-level information `θ`) of size `batchsize`.
+
+This can prevent memory issues that can occur with large data sets, particularly
+on the GPU.
 
 Minibatching will only be done if there are multiple data sets in `z`; this
-will be inferred by `z` being a vector, or a tuple whose first element is a vector.
+will be inferred by `z` being a vector, or a tuple whose first element is a
+vector.
 """
-function estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = true)
+function estimateinbatches(θ̂, z, θ = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+
+	# Tupleise if necessary
+  	z = isnothing(θ) ? z : (z, θ)
 
 	# Only do minibatching if we have multiple data sets
 	if typeof(z) <: AbstractVector
 		minibatching = true
 		batchsize = min(length(z), batchsize)
 	elseif typeof(z) <: Tuple && typeof(z[1]) <: AbstractVector
-		minibatching = true
-		batchsize = min(length(z[1]), batchsize)
+		# Can only do minibatching if the number of data sets in z[1] aligns
+		# with the number of sets in z[2]:
+		K₁ = length(z[1])
+		K₂ = typeof(z[2]) <: AbstractVector ? length(z[2]) : size(z[2], 2)
+		minibatching = K₁ == K₂
+		batchsize = min(K₁, batchsize)
 	else # we dont have replicates: just apply the estimator without minibatching
 		minibatching = false
 	end
@@ -377,13 +388,13 @@ function estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = tru
 
 	if !minibatching
 		z = z |> device
-		ŷ = θ̂(z)
+		ŷ = θ̂(z; kwargs...)
 		ŷ = ŷ |> cpu
 	else
 		data_loader = _DataLoader(z, batchsize, shuffle=false, partial=true)
 		ŷ = map(data_loader) do zᵢ
 			zᵢ = zᵢ |> device
-			ŷ = θ̂(zᵢ)
+			ŷ = θ̂(zᵢ; kwargs...)
 			ŷ = ŷ |> cpu
 			ŷ
 		end
@@ -394,7 +405,6 @@ function estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = tru
 end
 # Backwards compatability:
 _runondevice(θ̂, z, use_gpu::Bool; batchsize::Integer = 32) = estimateinbatches(θ̂, z; batchsize = batchsize, use_gpu = use_gpu)
-
 
 """
     expandgrid(xs, ys)

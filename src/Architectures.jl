@@ -99,8 +99,7 @@ data set).
 
 # Examples
 ```
-using NeuralEstimators
-using Flux
+using NeuralEstimators, Flux
 
 n = 10 # dimension of each replicate
 p = 4  # number of parameters in the statistical model
@@ -286,8 +285,7 @@ randomly initialised neural network is typically around zero.
 
 # Examples
 ```
-using NeuralEstimators
-using Flux
+using NeuralEstimators, Flux
 
 a = [25, 0.5, -pi/2]
 b = [500, 2.5, 0]

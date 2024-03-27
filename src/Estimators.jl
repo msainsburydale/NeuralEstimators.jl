@@ -62,8 +62,7 @@ rows correspond to the lower and upper bounds, respectively.
 
 # Examples
 ```
-using NeuralEstimators
-using Flux
+using NeuralEstimators, Flux
 
 # Generate some toy data
 n = 2   # bivariate data
@@ -139,17 +138,15 @@ parameter, and so on.
 
 # Examples
 ```
-using NeuralEstimators
-using Distributions
-using Flux
+using NeuralEstimators, Flux, Distributions
 
 # Generate data from the model Z|θ ~ N(θ, 1) and θ ~ N(0, 1)
 p = 1       # number of unknown parameters in the statistical model
 m = 30      # number of independent replicates
 d = 1       # dimension of each independent replicate
 K = 30000   # number of training samples
-prior(K) = randn(Float32, 1, K)
-simulate(θ, m) = [μ .+ randn(Float32, 1, m) for μ ∈ eachcol(θ_train)]
+prior(K) = randn32(1, K)
+simulate(θ, m) = [μ .+ randn32(1, m) for μ ∈ eachcol(θ_train)]
 θ_train = prior(K)
 θ_val   = prior(K)
 Z_train = simulate(θ_train, m)
@@ -234,8 +231,7 @@ but ensures positive weights (biases are unconstrained).
 
 # Examples
 ```
-using NeuralEstimators
-using Flux
+using NeuralEstimators, Flux
 
 layer = DensePositive(Dense(5 => 2))
 x = rand32(5, 64)
@@ -302,9 +298,7 @@ marginal posterior quantiles for each parameter in the statistical model.
 
 # Examples
 ```
-using NeuralEstimators
-using Distributions
-using Flux
+using NeuralEstimators, Flux, Distributions
 
 # Generate data from the model Z|θ ~ N(θ, 1) and θ ~ N(0, 1)
 d = 1       # dimension of each independent replicate
@@ -437,9 +431,7 @@ probability estimates, $c(\cdot, \cdot) = \frac{r(\cdot, \cdot)}{1 + r(\cdot, \c
 
 # Examples
 ```
-using NeuralEstimators
-using Distributions
-using Flux
+using NeuralEstimators, Flux, Distributions
 
 # Generate data from Z|μ,σ ~ N(μ, σ²) with μ, σ ~ U(0, 1)
 p = 2        # number of unknown parameters in the statistical model
@@ -485,8 +477,10 @@ r̂ = train(r̂, θ_train, θ_val, Z_train, Z_val)
 # Estimate ratio for many data sets and parameter vectors
 θ = prior(K)
 Z = simulate(θ, m)
-r̂(Z, θ)                            # likelihood-to-evidence ratio
-r̂(Z, θ; classifier = true)         # class probabilities
+r̂(Z, θ)                         # likelihood-to-evidence ratio
+r̂(Z, θ; classifier = true)      # class probabilities
+estimateinbatches(r̂, Z, θ)      # estimate in batches to reduce memory pressure
+estimateinbatches(r̂, Z, θ; classifier = true)
 
 # Inference with single data set
 θ = prior(1)
@@ -503,6 +497,7 @@ interval(samples; probs = [0.05, 0.95])       # posterior credible intervals
 θ = prior(10)
 z = simulate(θ, m)
 r̂(z, θ_grid)                                  # likelihood-to-evidence ratio
+estimateinbatches(r̂, z, θ_grid)               # likelihood-to-evidence ratio #TODO this doesn't work!
 samples = sample(r̂, z; theta_grid = θ_grid)   # posterior samples
 θ̄ = mean.(samples; dims = 2)                  # posterior means
 reduce(hcat, θ̄)                               # posterior means as single matrix
@@ -555,8 +550,7 @@ Any estimator can be included in `estimators`, including any of the subtypes of
 # estimator with a sample-size changepoint of 30, which dispatches θ̂₁ if m ≤ 30
 # and θ̂₂ if m > 30.
 
-using NeuralEstimators
-using Flux
+using NeuralEstimators, Flux
 
 n = 2  # bivariate data
 p = 3  # number of parameters in the statistical model
