@@ -398,9 +398,12 @@ end
 
 # ---- RatioEstimator  ----
 
-#TODO documentation and unit testing. Need to properly describe the learning task, so that "class probability" makes sense
-#TODO add more mathematical details from the ARSIA paper. See also the docs for LAMPE for a nice concise way to present the approach: https://github.com/probabilists/lampe/blob/master/lampe/inference/nre.py
-#TODO add key references (Cranmer, Hermans, Walchessen)
+#TODO unit testing
+#TODO documentation:
+# - Need to properly describe the learning task, so that "class probability" makes sense
+# - Add more mathematical details from the ARSIA paper.
+# - See also the docs for LAMPE for a nice concise way to present the approach: https://github.com/probabilists/lampe/blob/master/lampe/inference/nre.py
+# - add key references (Cranmer, Hermans, Walchessen)
 @doc raw"""
 	RatioEstimator(deepset::DeepSet)
 
@@ -411,7 +414,7 @@ r(\mathbf{Z}, \mathbf{\theta}) \equiv p(\mathbf{Z} \mid \mathbf{\theta})/p(\math
 ```
 
 where $p(\mathbf{Z} \mid \mathbf{\theta})$ is the likelihood and $p(\mathbf{Z})$
-is the marginal likelihood, also known as the model evidence.
+is the marginal likelihood or model evidence.
 
 The construction is based on the [`DeepSet`](@ref) architecture, which is
 subject to two requirements. First, the number of neurons in the first layer of
@@ -477,10 +480,8 @@ r̂ = train(r̂, θ_train, θ_val, Z_train, Z_val)
 # Estimate ratio for many data sets and parameter vectors
 θ = prior(K)
 Z = simulate(θ, m)
-r̂(Z, θ)                         # likelihood-to-evidence ratio
+r̂(Z, θ)                         # likelihood-to-evidence ratios
 r̂(Z, θ; classifier = true)      # class probabilities
-estimateinbatches(r̂, Z, θ)      # estimate in batches to reduce memory pressure
-estimateinbatches(r̂, Z, θ; classifier = true)
 
 # Inference with single data set
 θ = prior(1)
@@ -488,7 +489,8 @@ z = simulate(θ, m)[1]
 supp1 = range(0f0, 1f0, 100)         # support of θ₁
 supp2 = range(0f0, 1f0, 100)         # support of θ₂
 θ_grid = expandgrid(supp1, supp2)'
-r̂(z, θ_grid)                                  # likelihood-to-evidence ratio
+r̂(z, θ_grid)                                  # likelihood-to-evidence ratios
+mle(r̂, z; theta_grid = θ_grid)                # maximum-likelihood estimate
 samples = sample(r̂, z; theta_grid = θ_grid)   # posterior samples
 mean(samples; dims = 2)                       # posterior mean
 interval(samples; probs = [0.05, 0.95])       # posterior credible intervals
@@ -496,8 +498,8 @@ interval(samples; probs = [0.05, 0.95])       # posterior credible intervals
 # Inference with multiple data sets
 θ = prior(10)
 z = simulate(θ, m)
-r̂(z, θ_grid)                                  # likelihood-to-evidence ratio
-estimateinbatches(r̂, z, θ_grid)               # likelihood-to-evidence ratio #TODO this doesn't work!
+r̂(z, θ_grid)                                  # likelihood-to-evidence ratios
+mle(r̂, z; theta_grid = θ_grid)                # maximum-likelihood estimates
 samples = sample(r̂, z; theta_grid = θ_grid)   # posterior samples
 θ̄ = mean.(samples; dims = 2)                  # posterior means
 reduce(hcat, θ̄)                               # posterior means as single matrix

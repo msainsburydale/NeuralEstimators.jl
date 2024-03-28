@@ -25,8 +25,7 @@ A convenient interface for `R` users is available [here](https://github.com/msai
 This software was developed as part of academic research. If you would like to support it, please star the repository. If you use it in your research or other activities, please also use the following citation.
 
 ```
-@article{SZH_2023_neural_Bayes_estimators,
-	@article{,
+@article{,
 		author = {Sainsbury-Dale, Matthew and Zammit-Mangion, Andrew and Huser, Raphaël},
 		title = {Likelihood-Free Parameter Estimation with Neural {B}ayes Estimators},
 		journal = {The American Statistician},
@@ -35,19 +34,19 @@ This software was developed as part of academic research. If you would like to s
 		pages = {1--14},
 		doi = {10.1080/00031305.2023.2249522},
 		url = {https://doi.org/10.1080/00031305.2023.2249522}
-	}
+}
 ```
 
 ### Papers using NeuralEstimators
 
 - **Likelihood-free parameter estimation with neural Bayes estimators** [[paper]](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522)\
-Matthew Sainsbury-Dale, Andrew Zammit-Mangion, Raphaël Huser (2023)
+Matthew Sainsbury-Dale, Andrew Zammit-Mangion, Raphaël Huser (2024)
 
 - **Neural Bayes estimators for censored inference with peaks-over-threshold models** [[paper]](https://arxiv.org/abs/2306.15642)\
-Jordan Richards, Matthew Sainsbury-Dale, Andrew Zammit-Mangion, Raphaël Huser (2023+)
+Jordan Richards, Matthew Sainsbury-Dale, Andrew Zammit-Mangion, Raphaël Huser (2024+)
 
 - **Neural Bayes estimators for irregular spatial data using graph neural networks** [[paper]](https://arxiv.org/abs/2310.02600)\
-Matthew Sainsbury-Dale, Jordan Richards, Andrew Zammit-Mangion, Raphaël Huser (2023+)
+Matthew Sainsbury-Dale, Jordan Richards, Andrew Zammit-Mangion, Raphaël Huser (2024+)
 
 - **Modern extreme value statistics for Utopian extremes** [[paper]](https://arxiv.org/abs/2311.11054)\
 Jordan Richards, Noura Alotaibi, Daniela Cisneros, Yan Gong, Matheus B. Guerrero, Paolo Redondo, Xuanjie Shao (2023)

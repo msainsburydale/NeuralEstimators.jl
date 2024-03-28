@@ -50,7 +50,7 @@ include("Architectures.jl")
 export NeuralEstimator, PointEstimator, IntervalEstimator, QuantileEstimator, DensePositive, QuantileEstimatorDiscrete, RatioEstimator, PiecewiseEstimator, initialise_estimator
 include("Estimators.jl")
 
-export sample
+export sample, mle
 include("inference.jl")
 
 export GNN, UniversalPool, adjacencymatrix, WeightedGraphConv, maternclusterprocess
@@ -84,14 +84,12 @@ include("missingdata.jl")
 end
 
 #TODO
-# - See if there are any other places I can use reduce(vcat, x) instead of vcat(x…).
 # - assess(est::QuantileEstimatorDiscrete). Here, we can use simulation-based calibration (e.g., qq plots).
 # - assess(est::RatioEstimator). Here, we can use simulation-based calibration (e.g., qq plots).
 # - Incorporate the following package to very easily add a lot of bootstrap functionality: https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
 # - Examples: show a plot of a single data set within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
 # - Examples: Bivariate data in multivariate section.
 # - Examples: Gridded spatial data. Parametric bootstrap:
-
 # ```
 # θ̂_test = estimateinbatches(θ̂, Z_test)
 # B = 200
@@ -101,6 +99,8 @@ end
 
 
 #TODO
+# - See if there are any other places I can use reduce(vcat, x) instead of vcat(x…).
+# - would be good to automatically convert to Float32 upon entry into each train method (and define a wrapper function that does this for the "simulation on the fly"  methods)
 # - ProgressMeter? (see https://fluxml.ai/Flux.jl/stable/models/quickstart/) Only if it doesn’t get in the way of the current info that is printed to the screen.
 # - 8.	Add dropout layers in initialise_estimator(), so that dropout is used by default when the user creates their estimator with this function.
 # - Clean up my handling of GNN: do we really need a separate object for it, or can we just use DeepSet with the inner network a GNN?
