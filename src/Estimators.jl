@@ -95,7 +95,6 @@ struct IntervalEstimator{F, G, H} <: NeuralEstimator
 	v::G
 	g::Union{Function,Compress}
 	probs::H
-	# note that Flux warns against the use of inner constructors: see https://fluxml.ai/Flux.jl/stable/models/basics/#Flux.@layer
 end
 IntervalEstimator(u, v = u; probs = [0.025, 0.975]) = IntervalEstimator(deepcopy(u), deepcopy(v), identity, probs)
 IntervalEstimator(u, g::Compress; probs = [0.025, 0.975]) = IntervalEstimator(deepcopy(u), deepcopy(u), g, probs)
@@ -197,7 +196,6 @@ struct QuantileEstimatorDiscrete{V, P} <: NeuralEstimator
 	v::V
 	probs::P
 	g::Function
-	# note that Flux warns against the use of inner constructors: see https://fluxml.ai/Flux.jl/stable/models/basics/#Flux.@layer
 end
 QuantileEstimatorDiscrete(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus) = QuantileEstimatorDiscrete(deepcopy.(repeat([v], length(probs))), probs, g)
 @layer QuantileEstimatorDiscrete

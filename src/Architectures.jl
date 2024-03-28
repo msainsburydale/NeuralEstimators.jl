@@ -310,7 +310,7 @@ end
 Compress(a, b) = Compress(float.(a), float.(b), ones(eltype(float.(a)), length(a)))
 Compress(a::Number, b::Number) = Compress([float(a)], [float(b)])
 (l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-l.k .* θ))
-Flux.@layer Compress
+@layer Compress
 Flux.trainable(l::Compress) =  ()
 
 
