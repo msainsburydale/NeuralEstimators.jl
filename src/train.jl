@@ -303,8 +303,8 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 			epoch_time_simulate = 0.0
 			epoch_time    = 0.0
 			for parameters ∈ _ParameterLoader(θ_train, batchsize = batchsize)
-				epoch_time_simulate += @elapsed Z = simulator(parameters, m)
-				θ = _extractθ(parameters)
+				epoch_time_simulate += @elapsed Z = ZtoFloat32(simulator(parameters, m))
+				θ = θtoFloat32(_extractθ(parameters))
 				epoch_time += @elapsed train_loss += _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 			end
 			verbose && println("Total time spent simulating data: $(round(epoch_time_simulate, digits = 3)) seconds")
@@ -357,6 +357,12 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	@assert batchsize > 0
 	@assert epochs > 0
 	@assert stopping_epochs > 0
+
+	# Attempt to convert to Float32 for numerical efficiency
+	θ_train = θtoFloat32(θ_train)
+	θ_val   = θtoFloat32(θ_val)
+	Z_train = ZtoFloat32(Z_train)
+	Z_val   = ZtoFloat32(Z_val)
 
 	# Determine if we we need to subset the data.
 	# Start by assuming we will not subset the data:
@@ -508,6 +514,10 @@ function train(θ̂::RatioEstimator, θ_train::AbstractMatrix, θ_val::AbstractM
 end
 function _processinputs(Z, θ)
 
+	# Attempt to convert to Float32 for numerical efficiency
+    Z = ZtoFloat32(Z)
+    θ = θtoFloat32(θ)
+
 	# Size of data set
 	K = length(Z) # should equal size(θ, 2)
 
@@ -534,6 +544,10 @@ function _processinputs(Z, θ)
 
 	return input, output
 end
+
+ZtoFloat32(Z) = try broadcast.(Float32, Z) catch e Z end
+θtoFloat32(θ) = try broadcast(Float32, θ) catch e θ end
+
 
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 
@@ -801,5 +815,5 @@ end
 
 
 # Wrapper function that returns simulated data and the true parameter values
-_simulate(simulator, params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (simulator(params, m), _extractθ(params))
+_simulate(simulator, params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (ZtoFloat32(simulator(params, m)), θtoFloat32(_extractθ(params)))
 _constructset(simulator, params::P, m, batchsize)  where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _DataLoader(_simulate(simulator, params, m), batchsize)

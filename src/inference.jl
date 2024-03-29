@@ -1,6 +1,7 @@
 #TODO when we add them, this will be easily extended to NLE and NPE (whatever methods allows a density to be evaluated)
 #TODO documentation and unit testing
 #TODO also allow prior to be a vector with length(prior) == size(theta_grid, 2)
+# theta_grid: a (fine) gridding of the parameter space, given as a matrix with p rows, where p is the number of parameters in the model
 function sample(est::RatioEstimator,
 				Z,
 				N::Integer = 1000;

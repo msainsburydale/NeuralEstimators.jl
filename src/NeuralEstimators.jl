@@ -10,6 +10,7 @@ using ChainRulesCore: @non_differentiable, @ignore_derivatives
 using ColorSchemes
 using CUDA
 using CUDA: CuArray
+using cuDNN
 using CSV
 using DataFrames
 using Distances
