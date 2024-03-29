@@ -365,6 +365,10 @@ vector.
 """
 function estimateinbatches(θ̂, z, θ = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
 
+	# Attempt to convert to Float32 for numerical efficiency
+	θ = θtoFloat32(θ)
+	z = ZtoFloat32(z)
+
 	# Tupleise if necessary
   	z = isnothing(θ) ? z : (z, θ)
 
