@@ -19,7 +19,6 @@ function sample(K)
 	μ = rand(Normal(0, 1), K)
 	σ = rand(InverseGamma(3, 1), K)
 	θ = hcat(μ, σ)'
-	θ = Float32.(θ)
 	θ = NamedArray(θ)
 	setnames!(θ, ["μ", "σ"], 1)
 	return θ
@@ -117,8 +116,7 @@ Below, we develop a neural Bayes estimator for the spatial Gaussian process mode
 ```
 function sample(K)
 	θ = rand(Uniform(0, 0.6), K)
-	θ = Float32.(θ')
-	return θ
+	return θ'
 end
 ```
 
@@ -143,9 +141,8 @@ function simulate(θ, m = 1)
 	# Spatial field
 	Z = L * randn(n)
 
-	# Reshape to 16x16 image and convert to Float32 for efficiency
+	# Reshape to 16x16 image
 	Z = reshape(Z, 16, 16, 1, 1)
-	Z = Float32.(Z)
 
 	return Z
 end

@@ -34,8 +34,8 @@ functions as a user-defined summary statistic in [`DeepSet`](@ref) objects.
 
 Examples
 ```
-f(z) = rand(Float32, 2)
-g(z) = rand(Float32, 3) .+ z
+f(z) = rand32(2)
+g(z) = rand32(3) .+ z
 S = [f, g]
 S(1)
 ```
@@ -114,7 +114,7 @@ w = 16 # width of each hidden layer
 θ̂ = DeepSet(ψ, ϕ, S = S)
 
 # Toy data
-Z = [rand(Float32, n, m) for m ∈ (3, 4)]; # two data sets containing 3 and 4 replicates
+Z = [rand32(n, m) for m ∈ (3, 4)]; # two data sets containing 3 and 4 replicates
 
 # Apply the data
 θ̂(Z)
@@ -123,7 +123,7 @@ Z = [rand(Float32, n, m) for m ∈ (3, 4)]; # two data sets containing 3 and 4 r
 qₓ = 2 # dimension of set-level vector
 ϕ  = Chain(Dense(qₜ + qₛ + qₓ, w, relu), Dense(w, p));
 θ̂  = DeepSet(ψ, ϕ; S = S)
-x  = [rand(Float32, qₓ) for _ ∈ eachindex(Z)]
+x  = [rand32(qₓ) for _ ∈ eachindex(Z)]
 θ̂((Z, x))
 ```
 """

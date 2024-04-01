@@ -391,8 +391,8 @@ function testbackprop(l, dvc, p::Integer, K::Integer, d::Integer)
 	θ = arrayn(p, K) |> dvc
 	dense = Dense(d, p)
 	θ̂ = Chain(dense, l) |> dvc
-	# Flux.gradient(() -> mae(θ̂(Z), θ), Flux.params(θ̂)) # "implicit" style of Flux <= 0.14
-	Flux.gradient(θ̂ -> mae(θ̂(Z), θ), θ̂)                 # "explicit" style of Flux >= 0.15
+	Flux.gradient(() -> mae(θ̂(Z), θ), Flux.params(θ̂)) # "implicit" style of Flux <= 0.14
+	# Flux.gradient(θ̂ -> mae(θ̂(Z), θ), θ̂)                 # "explicit" style of Flux >= 0.15
 end
 
 @testset "Activation functions: $dvc" for dvc ∈ devices
@@ -560,11 +560,19 @@ m  = 10 # default sample size
 			θ̂(z)
 
 			# Test that we can update the neural-network parameters
-			optimiser = Flux.setup(Adam(), θ̂)
-			gradients = Flux.gradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
-			Flux.update!(optimiser, θ̂, gradients[1])
-			ls, gradients = Flux.withgradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
-			Flux.update!(optimiser, θ̂, gradients[1])
+			# "Implicit" style used by Flux <= 0.14.
+			optimiser = Adam()
+			γ = Flux.params(θ̂)
+			∇ = Flux.gradient(() -> loss(θ̂(Z), θ), γ)
+			Flux.update!(optimiser, γ, ∇)
+			ls, ∇ = Flux.withgradient(() -> loss(θ̂(Z), θ), γ)
+			Flux.update!(optimiser, γ, ∇)
+			# "Explicit" style required by Flux >= 0.15.
+			# optimiser = Flux.setup(Adam(), θ̂)
+			# ∇ = Flux.gradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
+			# Flux.update!(optimiser, θ̂, ∇[1])
+			# ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
+			# Flux.update!(optimiser, θ̂, ∇[1])
 
 		    use_gpu = dvc == gpu
 			@testset "train" begin

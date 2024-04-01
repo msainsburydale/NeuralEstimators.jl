@@ -1,3 +1,4 @@
+# - `optimiser`: An Optimisers.jl optimisation rule, using `Adam()` by default. When the training data and/or parameters are held fixed, the default is to use L₂ regularisation with penalty coefficient λ=1e-4, so that `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂)`. Otherwise, when the training data and parameters are simulated "on the fly", by default no regularisation is used, so that `optimiser = Flux.setup(Adam(), θ̂)`.
 """
 	train(θ̂, sampler::Function, simulator::Function; ...)
 	train(θ̂, θ_train::P, θ_val::P, simulator::Function; ...) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
@@ -18,7 +19,7 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 - `loss = mae`
 - `epochs::Integer = 100`
 - `batchsize::Integer = 32`
-- `optimiser`: An Optimisers.jl optimisation rule, using `Adam()` by default. When the training data and/or parameters are held fixed, the default is to use L₂ regularisation with penalty coefficient λ=1e-4, so that `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂)`. Otherwise, when the training data and parameters are simulated "on the fly", by default no regularisation is used, so that `optimiser = Flux.setup(Adam(), θ̂)`.
+- `optimiser = ADAM()`
 - `savepath::String = ""`: path to save the neural-network weights during training (as `bson` files) and other information, such as the risk vs epoch (the risk function evaluated over the training and validation sets are saved in the first and second columns of `loss_per_epoch.csv`). If `savepath` is an empty string (default), nothing is saved.
 - `stopping_epochs::Integer = 5`: cease training if the risk doesn't improve in this number of epochs.
 - `use_gpu::Bool = true`
@@ -36,20 +37,18 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 
 # Examples
 ```
-using NeuralEstimators
-using Flux
+using NeuralEstimators, Flux
 
 # parameter sampler
 function sampler(K)
 	μ = randn(K) # Gaussian prior
 	σ = rand(K)  # Uniform prior
 	θ = hcat(μ, σ)'
-	θ = Float32.(θ)
 	return θ
 end
 
 # data simulator
-simulator(θ_matrix, m) = [θ[1] .+ θ[2] * randn(Float32, 1, m) for θ ∈ eachcol(θ_matrix)]
+simulator(θ_matrix, m) = [θ[1] .+ θ[2] * randn32(1, m) for θ ∈ eachcol(θ_matrix)]
 
 # architecture
 d = 1   # dimension of each replicate
@@ -96,7 +95,8 @@ function _train(θ̂, sampler, simulator;
 	epochs_per_Z_refresh::Integer = 1,
 	simulate_just_in_time::Bool = false,
 	loss = Flux.Losses.mae,
-	optimiser          = Flux.setup(Adam(), θ̂),
+	# optimiser          = Flux.setup(Adam(), θ̂),
+	optimiser          = Adam(),
     batchsize::Integer = 32,
     epochs::Integer    = 100,
 	savepath::String   = "",
@@ -233,7 +233,8 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 		epochs_per_Z_refresh::Integer = 1,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂),
+		# optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂),
+		optimiser        = Adam(),
 		savepath::String = "",
 		simulate_just_in_time::Bool = false,
 		stopping_epochs::Integer = 5,
@@ -347,7 +348,8 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂),
+		# optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂),
+		optimiser        = Adam(),
 		savepath::String = "",
 		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
@@ -767,13 +769,13 @@ function _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 	Z, θ = Z |> device, θ |> device
 
 	# "Implicit" style used by Flux <= 0.14.
-	# γ = Flux.params(θ̂)
-	# ls, ∇ = Flux.withgradient(() -> loss(θ̂(Z), θ), γ)
-	# update!(optimiser, γ, ∇)
+	γ = Flux.params(θ̂)
+	ls, ∇ = Flux.withgradient(() -> loss(θ̂(Z), θ), γ)
+	update!(optimiser, γ, ∇)
 
 	# "Explicit" style required by Flux >= 0.15.
-	ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
-	update!(optimiser, θ̂, ∇[1])
+	# ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
+	# update!(optimiser, θ̂, ∇[1])
 
 	# Assuming that loss returns an average, convert to a sum
 	ls = ls * size(θ, 2)
@@ -802,9 +804,14 @@ function _updatebatch!(θ̂::QuantileEstimator, Zτ::Tuple, θ, device, loss, op
 	Zτ, θ = Zτ |> device, θ |> device
 	τ = reduce(vcat, Zτ[2]) # convert from vector of vectors to single vector
 
+	# "Implicit" style used by Flux <= 0.14.
+	γ = Flux.params(θ̂)
+	ls, ∇ = Flux.withgradient(() -> quantileloss(θ̂(Zτ), θ, τ), γ)
+	update!(optimiser, γ, ∇)
+
 	# "Explicit" style required by Flux >= 0.15.
-	ls, ∇ = Flux.withgradient(θ̂ -> quantileloss(θ̂(Zτ), θ, τ), θ̂)
-	update!(optimiser, θ̂, ∇[1])
+	# ls, ∇ = Flux.withgradient(θ̂ -> quantileloss(θ̂(Zτ), θ, τ), θ̂)
+	# update!(optimiser, θ̂, ∇[1])
 
 	# Assuming that loss returns an average, convert to a sum
 	ls = ls * size(θ, 2)

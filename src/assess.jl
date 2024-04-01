@@ -333,11 +333,11 @@ w = 32 # width of each layer
 
 # Generate testing parameters
 K = 100
-θ = rand(Float32, p, K)
+θ = rand32(p, K)
 
 # Data for a single sample size
 m = 30
-Z = [rand(Float32, n, m) for _ ∈ 1:K];
+Z = [rand32(n, m) for _ ∈ 1:K];
 assessment = assess(θ̂, θ, Z);
 risk(assessment)
 
