@@ -147,7 +147,6 @@ end
 function numberreplicates(Z::V) where {V <: AbstractVector{T}} where {T <: Number}
 	numberreplicates(reshape(Z, :, 1))
 end
-
 function numberreplicates(Z::G) where {G <: GNNGraph}
 	x = Z.ndata.x
 	if ndims(x) == 3
@@ -156,15 +155,17 @@ function numberreplicates(Z::G) where {G <: GNNGraph}
 		Z.num_graphs
 	end
 end
-
-
-
 function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
 	Z = tup[1]
 	X = tup[2]
 	@assert length(Z) == length(X)
-
-	numberreplicates.(Z)
+	numberreplicates(Z)
+end
+function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, M}} where {V₁ <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
+	Z = tup[1]
+	X = tup[2]
+	@assert length(Z) == size(X, 2)
+	numberreplicates(Z)
 end
 
 #TODO Recall that I set the code up to have ndata as a 3D array; with this format,
@@ -260,6 +261,7 @@ function subsetdata(Z::G, i) where {G <: AbstractGraph}
 	else
 		# @warn "`subsetdata()` is slow for graphical data."
 		# TODO getgraph() doesn't currently work with the GPU: see https://github.com/CarloLucibello/GraphNeuralNetworks.jl/issues/161
+		# TODO getgraph() doesn’t return duplicates. So subsetdata(Z, [1, 1]) returns just a single graph
 		flag = Z.ndata[sym] isa CuArray
 		Z = cpu(Z)
 		Z = getgraph(Z, i)
@@ -268,7 +270,7 @@ function subsetdata(Z::G, i) where {G <: AbstractGraph}
 	end
 end
 
-function _quietDataLoader(data, batchsize::Integer; shuffle = true, partial = false)
+function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
 	oldstd = stdout
 	redirect_stderr(devnull)
 	data_loader = DataLoader(data, batchsize = batchsize, shuffle = shuffle, partial = partial)
@@ -349,23 +351,38 @@ end
 
 
 """
-	estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = true)
+	estimateinbatches(θ̂, z, θ = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
 
-Apply the estimator `θ̂` on minibatches of `z` of size `batchsize`, to avoid
-memory issues that can occur when `z` is very large.
+Apply the estimator `θ̂` on minibatches of `z` (and optionally parameter vectors
+or other set-level information `θ`) of size `batchsize`.
+
+This can prevent memory issues that can occur with large data sets, particularly
+on the GPU.
 
 Minibatching will only be done if there are multiple data sets in `z`; this
-will be inferred by `z` being a vector, or a tuple whose first element is a vector.
+will be inferred by `z` being a vector, or a tuple whose first element is a
+vector.
 """
-function estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = true)
+function estimateinbatches(θ̂, z, θ = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+
+	# Attempt to convert to Float32 for numerical efficiency
+	θ = θtoFloat32(θ)
+	z = ZtoFloat32(z)
+
+	# Tupleise if necessary
+  	z = isnothing(θ) ? z : (z, θ)
 
 	# Only do minibatching if we have multiple data sets
 	if typeof(z) <: AbstractVector
 		minibatching = true
 		batchsize = min(length(z), batchsize)
 	elseif typeof(z) <: Tuple && typeof(z[1]) <: AbstractVector
-		minibatching = true
-		batchsize = min(length(z[1]), batchsize)
+		# Can only do minibatching if the number of data sets in z[1] aligns
+		# with the number of sets in z[2]:
+		K₁ = length(z[1])
+		K₂ = typeof(z[2]) <: AbstractVector ? length(z[2]) : size(z[2], 2)
+		minibatching = K₁ == K₂
+		batchsize = min(K₁, batchsize)
 	else # we dont have replicates: just apply the estimator without minibatching
 		minibatching = false
 	end
@@ -375,13 +392,13 @@ function estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = tru
 
 	if !minibatching
 		z = z |> device
-		ŷ = θ̂(z)
+		ŷ = θ̂(z; kwargs...)
 		ŷ = ŷ |> cpu
 	else
-		data_loader = _quietDataLoader(z, batchsize, shuffle=false, partial=true)
+		data_loader = _DataLoader(z, batchsize, shuffle=false, partial=true)
 		ŷ = map(data_loader) do zᵢ
 			zᵢ = zᵢ |> device
-			ŷ = θ̂(zᵢ)
+			ŷ = θ̂(zᵢ; kwargs...)
 			ŷ = ŷ |> cpu
 			ŷ
 		end
@@ -392,7 +409,6 @@ function estimateinbatches(θ̂, z; batchsize::Integer = 32, use_gpu::Bool = tru
 end
 # Backwards compatability:
 _runondevice(θ̂, z, use_gpu::Bool; batchsize::Integer = 32) = estimateinbatches(θ̂, z; batchsize = batchsize, use_gpu = use_gpu)
-
 
 """
     expandgrid(xs, ys)

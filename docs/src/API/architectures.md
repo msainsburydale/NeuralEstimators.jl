@@ -16,6 +16,8 @@ GNN
 ## Layers
 
 ```@docs
+DensePositive
+
 WeightedGraphConv
 
 UniversalPool

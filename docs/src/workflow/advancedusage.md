@@ -44,9 +44,50 @@ The above strategies are facilitated with various methods of [`train`](@ref).
 
 ## Regularisation
 
-The term *regularisation* refers to a variety of techniques aimed to reduce overfitting when training a neural network.
+The term *regularisation* refers to a variety of techniques aimed to reduce overfitting when training a neural network, primarily by discouraging complex models.
 
-One common regularisation technique is known as dropout [(Srivastava et al., 2014)](https://jmlr.org/papers/v15/srivastava14a.html), implemented in Flux's [`Dropout`](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dropout) layer. Dropout involves temporarily dropping ("turn off") a randomly selected set of neurons (along with their connections) at each iteration of the training stage, and this results in a computationally-efficient form of model (neural network) averaging. 
+One common regularisation technique is known as dropout [(Srivastava et al., 2014)](https://jmlr.org/papers/v15/srivastava14a.html), implemented in Flux's [`Dropout`](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dropout) layer. Dropout involves temporarily dropping ("turning off") a randomly selected set of neurons (along with their connections) at each iteration of the training stage, and this results in a computationally-efficient form of model (neural-network) averaging.
+
+Another class of regularisation techniques involve modifying the loss function. For instance, L₁ regularisation (sometimes called lasso regression) adds to the loss a penalty based on the absolute value of the neural-network parameters. Similarly, L₂ regularisation (sometimes called ridge regression) adds to the loss a penalty based on the square of the neural-network parameters. Note that these penalty terms are not functions of the data or of the statistical-model parameters that we are trying to infer, and therefore do not modify the Bayes risk or the associated Bayes estimator. These regularisation techniques can be implemented straightforwardly by providing a custom `optimiser` to [`train`](@ref) that includes a [`SignDecay`](https://fluxml.ai/Flux.jl/stable/training/optimisers/#Flux.Optimise.SignDecay) object for L₁ regularisation, or a [`WeightDecay`](https://fluxml.ai/Flux.jl/stable/training/optimisers/#Flux.Optimise.WeightDecay) object for L₂ regularisation. See the [Flux documentation](https://fluxml.ai/Flux.jl/stable/training/training/#Regularisation) for further details.
+
+For example, the following code constructs a neural Bayes estimator using dropout and L₁ regularisation with penalty coefficient $\lambda = 10^{-4}$:
+
+```
+using NeuralEstimators
+using Flux
+
+# Generate data from the model Z ~ N(θ, 1) and θ ~ N(0, 1)
+p = 1       # number of unknown parameters in the statistical model
+m = 5       # number of independent replicates
+d = 1       # dimension of each independent replicate
+K = 3000    # number of training samples
+θ_train = randn(1, K)
+θ_val   = randn(1, K)
+Z_train = [μ .+ randn(1, m) for μ ∈ eachcol(θ_train)]
+Z_val   = [μ .+ randn(1, m) for μ ∈ eachcol(θ_val)]
+
+# Architecture with dropout layers
+ψ = Chain(
+	Dense(1, 32, relu),
+	Dropout(0.1),
+	Dense(32, 32, relu),
+	Dropout(0.5)
+	)     
+ϕ = Chain(
+	Dense(32, 32, relu),
+	Dropout(0.5),
+	Dense(32, 1)
+	)           
+θ̂ = DeepSet(ψ, ϕ)
+
+# Optimiser with L₂ regularisation
+optimiser = Flux.setup(OptimiserChain(SignDecay(1e-4), Adam()), θ̂)
+
+# Train the estimator
+train(θ̂, θ_train, θ_val, Z_train, Z_val; optimiser = optimiser)
+```
+
+Note that when the training data and/or parameters are held fixed during training, L₂ regularisation with penalty coefficient $\lambda = 10^{-4}$ is applied by default.
 
 ## Combining learned and expert summary statistics
 

@@ -1,3 +1,4 @@
+# - `optimiser`: An Optimisers.jl optimisation rule, using `Adam()` by default. When the training data and/or parameters are held fixed, the default is to use L₂ regularisation with penalty coefficient λ=1e-4, so that `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂)`. Otherwise, when the training data and parameters are simulated "on the fly", by default no regularisation is used, so that `optimiser = Flux.setup(Adam(), θ̂)`.
 """
 	train(θ̂, sampler::Function, simulator::Function; ...)
 	train(θ̂, θ_train::P, θ_val::P, simulator::Function; ...) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
@@ -18,7 +19,7 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 - `loss = mae`
 - `epochs::Integer = 100`
 - `batchsize::Integer = 32`
-- `optimiser = ADAM(1e-4)`
+- `optimiser = ADAM()`
 - `savepath::String = ""`: path to save the neural-network weights during training (as `bson` files) and other information, such as the risk vs epoch (the risk function evaluated over the training and validation sets are saved in the first and second columns of `loss_per_epoch.csv`). If `savepath` is an empty string (default), nothing is saved.
 - `stopping_epochs::Integer = 5`: cease training if the risk doesn't improve in this number of epochs.
 - `use_gpu::Bool = true`
@@ -36,20 +37,18 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 
 # Examples
 ```
-using NeuralEstimators
-using Flux
+using NeuralEstimators, Flux
 
 # parameter sampler
 function sampler(K)
 	μ = randn(K) # Gaussian prior
 	σ = rand(K)  # Uniform prior
 	θ = hcat(μ, σ)'
-	θ = Float32.(θ)
 	return θ
 end
 
 # data simulator
-simulator(θ_matrix, m) = [θ[1] .+ θ[2] * randn(Float32, 1, m) for θ ∈ eachcol(θ_matrix)]
+simulator(θ_matrix, m) = [θ[1] .+ θ[2] * randn32(1, m) for θ ∈ eachcol(θ_matrix)]
 
 # architecture
 d = 1   # dimension of each replicate
@@ -96,7 +95,8 @@ function _train(θ̂, sampler, simulator;
 	epochs_per_Z_refresh::Integer = 1,
 	simulate_just_in_time::Bool = false,
 	loss = Flux.Losses.mae,
-	optimiser          = ADAM(1e-4),
+	# optimiser          = Flux.setup(Flux.Adam(), θ̂),
+	optimiser          = Flux.Adam(),
     batchsize::Integer = 32,
     epochs::Integer    = 100,
 	savepath::String   = "",
@@ -110,7 +110,7 @@ function _train(θ̂, sampler, simulator;
 	@assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
 	@assert epochs_per_θ_refresh == 1 || epochs_per_theta_refresh == 1 "Only one of `epochs_per_θ_refresh` or `epochs_per_theta_refresh` should be provided"
 	if !isnothing(xi) ξ = xi end
-	if epochs_per_theta_refresh != 1 epochs_per_θ_refresh = epochs_per_theta_refresh == 1 end
+	if epochs_per_theta_refresh != 1 epochs_per_θ_refresh = epochs_per_theta_refresh end
 
     _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 
@@ -127,11 +127,10 @@ function _train(θ̂, sampler, simulator;
 
 	device = _checkgpu(use_gpu, verbose = verbose)
     θ̂ = θ̂ |> device
-    γ = Flux.params(θ̂)
 
 	verbose && println("Sampling the validation set...")
 	θ_val   = isnothing(ξ) ? sampler(K ÷ 5 + 1) : sampler(K ÷ 5 + 1, ξ)
-	val_set = _quietDataLoader((simulator(θ_val, m), _extractθ(θ_val)), batchsize)
+	val_set = _DataLoader((simulator(θ_val, m), _extractθ(θ_val)), batchsize)
 
 	# Initialise the loss per epoch matrix.
 	verbose && print("Computing the initial validation risk...")
@@ -150,6 +149,7 @@ function _train(θ̂, sampler, simulator;
 	# For loops create a new scope for the variables that are not present in the
 	# enclosing scope, and such variables get a new binding in each iteration of
 	# the loop; circumvent this by declaring local variables.
+	local θ̂_best = θ̂
 	local θ_train
 	local train_set
 	local min_val_risk = initial_val_risk # minimum validation loss, monitored for early stopping
@@ -182,7 +182,7 @@ function _train(θ̂, sampler, simulator;
 
 			# For each batch, update θ̂ and compute the training loss
 			epoch_time = @elapsed for (Z, θ) in train_set
-			   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+			   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 			end
 
 		else
@@ -192,7 +192,7 @@ function _train(θ̂, sampler, simulator;
 				parameters = isnothing(ξ) ? sampler(batchsize) : sampler(batchsize, ξ)
 				Z = simulator(parameters, m)
 				θ = _extractθ(parameters)
-				train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+				train_loss += _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 			end
 		end
 
@@ -211,6 +211,7 @@ function _train(θ̂, sampler, simulator;
 			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = current_val_risk
 			early_stopping_counter = 0
+			θ̂_best = θ̂
 		else
 			early_stopping_counter += 1
 			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
@@ -222,7 +223,7 @@ function _train(θ̂, sampler, simulator;
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	savebool && _savebestweights(savepath)
 
-    return θ̂
+    return θ̂_best
 end
 
 
@@ -232,7 +233,8 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 		epochs_per_Z_refresh::Integer = 1,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		optimiser        = ADAM(1e-4),
+		# optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Flux.Adam()), θ̂),
+		optimiser        = Flux.Adam(),
 		savepath::String = "",
 		simulate_just_in_time::Bool = false,
 		stopping_epochs::Integer = 5,
@@ -252,7 +254,6 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 
 	device = _checkgpu(use_gpu, verbose = verbose)
     θ̂ = θ̂ |> device
-    γ = Flux.params(θ̂)
 
 	verbose && println("Simulating validation data...")
 	val_set = _constructset(simulator, θ_val, m, batchsize)
@@ -273,6 +274,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 	# Either way, store this decision in a variable.
 	store_entire_train_set = !simulate_just_in_time || epochs_per_Z_refresh != 1
 
+	local θ̂_best = θ̂
 	local train_set
 	local min_val_risk = initial_val_risk
 	local early_stopping_counter = 0
@@ -293,7 +295,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 
 			# For each batch, update θ̂ and compute the training loss
 			epoch_time = @elapsed for (Z, θ) in train_set
-			   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+			   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 			end
 
 		else
@@ -302,9 +304,9 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 			epoch_time_simulate = 0.0
 			epoch_time    = 0.0
 			for parameters ∈ _ParameterLoader(θ_train, batchsize = batchsize)
-				epoch_time_simulate += @elapsed Z = simulator(parameters, m)
-				θ = _extractθ(parameters)
-				epoch_time += @elapsed train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+				epoch_time_simulate += @elapsed Z = ZtoFloat32(simulator(parameters, m))
+				θ = θtoFloat32(_extractθ(parameters))
+				epoch_time += @elapsed train_loss += _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 			end
 			verbose && println("Total time spent simulating data: $(round(epoch_time_simulate, digits = 3)) seconds")
 			epoch_time += epoch_time_simulate
@@ -326,6 +328,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = current_val_risk
 			early_stopping_counter = 0
+			θ̂_best = θ̂
 		else
 			early_stopping_counter += 1
 			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
@@ -337,24 +340,31 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	savebool && _savebestweights(savepath)
 
-    return θ̂
+    return θ̂_best
 end
 
-
+# TODO now that we have NRE, we might be better off calling the argument "output_train" and "input_train", etc.
 function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		optimiser        = ADAM(1e-4),
+		# optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Flux.Adam()), θ̂),
+		optimiser        = Flux.Adam(),
 		savepath::String = "",
 		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
 		verbose::Bool    = true
-		) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
+		) where {T, P <: Union{Tuple, AbstractMatrix, ParameterConfigurations}}
 
 	@assert batchsize > 0
 	@assert epochs > 0
 	@assert stopping_epochs > 0
+
+	# Attempt to convert to Float32 for numerical efficiency
+	θ_train = θtoFloat32(θ_train)
+	θ_val   = θtoFloat32(θ_val)
+	Z_train = ZtoFloat32(Z_train)
+	Z_val   = ZtoFloat32(Z_val)
 
 	# Determine if we we need to subset the data.
 	# Start by assuming we will not subset the data:
@@ -385,16 +395,15 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
 	device = _checkgpu(use_gpu, verbose = verbose)
     θ̂ = θ̂ |> device
-    γ = Flux.params(θ̂)
 
 	verbose && print("Computing the initial validation risk...")
-	val_set = _quietDataLoader((Z_val, _extractθ(θ_val)), batchsize)
+	val_set = _DataLoader((Z_val, _extractθ(θ_val)), batchsize)
 	initial_val_risk = _lossdataloader(loss, val_set, θ̂, device)
 	verbose && println(" Initial validation risk = $initial_val_risk")
 
 	verbose && print("Computing the initial training risk...")
 	tmp = subsetbool ? subsetdata(Z_train, 1:m) : Z_train
-	tmp = _quietDataLoader((tmp, _extractθ(θ_train)), batchsize)
+	tmp = _DataLoader((tmp, _extractθ(θ_train)), batchsize)
 	initial_train_risk = _lossdataloader(loss, tmp, θ̂, device)
 	verbose && println(" Initial training risk = $initial_train_risk")
 
@@ -402,6 +411,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	loss_per_epoch = [initial_train_risk initial_val_risk;]
 	savebool && _saveweights(θ̂, savepath, 0)
 
+	local θ̂_best = θ̂
 	local min_val_risk = initial_val_risk
 	local early_stopping_counter = 0
 	train_time = @elapsed for epoch in 1:epochs
@@ -410,9 +420,9 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
 		# For each batch update θ̂ and compute the training loss
 		train_set = subsetbool ? subsetdata(Z_train, replicates[epoch]) : Z_train
-		train_set = _quietDataLoader((train_set, _extractθ(θ_train)), batchsize)
+		train_set = _DataLoader((train_set, _extractθ(θ_train)), batchsize)
 		epoch_time = @elapsed for (Z, θ) in train_set
-		   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+		   train_loss += _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 		end
 		train_loss = train_loss / size(θ_train, 2)
 
@@ -430,6 +440,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = current_val_risk
 			early_stopping_counter = 0
+			θ̂_best = θ̂
 		else
 			early_stopping_counter += 1
 			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
@@ -441,43 +452,104 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	savebool && _savebestweights(savepath)
 
-    return θ̂
+    return θ̂_best
 end
 
-# General fallback:
+# General fallback
 train(args...; kwargs...) = _train(args...; kwargs...)
 
-# Wrapper functions for specific estimator types
-function train(θ̂::IntervalEstimator, args...; kwargs...)
+# Wrapper functions for specific types of neural estimators
+function train(θ̂::Union{IntervalEstimator, QuantileEstimatorDiscrete}, args...; kwargs...)
 
 	# Get the key word arguments
 	kwargs = (;kwargs...)
 
 	# Define the loss function based on the given probabiltiy levels
-	probs = Float32.(θ̂.probs)
-	# Determine if we need to move probs to the GPU
+	τ = Float32.(θ̂.probs)
+	# Determine if we need to move τ to the GPU
 	use_gpu = haskey(kwargs, :use_gpu) ? kwargs.use_gpu : true
 	device  = _checkgpu(use_gpu, verbose = false)
-	probs   = device(probs)
+	τ = device(τ)
 	# Define the loss function
-	qloss = (θ̂, θ) -> quantileloss(θ̂, θ, probs)
+	qloss = (θ̂, θ) -> quantileloss(θ̂, θ, τ)
 
 	# Notify the user if "loss" is in the keyword arguments
 	if haskey(kwargs, :loss)
-		@info "The user has provided the loss function to `train()`, but this not necessary when training an `IntervalEstimator`, since the loss function is always the quantile loss."
+		@info "The keyword argument `loss` is not required when training a $(typeof(θ̂)), since in this case the quantile loss is always used"
 	end
 	# Add our quantile loss to the list of keyword arguments
 	kwargs = merge(kwargs, (loss = qloss,))
 
 	# Train the estimator
-	_train(θ̂, args...; kwargs..., loss = qloss)
+	_train(θ̂, args...; kwargs...)
 end
 
-# function f(x...; kwargs...)
-# kwargs = (;kwargs...)
-# kwargs = merge(kwargs, (k = 10, ))
-# println(kwargs)
-# end
+function train(θ̂::QuantileEstimatorContinuous, args...; kwargs...)
+	# We define the loss function in the methods _lossdataloader(θ̂::QuantileEstimatorContinuous...) and _updatebatch!(θ̂::QuantileEstimatorContinuous...)
+	# Here, just notify the user if they've assigned a loss function
+	kwargs = (;kwargs...)
+	if haskey(kwargs, :loss)
+		@info "The keyword argument `loss` is not required when training a $(typeof(θ̂)), since in this case the quantile loss is always used"
+	end
+	_train(θ̂, args...; kwargs...)
+end
+
+#TODO methods that take a function instead of fixed data/parameter instances
+#TODO with some small work, think we can replace "AbstractMatrix" with P <: Union{Tuple, AbstractMatrix, ParameterConfigurations}
+function train(θ̂::RatioEstimator, θ_train::AbstractMatrix, θ_val::AbstractMatrix, Z_train, Z_val; kwargs...)
+
+	# Get the key word arguments and assign the loss function
+	kwargs = (;kwargs...)
+	if haskey(kwargs, :loss)
+		@info "The keyword argument `loss` is not required when training a $(typeof(θ̂)), since in this case the binary cross-entropy (log) loss is always used"
+	end
+	kwargs = merge(kwargs, (loss = Flux.logitbinarycrossentropy,))
+
+	input_train, output_train = _processinputs(Z_train, θ_train)
+	input_val, output_val = _processinputs(Z_val, θ_val)
+
+	# Train the estimator (note that we train on the linear scale for numerical stability)
+	deepset = _train(θ̂.deepset, output_train, output_val, input_train, input_val; kwargs...)
+
+	# Rebuild the ratio estimator
+	RatioEstimator(deepset)
+end
+function _processinputs(Z, θ)
+
+	# Attempt to convert to Float32 for numerical efficiency
+    Z = ZtoFloat32(Z)
+    θ = θtoFloat32(θ)
+
+	# Size of data set
+	K = length(Z) # should equal size(θ, 2)
+
+	# Create independent pairs
+	θ̃ = subsetparameters(θ, shuffle(1:K))
+	Z̃ = Z # NB memory inefficient to replicate the data in this way, would be better to use a view or similar
+
+	# Combine dependent and independent pairs
+	Z = vcat(Z, Z̃)
+	θ = hcat(θ, θ̃)
+
+	# Create class labels for output
+	labels = [:dependent, :independent]
+	output = onehotbatch(repeat(labels, inner = K), labels)[1:1, :]
+
+	# Shuffle everything incase batching isn't shuffled downstrean
+	idx = shuffle(1:2K)
+	Z = Z[idx]
+	θ = θ[:, idx]
+	output = output[1:1, idx]
+
+	# Combine data and parameters into a single tuple
+	input = (Z, θ)
+
+	return input, output
+end
+
+ZtoFloat32(Z) = try broadcast.(Float32, Z) catch e Z end
+θtoFloat32(θ) = try broadcast(Float32, θ) catch e θ end
+
 
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 
@@ -612,7 +684,6 @@ function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) whe
 end
 
 
-
 # ---- Helper functions ----
 
 function _deepcopyestimator(θ̂, kwargs, E)
@@ -655,21 +726,6 @@ function _checkargs_trainx(kwargs)
 	return verbose
 end
 
-# Computes the loss function in a memory-safe manner
-function _lossdataloader(loss, data_loader::DataLoader, θ̂, device)
-    ls  = 0.0f0
-    num = 0
-    for (Z, θ) in data_loader
-        Z, θ = Z |> device, θ |> device
-
-		# Assuming loss returns an average, convert it to a sum
-		b = length(Z)
-        ls  += loss(θ̂(Z), θ) * b
-        num +=  b
-    end
-
-    return cpu(ls / num)
-end
 
 
 function _saveweights(θ̂, savepath, epoch = "")
@@ -694,24 +750,77 @@ function _saveinfo(loss_per_epoch, train_time, savepath::String; verbose::Bool =
 	CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
 end
 
-function _updatebatch!(θ̂, Z, θ, device, loss, γ, optimiser)
+# Computes the loss function in a memory-safe manner
+function _lossdataloader(loss, data_loader::DataLoader, θ̂, device)
+    ls  = 0.0f0
+    K = 0
+    for (Z, θ) in data_loader
+        Z, θ = Z |> device, θ |> device
+		# Assuming loss returns an average, convert it to a sum
+		k = size(θ, 2)
+        ls  += loss(θ̂(Z), θ) * k
+        K +=  k
+    end
+
+    return cpu(ls / K)
+end
+function _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 
 	Z, θ = Z |> device, θ |> device
 
-	# Compute gradients in such a way that the training loss is also saved.
-	# This is equivalent to: gradients = gradient(() -> loss(θ̂(Z), θ), γ)
-	ls, back = Zygote.pullback(() -> loss(θ̂(Z), θ), γ)
-	gradients = back(one(ls))
-	update!(optimiser, γ, gradients)
+	# "Implicit" style used by Flux <= 0.14.
+	γ = Flux.params(θ̂)
+	ls, ∇ = Flux.withgradient(() -> loss(θ̂(Z), θ), γ)
+	update!(optimiser, γ, ∇)
 
-	# New explicit form:
-	# gradients = Flux.gradient(θ̂ -> loss(θ̂(Z), θ), θ̂) 
+	# "Explicit" style required by Flux >= 0.15.
+	# ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
+	# update!(optimiser, θ̂, ∇[1])
 
-	# Assuming that loss returns an average, convert it to a sum.
-	ls = ls * size(θ)[end]
+	# Assuming that loss returns an average, convert to a sum
+	ls = ls * size(θ, 2)
+
 	return ls
 end
 
+# Need custom functions for QuantileEstimatorContinuous because τ is required both as
+# input to the neural estimator and in the loss function itself.
+# Note that the positional argument "loss" is still defined but not called
+function _lossdataloader(loss, data_loader::DataLoader, θ̂::QuantileEstimatorContinuous, device)
+    ls = 0
+    K = 0
+    for (Zτ, θ) in data_loader
+		Zτ, θ = Zτ |> device, θ |> device
+		τ = reduce(vcat, Zτ[2]) # convert from vector of vectors to single vector
+		# Assuming loss returns an average, convert it to a sum
+		k = size(θ, 2)
+        ls += quantileloss(θ̂(Zτ), θ, τ) * k
+        K +=  k
+    end
+
+    return cpu(ls / K)
+end
+function _updatebatch!(θ̂::QuantileEstimatorContinuous, Zτ::Tuple, θ, device, loss, optimiser)
+	Zτ, θ = Zτ |> device, θ |> device
+	τ = reduce(vcat, Zτ[2]) # convert from vector of vectors to single vector
+
+	# "Implicit" style used by Flux <= 0.14.
+	γ = Flux.params(θ̂)
+	ls, ∇ = Flux.withgradient(() -> quantileloss(θ̂(Zτ), θ, τ), γ)
+	update!(optimiser, γ, ∇)
+
+	# "Explicit" style required by Flux >= 0.15.
+	# ls, ∇ = Flux.withgradient(θ̂ -> quantileloss(θ̂(Zτ), θ, τ), θ̂)
+	# update!(optimiser, θ̂, ∇[1])
+
+	# Assuming that loss returns an average, convert to a sum
+	ls = ls * size(θ, 2)
+
+	return ls
+end
+
+
+
 # Wrapper function that returns simulated data and the true parameter values
-_simulate(simulator, params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (simulator(params, m), _extractθ(params))
-_constructset(simulator, params::P, m, batchsize)  where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _quietDataLoader(_simulate(simulator, params, m), batchsize)
+_simulate(simulator, params::P, m) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = (ZtoFloat32(simulator(params, m)), θtoFloat32(_extractθ(params)))
+_constructset(simulator, params::P, m, batchsize)  where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _DataLoader(_simulate(simulator, params, m), batchsize)

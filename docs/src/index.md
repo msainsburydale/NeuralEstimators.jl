@@ -20,12 +20,13 @@ Once familiar with the details of the [Framework](@ref), see the [Examples](@ref
 This software was developed as part of academic research. If you would like to support it, please star the [repository](https://github.com/msainsburydale/NeuralEstimators.jl). If you use it in your research or other activities, please also use the following citation.
 
 ```
-@article{SZH_2023_neural_Bayes_estimators,
+@article{,
 	author = {Sainsbury-Dale, Matthew and Zammit-Mangion, Andrew and Huser, Raphaël},
 	title = {Likelihood-Free Parameter Estimation with Neural {B}ayes Estimators},
 	journal = {The American Statistician},
-	year = {2023},
-	volume = {to appear},
+	year = {2024},
+	volume = {78},
+	pages = {1--14},
 	doi = {10.1080/00031305.2023.2249522},
 	url = {https://doi.org/10.1080/00031305.2023.2249522}
 }

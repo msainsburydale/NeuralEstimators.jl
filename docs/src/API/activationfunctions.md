@@ -5,7 +5,7 @@ Order = [:type, :function]
 Pages   = ["activationfunctions.md"]
 ```
 
-In addition to the standard activation functions provided by [Flux](https://fluxml.ai/Flux.jl/stable/models/activation/), the following layers can be used at the end of an architecture, to act as output activation functions that ensure valid estimates for certain models.
+In addition to the standard activation functions provided by [Flux](https://fluxml.ai/Flux.jl/stable/models/activation/), the following layers can be used at the end of an architecture, to act as output activation functions that ensure valid estimates for certain models. **NB:** Although we refer to the following objects as "activation functions", they should be treated as layers that are included in the final stage of a Flux `Chain()`. 
 
 ```@docs
 Compress

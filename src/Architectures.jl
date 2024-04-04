@@ -1,6 +1,3 @@
-using Functors: @functor
-using RecursiveArrayTools: VectorOfArray, convert
-
 # ---- Aggregation (pooling) and misc functions ----
 
 elementwise_mean(X::A) where {A <: AbstractArray{T, N}} where {T, N} = mean(X, dims = N)
@@ -37,13 +34,14 @@ functions as a user-defined summary statistic in [`DeepSet`](@ref) objects.
 
 Examples
 ```
-f(z) = rand(Float32, 2)
-g(z) = rand(Float32, 3) .+ z
+f(z) = rand32(2)
+g(z) = rand32(3) .+ z
 S = [f, g]
 S(1)
 ```
 """
 (S::Vector{Function})(z) = vcat([s(z) for s ∈ S]...)
+# (S::Vector)(z) = vcat([s(z) for s ∈ S]...) # can use a more general construction like this to allow for vectors of NeuralEstimators to be called in this way
 
 """
     DeepSet(ψ, ϕ, a; S = nothing)
@@ -101,8 +99,7 @@ data set).
 
 # Examples
 ```
-using NeuralEstimators
-using Flux
+using NeuralEstimators, Flux
 
 n = 10 # dimension of each replicate
 p = 4  # number of parameters in the statistical model
@@ -117,7 +114,7 @@ w = 16 # width of each hidden layer
 θ̂ = DeepSet(ψ, ϕ, S = S)
 
 # Toy data
-Z = [rand(Float32, n, m) for m ∈ (3, 4)]; # two data sets containing 3 and 4 replicates
+Z = [rand32(n, m) for m ∈ (3, 4)]; # two data sets containing 3 and 4 replicates
 
 # Apply the data
 θ̂(Z)
@@ -126,7 +123,7 @@ Z = [rand(Float32, n, m) for m ∈ (3, 4)]; # two data sets containing 3 and 4 r
 qₓ = 2 # dimension of set-level vector
 ϕ  = Chain(Dense(qₜ + qₛ + qₓ, w, relu), Dense(w, p));
 θ̂  = DeepSet(ψ, ϕ; S = S)
-x  = [rand(Float32, qₓ) for _ ∈ eachindex(Z)]
+x  = [rand32(qₓ) for _ ∈ eachindex(Z)]
 θ̂((Z, x))
 ```
 """
@@ -136,34 +133,44 @@ struct DeepSet{T, F, G, K}
 	a::F
 	S::K
 end
-@functor DeepSet
-Flux.trainable(d::DeepSet) = (d.ψ, d.ϕ)
+@layer DeepSet
 DeepSet(ψ, ϕ, a; S = nothing) = DeepSet(ψ, ϕ, a, S)
 DeepSet(ψ, ϕ; a::String = "mean", S = nothing) = DeepSet(ψ, ϕ, _agg(a), S)
 Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)")
-Base.show(io::IO, m::MIME"text/plain", D::DeepSet) = print(io, D)
 
 # Single data set
 function (d::DeepSet)(Z::A) where A
+	d.ϕ(summary(d, Z))
+end
+function summary(d::DeepSet, Z::A) where A
 	t = d.a(d.ψ(Z))
 	if !isnothing(d.S)
 		s = d.S(Z)
 		t = vcat(t, s)
 	end
-	d.ϕ(t)
+	return t
 end
 
 # Single data set with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractVector{T}} where T
-	Z = tup[1]
-	x = tup[2]
-	t = d.a(d.ψ(Z))
-	if !isnothing(d.S)
-		s = d.S(Z)
-		t = vcat(t, s)
-	end
+	Z, x = tup
+	t = summary(d, Z)
 	u = vcat(t, x)
 	d.ϕ(u)
+end
+function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractMatrix{T}} where T
+	Z, x = tup
+	if size(x, 2) == 1
+		# Catches the simple case that the user accidentally passed an Nx1 matrix
+		# rather than an N-dimensional vector. Also used by RatioEstimator.
+		d((Z, vec(x)))
+	else
+		# Designed for situations where we have a fixed data set and want to
+		# evaluate the deepset object for many different set-level information
+		t = summary(d, Z) # summary statistics only need to be computed once
+		tx = vcat(repeat(t, 1, size(x, 2)), x) # NB ideally we'd avoid copying t so many times here, using @view
+		d.ϕ(tx) # Sanity check: stackarrays([d((Z, vec(x̃))) for x̃ in eachcol(x)])
+	end
 end
 
 # Multiple data sets: simple fallback method using broadcasting
@@ -186,7 +193,11 @@ function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractA
 	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
 
 	# Construct the summary statistics
-	t = map(eachindex(Z)) do i
+	# NB for some reason, with the new "explicit" gradient() required by
+	# Flux/Zygote, an error is caused if one uses the same variable name outside
+	# and inside a broadcast like this. For instance, if for the object "stats"
+	# below we had called it "t", then error would be thrown by gradient().
+	stats = map(eachindex(Z)) do i
 		idx = indices[i]
 		t = d.a(ψa[colons..., idx])
 		if !isnothing(d.S)
@@ -196,40 +207,45 @@ function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractA
 		t
 	end
 
-	# Stack into a single array
-	t = stackarrays(t)
-
-	# Apply the outer network
-	θ̂ = d.ϕ(t)
-
-	return θ̂
+	# Stack into a single array and apply the outer network
+	return d.ϕ(stackarrays(stats))
 end
 
 # Multiple data sets with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
-	Z = tup[1]
-	x = tup[2]
+	Z, x = tup
 	t = d.a.(d.ψ.(Z))
 	if !isnothing(d.S)
 		s = d.S.(Z)
 		t = vcat.(t, s)
 	end
+	# TODO can the above be replaced by?: t = summary.(Ref(d), Z)
 	t = vcat.(t, x)
 	stackarrays(d.ϕ.(t))
+end
+function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractMatrix{T}} where {A, T}
+	Z, x = tup
+	if size(x, 2) == length(Z)
+		# Catches the simple case that the user accidentally passed an NxM matrix
+		# rather than an M-dimensional vector of N-vector.
+		# Also used by RatioEstimator.
+		d((Z, eachcol(x)))
+	else
+		# Designed for situations where we have a several data sets and we want
+		# to evaluate the deepset object for many different set-level information
+		[d((z, x)) for z in Z]
+	end
 end
 
 # Multiple data sets: optimised version for array data + vector set-level covariates.
 # (basically the same code as array method without covariates)
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
-
-	Z = tup[1]
-	X = tup[2]
-
+	Z, X = tup
 	z = stackarrays(Z)
 	ψa = d.ψ(z)
 	indices = _getindices(Z)
 	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
-	u = map(eachindex(Z)) do i
+	stats = map(eachindex(Z)) do i
 		idx = indices[i]
 		t = d.a(ψa[colons..., idx])
 		if !isnothing(d.S)
@@ -239,9 +255,10 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 		u = vcat(t, X[i])
 		u
 	end
-	u = stackarrays(u)
-	d.ϕ(u)
+	d.ϕ(stackarrays(stats))
 end
+
+
 
 
 # ---- Activation functions -----
@@ -268,8 +285,7 @@ randomly initialised neural network is typically around zero.
 
 # Examples
 ```
-using NeuralEstimators
-using Flux
+using NeuralEstimators, Flux
 
 a = [25, 0.5, -pi/2]
 b = [500, 2.5, 0]
@@ -293,11 +309,32 @@ struct Compress{T}
 end
 Compress(a, b) = Compress(float.(a), float.(b), ones(eltype(float.(a)), length(a)))
 Compress(a::Number, b::Number) = Compress([float(a)], [float(b)])
-
 (l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-l.k .* θ))
-
-Flux.@functor Compress
+@layer Compress
 Flux.trainable(l::Compress) =  ()
+
+
+#TODO documentation and unit testing
+export TruncateSupport
+struct TruncateSupport
+	a
+	b
+	p::Integer
+end
+function (l::TruncateSupport)(θ::AbstractMatrix)
+	p = l.p
+	m = size(θ, 1)
+	@assert m ÷ p == m/p "Number of rows in the input must be a multiple of the number of parameters in the statistical model"
+	r = m ÷ p
+	idx = repeat(1:p, inner = r)
+	y = [tuncatesupport.(θ[i:i, :], Ref(l.a[idx[i]]), Ref(l.b[idx[i]])) for i in eachindex(idx)]
+	reduce(vcat, y)
+end
+TruncateSupport(a, b) = TruncateSupport(float.(a), float.(b), length(a))
+TruncateSupport(a::Number, b::Number) = TruncateSupport([float(a)], [float(b)], 1)
+Flux.@functor TruncateSupport
+Flux.trainable(l::TruncateSupport) = ()
+tuncatesupport(θ, a, b) = min(max(θ, a), b)
 
 # ---- Layers to construct Covariance and Correlation matrices ----
 
@@ -390,6 +427,7 @@ function (l::CovarianceMatrix)(v, cholesky_only::Bool = false)
 	@assert p == l.p "the number of rows must be the triangular number T(d) = d(d+1)÷2 = $(l.p)"
 
 	# Ensure that diagonal elements are positive
+	#TODO the solution might be to replace the comprehension with map(): see https://github.com/FluxML/Flux.jl/issues/2187
 	L = vcat([i ∈ l.diag_idx ? softplus.(v[i:i, :]) : v[i:i, :] for i ∈ 1:p]...)
 	cholesky_only && return L
 
@@ -556,3 +594,52 @@ end
 # v = reshape(v, p, K)
 # l = CovarianceMatrix(d)
 # l(v) - l(v, true)
+
+
+# ---- Layers ----
+
+"""
+	DensePositive(layer::Dense, g::Function)
+	DensePositive(layer::Dense; g::Function = Flux.relu)
+Wrapper around the standard
+[Dense](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dense) layer that
+ensures positive weights (biases are left unconstrained).
+
+This layer can be useful for constucting (partially) monotonic neural networks (see, e.g., [`QuantileEstimatorContinuous`])(@ref).
+
+# Examples
+```
+using NeuralEstimators, Flux
+
+layer = DensePositive(Dense(5 => 2))
+x = rand32(5, 64)
+layer(x)
+```
+"""
+struct DensePositive
+	layer::Dense
+	g::Function
+	last_only::Bool
+end
+DensePositive(layer::Dense; g::Function = Flux.relu, last_only::Bool = false) = DensePositive(layer, g, last_only)
+@layer DensePositive
+# Simple version of forward pass:
+# (d::DensePositive)(x) = d.layer.σ.(Flux.softplus(d.layer.weight) * x .+ d.layer.bias)
+# Complex version of forward pass based on Flux's Dense code:
+function (d::DensePositive)(x::AbstractVecOrMat)
+  a = d.layer # extract the underlying fully-connected layer
+  _size_check(a, x, 1 => size(a.weight, 2))
+  σ = NNlib.fast_act(a.σ, x) # replaces tanh => tanh_fast, etc
+  xT = _match_eltype(a, x)   # fixes Float64 input, etc.
+  if d.last_only
+	  weight = d.g.(hcat(a.weight[:, 1:end-1], a.weight[:, end:end]))
+  else
+	  weight = d.g.(a.weight)
+  end
+  σ.(weight * xT .+ a.bias)
+end
+function (a::DensePositive)(x::AbstractArray)
+  a = d.layer # extract the underlying fully-connected layer
+  _size_check(a, x, 1 => size(a.weight, 2))
+  reshape(a(reshape(x, size(x,1), :)), :, size(x)[2:end]...)
+end

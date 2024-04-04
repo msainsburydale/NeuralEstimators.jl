@@ -119,7 +119,7 @@ struct WeightedGraphConv{W<:AbstractMatrix,B,F,A,C} <: GNNLayer
     aggr::A
 end
 
-@functor WeightedGraphConv
+@layer WeightedGraphConv
 
 function WeightedGraphConv(ch::Pair{Int,Int}, σ=identity; aggr=mean,
                    init=glorot_uniform, bias::Bool=true)
@@ -587,7 +587,7 @@ struct UniversalPool{G,F}
     ϕ::F
 end
 
-@functor UniversalPool
+@layer UniversalPool
 
 function (l::UniversalPool)(g::GNNGraph, x::AbstractArray)
     u = reduce_nodes(mean, g, l.ψ(x))
@@ -598,7 +598,6 @@ end
 (l::UniversalPool)(g::GNNGraph) = GNNGraph(g, gdata = l(g, node_features(g)))
 
 Base.show(io::IO, D::UniversalPool) = print(io, "\nUniversal pooling layer:\nInner network ψ ($(nparams(D.ψ)) parameters):  $(D.ψ)\nOuter network ϕ ($(nparams(D.ϕ)) parameters):  $(D.ϕ)")
-Base.show(io::IO, m::MIME"text/plain", D::UniversalPool) = print(io, D)
 
 # ---- GNN ----
 
@@ -664,14 +663,13 @@ struct GNN{F, G}
 	readout::G       # global pooling module
 	deepset::DeepSet # DeepSets module to map the learned feature vector to the parameter space
 end
-@functor GNN
+@layer GNN
 
 # Constructors
 GNN(propagation, readout, ϕ, a; S = nothing) = GNN(propagation, readout, DeepSet(identity, ϕ, a; S = S))
 GNN(propagation, readout, ϕ; a::String = "mean", S = nothing) = GNN(propagation, readout, ϕ, _agg(a); S = S)
 
 Base.show(io::IO, D::GNN) = print(io, "\nGNN estimator with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)\n\nAggregation function ($(nparams(D.deepset.a)) parameters):  $(D.deepset.a)\n\nExpert summary statistics ($(nparams(D.deepset.S))) parameters):  $(D.deepset.S)\n\nMapping module ($(nparams(D.deepset.ϕ)) parameters):  $(D.deepset.ϕ)")
-Base.show(io::IO, m::MIME"text/plain", D::GNN) = print(io, D)
 
 dropsingleton(x::AbstractMatrix) = x
 dropsingleton(x::A) where A <: AbstractArray{T, 3} where T = dropdims(x, dims = 3)
