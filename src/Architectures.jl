@@ -594,3 +594,52 @@ end
 # v = reshape(v, p, K)
 # l = CovarianceMatrix(d)
 # l(v) - l(v, true)
+
+
+# ---- Layers ----
+
+"""
+	DensePositive(layer::Dense, g::Function)
+	DensePositive(layer::Dense; g::Function = Flux.relu)
+Wrapper around the standard
+[Dense](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dense) layer that
+ensures positive weights (biases are left unconstrained).
+
+This layer can be useful for constucting (partially) monotonic neural networks (see, e.g., [`QuantileEstimatorContinuous`])(@ref).
+
+# Examples
+```
+using NeuralEstimators, Flux
+
+layer = DensePositive(Dense(5 => 2))
+x = rand32(5, 64)
+layer(x)
+```
+"""
+struct DensePositive
+	layer::Dense
+	g::Function
+	last_only::Bool
+end
+DensePositive(layer::Dense; g::Function = Flux.relu, last_only::Bool = false) = DensePositive(layer, g, last_only)
+@layer DensePositive
+# Simple version of forward pass:
+# (d::DensePositive)(x) = d.layer.σ.(Flux.softplus(d.layer.weight) * x .+ d.layer.bias)
+# Complex version of forward pass based on Flux's Dense code:
+function (d::DensePositive)(x::AbstractVecOrMat)
+  a = d.layer # extract the underlying fully-connected layer
+  _size_check(a, x, 1 => size(a.weight, 2))
+  σ = NNlib.fast_act(a.σ, x) # replaces tanh => tanh_fast, etc
+  xT = _match_eltype(a, x)   # fixes Float64 input, etc.
+  if d.last_only
+	  weight = d.g.(hcat(a.weight[:, 1:end-1], a.weight[:, end:end]))
+  else
+	  weight = d.g.(a.weight)
+  end
+  σ.(weight * xT .+ a.bias)
+end
+function (a::DensePositive)(x::AbstractArray)
+  a = d.layer # extract the underlying fully-connected layer
+  _size_check(a, x, 1 => size(a.weight, 2))
+  reshape(a(reshape(x, size(x,1), :)), :, size(x)[2:end]...)
+end

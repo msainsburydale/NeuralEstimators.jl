@@ -95,8 +95,8 @@ function _train(θ̂, sampler, simulator;
 	epochs_per_Z_refresh::Integer = 1,
 	simulate_just_in_time::Bool = false,
 	loss = Flux.Losses.mae,
-	# optimiser          = Flux.setup(Adam(), θ̂),
-	optimiser          = Adam(),
+	# optimiser          = Flux.setup(Flux.Adam(), θ̂),
+	optimiser          = Flux.Adam(),
     batchsize::Integer = 32,
     epochs::Integer    = 100,
 	savepath::String   = "",
@@ -110,7 +110,7 @@ function _train(θ̂, sampler, simulator;
 	@assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
 	@assert epochs_per_θ_refresh == 1 || epochs_per_theta_refresh == 1 "Only one of `epochs_per_θ_refresh` or `epochs_per_theta_refresh` should be provided"
 	if !isnothing(xi) ξ = xi end
-	if epochs_per_theta_refresh != 1 epochs_per_θ_refresh = epochs_per_theta_refresh == 1 end
+	if epochs_per_theta_refresh != 1 epochs_per_θ_refresh = epochs_per_theta_refresh end
 
     _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 
@@ -233,8 +233,8 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 		epochs_per_Z_refresh::Integer = 1,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		# optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂),
-		optimiser        = Adam(),
+		# optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Flux.Adam()), θ̂),
+		optimiser        = Flux.Adam(),
 		savepath::String = "",
 		simulate_just_in_time::Bool = false,
 		stopping_epochs::Integer = 5,
@@ -348,8 +348,8 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		# optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂),
-		optimiser        = Adam(),
+		# optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Flux.Adam()), θ̂),
+		optimiser        = Flux.Adam(),
 		savepath::String = "",
 		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
@@ -484,8 +484,8 @@ function train(θ̂::Union{IntervalEstimator, QuantileEstimatorDiscrete}, args..
 	_train(θ̂, args...; kwargs...)
 end
 
-function train(θ̂::QuantileEstimator, args...; kwargs...)
-	# We define the loss function in the methods _lossdataloader(θ̂::QuantileEstimator...) and _updatebatch!(θ̂::QuantileEstimator...)
+function train(θ̂::QuantileEstimatorContinuous, args...; kwargs...)
+	# We define the loss function in the methods _lossdataloader(θ̂::QuantileEstimatorContinuous...) and _updatebatch!(θ̂::QuantileEstimatorContinuous...)
 	# Here, just notify the user if they've assigned a loss function
 	kwargs = (;kwargs...)
 	if haskey(kwargs, :loss)
@@ -783,10 +783,10 @@ function _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 	return ls
 end
 
-# Need custom functions for QuantileEstimator because τ is required both as
+# Need custom functions for QuantileEstimatorContinuous because τ is required both as
 # input to the neural estimator and in the loss function itself.
 # Note that the positional argument "loss" is still defined but not called
-function _lossdataloader(loss, data_loader::DataLoader, θ̂::QuantileEstimator, device)
+function _lossdataloader(loss, data_loader::DataLoader, θ̂::QuantileEstimatorContinuous, device)
     ls = 0
     K = 0
     for (Zτ, θ) in data_loader
@@ -800,7 +800,7 @@ function _lossdataloader(loss, data_loader::DataLoader, θ̂::QuantileEstimator,
 
     return cpu(ls / K)
 end
-function _updatebatch!(θ̂::QuantileEstimator, Zτ::Tuple, θ, device, loss, optimiser)
+function _updatebatch!(θ̂::QuantileEstimatorContinuous, Zτ::Tuple, θ, device, loss, optimiser)
 	Zτ, θ = Zτ |> device, θ |> device
 	τ = reduce(vcat, Zτ[2]) # convert from vector of vectors to single vector
 

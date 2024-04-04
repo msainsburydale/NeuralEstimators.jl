@@ -319,8 +319,7 @@ The output is of type `Assessment`; see `?Assessment` for details.
 
 # Examples
 ```
-using NeuralEstimators
-using Flux
+using NeuralEstimators, Flux
 
 n = 10 # number of observations in each realisation
 p = 4  # number of parameters in the statistical model

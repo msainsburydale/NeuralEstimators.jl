@@ -28,6 +28,7 @@ using InvertedIndices
 using LinearAlgebra
 using NamedArrays
 using NearestNeighbors
+using Optim
 using Random: randexp, shuffle
 using RecursiveArrayTools: VectorOfArray, convert
 using SparseArrays
@@ -35,7 +36,6 @@ using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum
 using StatsBase
 using StatsBase: wsample
-import StatsBase: sample
 using Zygote
 
 export kpowerloss, intervalscore, quantileloss
@@ -48,10 +48,10 @@ export DeepSet, Compress, CovarianceMatrix, CorrelationMatrix
 export vectotril, vectotriu
 include("Architectures.jl")
 
-export NeuralEstimator, PointEstimator, IntervalEstimator, QuantileEstimator, DensePositive, QuantileEstimatorDiscrete, RatioEstimator, PiecewiseEstimator, initialise_estimator
+export NeuralEstimator, PointEstimator, IntervalEstimator, QuantileEstimatorContinuous, DensePositive, QuantileEstimatorDiscrete, RatioEstimator, PiecewiseEstimator, initialise_estimator
 include("Estimators.jl")
 
-export sample, mle
+export sampleposterior, mlestimate, mapestimate, bootstrap, interval
 include("inference.jl")
 
 export GNN, UniversalPool, adjacencymatrix, WeightedGraphConv, maternclusterprocess
@@ -69,9 +69,6 @@ include("train.jl")
 
 export assess, Assessment, merge, join, risk, bias, rmse, coverage, plot, intervalscore, diagnostics
 include("assess.jl")
-
-export bootstrap, interval
-include("bootstrap.jl")
 
 export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches, rowwisenorm
 include("utility.jl")
@@ -122,6 +119,7 @@ end
     # the intervals in method B will always be substantially misleading.
 
 # ---- long term:
+# - Proper citations: https://juliadocs.org/DocumenterCitations.jl/stable/
 # - Might also be useful to store the parameter_names in NeuralEstimator: if they are present in the estimator, they can be compared to other sources of parameter_names as a sanity check, and they can be used in bootstrap() so that the bootstrap estimates and resulting intervals are given informative names.
 # - Would be good if interval(θ̂::IntervalEstimator, Z) and interval(bs) also displayed the parameter names... this could be done if the estimator stores the parameter names.
 # - See if I can move WeightedGraphConv to GraphNeuralNetworks (bit untidy that it's in this package and not in the GNN package).

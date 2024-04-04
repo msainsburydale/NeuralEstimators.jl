@@ -561,14 +561,14 @@ m  = 10 # default sample size
 
 			# Test that we can update the neural-network parameters
 			# "Implicit" style used by Flux <= 0.14.
-			optimiser = Adam()
+			optimiser = Flux.Adam()
 			γ = Flux.params(θ̂)
 			∇ = Flux.gradient(() -> loss(θ̂(Z), θ), γ)
 			Flux.update!(optimiser, γ, ∇)
 			ls, ∇ = Flux.withgradient(() -> loss(θ̂(Z), θ), γ)
 			Flux.update!(optimiser, γ, ∇)
 			# "Explicit" style required by Flux >= 0.15.
-			# optimiser = Flux.setup(Adam(), θ̂)
+			# optimiser = Flux.setup(Flux.Adam(), θ̂)
 			# ∇ = Flux.gradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
 			# Flux.update!(optimiser, θ̂, ∇[1])
 			# ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
@@ -956,4 +956,117 @@ end
 	Z = removedata(Z, 1.0)
 	@test_throws Exception neuralem(Z, θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
 	@test_throws Exception neuralem(Z, θ₀, nsims = H, use_ξ_in_simulateconditional = true)
+end
+
+@testset "QuantileEstimatorContinuous" begin
+	# Generate training data from the model Z|θ ~ N(θ, 1) and θ ~ N(0, 1)
+	d = 1       # dimension of each independent replicate
+	m = 30      # number of independent replicates
+	p = 1       # number of unknown parameters in the statistical model
+	K = 1000  # number of training samples
+	prior(K) = randn32(1, K)
+	simulateZ(θ, m) = [μ .+ randn32(1, m) for μ ∈ eachcol(θ_train)]
+	simulateτ(K) = [rand32(1) for _ in 1:K]
+	simulate(θ, m) = (simulateZ(θ, m), simulateτ(size(θ, 2)))
+	θ_train  = prior(K)
+	θ_val    = prior(K)
+	Zτ_train = simulate(θ_train, m)
+	Zτ_val   = simulate(θ_val, m)
+
+	# Architecture
+	w = 64   # width of each hidden layer
+	q = 2p   # output dimension of summary network
+	ψ = Chain(
+		Dense(d, w, relu),
+		Dense(w, w, relu),
+		Dense(w, q, relu)
+		)
+	ϕ = Chain(
+		DensePositive(Dense(q + 1, w, relu); last_only = true),
+		DensePositive(Dense(w, w, relu)),
+		DensePositive(Dense(w, p))
+		)
+	deepset = DeepSet(ψ, ϕ)
+
+	# Initialise the estimator
+	θ̂ = QuantileEstimatorContinuous(deepset)
+
+	# Train the estimator
+	train(θ̂, θ_train, θ_val, Zτ_train, Zτ_val, epochs = 2, verbose = false)
+
+	# Estimate a single quantile for many test data sets
+	θ = prior(K)
+	Z = simulateZ(θ, m)
+	τ = 0.1f0
+	θ̂(Z[1], τ)
+	θ̂(Z, τ)
+
+	# Estimate multiple quantiles for a single data set
+	τ = [0.1, 0.25, 0.5, 0.75, 0.9]
+	reduce(hcat, θ̂.(Ref(Z[1]), τ))
+
+	# Check monotonicty
+	@test all(θ̂(Z, 0.1f0) .<= θ̂(Z, 0.11f0) .<= θ̂(Z, 0.9f0) .<= θ̂(Z, 0.91f0))
+end
+
+
+
+@testset "RatioEstimator" begin
+	# Generate data from Z|μ,σ ~ N(μ, σ²) with μ, σ ~ U(0, 1)
+	p = 2        # number of unknown parameters in the statistical model
+	d = 1        # dimension of each independent replicate
+	m = 100      # number of independent replicates
+	K = 1000    # number of training samples
+
+	prior(K) = rand32(p, K)
+	simulate(θ, m) = θ[1] .+ θ[2] .* randn32(d, m)
+	simulate(θ::AbstractMatrix, m) = simulate.(eachcol(θ), m)
+
+	θ_train = prior(K)
+	θ_val   = prior(K)
+	Z_train = simulate(θ_train, m)
+	Z_val   = simulate(θ_val, m)
+
+	# Architecture
+	w = 64 # width of each hidden layer
+	q = 2p # number of learned summary statistics
+	ψ = Chain(
+		Dense(d, w, relu),
+		Dropout(0.3),
+		Dense(w, w, relu),
+		Dropout(0.3),
+		Dense(w, q, relu),
+		Dropout(0.3)
+		)
+	ϕ = Chain(
+		Dense(q + p, w, relu),
+		Dropout(0.3),
+		Dense(w, w, relu),
+		Dropout(0.3),
+		Dense(w, 1)
+		)
+	deepset = DeepSet(ψ, ϕ)
+
+	# Initialise the estimator
+	r̂ = RatioEstimator(deepset)
+
+	# Train the estimator
+	r̂ = train(r̂, θ_train, θ_val, Z_train, Z_val, epochs = 2, use_gpu = false, verbose = false)
+
+	# Estimate ratio for many data sets and parameter vectors
+	θ = prior(K)
+	Z = simulate(θ, m)
+	r̂(Z, θ)                                            # likelihood-to-evidence ratios
+	r̂(Z, θ; classifier = true)                         # class probabilities
+
+	# Inference with "observed" data set
+	θ = prior(1)
+	z = simulate(θ, m)[1]
+	θ₀ = [0.5, 0.5]                           # initial estimate
+	mlestimate(r̂, z;  θ₀ = θ₀)                # maximum-likelihood estimate
+	mapestimate(r̂, z; θ₀ = θ₀)                # maximum-a-posteriori estimate
+	θ_grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
+	θ_grid = Float32.(θ_grid)
+	r̂(z, θ_grid)                              # likelihood-to-evidence ratios over grid
+	sampleposterior(r̂, z; θ_grid = θ_grid)    # posterior samples
 end
