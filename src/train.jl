@@ -343,7 +343,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
     return θ̂_best
 end
 
-# TODO now that we have NRE, we might be better off calling the argument "output_train" and "input_train", etc.
+# TODO now that we have NRE and QuantileEstimatorContinuous, would be clearer to call the arguments of these internal functions "output_train" and "input_train", etc.
 function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
@@ -768,6 +768,13 @@ function _updatebatch!(θ̂, Z, θ, device, loss, optimiser)
 
 	Z, θ = Z |> device, θ |> device
 
+	# NB computing the training risk in this way is efficient, but it means that
+	# the final training risk that we report for each is slightly inaccurate
+	# (since the weights are updated after each batch). It would be more
+	# accurate (but less efficient) if we computed the training risk once again
+	# at the end of each epoch, like we do for the validation risk... might add
+	# and option for this in the future, but will leave it for now.
+
 	# "Implicit" style used by Flux <= 0.14.
 	γ = Flux.params(θ̂)
 	ls, ∇ = Flux.withgradient(() -> loss(θ̂(Z), θ), γ)
@@ -803,6 +810,13 @@ end
 function _updatebatch!(θ̂::QuantileEstimatorContinuous, Zτ::Tuple, θ, device, loss, optimiser)
 	Zτ, θ = Zτ |> device, θ |> device
 	τ = reduce(vcat, Zτ[2]) # convert from vector of vectors to single vector
+
+	# NB computing the training risk in this way is efficient, but it means that
+	# the final training risk that we report for each is slightly inaccurate
+	# (since the weights are updated after each batch). It would be more
+	# accurate (but less efficient) if we computed the training risk once again
+	# at the end of each epoch, like we do for the validation risk... might add
+	# and option for this in the future, but will leave it for now.
 
 	# "Implicit" style used by Flux <= 0.14.
 	γ = Flux.params(θ̂)

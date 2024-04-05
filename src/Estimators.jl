@@ -132,9 +132,9 @@ The estimator employs a representation that prevents quantile crossing, namely,
 ```
 where $\mathbf{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$, are unconstrained neural
 networks that transform data into $p$-dimensional vectors, and $g(\cdot)$ is a
-monotonically increasing function (e.g., exponential or softplus) applied
-elementwise to its arguments. In this implementation, the same neural-network
-architecture `v` is used for each $\mathbf{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$.
+non-negative function (e.g., exponential or softplus) applied elementwise to
+its arguments. In this implementation, the same neural-network architecture `v`
+is used for each $\mathbf{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$.
 
 Note that one may use a simple [`PointEstimator`](@ref) and the
 [`quantileloss`](@ref) to target a specific quantile.
@@ -151,17 +151,12 @@ See also [`IntervalEstimator`](@ref) and
 ```
 using NeuralEstimators, Flux, Distributions
 
-# Generate data from the model Z|θ ~ N(θ, 1) and θ ~ N(0, 1)
-p = 1       # number of unknown parameters in the statistical model
-m = 30      # number of independent replicates
-d = 1       # dimension of each independent replicate
-K = 30000   # number of training samples
-prior(K) = randn32(1, K)
-simulate(θ, m) = [μ .+ randn32(1, m) for μ ∈ eachcol(θ_train)]
-θ_train = prior(K)
-θ_val   = prior(K)
-Z_train = simulate(θ_train, m)
-Z_val   = simulate(θ_val, m)
+# Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
+d = 1   # dimension of each independent replicate
+p = 1   # number of unknown parameters in the statistical model
+m = 30  # number of independent replicates in each data set
+prior(K) = randn32(p, K)
+simulate(θ, m) = [μ .+ randn32(d, m) for μ ∈ eachcol(θ)]
 
 # Architecture
 ψ = Chain(Dense(d, 32, relu), Dense(32, 32, relu))
@@ -169,15 +164,28 @@ Z_val   = simulate(θ_val, m)
 v = DeepSet(ψ, ϕ)
 
 # Initialise the estimator
-θ̂ = QuantileEstimatorDiscrete(v)
+τ = [0.05, 0.25, 0.5, 0.75, 0.95]
+q̂ = QuantileEstimatorDiscrete(v; probs = τ)
 
 # Train the estimator
-train(θ̂, θ_train, θ_val, Z_train, Z_val)
+q̂ = train(q̂, prior, simulate, m = m)
 
-# Use the estimator with test data
-θ = prior(K)
+# Closed-form posterior for comparison
+function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
+
+	# Parameters of psoterior distribution
+	μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
+	σ̃ = sqrt((1/σ₀^2 + length(Z)/σ²)^-1)
+
+	# Posterior
+	Normal(μ̃, σ̃)
+end
+
+# Estimate posterior quantiles for 1000 test data sets
+θ = prior(1000)
 Z = simulate(θ, m)
-θ̂(Z)
+q̂(Z)                                             # neural quantiles
+reduce(hcat, quantile.(posterior.(Z), Ref(τ)))   # true quantiles
 ```
 """
 struct QuantileEstimatorDiscrete{V, P} <: NeuralEstimator
@@ -205,42 +213,12 @@ function (est::QuantileEstimatorDiscrete)(Z)
 	q = [v[1], gv...]
 	reduce(vcat, cumsum(q))
 end
-#TODO In the docs example, why does the risk increase during training? Is it because I'm computing the risk in different ways before vs. during the training loop?
 
-# # Compare to the closed-form posterior
-# function posterior(Z)
-# 	# Prior hyperparameters
-# 	σ₀  = 1
-# 	σ₀² = σ₀^2
-# 	μ₀  = 0
-#
-# 	# Known variance
-#     σ  = 1
-# 	σ² = σ^2
-#
-# 	# Posterior parameters
-# 	μ̃ = (1/σ₀² + length(Z)/σ²)^-1 * (μ₀/σ₀² + sum(Z)/σ²)
-# 	σ̃ = sqrt((1/σ₀² + length(Z)/σ²)^-1)
-#
-# 	# Posterior
-# 	Normal(μ̃, σ̃)
-# end
-# true_quantiles = quantile.(posterior.(Z), Ref([0.05, 0.25, 0.5, 0.75, 0.95]))
-# true_quantiles = reduce(hcat, true_quantiles)
-#
-# # Compare estimates to true values
-# θ̂(Z) - true_quantiles
-
-#TODO describe more the architecture (dimension of input, dimension of output, the use of DensePositive)
-#TODO add reference to Cannon (2018) and others
 @doc raw"""
 	QuantileEstimatorContinuous(deepset::DeepSet)
-A neural estimator that estimates marginal posterior quantiles given as
-input the desired probability level $\tau ∈ (0, 1)$.
-
-The estimator takes as input the data $\mathbf{Z}$ and the desired probability
-level $\tau$, and therefore has the form,
-
+A neural estimator that estimates marginal posterior $\tau$-quantiles given as
+input the data $\mathbf{Z}$ and the desired probability level $\tau ∈ (0, 1)$,
+therefore taking the form
 ```math
 \hat{\mathbf{q}}(\mathbf{Z}, \tau), \quad \tau ∈ (0, 1).
 ```
@@ -254,11 +232,13 @@ is equal to the number ``p`` of parameters in the statistical model.
 
 Although not a requirement, one may employ a (partially) monotonic neural
 network to prevent quantile crossing (i.e., to ensure that the
-$\tau_1$th quantile does not exceed the $\tau_2$th quantile for any
+$\tau_1$-quantile does not exceed the $\tau_2$-quantile for any
 $\tau_2 > \tau_1$). There are several ways to construct such a neural network:
 one simple yet effective approach is to ensure that all weights associated with
-$\tau$ are strictly positive, and this can be done using the
-[`DensePositive`](@ref) layer as illustrated in the examples below.
+$\tau$ are strictly positive
+(see, e.g., [Cannon, 2018](https://link.springer.com/article/10.1007/s00477-018-1573-6)),
+and this can be done using the [`DensePositive`](@ref) layer as illustrated in
+the examples below.
 
 The return value when applied to data is a matrix with ``p`` rows, corresponding
 to the estimated marginal posterior quantiles for each parameter in the
@@ -266,25 +246,20 @@ statistical model.
 
 # Examples
 ```
-using NeuralEstimators, Flux
+using NeuralEstimators, Flux, Distributions, Statistics
 
-# Generate training data from the model Z|θ ~ N(θ, 1) and θ ~ N(0, 1)
-d = 1       # dimension of each independent replicate
-m = 30      # number of independent replicates
-p = 1       # number of unknown parameters in the statistical model
-K = 100000  # number of training samples
-prior(K) = randn32(1, K)
-simulateZ(θ, m) = [μ .+ randn32(1, m) for μ ∈ eachcol(θ_train)]
-simulateτ(K) = [rand32(1) for _ in 1:K]
-simulate(θ, m) = (simulateZ(θ, m), simulateτ(size(θ, 2)))
-θ_train  = prior(K)
-θ_val    = prior(K)
-Zτ_train = simulate(θ_train, m)
-Zτ_val   = simulate(θ_val, m)
+# Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
+d = 1         # dimension of each independent replicate
+p = 1         # number of unknown parameters in the statistical model
+m = 30        # number of independent replicates in each data set
+prior(K) = randn32(p, K)
+simulateZ(θ, m) = [μ .+ randn32(d, m) for μ ∈ eachcol(θ)]
+simulateτ(K)    = [rand32(1) for k in 1:K]
+simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
 
-# Architecture (monotonic network to preclude the possibility of quantile crossing)
-w = 64   # width of each hidden layer
-q = 2p   # output dimension of summary network
+# Architecture: partially monotonic network to preclude quantile crossing
+w = 64  # width of each hidden layer
+q = 2p  # output dimension of summary network
 ψ = Chain(
 	Dense(d, w, relu),
 	Dense(w, w, relu),
@@ -298,21 +273,34 @@ q = 2p   # output dimension of summary network
 deepset = DeepSet(ψ, ϕ)
 
 # Initialise the estimator
-θ̂ = QuantileEstimatorContinuous(deepset)
+q̂ = QuantileEstimatorContinuous(deepset)
 
 # Train the estimator
-train(θ̂, θ_train, θ_val, Zτ_train, Zτ_val)
+q̂ = train(q̂, prior, simulate, m = m)
 
-# Estimate a single quantile for many test data sets
-θ = prior(K)
+# Closed-form posterior for comparison
+function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
+
+	# Parameters of psoterior distribution
+	μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
+	σ̃ = sqrt((1/σ₀^2 + length(Z)/σ²)^-1)
+
+	# Posterior
+	Normal(μ̃, σ̃)
+end
+
+# Estimate the posterior 0.1-quantile for 1000 test data sets
+θ = prior(1000)
 Z = simulateZ(θ, m)
 τ = 0.1f0
-θ̂(Z[1], τ)
-θ̂(Z, τ)
+q̂(Z, τ)                        # neural quantiles
+quantile.(posterior.(Z), τ)'   # true quantiles
 
-# Estimate multiple quantiles for a single data set
-τ = [0.1, 0.25, 0.5, 0.75, 0.9]
-reduce(hcat, θ̂.(Ref(Z[1]), τ))
+# Estimate several quantiles for a single data set
+z = Z[1]
+τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
+reduce(vcat, q̂.(Ref(z), τ))    # neural quantiles
+quantile.(posterior(z), τ)     # true quantiles
 ```
 """
 struct QuantileEstimatorContinuous <: NeuralEstimator
@@ -327,40 +315,6 @@ function (est::QuantileEstimatorContinuous)(Z::V, τ::Number) where V <: Abstrac
 end
 (est::QuantileEstimatorContinuous)(Z, τ) = est((Z, τ)) # "Tupleise" input and pass to Tuple method
 (est::QuantileEstimatorContinuous)(Zτ::Tuple) = est.deepset(Zτ)
-#TODO why is the validation risk so large (why is there so much overfitting, at
-#     least as measured by validation risk)?
-#TODO train(θ̂, prior, simulate, m = m)  # training with "on-the-fly" simulation
-#TODO why is the initial training risk different to the previous final training risk?
-# train(θ̂, θ_train, θ_train, Zτ_train, Zτ_train)
-# train(θ̂, θ_train, θ_train, Zτ_train, Zτ_train)
-
-# # Compare to closed-form posterior
-# function posterior(Z)
-# 	# Prior hyperparameters
-# 	σ₀  = 1
-# 	σ₀² = σ₀^2
-# 	μ₀  = 0
-#
-# 	# Known variance
-#     σ  = 1
-# 	σ² = σ^2
-#
-# 	# Posterior parameters
-# 	μ̃ = (1/σ₀² + length(Z)/σ²)^-1 * (μ₀/σ₀² + sum(Z)/σ²)
-# 	σ̃ = sqrt((1/σ₀² + length(Z)/σ²)^-1)
-#
-# 	# Posterior
-# 	Normal(μ̃, σ̃)
-# end
-#
-# # Many data sets, single quantile:
-# quantile.(posterior.(Z), τ)'
-# θ̂(Z, τ)
-#
-# # Single data set, range of quantiles:
-# τ = [0.1, 0.25, 0.5, 0.75, 0.9]
-# quantile.(posterior(Z[1]), τ)'
-# reduce(hcat, θ̂.(Ref(Z[1]), τ))
 
 # ---- RatioEstimator  ----
 
@@ -482,10 +436,6 @@ function (est::RatioEstimator)(Zθ::Tuple; classifier::Bool = false)
 	end
 	classifier ? c : c ./ (1 .- c)
 end
-
-# References
-# - Hermans J, Begy V, Louppe G. 2020. Likelihood-free MCMC with amortized approximate ratio estimators, In Proceedings of the 37th International Conference on Machine Learning (ICML 2020), vol. 119, pp. 4239–4248, PMLR
-# - Walchessen J, Lenzi A, Kuusela M. 2023. Neural likelihood surfaces for spatial processes with computationally intensive or intractable likelihoods. arXiv:2305.04634 [stat.ME]
 
 # # Estimate ratio for many data sets and parameter vectors
 # θ = prior(K)
