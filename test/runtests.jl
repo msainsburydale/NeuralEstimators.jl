@@ -1012,37 +1012,28 @@ end
 
 
 @testset "RatioEstimator" begin
+	using NeuralEstimators, Flux, Statistics
+
 	# Generate data from Z|μ,σ ~ N(μ, σ²) with μ, σ ~ U(0, 1)
-	p = 2        # number of unknown parameters in the statistical model
-	d = 1        # dimension of each independent replicate
-	m = 100      # number of independent replicates
-	K = 1000    # number of training samples
+	p = 2     # number of unknown parameters in the statistical model
+	d = 1     # dimension of each independent replicate
+	m = 100   # number of independent replicates
 
 	prior(K) = rand32(p, K)
 	simulate(θ, m) = θ[1] .+ θ[2] .* randn32(d, m)
 	simulate(θ::AbstractMatrix, m) = simulate.(eachcol(θ), m)
-
-	θ_train = prior(K)
-	θ_val   = prior(K)
-	Z_train = simulate(θ_train, m)
-	Z_val   = simulate(θ_val, m)
 
 	# Architecture
 	w = 64 # width of each hidden layer
 	q = 2p # number of learned summary statistics
 	ψ = Chain(
 		Dense(d, w, relu),
-		Dropout(0.3),
 		Dense(w, w, relu),
-		Dropout(0.3),
-		Dense(w, q, relu),
-		Dropout(0.3)
+		Dense(w, q, relu)
 		)
 	ϕ = Chain(
 		Dense(q + p, w, relu),
-		Dropout(0.3),
 		Dense(w, w, relu),
-		Dropout(0.3),
 		Dense(w, 1)
 		)
 	deepset = DeepSet(ψ, ϕ)
@@ -1051,13 +1042,7 @@ end
 	r̂ = RatioEstimator(deepset)
 
 	# Train the estimator
-	r̂ = train(r̂, θ_train, θ_val, Z_train, Z_val, epochs = 2, use_gpu = false, verbose = false)
-
-	# Estimate ratio for many data sets and parameter vectors
-	θ = prior(K)
-	Z = simulate(θ, m)
-	r̂(Z, θ)                                            # likelihood-to-evidence ratios
-	r̂(Z, θ; classifier = true)                         # class probabilities
+	r̂ = train(r̂, prior, simulate, m = m, epochs = 2, verbose = false)
 
 	# Inference with "observed" data set
 	θ = prior(1)
@@ -1066,7 +1051,22 @@ end
 	mlestimate(r̂, z;  θ₀ = θ₀)                # maximum-likelihood estimate
 	mapestimate(r̂, z; θ₀ = θ₀)                # maximum-a-posteriori estimate
 	θ_grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
-	θ_grid = Float32.(θ_grid)
 	r̂(z, θ_grid)                              # likelihood-to-evidence ratios over grid
 	sampleposterior(r̂, z; θ_grid = θ_grid)    # posterior samples
+
+	# Estimate ratio for many data sets and parameter vectors
+	θ = prior(1000)
+	Z = simulate(θ, m)
+	r̂(Z, θ)                                   # likelihood-to-evidence ratios
+	r̂(Z, θ; classifier = true)                # class probabilities
+
+	# Inference with multiple data sets
+	θ = prior(10)
+	z = simulate(θ, m)
+	r̂(z, θ_grid)                                       # likelihood-to-evidence ratios
+	mlestimate(r̂, z; θ_grid = θ_grid)                  # maximum-likelihood estimates
+	mlestimate(r̂, z; θ₀ = θ₀)                          # maximum-likelihood estimates
+	samples = sampleposterior(r̂, z; θ_grid = θ_grid)   # posterior samples
+	θ̄ = reduce(hcat, mean.(samples; dims = 2))         # posterior means
+	interval.(samples; probs = [0.05, 0.95])           # posterior credible intervals
 end

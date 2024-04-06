@@ -82,41 +82,21 @@ include("missingdata.jl")
 end
 
 #TODO
+# - Fix warnings that appear when running the test code
 # - assess(est::QuantileEstimatorDiscrete). Here, we can use simulation-based calibration (e.g., qq plots).
 # - assess(est::RatioEstimator). Here, we can use simulation-based calibration (e.g., qq plots).
 # - Incorporate the following package to very easily add a lot of bootstrap functionality: https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
 # - Examples: show a plot of a single data set within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
 # - Examples: Bivariate data in multivariate section.
-# - Examples: Gridded spatial data. Parametric bootstrap:
-# ```
-# θ̂_test = estimateinbatches(θ̂, Z_test)
-# B = 200
-# Z_boot = [[simulate(θ, m) for b ∈ 1:B] for θ ∈ eachcol(θ̂_test)]
-# assessment = assess(θ̂, θ_test, Z_test, boot = Z_boot)
-# ```
-
 
 #TODO
 # - See if there are any other places I can use reduce(vcat, x) instead of vcat(x…).
-# - would be good to automatically convert to Float32 upon entry into each train method (and define a wrapper function that does this for the "simulation on the fly"  methods)
 # - ProgressMeter? (see https://fluxml.ai/Flux.jl/stable/models/quickstart/) Only if it doesn’t get in the way of the current info that is printed to the screen.
-# - 8.	Add dropout layers in initialise_estimator(), so that dropout is used by default when the user creates their estimator with this function.
 # - Clean up my handling of GNN: do we really need a separate object for it, or can we just use DeepSet with the inner network a GNN?
 # - Examples: Add functionality for storing and plotting the training-validation risk in the NeuralEstimator. This will involve changing _train() to return both the estimator and the risk, and then defining train(::NeuralEstimator) to update the slot containing the risk. We will also need _train() to take the argument "loss_vs_epoch", so that we can "continue training". Oncce I do this, I can then add a plotting method for plotting the risk.
 # - Examples: discrete parameter.
-# - General purpose quantile estimator of the form (9) in the manuscript. Also look into monotonic networks.
 # - Add helper functions for censored data and write an example in the documentation.
-# - Check that training with CorrelationMatrix works well.
-
-# More/better ways to assess intervals. For example, from Efron (2003):
-    # Coverage, even appropriately defined, is not the end of the story. Stability
-    # of the intervals, in length and location, is also important. Here is an example.
-    # Suppose we are in a standard normal situation where the exact interval is
-    # Student’s t with 10 degrees of freedom. Method A produces the exact 90%
-    # interval except shortened by a factor of 0.90; method B produces the exact
-    # 90% interval either shortened by a factor of 2/3 or lengthened by a factor of
-    # 3/2, with equal probability. Both methods provide about 86% coverage, but
-    # the intervals in method B will always be substantially misleading.
+# - Check that training with CovarianceMatrix/CorrelationMatrix works well.
 
 # ---- long term:
 # - Proper citations: https://juliadocs.org/DocumenterCitations.jl/stable/

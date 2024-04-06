@@ -371,36 +371,25 @@ approximate maximum-likelihood and maximum-a-posteriori estimates, and
 using NeuralEstimators, Flux, Statistics
 
 # Generate data from Z|μ,σ ~ N(μ, σ²) with μ, σ ~ U(0, 1)
-p = 2        # number of unknown parameters in the statistical model
-d = 1        # dimension of each independent replicate
-m = 100      # number of independent replicates
-K = 10000    # number of training samples
+p = 2     # number of unknown parameters in the statistical model
+d = 1     # dimension of each independent replicate
+m = 100   # number of independent replicates
 
 prior(K) = rand32(p, K)
 simulate(θ, m) = θ[1] .+ θ[2] .* randn32(d, m)
 simulate(θ::AbstractMatrix, m) = simulate.(eachcol(θ), m)
-
-θ_train = prior(K)
-θ_val   = prior(K)
-Z_train = simulate(θ_train, m)
-Z_val   = simulate(θ_val, m)
 
 # Architecture
 w = 64 # width of each hidden layer
 q = 2p # number of learned summary statistics
 ψ = Chain(
 	Dense(d, w, relu),
-	Dropout(0.3),
 	Dense(w, w, relu),
-	Dropout(0.3),
-	Dense(w, q, relu),
-	Dropout(0.3)
+	Dense(w, q, relu)
 	)
 ϕ = Chain(
 	Dense(q + p, w, relu),
-	Dropout(0.3),
 	Dense(w, w, relu),
-	Dropout(0.3),
 	Dense(w, 1)
 	)
 deepset = DeepSet(ψ, ϕ)
@@ -409,7 +398,7 @@ deepset = DeepSet(ψ, ϕ)
 r̂ = RatioEstimator(deepset)
 
 # Train the estimator
-r̂ = train(r̂, θ_train, θ_val, Z_train, Z_val)
+r̂ = train(r̂, prior, simulate, m = m)
 
 # Inference with "observed" data set
 θ = prior(1)
@@ -438,7 +427,7 @@ function (est::RatioEstimator)(Zθ::Tuple; classifier::Bool = false)
 end
 
 # # Estimate ratio for many data sets and parameter vectors
-# θ = prior(K)
+# θ = prior(1000)
 # Z = simulate(θ, m)
 # r̂(Z, θ)                                   # likelihood-to-evidence ratios
 # r̂(Z, θ; classifier = true)                # class probabilities
@@ -446,63 +435,83 @@ end
 # # Inference with multiple data sets
 # θ = prior(10)
 # z = simulate(θ, m)
-# r̂(z, grid)                                         # likelihood-to-evidence ratios
-# mlestimate(r̂, z; theta_grid = grid)                # maximum-likelihood estimates
-# mlestimate(r̂, z; theta_init = [0.5, 0.5])          # maximum-likelihood estimates
-# samples = sampleposterior(r̂, z; theta_grid = grid) # posterior samples
-# θ̄ = mean.(samples; dims = 2)                       # posterior means
+# r̂(z, θ_grid)                                       # likelihood-to-evidence ratios
+# mlestimate(r̂, z; θ_grid = θ_grid)                  # maximum-likelihood estimates
+# mlestimate(r̂, z; θ₀ = θ₀)                          # maximum-likelihood estimates
+# samples = sampleposterior(r̂, z; θ_grid = θ_grid)   # posterior samples
+# θ̄ = reduce(hcat, mean.(samples; dims = 2))         # posterior means
 # interval.(samples; probs = [0.05, 0.95])           # posterior credible intervals
 
 # ---- PiecewiseEstimator ----
 
-"""
-	PiecewiseEstimator(estimators, breaks)
-Creates a piecewise estimator from a collection of `estimators`, based on the
-collection of changepoints, `breaks`, which should contain one element fewer
-than the number of `estimators`.
+@doc raw"""
+	PiecewiseEstimator(estimators, changepoints)
+Creates a piecewise estimator
+([Sainsbury-Dale et al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522), sec. 2.2.2)
+from a collection of `estimators` and sample-size `changepoints`.
+
+Specifically, with $l$ estimators and sample-size changepoints
+$m_1 < m_2 < \dots < m_{l-1}$, the piecewise etimator takes the form,
+
+```math
+\hat{\mathbf{\theta}}(\mathbf{Z})
+=
+\begin{cases}
+\hat{\mathbf{\theta}}_1(\mathbf{Z}) & m \leq m_1,\\
+\hat{\mathbf{\theta}}_2(\mathbf{Z}) & m_1 < m \leq m_2,\\
+\quad \vdots \\
+\hat{\mathbf{\theta}}_l(\mathbf{Z}) & m > m_{l-1}.
+\end{cases}
+```
+
+For example, given an estimator  ``\hat{\mathbf{\theta}}_1(\cdot)`` trained for small
+sample sizes (e.g., m ≤ 30) and an estimator ``\hat{\mathbf{\theta}}_2(\cdot)``
+trained for moderate-to-large sample sizes (e.g., m > 30), we may construct a
+`PiecewiseEstimator` that dispatches ``\hat{\mathbf{\theta}}_1(\cdot)`` if
+m ≤ 30 and ``\hat{\mathbf{\theta}}_2(\cdot)`` otherwise.
+
+See also [`trainx()`](@ref) for training estimators for a range of sample sizes.
 
 # Examples
 ```
-# Suppose that we've trained two neural estimators. The first, θ̂₁, is trained
-# for small sample sizes (e.g., m ≤ 30), and the second, `θ̂₂`, is trained for
-# moderate-to-large sample sizes (e.g., m > 30). We construct a piecewise
-# estimator with a sample-size changepoint of 30, which dispatches θ̂₁ if m ≤ 30
-# and θ̂₂ if m > 30.
-
 using NeuralEstimators, Flux
 
-n = 2  # bivariate data
+d = 2  # bivariate data
 p = 3  # number of parameters in the statistical model
 w = 8  # width of each hidden layer
 
 # Small-sample estimator
-ψ₁ = Chain(Dense(n, w, relu), Dense(w, w, relu));
+ψ₁ = Chain(Dense(d, w, relu), Dense(w, w, relu));
 ϕ₁ = Chain(Dense(w, w, relu), Dense(w, p));
 θ̂₁ = PointEstimator(DeepSet(ψ₁, ϕ₁))
 
 # Large-sample estimator
-ψ₂ = Chain(Dense(n, w, relu), Dense(w, w, relu));
+ψ₂ = Chain(Dense(d, w, relu), Dense(w, w, relu));
 ϕ₂ = Chain(Dense(w, w, relu), Dense(w, p));
 θ̂₂ = PointEstimator(DeepSet(ψ₂, ϕ₂))
 
-# Piecewise estimator
-θ̂ = PiecewiseEstimator([θ̂₁, θ̂₂], [30])
+# Piecewise estimator with changepoint m=30
+θ̂ = PiecewiseEstimator([θ̂₁, θ̂₂], 30)
 
-# Apply the estimator
-Z = [rand(n, 1, m) for m ∈ (10, 50)]
+# Apply the (untrained) piecewise estimator to data
+Z = [rand(d, 1, m) for m ∈ (10, 50)]
 θ̂(Z)
 ```
 """
 struct PiecewiseEstimator <: NeuralEstimator
 	estimators
-	breaks
-	function PiecewiseEstimator(estimators, breaks)
-		if length(breaks) != length(estimators) - 1
-			error("The length of `breaks` should be one fewer than the number of `estimators`")
-		elseif !issorted(breaks)
-			error("`breaks` should be in ascending order")
+	changepoints
+	function PiecewiseEstimator(estimators, changepoints)
+		if isa(changepoints, Number)
+			changepoints = [changepoints]
+		end
+		@assert all(isinteger.(changepoints)) "`changepoints` should contain integers"
+		if length(changepoints) != length(estimators) - 1
+			error("The length of `changepoints` should be one fewer than the number of `estimators`")
+		elseif !issorted(changepoints)
+			error("`changepoints` should be in ascending order")
 		else
-			new(estimators, breaks)
+			new(estimators, changepoints)
 		end
 	end
 end
@@ -510,18 +519,18 @@ end
 function (pe::PiecewiseEstimator)(Z)
 	# Note that this is an inefficient implementation, analogous to the inefficient
 	# DeepSet implementation. A more efficient approach would be to subset Z based
-	# on breaks, apply the estimators to each block of Z, then combine the estimates.
-	breaks = [pe.breaks..., Inf]
+	# on changepoints, apply the estimators to each block of Z, then combine the estimates.
+	changepoints = [pe.changepoints..., Inf]
 	m = numberreplicates(Z)
 	θ̂ = map(eachindex(Z)) do i
 		# find which estimator to use, and then apply it
 		mᵢ = m[i]
-		j = findfirst(mᵢ .<= breaks)
+		j = findfirst(mᵢ .<= changepoints)
 		pe.estimators[j](Z[[i]])
 	end
 	return stackarrays(θ̂)
 end
-Base.show(io::IO, pe::PiecewiseEstimator) = print(io, "\nPiecewise estimator with $(length(pe.estimators)) estimators and sample size change-points: $(pe.breaks)")
+Base.show(io::IO, pe::PiecewiseEstimator) = print(io, "\nPiecewise estimator with $(length(pe.estimators)) estimators and sample size change-points: $(pe.changepoints)")
 
 
 # ---- Helper function for initialising an estimator ----
