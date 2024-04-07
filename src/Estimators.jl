@@ -173,7 +173,7 @@ q̂ = train(q̂, prior, simulate, m = m)
 # Closed-form posterior for comparison
 function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
 
-	# Parameters of psoterior distribution
+	# Parameters of posterior distribution
 	μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
 	σ̃ = sqrt((1/σ₀^2 + length(Z)/σ²)^-1)
 
@@ -259,7 +259,7 @@ simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
 
 # Architecture: partially monotonic network to preclude quantile crossing
 w = 64  # width of each hidden layer
-q = 2p  # output dimension of summary network
+q = 16  # number of learned summary statistics
 ψ = Chain(
 	Dense(d, w, relu),
 	Dense(w, w, relu),
@@ -281,7 +281,7 @@ q̂ = train(q̂, prior, simulate, m = m)
 # Closed-form posterior for comparison
 function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
 
-	# Parameters of psoterior distribution
+	# Parameters of posterior distribution
 	μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
 	σ̃ = sqrt((1/σ₀^2 + length(Z)/σ²)^-1)
 
