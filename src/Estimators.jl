@@ -407,6 +407,7 @@ z = simulate(θ, m)[1]
 mlestimate(r̂, z;  θ₀ = θ₀)                # maximum-likelihood estimate
 mapestimate(r̂, z; θ₀ = θ₀)                # maximum-a-posteriori estimate
 θ_grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
+θ_grid = Float32.(θ_grid)  
 r̂(z, θ_grid)                              # likelihood-to-evidence ratios over grid
 sampleposterior(r̂, z; θ_grid = θ_grid)    # posterior samples
 ```

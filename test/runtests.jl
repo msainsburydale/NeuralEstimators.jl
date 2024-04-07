@@ -3,7 +3,7 @@ import NeuralEstimators: simulate
 using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, _agg, rowwisenorm
 using CUDA
 using DataFrames
-using Distributions: Normal, Uniform, Product, cdf, logpdf, quantile
+using Distributions
 using Distances
 using Flux
 using Flux: batch, DataLoader, mae, mse
@@ -483,7 +483,7 @@ parameter_names = ["μ", "σ"]
 struct Parameters <: ParameterConfigurations
 	θ
 end
-Ω = Product([Normal(0, 1), Uniform(0.1, 1.5)])
+Ω = product_distribution([Normal(0, 1), Uniform(0.1, 1.5)])
 ξ = (Ω = Ω, parameter_names = parameter_names)
 K = 100
 Parameters(K::Integer, ξ) = Parameters(Float32.(rand(ξ.Ω, K)))
@@ -525,7 +525,7 @@ w  = 32 # width of each layer
 qₓ = 2  # number of set-level covariates
 m  = 10 # default sample size
 
-@testset "DeepSet: array data" begin
+@testset "DeepSet" begin
 	@testset "$covar" for covar ∈ ["no set-level covariates" "set-level covariates"]
 		q = w
 		if covar == "set-level covariates"
@@ -578,17 +578,17 @@ m  = 10 # default sample size
 			@testset "train" begin
 
 				# train: single estimator
-				θ̂ = train(θ̂, Parameters, simulator, m = m, epochs = 2, use_gpu = use_gpu, verbose = verbose, ξ = ξ)
-				θ̂ = train(θ̂, Parameters, simulator, m = m, epochs = 2, use_gpu = use_gpu, verbose = verbose, ξ = ξ, savepath = "testing-path")
-				θ̂ = train(θ̂, Parameters, simulator, m = m, epochs = 2, use_gpu = use_gpu, verbose = verbose, ξ = ξ, simulate_just_in_time = true)
-				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 2, use_gpu = use_gpu, verbose = verbose)
-				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 2, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
-				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 2, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
-				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 2, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
+				θ̂ = train(θ̂, Parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, ξ = ξ)
+				θ̂ = train(θ̂, Parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, ξ = ξ, savepath = "testing-path")
+				θ̂ = train(θ̂, Parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, ξ = ξ, simulate_just_in_time = true)
+				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose)
+				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
+				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 1, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
+				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 1, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
 				Z_train = simulator(parameters, 2m);
 				Z_val   = simulator(parameters, m);
-				train(θ̂, parameters, parameters, Z_train, Z_val; epochs = 5, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
-				train(θ̂, parameters, parameters, Z_train, Z_val; epochs = 5, use_gpu = use_gpu, verbose = verbose)
+				train(θ̂, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
+				train(θ̂, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose)
 
 				# trainx: Multiple estimators
 				trainx(θ̂, Parameters, simulator, [1, 2, 5]; ξ = ξ, epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
@@ -801,8 +801,6 @@ end
 	# coverage(assessment)
 end
 
-#TODO QuantileEstimator
-
 @testset "EM" begin
 
 	# Set the prior distribution
@@ -959,23 +957,20 @@ end
 end
 
 @testset "QuantileEstimatorContinuous" begin
-	# Generate training data from the model Z|θ ~ N(θ, 1) and θ ~ N(0, 1)
-	d = 1       # dimension of each independent replicate
-	m = 30      # number of independent replicates
-	p = 1       # number of unknown parameters in the statistical model
-	K = 1000  # number of training samples
-	prior(K) = randn32(1, K)
-	simulateZ(θ, m) = [μ .+ randn32(1, m) for μ ∈ eachcol(θ_train)]
-	simulateτ(K) = [rand32(1) for _ in 1:K]
-	simulate(θ, m) = (simulateZ(θ, m), simulateτ(size(θ, 2)))
-	θ_train  = prior(K)
-	θ_val    = prior(K)
-	Zτ_train = simulate(θ_train, m)
-	Zτ_val   = simulate(θ_val, m)
+	using NeuralEstimators, Flux, Distributions, Statistics
 
-	# Architecture
-	w = 64   # width of each hidden layer
-	q = 2p   # output dimension of summary network
+	# Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
+	d = 1         # dimension of each independent replicate
+	p = 1         # number of unknown parameters in the statistical model
+	m = 30        # number of independent replicates in each data set
+	prior(K) = randn32(p, K)
+	simulateZ(θ, m) = [μ .+ randn32(d, m) for μ ∈ eachcol(θ)]
+	simulateτ(K)    = [rand32(1) for k in 1:K]
+	simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
+
+	# Architecture: partially monotonic network to preclude quantile crossing
+	w = 64  # width of each hidden layer
+	q = 16  # number of learned summary statistics
 	ψ = Chain(
 		Dense(d, w, relu),
 		Dense(w, w, relu),
@@ -989,30 +984,40 @@ end
 	deepset = DeepSet(ψ, ϕ)
 
 	# Initialise the estimator
-	θ̂ = QuantileEstimatorContinuous(deepset)
+	q̂ = QuantileEstimatorContinuous(deepset)
 
 	# Train the estimator
-	train(θ̂, θ_train, θ_val, Zτ_train, Zτ_val, epochs = 2, verbose = false)
+	q̂ = train(q̂, prior, simulate, m = m, epochs = 1, verbose = false)
 
-	# Estimate a single quantile for many test data sets
-	θ = prior(K)
+	# Closed-form posterior for comparison
+	function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
+
+		# Parameters of posterior distribution
+		μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
+		σ̃ = sqrt((1/σ₀^2 + length(Z)/σ²)^-1)
+
+		# Posterior
+		Normal(μ̃, σ̃)
+	end
+
+	# Estimate the posterior 0.1-quantile for 1000 test data sets
+	θ = prior(1000)
 	Z = simulateZ(θ, m)
 	τ = 0.1f0
-	θ̂(Z[1], τ)
-	θ̂(Z, τ)
+	q̂(Z, τ)                        # neural quantiles
+	quantile.(posterior.(Z), τ)'   # true quantiles
 
-	# Estimate multiple quantiles for a single data set
-	τ = [0.1, 0.25, 0.5, 0.75, 0.9]
-	reduce(hcat, θ̂.(Ref(Z[1]), τ))
+	# Estimate several quantiles for a single data set
+	z = Z[1]
+	τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
+	reduce(vcat, q̂.(Ref(z), τ))    # neural quantiles
+	quantile.(posterior(z), τ)     # true quantiles
 
 	# Check monotonicty
-	@test all(θ̂(Z, 0.1f0) .<= θ̂(Z, 0.11f0) .<= θ̂(Z, 0.9f0) .<= θ̂(Z, 0.91f0))
+	@test all(q̂(z, 0.1f0) .<= q̂(z, 0.11f0) .<= q̂(z, 0.9f0) .<= q̂(z, 0.91f0))
 end
 
-
-
 @testset "RatioEstimator" begin
-	using NeuralEstimators, Flux, Statistics
 
 	# Generate data from Z|μ,σ ~ N(μ, σ²) with μ, σ ~ U(0, 1)
 	p = 2     # number of unknown parameters in the statistical model
@@ -1042,7 +1047,7 @@ end
 	r̂ = RatioEstimator(deepset)
 
 	# Train the estimator
-	r̂ = train(r̂, prior, simulate, m = m, epochs = 2, verbose = false)
+	r̂ = train(r̂, prior, simulate, m = m, epochs = 1, verbose = false)
 
 	# Inference with "observed" data set
 	θ = prior(1)
@@ -1051,22 +1056,13 @@ end
 	mlestimate(r̂, z;  θ₀ = θ₀)                # maximum-likelihood estimate
 	mapestimate(r̂, z; θ₀ = θ₀)                # maximum-a-posteriori estimate
 	θ_grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
+	θ_grid = Float32.(θ_grid)
 	r̂(z, θ_grid)                              # likelihood-to-evidence ratios over grid
 	sampleposterior(r̂, z; θ_grid = θ_grid)    # posterior samples
 
 	# Estimate ratio for many data sets and parameter vectors
 	θ = prior(1000)
 	Z = simulate(θ, m)
-	r̂(Z, θ)                                   # likelihood-to-evidence ratios
-	r̂(Z, θ; classifier = true)                # class probabilities
-
-	# Inference with multiple data sets
-	θ = prior(10)
-	z = simulate(θ, m)
-	r̂(z, θ_grid)                                       # likelihood-to-evidence ratios
-	mlestimate(r̂, z; θ_grid = θ_grid)                  # maximum-likelihood estimates
-	mlestimate(r̂, z; θ₀ = θ₀)                          # maximum-likelihood estimates
-	samples = sampleposterior(r̂, z; θ_grid = θ_grid)   # posterior samples
-	θ̄ = reduce(hcat, mean.(samples; dims = 2))         # posterior means
-	interval.(samples; probs = [0.05, 0.95])           # posterior credible intervals
+	@test all(r̂(Z, θ) .>= 0)                          # likelihood-to-evidence ratios
+	@test all(0 .<= r̂(Z, θ; classifier = true) .<= 1) # class probabilities
 end

@@ -15,7 +15,6 @@ using CSV
 using DataFrames
 using Distances
 using Distributions
-using Distributions: Bernoulli, Product
 using Folds
 using Flux
 using Flux: ofeltype, params, DataLoader, update!, glorot_uniform, onehotbatch, _size_check, _match_eltype # @layer

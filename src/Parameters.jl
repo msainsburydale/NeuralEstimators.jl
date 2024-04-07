@@ -94,7 +94,7 @@ end
 function _ParameterLoader(parameters::P; batchsize::Integer = 1, shuffle::Bool = false, partial::Bool = true) where {P <: ParameterConfigurations}
     @assert batchsize > 0
     K = size(parameters, 2)
-    if K < batchsize batchsize = K end
+    if K <= batchsize batchsize = K end
     imax = partial ? K : K - batchsize + 1 # imax ≡ the largest index that we go to
     _ParameterLoader(parameters, batchsize, K, partial, imax, [1:K;], shuffle)
 end
