@@ -137,15 +137,15 @@ function _maximisedensity(
 
 		objective(θ) = -first(prior(θ) * est(Z, θ)) # closure that will be minimised
 
-		# Gradient-free NelderMead algorithm
-		#θ̂ = optimize(objective, θ₀, NelderMead()) |> Optim.minimizer
-
 		# Gradient using reverse-mode automatic differentiation with Zygote
 		# ∇objective(θ) = gradient(θ -> objective(θ), θ)[1]
 		# θ̂ = optimize(objective, ∇objective, θ₀, LBFGS(); inplace = false) |> Optim.minimizer
 
 		# Gradient using finite differences
-		θ̂ = optimize(objective, θ₀, LBFGS()) |> Optim.minimizer
+		# θ̂ = optimize(objective, θ₀, LBFGS()) |> Optim.minimizer
+
+		# Gradient-free NelderMead algorithm (find that this is most stable)
+		θ̂ = optimize(objective, θ₀, NelderMead()) |> Optim.minimizer
 	end
 
 	return θ̂
