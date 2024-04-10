@@ -148,7 +148,7 @@ function _train(θ̂, sampler, simulator;
 	# For loops create a new scope for the variables that are not present in the
 	# enclosing scope, and such variables get a new binding in each iteration of
 	# the loop; circumvent this by declaring local variables.
-	local θ̂_best = θ̂
+	local θ̂_best = deepcopy(θ̂)
 	local θ_train
 	local train_set
 	local min_val_risk = val_risk # minimum validation loss, monitored for early stopping
@@ -203,7 +203,7 @@ function _train(θ̂, sampler, simulator;
 			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = val_risk
 			early_stopping_counter = 0
-			θ̂_best = θ̂
+			θ̂_best = deepcopy(θ̂)
 		else
 			early_stopping_counter += 1
 			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
@@ -267,7 +267,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 	# Either way, store this decision in a variable.
 	store_entire_train_set = !simulate_just_in_time || epochs_per_Z_refresh != 1
 
-	local θ̂_best = θ̂
+	local θ̂_best = deepcopy(θ̂)
 	local train_set
 	local min_val_risk = val_risk
 	local early_stopping_counter = 0
@@ -289,7 +289,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 			sim_time = 0.0
 			epoch_time = 0.0
 			train_risk = []
-			for θ ∈ _ParameterLoader(θ_train, batchsize = batchsize) 
+			for θ ∈ _ParameterLoader(θ_train, batchsize = batchsize)
 				sim_time   += @elapsed set = _constructset(θ̂, simulator, θ, m, batchsize)
 				epoch_time += @elapsed rsk = _risk(θ̂, loss, set, device, optimiser)
 				push!(train_risk, rsk)
@@ -313,7 +313,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = val_risk
 			early_stopping_counter = 0
-			θ̂_best = θ̂
+			θ̂_best = deepcopy(θ̂)
 		else
 			early_stopping_counter += 1
 			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
@@ -388,7 +388,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	loss_per_epoch = [initial_train_risk val_risk;]
 	savebool && _saveweights(θ̂, savepath, 0)
 
-	local θ̂_best = θ̂
+	local θ̂_best = deepcopy(θ̂)
 	local min_val_risk = val_risk
 	local early_stopping_counter = 0
 	train_time = @elapsed for epoch in 1:epochs
@@ -412,7 +412,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = val_risk
 			early_stopping_counter = 0
-			θ̂_best = θ̂
+			θ̂_best = deepcopy(θ̂)
 		else
 			early_stopping_counter += 1
 			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
