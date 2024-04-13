@@ -170,21 +170,22 @@ end
 
 #TODO Recall that I set the code up to have ndata as a 3D array; with this format,
 #     non-parametric bootstrap would be exceedingly fast (since we can subset the array data, I think).
-#TODO not clear what m is here. Change documentation to be more like: https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.getgraph-Tuple{GNNGraph,%20Int64}
 """
-	subsetdata(Z::V, m) where {V <: AbstractArray{A}} where {A <: Any}
-	subsetdata(Z::A, m) where {A <: AbstractArray{T, N}} where {T, N}
-	subsetdata(Z::G, m) where {G <: AbstractGraph}
-Subsets `m` replicates from data `Z`.
+	subsetdata(Z::V, i) where {V <: AbstractArray{A}} where {A <: Any}
+	subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
+	subsetdata(Z::G, i) where {G <: AbstractGraph}
+Return replicate(s) `i` from each data set in `Z`.
 
-Note that `subsetdata` is slow for graphical data, and one should consider using
-a method of `train` that does not require the data to be subsetted when working
-with graphical data: use `numberreplicates` to check that the training and
-validation data sets are equally replicated, which prevents the invocation of
-`subsetdata`. Note also that `subsetdata` only applies to vectors of batched graphs.
+If the user is working with data that are not covered by the default methods,
+simply overload the function with the appropriate type for `Z`.
 
-If the user is working with data that is not covered by the default methods,
-simply overload `subsetdata` with the appropriate type for `Z`.
+For graphical data, calls
+[`getgraph()`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.getgraph-Tuple{GNNGraph,%20Int64}),
+where the replicates are assumed be to stored as batched graphs. Since this can
+be slow, one should consider using a method of [`train()`](@ref) that does not require
+the data to be subsetted when working
+with graphical data (use [`numberreplicates()`](@ref) to check that the training
+and validation data sets are equally replicated, which prevents subsetting).
 
 # Examples
 ```
@@ -193,17 +194,19 @@ using GraphNeuralNetworks
 using Flux: batch
 
 d = 1  # dimension of the response variable
-n = 5  # number of observations in each realisation
+n = 4  # number of observations in each realisation
 m = 6  # number of replicates in each data set
 K = 2  # number of data sets
 
 # Array data
 Z = [rand(n, d, m) for k ∈ 1:K]
+subsetdata(Z, 2)   # extract second replicate from each data set
 subsetdata(Z, 1:3) # extract first 3 replicates from each data set
 
 # Graphical data
 e = 8 # number of edges
 Z = [batch([rand_graph(n, e, ndata = rand(d, n)) for _ ∈ 1:m]) for k ∈ 1:K]
+subsetdata(Z, 2)   # extract second replicate from each data set
 subsetdata(Z, 1:3) # extract first 3 replicates from each data set
 ```
 """
@@ -233,7 +236,8 @@ function subsetdata end
 # ---- End test code ----
 
 # Wrapper to ensure that the number of dimensions in the subsetted Z is preserved
-subsetdata(Z, i::Int) = subsetdata(Z, i:i)
+# This causes dispatch ambiguity; instead, convert i to a range with each method
+# subsetdata(Z, i::Int) = subsetdata(Z, i:i)
 
 function subsetdata(Z::V, i) where {V <: AbstractVector{A}} where A
 	subsetdata.(Z, Ref(i))
@@ -243,19 +247,18 @@ function subsetdata(tup::Tup, i) where {Tup <: Tuple{V₁, V₂}} where {V₁ <:
 	Z = tup[1]
 	X = tup[2]
 	@assert length(Z) == length(X)
-
-	(subsetdata(Z, i), X) # NB X is not subsetted because it is set-level information
+	(subsetdata(Z, i), X) # X is not subsetted because it is set-level information
 end
 
 function subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
+	if typeof(i) <: Integer i = i:i end
 	colons  = ntuple(_ -> (:), N - 1)
 	Z[colons..., i]
 end
 
 function subsetdata(Z::G, i) where {G <: AbstractGraph}
-
+	if typeof(i) <: Integer i = i:i end
 	sym = collect(keys(Z.ndata))[1]
-
 	if ndims(Z.ndata[sym]) == 3
 		GNNGraph(Z; ndata = Z.ndata[sym][:, i, :])
 	else

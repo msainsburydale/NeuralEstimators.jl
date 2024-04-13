@@ -406,8 +406,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		savebool && @save loss_path loss_per_epoch
 
 		# If the current loss is better than the previous best, save θ̂ and
-		# update the minimum validation risk; otherwise, add to the early
-		# stopping counter
+		# update the minimum validation risk
 		if val_risk <= min_val_risk
 			savebool && _saveweights(θ̂, savepath, epoch)
 			min_val_risk = val_risk
@@ -420,7 +419,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
     end
 
-	# save key information and the best θ̂ as best_network.bson.
+	# save key information 
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	savebool && _savebestweights(savepath)
 
