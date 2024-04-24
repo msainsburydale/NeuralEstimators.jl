@@ -7,6 +7,7 @@ import Base: join, merge, show, size, summary
 using BSON: @save, load
 using CairoMakie
 using ChainRulesCore: @non_differentiable, @ignore_derivatives
+using Clustering
 using ColorSchemes
 using CUDA
 using CUDA: CuArray
@@ -32,9 +33,10 @@ using Random: randexp, shuffle
 using RecursiveArrayTools: VectorOfArray, convert
 using SparseArrays
 using SpecialFunctions: besselk, gamma, loggamma
-using Statistics: mean, median, sum
+using Statistics: mean, median, sum, quantile
 using StatsBase
 using StatsBase: wsample
+using Suppressor
 using Zygote
 
 export kpowerloss, intervalscore, quantileloss
@@ -43,7 +45,7 @@ include("loss.jl")
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
-export DeepSet, Compress, CovarianceMatrix, CorrelationMatrix
+export DeepSet, summarystatistics, Compress, CovarianceMatrix, CorrelationMatrix
 export vectotril, vectotriu
 include("Architectures.jl")
 
@@ -53,7 +55,7 @@ include("Estimators.jl")
 export sampleposterior, mlestimate, mapestimate, bootstrap, interval
 include("inference.jl")
 
-export GNN, UniversalPool, adjacencymatrix, WeightedGraphConv, maternclusterprocess
+export spatialgraph, SpatialGraphConv, SpatialPyramidPool, UniversalPool, GNNSummary, adjacencymatrix, maternclusterprocess
 include("Graphs.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
@@ -95,13 +97,12 @@ end
 # - Examples: Add functionality for storing and plotting the training-validation risk in the NeuralEstimator. This will involve changing _train() to return both the estimator and the risk, and then defining train(::NeuralEstimator) to update the slot containing the risk. We will also need _train() to take the argument "loss_vs_epoch", so that we can "continue training". Oncce I do this, I can then add a plotting method for plotting the risk.
 # - Examples: discrete parameter.
 # - Add helper functions for censored data and write an example in the documentation.
-# - Check that training with CovarianceMatrix/CorrelationMatrix works well.
+# - Check that training with CovarianceMatrix/CorrelationMatrix works.
 
 # ---- long term:
 # - Proper citations: https://juliadocs.org/DocumenterCitations.jl/stable/
 # - Might also be useful to store the parameter_names in NeuralEstimator: if they are present in the estimator, they can be compared to other sources of parameter_names as a sanity check, and they can be used in bootstrap() so that the bootstrap estimates and resulting intervals are given informative names.
 # - Would be good if interval(θ̂::IntervalEstimator, Z) and interval(bs) also displayed the parameter names... this could be done if the estimator stores the parameter names.
-# - See if I can move WeightedGraphConv to GraphNeuralNetworks (bit untidy that it's in this package and not in the GNN package).
 # - turn some document examples into "doctests"
 # - Add "AR(k) time series" example, or a Ricker model. (An example using partially exchangeable neural networks.)
 # - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. It seems very easy, just need to add precompile(f, (arg_types…)) to whatever methods I want to precompile.

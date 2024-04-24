@@ -1,87 +1,126 @@
-"""
-	maternclusterprocess(; λ=10, μ=10, r=0.1, xmin=0, xmax=1, ymin=0, ymax=1)
+#
+# For a concrete example, we consider the spatial Gaussian-process model,
+# ```math
+# Z_{j} = Y(\boldsymbol{s}_{j}) + \epsilon_{j}, \quad j = 1, \dots, n,
+# ```
+# where $\boldsymbol{Z} \equiv (Z_{1}, \dots, Z_{n})'$ are data collected at locations $\{\boldsymbol{s}_{1}, \dots, \boldsymbol{s}_{n}\}$ in a spatial domain $\mathcal{D}$, $Y(\cdot)$ is a spatially-correlated mean-zero Gaussian process, and $\epsilon_j \sim N(0, \tau^2)$, $j = 1, \dots, n$ is Gaussian white noise with standard deviation $\tau > 0$. Here, we use the popular isotropic Matérn covariance function,
+# ```math
+# \text{cov}\big(Y(\boldsymbol{s}), Y(\boldsymbol{u})\big)
+# =
+# \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \Big(\frac{\|\boldsymbol{s} - \boldsymbol{u}\|}{\rho}\Big)^\nu K_\nu\Big(\frac{\|\boldsymbol{s} - \boldsymbol{u}\|}{\rho}\Big),
+# \quad \boldsymbol{s}, \boldsymbol{u} \in \mathcal{D},
+# ```
+# where $\sigma^2$ is the marginal variance, $\Gamma(\cdot)$ is the gamma function, $K_\nu(\cdot)$ is the Bessel function of the second kind of order $\nu$, and $\rho > 0$ and $\nu > 0$ are range and smoothness parameters, respectively. For ease of illustration, we fix $\sigma^2 = 1$ and $\nu = 1$, which leaves two unknown parameters that need to be estimated, $\boldsymbol{\theta} \equiv (\tau, \rho)'$.
 
-Simulates a Matérn cluster process with density of parent Poisson point process
-`λ`, mean number of daughter points `μ`, and radius of cluster disk `r`, over the
-simulation window defined by `{x/y}min` and `{x/y}max`.
+#NB I'm now set up to implement "local pooling", which might improve time and memory efficiency if implemented well
 
-Note that one may also use the R package spatstat using RCall.
+# ---- Spatial Graph ----
+
+#TODO q is not currently being used in the example... think I need to allow Z to be a three-dimensional array
+#TODO elsewhere in the package, I think I use d to denote the dimension of the response variable... this will cause confusion, so get this right (check with the papers)
+#TODO documentation (keyword arguments: pyramid_pool, k = 10, maxmin = true)
+@doc raw"""
+	spatialgraph(S)
+	spatialgraph(S, Z)
+	spatialgraph(g::GNNGraph, Z)
+Given data `Z` and spatial locations `S`, constructs a
+[`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/gnngraph/#GNNGraph-type)
+ready for use in a graph neural network.
+
+Let $\mathcal{D} \subset \mathbb{R}^d$ denote the spatial domain of interest.
+In the case that $m$ independent replicates are collected over the same set of
+$n$ spatial locations,
+```math
+\{\mathbf{s}_1, \dots, \mathbf{s}_n\} \subset \mathcal{D},
+```
+`Z` and `S` should be given as $n \times m$ and $n \times d$ matrices,
+respectively. Otherwise, in the case that $m$ independent replicates
+are collected over differing sets of spatial locations,
+```math
+\{\mathbf{s}_{ij}, \dots, \mathbf{s}_{in_i}\} \subset \mathcal{D}, \quad i = 1, \dots, m,
+```
+`Z` should be given as an $m$-dimensional vector of $n_i$-dimensional vectors,
+and `S` should be given as an $m$-dimensional vector of $n_i \times d$ matrices.
 
 # Examples
 ```
-using NeuralEstimators
+using NeuralEstimators, BenchmarkTools
 
-# Simulate a realisation from a Matérn cluster process
-S = maternclusterprocess()
+# Dimension of the response, number of replicates, and spatial dimension
+q = 1  # dimension of response (here, univariate data)
+m = 5  # number of replicates
+d = 2  # spatial dimension
 
-# Visualise realisation (requires UnicodePlots)
-using UnicodePlots
-scatterplot(S[:, 1], S[:, 2])
+# Spatial locations fixed for all replicates
+n = 100
+S = rand(n, d)
+Z = rand(n, m)
+g = spatialgraph(S)
+g = spatialgraph(g, Z)
+g = spatialgraph(S, Z)
+@btime spatialgraph($S)
+@btime spatialgraph($S, pyramid_pool = false)
 
-# Visualise realisations from the cluster process with varying parameters
-n = 250
-λ = [10, 25, 50, 90]
-μ = n ./ λ
-plots = map(eachindex(λ)) do i
-	S = maternclusterprocess(λ = λ[i], μ = μ[i])
-	scatterplot(S[:, 1], S[:, 2])
-end
+# Spatial locations varying between replicates
+n = rand(50:100, m)
+S = rand.(n, d)
+Z = rand.(n)
+g = spatialgraph(S)
+g = spatialgraph(g, Z)
+g = spatialgraph(S, Z)
+@btime spatialgraph($S)
+@btime spatialgraph($S, pyramid_pool = false)
 ```
 """
-function maternclusterprocess(; λ = 10, μ = 10, r = 0.1, xmin = 0, xmax = 1, ymin = 0, ymax = 1)
+function spatialgraph(S::AbstractMatrix; store_S::Bool = false, pyramid_pool::Bool = false, k = 10, maxmin = true)
+	ndata = DataStore()
+	S = Float32.(S)
+	A = adjacencymatrix(S, k; maxmin = maxmin)
+	S = permutedims(S) # need final dimension to be n-dimensional
+	if store_S
+		ndata = (ndata..., S = S)
+	end
+	if pyramid_pool
+		clusterings = computeclusters(S)
+		ndata = (ndata..., clusterings = clusterings)
+	end
+	GNNGraph(A, ndata = ndata)
+end
+spatialgraph(S::AbstractVector; kwargs...) = batch(spatialgraph.(S)) # spatial locations varying between replicates
+#TODO multivariate data with spatial locations varying between replicates
 
-	#Extended simulation windows parameters
-	rExt=r #extension parameter -- use cluster radius
-	xminExt=xmin-rExt
-	xmaxExt=xmax+rExt
-	yminExt=ymin-rExt
-	ymaxExt=ymax+rExt
-	#rectangle dimensions
-	xDeltaExt=xmaxExt-xminExt
-	yDeltaExt=ymaxExt-yminExt
-	areaTotalExt=xDeltaExt*yDeltaExt #area of extended rectangle
+# Wrappers that allow data to be passed into an already-constructed graph
+# (useful for partial simulation on the fly, with the parameters held fixed)
+spatialgraph(g::GNNGraph, Z) = GNNGraph(g, ndata = (g.ndata..., Z = reshapeZ(Z)))
+reshapeZ(Z::V) where V <: AbstractVector{A} where A <: AbstractArray = stackarrays(reshapeZ.(Z))
+reshapeZ(Z::AbstractVector) = reshapeZ(reshape(Z, length(Z), 1))
+reshapeZ(Z::AbstractMatrix) = reshapeZ(reshape(Z, 1, size(Z)...))
+function reshapeZ(Z::A) where A <: AbstractArray{T, 3} where {T}
+	# Z is given as a three-dimensional array, with
+	# Dimension 1: q, dimension of the response variable (e.g., singleton with univariate data)
+	# Dimension 2: n, number of spatial locations
+	# Dimension 3: m, number of replicates
+	# Permute dimensions 2 and 3 since GNNGraph requires final dimension to be n-dimensional
+	permutedims(Float32.(Z), (1, 3, 2))
+end
 
-	#Simulate Poisson point process
-	numbPointsParent=rand(Poisson(areaTotalExt*λ)) #Poisson number of points
-
-	#x and y coordinates of Poisson points for the parent
-	xxParent=xminExt.+xDeltaExt*rand(numbPointsParent)
-	yyParent=yminExt.+yDeltaExt*rand(numbPointsParent)
-
-	#Simulate Poisson point process for the daughters (ie final poiint process)
-	numbPointsDaughter=rand(Poisson(μ),numbPointsParent)
-	numbPoints=sum(numbPointsDaughter) #total number of points
-
-	#Generate the (relative) locations in polar coordinates by
-	#simulating independent variables.
-	theta=2*pi*rand(numbPoints) #angular coordinates
-	rho=r*sqrt.(rand(numbPoints)) #radial coordinates
-
-	#Convert polar to Cartesian coordinates
-	xx0=rho.*cos.(theta)
-	yy0=rho.*sin.(theta)
-
-	#replicate parent points (ie centres of disks/clusters)
-	xx=vcat(fill.(xxParent, numbPointsDaughter)...)
-	yy=vcat(fill.(yyParent, numbPointsDaughter)...)
-
-	#Shift centre of disk to (xx0,yy0)
-	xx=xx.+xx0
-	yy=yy.+yy0
-
-	#thin points if outside the simulation window
-	booleInside=((xx.>=xmin).&(xx.<=xmax).&(yy.>=ymin).&(yy.<=ymax))
-	xx=xx[booleInside]
-	yy=yy[booleInside]
-
-	hcat(xx, yy)
+# Wrapper that allows Z to be included at construction time
+function spatialgraph(S, Z; kwargs...)
+	g = spatialgraph(S; kwargs...)
+	spatialgraph(g, Z)
 end
 
 
-# ---- Graph convolution layer weighted by spatial distance ----
 
+
+
+
+# ---- Graph convolution layer weighting by spatial distance ----
+
+#TODO add proper documentation (add maths from the paper)
+#TODO allow for more general formulation, like we give in the ARSIA paper
 @doc raw"""
-    WeightedGraphConv(in => out, σ=identity; aggr=mean, bias=true, init=glorot_uniform)
+    SpatialGraphConv(in => out, σ=identity; aggr=mean, bias=true, init=glorot_uniform)
 Same as regular [`GraphConv`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/conv/#GraphNeuralNetworks.GraphConv) layer, but where the neighbours of a node are weighted by their spatial distance to that node.
 
 # Arguments
@@ -94,23 +133,22 @@ Same as regular [`GraphConv`](https://carlolucibello.github.io/GraphNeuralNetwor
 
 # Examples
 ```
-using NeuralEstimators
-using GraphNeuralNetworks
+using NeuralEstimators, GraphNeuralNetworks
 
 # Construct a spatially-weighted adjacency matrix based on k-nearest neighbours
-# with k = 5, and convert to a graph with random (uncorrelated) dummy data:
-n = 100
-S = rand(n, 2)
-d = 1 # dimension of each observation (univariate data here)
+# with k = 5, and convert to a graph with random dummy data
+n = 100         # number of spatial locations
+S = rand(n, 2)  # spatial locations
+d = 1           # dimension of each observation (univariate)
 A = adjacencymatrix(S, 5)
 Z = GNNGraph(A, ndata = rand(d, n))
 
 # Construct the layer and apply it to the data to generate convolved features
-layer = WeightedGraphConv(d => 16)
+layer = SpatialGraphConv(d => 16)
 layer(Z)
 ```
 """
-struct WeightedGraphConv{W<:AbstractMatrix,B,F,A,C} <: GNNLayer
+struct SpatialGraphConv{W<:AbstractMatrix,B,F,A,C} <: GNNLayer
     W1::W
     W2::W
     W3::C
@@ -118,11 +156,16 @@ struct WeightedGraphConv{W<:AbstractMatrix,B,F,A,C} <: GNNLayer
     σ::F
     aggr::A
 end
+@layer SpatialGraphConv
+WeightedGraphConv = SpatialGraphConv; export WeightedGraphConv # alias for backwards compatability
+function SpatialGraphConv(
+	ch::Pair{Int,Int},
+	σ = identity;
+	aggr = mean,
+	init = glorot_uniform,
+	bias::Bool = true
+	)
 
-@layer WeightedGraphConv
-
-function WeightedGraphConv(ch::Pair{Int,Int}, σ=identity; aggr=mean,
-                   init=glorot_uniform, bias::Bool=true)
     in, out = ch
     W1 = init(out, in)
     W2 = init(out, in)
@@ -131,12 +174,16 @@ function WeightedGraphConv(ch::Pair{Int,Int}, σ=identity; aggr=mean,
     # range parameter for each channel, in which case W3 would be an array of parameters.
     W3 = init(1)
     b = bias ? Flux.create_bias(W1, true, out) : false
-    WeightedGraphConv(W1, W2, W3, b, σ, aggr)
+    SpatialGraphConv(W1, W2, W3, b, σ, aggr)
 end
-
-rangeparameter(l::WeightedGraphConv) = exp.(l.W3)
-
-function (l::WeightedGraphConv)(g::GNNGraph, x::AbstractMatrix)
+rangeparameter(l::SpatialGraphConv) = exp.(l.W3)
+function (l::SpatialGraphConv)(g::GNNGraph)
+	# update the data slot Z, pass everything else on unchanged
+	Z = :Z ∈ keys(g.ndata) ? g.ndata.Z : first(values(g.ndata))
+	h = l(g, Z)
+	@ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = h))
+end
+function (l::SpatialGraphConv)(g::GNNGraph, x::AbstractMatrix)
     check_num_nodes(g, x)
     r = rangeparameter(l)  # strictly positive range parameter
     d = g.graph[3]         # vector of spatial distances
@@ -145,8 +192,7 @@ function (l::WeightedGraphConv)(g::GNNGraph, x::AbstractMatrix)
     x = l.σ.(l.W1 * x .+ l.W2 * m .+ l.bias)
     return x
 end
-
-function (l::WeightedGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
+function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
     check_num_nodes(g, x)
 	r = rangeparameter(l)  # strictly positive range parameter
 	d = g.graph[3]         # vector of spatial distances
@@ -155,16 +201,310 @@ function (l::WeightedGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3
 	x = l.σ.(l.W1 ⊠ x .+ l.W2 ⊠ m .+ l.bias) # ⊠ is shorthand for batched_mul
 	return x
 end
-
-
-function Base.show(io::IO, l::WeightedGraphConv)
+function Base.show(io::IO, l::SpatialGraphConv)
     in_channel  = size(l.W1, ndims(l.W1))
     out_channel = size(l.W1, ndims(l.W1)-1)
-    print(io, "WeightedGraphConv(", in_channel, " => ", out_channel)
+    print(io, "SpatialGraphConv(", in_channel, " => ", out_channel)
     l.σ == identity || print(io, ", ", l.σ)
     print(io, ", aggr=", l.aggr)
     print(io, ")")
 end
+
+# ---- Clustering ----
+
+# TODO suppress warning "clustering cost increased at iteration 1"
+"""
+	computeclusters(S::Matrix)
+Computes hierarchical clusters based on K-means.
+
+# Examples
+```
+# random set of locations
+d = 2
+n = 5000
+S = rand(d, n)
+computeclusters(S)
+```
+"""
+function computeclusters(S::Matrix)
+
+	# Note that if we just want random initial values, we can simply do:
+	# K = [16, 4, 1]
+	# permutedims(reduce(hcat, assignments.(kmeans.(Ref(S), K))))
+
+	# To construct a grid of initial points, we needsquare numbers when d = 1,
+	# cubic numbers when d=3, quartic numbers when d=4, etc.
+	d = size(S, 1)
+	# K = d ∈ [1, 2] ? [16, 4, 1] : (1:3).^d #TODO try with just one cluster layer
+	K = d ∈ [1, 2] ? [16, 4, 1] : (1:3).^d #TODO try with just one cluster layer
+	clusterings = map(K) do k
+		# Compute initial seeds
+		# Partition the domain in a consistent way, so that the spatial
+		# relationship is predictable/consistent. Do this using the keyword
+		# argument "init", which allows an integer vector of length kc that provides
+		# the indices of points to use as initial seeds. So, we just provide the
+		# inital points as a grid based on S, where the grid ordering is consistent.
+		# The resulting clusters should then roughly align with this grid each time
+		# a new set of locations is given.
+		if k == 1
+			τ = [0.5]
+		else
+			τ = (0:isqrt(k)-1)/(isqrt(k)-1)
+		end
+		S_quantiles = quantile.(eachrow(S), Ref(τ))
+		init_points = permutedims(expandgrid(S_quantiles...))
+		init = map(eachcol(init_points)) do s
+			partialsortperm(vec(sum(abs.(S .- s), dims = 1)), 1)
+		end
+		# S[:, init] # points that will be used as initial cluster points
+		@suppress_err assignments(kmeans(S, k; init = init))
+	end
+	permutedims(reduce(hcat, clusterings))
+end
+
+
+# TODO documentation
+@doc raw"""
+	SpatialPyramidPool(aggr)
+
+Clusterings are stored as a matrix with $n$ columns, where each row
+corresponds to a clustering at a different resolutions (each spatial
+location belongs to a single cluster in a given resolution). The clusterings
+can be stored in the graph object (so that the clustering algorithm need
+only be called once for a given set of locations); if clusterings is not
+present in the graph object, the layer will compute the clusterings
+automatically (this is less efficient since the clusterings cannot be stored
+for later use).
+
+# Examples
+```
+using NeuralEstimators, Statistics
+
+# Constants across the examples
+q = 1   # univariate data
+m = 5   # number of independent replicates
+d = 2   # spatial dimension, D ⊂ ℜ²
+layer = SpatialGraphConv(q => 16)
+pool  = SpatialPyramidPool(mean)
+
+# Spatial locations fixed for all replicates
+n = 100
+S = rand(n, d)
+Z = rand(n, m)
+g = spatialgraph(S, Z)
+h = layer(g)
+r = pool(h)
+
+# Spatial locations varying between replicates
+n = rand(50:100, m)
+S = rand.(n, d)
+Z = rand.(n)
+g = spatialgraph(S, Z)
+h = layer(g)
+r = pool(h)
+```
+"""
+struct SpatialPyramidPool{F} <: GNNLayer
+    aggr::F
+end
+@layer SpatialPyramidPool
+function (l::SpatialPyramidPool)(g::GNNGraph)
+
+	@assert :clusterings ∈ keys(g.ndata) # could compute clusterings here, but more efficient not to plus it makes things more complicated
+
+	# Input Z is an nₕ x m x n array, where nₕ is the number of hidden features of
+	# each node in the final propagation layer
+	Z = :Z ∈ keys(g.ndata) ? g.ndata.Z : first(values(g.ndata))
+
+	# Extract clusterings, a cxn matrix with cᵣ the number of cluster resolutions
+	clusterings = g.ndata.clusterings
+	# TODO now that we hardcode the cluster sizes, can compute clusterings here
+
+	# Pool the features over the clusterings
+	if g.num_graphs == 1
+		R = poolfeatures(Z, clusterings, l.aggr)
+	else
+		R = map(1:g.num_graphs) do i
+			# NB getgraph() is very slow, don't use it here
+			node_idx = findall(i .== g.graph_indicator)
+			poolfeatures(Z[:, :, node_idx], clusterings[:, node_idx], l.aggr)
+		end
+		R = reduce(hcat, R)
+	end
+
+	# R is a Cnₕ x m matrix where C is the total number of clusters across all
+	# clustering resolutions. It is now ready to be passed to the aggregation
+	# function of the DeepSets architecture. Note that we cannot store R in
+	# g.gdata, since it must have last dimension equal to the number of graphs
+	# (we can leave the singleton dimension if we want to do this).
+    return R
+end
+Base.show(io::IO, l::SpatialPyramidPool) = print(io, "\nSpatialPyramidPool with aggregation function $(l.aggr)")
+
+function poolfeatures(Z, clusterings, aggr)
+	R = map(eachrow(clusterings)) do clustering
+		K = maximum(clustering)
+		r = map(1:K) do k
+			idx = findall(k .== clustering)
+			h = Z[:, :, idx]
+			aggr(h, dims = 3)
+		end
+		reduce(vcat, r)
+	end
+	R = reduce(vcat, R)
+	R = dropdims(R; dims = 3)
+end
+
+# ---- Universal pooling layer ----
+
+@doc raw"""
+    UniversalPool(ψ, ϕ)
+Pooling layer (i.e., readout layer) from the paper ['Universal Readout for Graph Convolutional Neural Networks'](https://ieeexplore.ieee.org/document/8852103).
+It takes the form,
+```math
+\mathbf{V} = ϕ(|G|⁻¹ \sum_{s\in G} ψ(\mathbf{h}_s)),
+```
+where ``\mathbf{V}`` denotes the summary vector for graph ``G``,
+``\mathbf{h}_s`` denotes the vector of hidden features for node ``s \in G``,
+and `ψ` and `ϕ` are dense neural networks.
+
+See also the pooling layers available from [`GraphNeuralNetworks.jl`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/pool/).
+
+# Examples
+```julia
+using NeuralEstimators, Flux, GraphNeuralNetworks
+using Graphs: random_regular_graph
+
+# Construct an input graph G
+n_h     = 16  # dimension of each feature node
+n_nodes = 10
+n_edges = 4
+G = GNNGraph(random_regular_graph(n_nodes, n_edges), ndata = rand(Float32, n_h, n_nodes))
+
+# Construct the pooling layer
+n_t = 32  # dimension of the summary vector for each node
+n_v = 64  # dimension of the final summary vector V
+ψ = Dense(n_h, n_t)
+ϕ = Dense(n_t, n_v)
+pool = UniversalPool(ψ, ϕ)
+
+# Apply the pooling layer
+pool(G)
+```
+"""
+struct UniversalPool{G,F}
+    ψ::G
+    ϕ::F
+end
+@layer UniversalPool
+function (l::UniversalPool)(g::GNNGraph, x::AbstractArray)
+    u = reduce_nodes(mean, g, l.ψ(x))
+    t = l.ϕ(u)
+    return t
+end
+(l::UniversalPool)(g::GNNGraph) = GNNGraph(g, gdata = l(g, node_features(g)))
+Base.show(io::IO, D::UniversalPool) = print(io, "\nUniversal pooling layer:\nInner network ψ ($(nparams(D.ψ)) parameters):  $(D.ψ)\nOuter network ϕ ($(nparams(D.ϕ)) parameters):  $(D.ϕ)")
+
+
+# ---- GNNSummary ----
+
+#TODO can this be used with RatioEstimator, QuantileEstimatorDiscrete, and
+# QuantileEstimatorContinuous? If so, state that in the example.
+#TODO improve and update documentation
+"""
+	GNNSummary(propagation, readout)
+
+A graph neural network (GNN) designed for parameter point estimation.
+
+The `propagation` module transforms graphical input data into a set of
+hidden-feature graphs; the `readout` module aggregates these feature graphs into
+a single hidden feature vector of fixed length; the function `a`(⋅) is a
+permutation-invariant aggregation function, and `ϕ` is a neural network. Expert,
+user-defined summary statistics `S` can also be utilised, as described in [`DeepSet`](@ref).
+
+The data should be stored as a `GNNGraph` or `Vector{GNNGraph}`, where
+each graph is associated with a single parameter vector. The graphs may contain
+subgraphs corresponding to independent replicates from the model.
+
+# Examples
+```
+using NeuralEstimators, Flux, GraphNeuralNetworks
+using Flux: batch
+using Statistics: mean
+
+# Propagation module
+d = 1      # dimension of response variable
+nh = 32    # dimension of node feature vectors
+propagation = GNNChain(GraphConv(d => nh), GraphConv(nh => nh), GraphConv(nh => nh))
+
+# Simple readout module, the elementwise average
+readout = GlobalPool(mean)
+no = nh # dimension of the final summary vector for each graph
+
+# Summary network is the composition of the propagation and readout module
+ψ = GNNSummary(propagation, readout)
+
+# Mapping module
+p = 3     # number of parameters in the statistical model
+w = 64    # width of layers used for the mapping network ϕ
+ϕ = Chain(Dense(no, w, relu), Dense(w, w, relu), Dense(w, p))
+
+# Construct the estimator
+θ̂ = DeepSet(ψ, ϕ)
+
+# Apply the estimator to:
+# 	1. a single graph,
+# 	2. a single graph with sub-graphs (corresponding to independent replicates), and
+# 	3. a vector of graphs (corresponding to multiple spatial data sets).
+g₁ = rand_graph(11, 30, ndata=rand(d, 11))
+g₂ = rand_graph(13, 40, ndata=rand(d, 13))
+g₃ = batch([g₁, g₂])
+θ̂(g₁)
+θ̂(g₃)
+θ̂([g₁, g₂, g₃])
+```
+"""
+struct GNNSummary{F, G}
+	propagation::F   # propagation module
+	readout::G       # readout module
+end
+@layer GNNSummary
+Base.show(io::IO, D::GNNSummary) = print(io, "\nThe propagation and readout modules of a graph neural network (GNN), with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)")
+#TODO Really don't like this function; it's name is not reflective of what it
+# really does. Note also that the data
+dropsingleton(x::AbstractMatrix) = x
+dropsingleton(x::A) where A <: AbstractArray{T, 3} where T = dropdims(x, dims = 3)
+
+
+function (pr::GNNSummary)(g::GNNGraph)
+
+	# Propagation module, a graph-to-graph transformation
+	h = pr.propagation(g)
+
+	# Readout module, computes a fixed-length vector for each replicate
+	# R is a matrix with:
+	# nrows = number of readout summary statistics
+	# ncols = number of independent replicates
+	if isa(pr.readout, SpatialPyramidPool)
+		R = pr.readout(h)
+	else
+		# Ensure that we can still use the standard pooling layers
+		Z = :Z ∈ keys(h.ndata) ? h.ndata.Z : first(values(h.ndata))
+		R = GNNGraph(h, gdata = pr.readout(h, Z))
+		#dropsingleton(R.gdata.u) # drops the redundant third dimension
+		R = R.gdata.u
+		reshape(R, size(R, 1), :)
+	end
+end
+# Code from GNN example:
+# θ = sample(1)
+# g = simulate(θ, 7)[1]
+# ψ(g)
+# θ = sample(2)
+# # g = simulate(θ, 1:10) # TODO errors! Currently not allowed to have data sets with differing number of independent replicates
+# g = simulate(θ, 5)
+# g = Flux.batch(g)
+# ψ(g)
 
 # ---- Adjacency matrices ----
 
@@ -198,9 +538,7 @@ adjacency matrix (see below).
 
 # Examples
 ```
-using NeuralEstimators
-using Distances
-using SparseArrays
+using NeuralEstimators, Distances, SparseArrays
 
 n = 100
 d = 2
@@ -231,7 +569,7 @@ function adjacencymatrix(M::Mat, r::F, k::Integer) where Mat <: AbstractMatrix{T
 
 	I = Int64[]
 	J = Int64[]
-	V = Float64[]
+	V = T[]
 	n = size(M, 1)
 	m = size(M, 2)
 
@@ -274,7 +612,7 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 
 	I = Int64[]
 	J = Int64[]
-	V = Float64[]
+	V = T[]
 	n = size(M, 1)
 	m = size(M, 2)
 
@@ -313,7 +651,7 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 		ord     = ordermaxmin(S)          # calculate ordering
 		Sord    = S[ord, :]               # re-order locations
 		NNarray = findorderednn(Sord, k)  # find k nearest neighbours/"parents"
-		R = builddag(NNarray)             # build DAG
+		R = builddag(NNarray, T)          # build DAG
 		A = moralise ?  R' * R : R        # moralise
 
 		# Add distances to A
@@ -334,16 +672,12 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 	return A
 end
 
-# using NeuralEstimators
-# using Distances
-# using SparseArrays
-#
+# using NeuralEstimators, Distances, SparseArrays
+# import NeuralEstimators: adjacencymatrix, ordermaxmin, findorderednn, builddag, findneighbours
 # n = 5000
 # d = 2
-# S = rand(n, d)
+# S = rand(Float32, n, d)
 # k = 10
-# import NeuralEstimators: adjacencymatrix, ordermaxmin, findorderednn, builddag, findneighbours
-#
 # @elapsed adjacencymatrix(S, k; maxmin = true) # 10 seconds
 # @elapsed adjacencymatrix(S, k) # 0.3 seconds
 #
@@ -351,7 +685,6 @@ end
 # Sord    = S[ord, :]
 # @elapsed NNarray = findorderednn(Sord, k) # 9 seconds... this is the bottleneck
 # @elapsed R = builddag(NNarray)  # 0.02 seconds
-
 
 function adjacencymatrix(M::Mat, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
 
@@ -375,7 +708,7 @@ function adjacencymatrix(M::Mat, r::F) where Mat <: AbstractMatrix{T} where {T, 
 		S = M
 		I = Int64[]
 		J = Int64[]
-		V = Float64[]
+		V = T[]
 		for i ∈ 1:n
 			# Compute distances between s and all other locations
 			s = S[i, :]
@@ -517,11 +850,11 @@ function findorderednn(S, k::Integer)
   return NNarray
 end
 
-function builddag(NNarray)
+function builddag(NNarray, T = Float32)
   n, k = size(NNarray)
   I = [1]
   J = [1]
-  V = Float64[1.0]
+  V = T[1.0] # NB would be better if we could inherit the eltype somehow
   for j in 2:n
     i = NNarray[j, :]
     i = collect(skipmissing(i))
@@ -543,231 +876,88 @@ end
 # R = builddag(NNarray)             # build the DAG
 # Q = R' * R                        # moralise
 
-# ---- Universal pooling layer ----
 
-@doc raw"""
-    UniversalPool(ψ, ϕ)
-Pooling layer (i.e., readout layer) from the paper ['Universal Readout for Graph Convolutional Neural Networks'](https://ieeexplore.ieee.org/document/8852103).
-It takes the form,
-```math
-\mathbf{V} = ϕ(|G|⁻¹ \sum_{s\in G} ψ(\mathbf{h}_s)),
-```
-where ``\mathbf{V}`` denotes the summary vector for graph ``G``,
-``\mathbf{h}_s`` denotes the vector of hidden features for node ``s \in G``,
-and `ψ` and `ϕ` are dense neural networks.
 
-See also the pooling layers available from [`GraphNeuralNetworks.jl`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/pool/).
-
-# Examples
-```julia
-using NeuralEstimators
-using Flux
-using GraphNeuralNetworks
-using Graphs: random_regular_graph
-
-# Construct an input graph G
-n_h     = 16  # dimension of each feature node
-n_nodes = 10
-n_edges = 4
-G = GNNGraph(random_regular_graph(n_nodes, n_edges), ndata = rand(n_h, n_nodes))
-
-# Construct the pooling layer
-n_t = 32  # dimension of the summary vector for each node
-n_v = 64  # dimension of the final summary vector V
-ψ = Dense(n_h, n_t)
-ϕ = Dense(n_t, n_v)
-pool = UniversalPool(ψ, ϕ)
-
-# Apply the pooling layer
-pool(G)
-```
-"""
-struct UniversalPool{G,F}
-    ψ::G
-    ϕ::F
-end
-
-@layer UniversalPool
-
-function (l::UniversalPool)(g::GNNGraph, x::AbstractArray)
-    u = reduce_nodes(mean, g, l.ψ(x))
-    t = l.ϕ(u)
-    return t
-end
-
-(l::UniversalPool)(g::GNNGraph) = GNNGraph(g, gdata = l(g, node_features(g)))
-
-Base.show(io::IO, D::UniversalPool) = print(io, "\nUniversal pooling layer:\nInner network ψ ($(nparams(D.ψ)) parameters):  $(D.ψ)\nOuter network ϕ ($(nparams(D.ϕ)) parameters):  $(D.ϕ)")
-
-# ---- GNN ----
 
 """
-	GNN(propagation, readout, ϕ, a; S = nothing)
-	GNN(propagation, readout, ϕ; a::String = "mean", S = nothing)
+	maternclusterprocess(; λ=10, μ=10, r=0.1, xmin=0, xmax=1, ymin=0, ymax=1)
 
-A graph neural network (GNN) designed for parameter point estimation.
+Simulates a Matérn cluster process with density of parent Poisson point process
+`λ`, mean number of daughter points `μ`, and radius of cluster disk `r`, over the
+simulation window defined by `x/ymin` and `xymax`.
 
-The `propagation` module transforms graphical input data into a set of
-hidden-feature graphs; the `readout` module aggregates these feature graphs into
-a single hidden feature vector of fixed length; the function `a`(⋅) is a
-permutation-invariant aggregation function, and `ϕ` is a neural network. Expert,
-user-defined summary statistics `S` can also be utilised, as described in [`DeepSet`](@ref).
-
-The data should be stored as a `GNNGraph` or `Vector{GNNGraph}`, where
-each graph is associated with a single parameter vector. The graphs may contain
-sub-graphs corresponding to independent replicates from the model.
+See also the R package
+[`spatstat`](https://cran.r-project.org/web/packages/spatstat/index.html),
+which provides functions for simulating from a range of point processes and
+which can be interfaced from Julia using
+[`RCall`](https://juliainterop.github.io/RCall.jl/stable/).
 
 # Examples
 ```
 using NeuralEstimators
-using Flux
-using Flux: batch
-using GraphNeuralNetworks
-using Statistics: mean
 
-# Propagation module
-d = 1      # dimension of response variable
-nh = 32    # dimension of node feature vectors
-propagation = GNNChain(GraphConv(d => nh), GraphConv(nh => nh), GraphConv(nh => nh))
+# Simulate a realisation from a Matérn cluster process
+S = maternclusterprocess()
 
-# Readout module (using "universal pooling")
-nt = 64   # dimension of the summary vector for each node
-no = 128  # dimension of the final summary vector for each graph
-readout = UniversalPool(Dense(nh, nt), Dense(nt, no))
+# Visualise realisation (requires UnicodePlots)
+using UnicodePlots
+scatterplot(S[:, 1], S[:, 2])
 
-# Alternative readout module (using the elementwise average)
-# readout = GlobalPool(mean); no = nh
-
-# Mapping module
-p = 3     # number of parameters in the statistical model
-w = 64    # width of layers used for the mapping network ϕ
-ϕ = Chain(Dense(no, w, relu), Dense(w, w, relu), Dense(w, p))
-
-# Construct the estimator
-θ̂ = GNN(propagation, readout, ϕ)
-
-# Apply the estimator to:
-# 	1. a single graph,
-# 	2. a single graph with sub-graphs (corresponding to independent replicates), and
-# 	3. a vector of graphs (corresponding to multiple spatial data sets).
-g₁ = rand_graph(11, 30, ndata=rand(d, 11))
-g₂ = rand_graph(13, 40, ndata=rand(d, 13))
-g₃ = batch([g₁, g₂])
-θ̂(g₁)
-θ̂(g₃)
-θ̂([g₁, g₂, g₃])
+# Visualise realisations from the cluster process with varying parameters
+n = 250
+λ = [10, 25, 50, 90]
+μ = n ./ λ
+plots = map(eachindex(λ)) do i
+	S = maternclusterprocess(λ = λ[i], μ = μ[i])
+	scatterplot(S[:, 1], S[:, 2])
+end
 ```
 """
-struct GNN{F, G}
-	propagation::F   # propagation module
-	readout::G       # global pooling module
-	deepset::DeepSet # DeepSets module to map the learned feature vector to the parameter space
-end
-@layer GNN
+function maternclusterprocess(; λ = 10, μ = 10, r = 0.1, xmin = 0, xmax = 1, ymin = 0, ymax = 1)
 
-# Constructors
-GNN(propagation, readout, ϕ, a; S = nothing) = GNN(propagation, readout, DeepSet(identity, ϕ, a; S = S))
-GNN(propagation, readout, ϕ; a::String = "mean", S = nothing) = GNN(propagation, readout, ϕ, _agg(a); S = S)
+	#Extended simulation windows parameters
+	rExt=r #extension parameter -- use cluster radius
+	xminExt=xmin-rExt
+	xmaxExt=xmax+rExt
+	yminExt=ymin-rExt
+	ymaxExt=ymax+rExt
+	#rectangle dimensions
+	xDeltaExt=xmaxExt-xminExt
+	yDeltaExt=ymaxExt-yminExt
+	areaTotalExt=xDeltaExt*yDeltaExt #area of extended rectangle
 
-Base.show(io::IO, D::GNN) = print(io, "\nGNN estimator with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)\n\nAggregation function ($(nparams(D.deepset.a)) parameters):  $(D.deepset.a)\n\nExpert summary statistics ($(nparams(D.deepset.S))) parameters):  $(D.deepset.S)\n\nMapping module ($(nparams(D.deepset.ϕ)) parameters):  $(D.deepset.ϕ)")
+	#Simulate Poisson point process
+	numbPointsParent=rand(Poisson(areaTotalExt*λ)) #Poisson number of points
 
-dropsingleton(x::AbstractMatrix) = x
-dropsingleton(x::A) where A <: AbstractArray{T, 3} where T = dropdims(x, dims = 3)
+	#x and y coordinates of Poisson points for the parent
+	xxParent=xminExt.+xDeltaExt*rand(numbPointsParent)
+	yyParent=yminExt.+yDeltaExt*rand(numbPointsParent)
 
-# Single data set (replicates in g are associated with a single parameter).
-function (est::GNN)(g::GNNGraph)
+	#Simulate Poisson point process for the daughters (ie final poiint process)
+	numbPointsDaughter=rand(Poisson(μ),numbPointsParent)
+	numbPoints=sum(numbPointsDaughter) #total number of points
 
-	# Apply the graph-to-graph transformation
-	g̃ = est.propagation(g)
+	#Generate the (relative) locations in polar coordinates by
+	#simulating independent variables.
+	theta=2*pi*rand(numbPoints) #angular coordinates
+	rho=r*sqrt.(rand(numbPoints)) #radial coordinates
 
-	# Global pooling
-	ḡ = est.readout(g̃)
+	#Convert polar to Cartesian coordinates
+	xx0=rho.*cos.(theta)
+	yy0=rho.*sin.(theta)
 
-	# Extract the graph level data (i.e., the pooled features).
-	# h is a matrix with
-	# 	nrows = number of feature graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
-	#	ncols = number of original graphs (i.e., number of independent replicates).
-	u = ḡ.gdata.u
-	h = dropsingleton(u) # drops the redundant third dimension in the "efficient" storage approach
+	#replicate parent points (ie centres of disks/clusters)
+	xx=vcat(fill.(xxParent, numbPointsDaughter)...)
+	yy=vcat(fill.(yyParent, numbPointsDaughter)...)
 
-	# Apply the Deep Set module to map to the parameter space.
-	θ̂ = est.deepset(u)
-end
+	#Shift centre of disk to (xx0,yy0)
+	xx=xx.+xx0
+	yy=yy.+yy0
 
-# Multiple data sets
-function (est::GNN)(v::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
+	#thin points if outside the simulation window
+	booleInside=((xx.>=xmin).&(xx.<=xmax).&(yy.>=ymin).&(yy.<=ymax))
+	xx=xx[booleInside]
+	yy=yy[booleInside]
 
-	# Convert v to a super graph. Since each element of v is itself a super graph
-	# (where each sub graph corresponds to an independent replicate), we need to
-	# count the number of sub-graphs in each element of v for later use.
-	# Specifically, we need to keep track of the indices to determine which
-	# independent replicates are grouped together.
-	m = numberreplicates.(v)
-	g = Flux.batch(v)
-	# NB batch() causes array mutation, which means that this method
-	# cannot be used for computing gradients during training. As a work around,
-	# I've added a second method that takes both g and m. The user will not need
-	# to use this method, it's only necessary internally during training.
-
-	return est(g, m)
-end
-
-# Multiple data sets
-function (est::GNN)(g::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
-
-	# Apply the graph-to-graph transformation and global pooling
-	ḡ = est.readout(est.propagation(g))
-
-	# Extract the graph level features (i.e., pooled features), a matrix with:
-	# 	nrows = number of features graphs in final propagation layer * number of elements returned by the global pooling operation (one if global mean pooling is used)
-	#	ncols = total number of original graphs (i.e., total number of independent replicates).
-	h = ḡ.gdata.u
-
-	# Split the features based on the original grouping
-	# NB removed this if statement now that we're not currently trying to
-	#    optimise for the special case that the spatial locations are fixed
-	#    for all replciates.
-	# if ndims(h) == 2
-		ng = length(m)
-		cs = cumsum(m)
-		indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
-		h̃ = [h[:, idx] for idx ∈ indices]
-	# elseif ndims(h) == 3
-	# 	h̃ = [h[:, :, i] for i ∈ 1:size(h, 3)]
-	# end
-
-	# Apply the DeepSet module to map to the parameter space
-	return est.deepset(h̃)
-end
-
-# Also need a custom method for _updatebatch!()
-# NB Surely there is a more generic way to dispatch here (e.g., any structure that contains GNN)
-function _updatebatch!(θ̂::Union{GNN, PointEstimator{<:GNN}, IntervalEstimator{<:GNN}}, Z, θ, device, loss, γ, optimiser)
-
-	m = numberreplicates(Z)
-	Z = Flux.batch(Z)
-	Z, θ = Z |> device, θ |> device
-
-	# Compute gradients in such a way that the training loss is also saved.
-	# This is equivalent to: gradients = gradient(() -> loss(θ̂(Z), θ), γ)
-	ls, back = Zygote.pullback(() -> loss(θ̂(Z, m), θ), γ) # NB here we also pass m to θ̂, since Flux.batch() cannot be differentiated
-	gradients = back(one(ls))
-	update!(optimiser, γ, gradients)
-
-	# Assuming that loss returns an average, convert it to a sum.
-	ls = ls * size(θ)[end]
-	return ls
-end
-
-
-# Higher level methods needed to accomodate above methods for GNN. They are
-# exactly the same as the standard methods defined in Estimators.jl, but we
-# also pass through m.
-#NB Not ideal that there's so much code repetition... we're just replacing
-#   f(Z) with f(Z, m). Tried with the g(x...) = sum(x) approach; it almost worked, might be worth trying again.
-(est::PointEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer} = est.arch(Z, m)
-function (est::IntervalEstimator{<:GNN})(Z::GNNGraph, m::AbstractVector{I}) where {I <: Integer}
-	bₗ = est.u(Z, m)              # lower bound
-	bᵤ = bₗ .+ exp.(est.v(Z, m))  # upper bound
-	vcat(est.g(bₗ), est.g(bᵤ))
+	hcat(xx, yy)
 end

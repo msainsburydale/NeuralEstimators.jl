@@ -104,24 +104,20 @@ Note that, when estimating a full covariance matrix, one may wish to constrain t
 
 ## Gridded data
 
-For data collected over a regular grid, the neural Bayes estimator is based on a convolutional neural network (CNN).
+For data collected over a regular grid, the neural Bayes estimator is typically based on a convolutional neural network (CNN).
 
 In these settings, each data set must be stored as a ($D + 2$)-dimensional array, where $D$ is the dimension of the grid (e.g., $D = 1$ for time series, $D = 2$ for two-dimensional spatial grids, etc.). The first $D$ dimensions of the array correspond to the dimensions of the grid; the penultimate dimension stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes, etc.); and the final dimension stores the independent replicates. For example, to store 50 independent replicates of a bivariate spatial process measured over a 10x15 grid, one would construct an array of dimension 10x15x2x50.
 
-Below, we develop a neural Bayes estimator for the spatial Gaussian process model with exponential covariance function and unknown range parameter. The spatial domain is taken to be the unit square and we adopt the prior $\theta \sim U(0, 0.6)$.
+Below, we develop a neural Bayes estimator for the spatial Gaussian process model with exponential covariance function and unknown range parameter. The spatial domain is taken to be the unit square and we adopt the prior $\theta \sim U(0.05, 0.5)$.
 
 ```
-function sample(K)
-	θ = rand(Uniform(0, 0.6), K)
-	return θ'
-end
+sample(K) = rand(Uniform(0.05, 0.5), 1, K)
 ```
 
 Below, we give example code for simulating from the statistical model, where the data is collected over a 16x16 grid:
 
 ```
-using Distances
-using LinearAlgebra
+using Distances, LinearAlgebra
 
 function simulate(θ, m = 1)
 
@@ -183,15 +179,15 @@ K = 20000
 Z_train = simulate(θ_train)
 Z_val   = simulate(θ_val)
 
-θ̂  = train(θ̂,  θ_train, θ_val, Z_train, Z_val)
+θ̂  = train(θ̂,  θ_train, θ_val, Z_train, Z_val, use_gpu = false)
 θ̂₂ = train(θ̂₂, θ_train, θ_val, Z_train, Z_val)
 ```
 
 Once the estimators have been trained, we assess them using empirical simulation-based methods:
 
 ```
-θ_test = sample(100)
-Z_test = simulate(θ_test, m)
+θ_test = sample(1000)
+Z_test = simulate(θ_test)
 assessment = assess([θ̂, θ̂₂], θ_test, Z_test)
 
 bias(assessment)
@@ -206,7 +202,7 @@ Finally, we can apply our neural Bayes estimators to observed data. Note that wh
 
 ```
 θ = sample(1)                          # true parameter
-Z = simulate(θ, m)                     # "observed" data
+Z = simulate(θ)                        # "observed" data
 θ̂(Z)                                   # point estimates
 interval(θ̂₂, Z)                        # 95% marginal posterior credible intervals
 bs = bootstrap(θ̂, θ̂(Z), simulate, m)   # parametric bootstrap intervals
@@ -215,77 +211,73 @@ interval(bs)                           # 95% parametric bootstrap intervals
 
 ## Irregular spatial data
 
-The methodology we illustrate here uses graph neural networks (GNNs), which are implemented in Julia in the package [`GraphNeuralNetworks.jl`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/). GNN-based estimators parsimoniously model spatial dependence, and they can be applied to data collected over arbitrary spatial locations. Some key steps involve:
+To cater for data collected over arbitrary spatial locations, one may construct a neural Bayes estimator with a graph neural network (GNN) architecture (see [Sainsbury-Dale, Zammit-Mangion, Richards, and Huser, 2023](https://arxiv.org/abs/2310.02600)). Some key steps involve:
 
-- Sampling spatial locations to cover a wide range of spatial configurations during the training phase: see [`maternclusterprocess`](@ref).
+- Sampling spatial locations to cover a wide range of spatial configurations during the training phase. This can be done using an appropriately chosen spatial point process: see, for example, [`maternclusterprocess`](@ref).
 - Computing (spatially-weighted) adjacency matrices: see [`adjacencymatrix`](@ref).
 - Storing the data as a graph: see [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/gnngraph/#GNNGraph-type).
-- Constructing an appropriate architecture: see [`GNN`](@ref) and [`WeightedGraphConv`](@ref).
-
-For a concrete example, we consider a classical spatial model, the linear Gaussian-Gaussian model,
-
-```math
-Z_{j} = Y(\boldsymbol{s}_{j}) + \epsilon_{j}, \; j = 1, \dots, n,
-```
-where $\boldsymbol{Z} \equiv (Z_{1}, \dots, Z_{n})'$ are data observed at locations $\{\boldsymbol{s}_{1}, \dots, \boldsymbol{s}_{n}\} \subset \mathcal{D}$, where $\mathcal{D}$ is some spatial domain, $Y(\cdot)$ is a spatially-correlated mean-zero Gaussian process, and $\epsilon_j \sim N(0, \tau^2)$, $j = 1, \dots, n$ is Gaussian white noise with standard deviation $\tau > 0$. Here, we use the popular isotropic Matérn covariance function with fixed marginal variance $\sigma^2 = 1$, fixed smoothness parameter $\nu = 0.5$, and unknown range parameter $\rho > 0$. See [`matern`](@ref) for the specific parametrisation used in this example. Hence, we will construct a neural Bayes estimator for $\boldsymbol{\theta} \equiv (\tau, \rho)'$.
+- Constructing an appropriate architecture: see [`GNNSummary`](@ref), [`SpatialGraphConv`](@ref), and [`SpatialPyramidPool`](@ref).
 
 Before proceeding, we load the required packages:
 
 ```
-using NeuralEstimators
-using Flux
-using GraphNeuralNetworks
-using Distributions: Uniform
-using Distances: pairwise, Euclidean
-using LinearAlgebra
-using Statistics: mean
+using NeuralEstimators, Flux, GraphNeuralNetworks
+using Distances, Distributions, Folds, LinearAlgebra, Statistics
 ```
 
-First, we define a function to sample parameters from the prior. As before, the sampled parameters are stored as $p \times K$ matrices, with $p$ the number of parameters in the model and $K$ the number of sampled parameter vectors. We use the priors $\tau \sim U(0.1, 1)$ and $\rho \sim U(0.05, 0.5)$, and we assume that the parameters are independent a priori. Simulation from this model involves the computation of an expensive intermediate object, namely, the Cholesky factor of the covariance matrix. Storing this Cholesky factor for re-use can enable the fast simulation of new data sets (provided that the parameters are held fixed): hence, in this example, we define a class, `Parameters`, which is a sub-type of [`ParameterConfigurations`](@ref), for storing the matrix of parameters and the corresponding intermediate objects needed for data simulation.
+First, we define a function to sample parameters from the prior. As before, the sampled parameters are stored as $p \times K$ matrices, with $p$ the number of parameters in the model and $K$ the number of sampled parameter vectors. We use the priors $\tau \sim U(0, 1)$ and $\rho \sim U(0.05, 0.5)$, and we assume that the parameters are independent a priori. Simulation from this model involves the computation of an expensive intermediate object, namely, the Cholesky factor of the covariance matrix. Storing this Cholesky factor for re-use can enable the fast simulation of new data sets (provided that the parameters are held fixed): hence, in this example, we define a class, `Parameters`, which is a subtype of [`ParameterConfigurations`](@ref), for storing the matrix of parameters and the corresponding intermediate objects needed for data simulation.
 
-If one wishes to make inference from a single spatial data set only, and this data is collected before the estimator is constructed, then the data can be simulated using the observed spatial locations. However, if one wishes to construct an estimator that is (approximately) Bayes irrespective of the spatial locations, then synthetic spatial locations must be generated during the training phase. If no prior knowledge on the sampling configuration is available, then a wide variety of spatial configurations must be simulated to produce an estimator that is broadly applicable. Below, we use a Matérn cluster process (see [`maternclusterprocess`](@ref)) for this task (note that the hyper-parameters of this process govern the expected number of locations in each sampled set of spatial locations, and the degree of clustering).
+If one wishes to make inference from a single spatial data set only, and this data is collected before the estimator is constructed, then the data can be simulated using the observed spatial locations. Otherwise, synthetic spatial locations must be generated during the training phase. If no prior knowledge on the spatial configurations is available, then a wide variety of spatial configurations must be simulated to produce an estimator that is broadly applicable. Below, we use a Matérn cluster process (see [`maternclusterprocess`](@ref)) for this task (note that the hyper-parameters of this process govern the expected number of locations in each sampled set of spatial locations, and the degree of clustering).
 
-We define two constructors for our `Parameters` object: one that constructs a `Parameters` object given a single integer `K`, and another that constructs a `Parameters` object given a pre-specified $p\times K$ matrix of parameters and a set of spatial locations associated with each parameter vector. These constructors will be useful in the workflow below.
+Below, we define two constructors for our `Parameters` object: one that constructs a `Parameters` object given an integer `K`, and another that constructs a `Parameters` object given a $p\times K$ matrix of parameters and a set of spatial locations associated with each parameter vector. The former constructor will be useful in the training stage for sampling from the prior distribution, while the latter constructor will be useful for parametric bootstrap (since this involves simulation from the fitted model).
 
 ```
 struct Parameters{T} <: ParameterConfigurations
 	θ::Matrix{T}
-	locations
+	S
 	chols
 	graphs
 end
 
-function Parameters(K::Integer)
+function sample(K::Integer; cluster_process::Bool = false)
 
 	# Sample parameters from the prior distribution
-	τ = rand(Uniform(0.1, 1.0), K)
-	ρ = rand(Uniform(0.05, 0.5), K)
+	θ = rand(Uniform(0.05, 0.5), 1, K)
 
-	# Combine parameters into a pxK matrix
-	θ = permutedims(hcat(τ, ρ))
+	# Simulate spatial configurations over the unit square
+	n = rand(200:300, K)
+	if cluster_process
+		λ = rand(Uniform(10, 50), K)
+		S = [maternclusterprocess(λ = λ[k], μ = n[k]/λ[k]) for k ∈ 1:K]
+	else
+		#S = [rand(n[k], 2) for k ∈ 1:K]
+		pts = range(0, 1, length = 16)
+		S = expandgrid(pts, pts)
+		S = [S for _ in 1:K]
+	end
 
-	# Simulate spatial locations from a cluster process over the unit square
-	n = rand(Uniform(75, 200), K)
-	λ = rand(Uniform(10, 50), K)
-	locations = [maternclusterprocess(λ = λ[k], μ = n[k]/λ[k]) for k ∈ 1:K]
-
-	Parameters(θ::Matrix, locations)
+	Parameters(θ, S)
 end
 
-function Parameters(θ::Matrix, locations)
+function Parameters(θ::Matrix, S)
 
-	# Compute distance matrices and construct the graphs
-	D = pairwise.(Ref(Euclidean()), locations, locations, dims = 1)
-	A = adjacencymatrix.(D, 0.15)
-	graphs = GNNGraph.(A)
+	K = size(θ, 2)
 
-	# Compute Cholesky factors using the distance matrices
-	ρ = θ[2, :]
-	ν = 0.5
-	σ = 1
-	chols = maternchols(D, ρ, ν, σ.^2; stack = false)     
+	# Construct spatial graphs
+	graphs = spatialgraph.(S)
 
-	Parameters(θ, locations, chols, graphs)
+	# Cholesky factor of covariance matrix
+	  chols = Folds.map(1:K) do k
+		D = pairwise(Euclidean(), S[k], dims = 1)
+		ρ = θ[1, k]
+		Σ = exp.(-D ./ ρ)
+		L = cholesky(Symmetric(Σ)).L
+	end
+
+	# Convert to Float32 for computational efficiency
+	θ = Float32.(θ)  
+
+	Parameters(θ, S, chols, graphs)
 end
 ```
 
@@ -293,73 +285,87 @@ Next, we define a function for simulating from the model given an object of type
 
 ```
 function simulate(parameters::Parameters, m)
-
-	K = size(parameters, 2)
-	m̃ = rand(m, K)
-
-	τ      = parameters.θ[1, :]
-	chols  = parameters.chols
-	g      = parameters.graphs
-
-	# Z = Folds.map(1:K) do i # use this for parallel simulation
-	Z = map(1:K) do k
-		L = chols[k][:, :]
-		z = simulategaussianprocess(L, m̃[k])  # simulate a smooth field
-		z = z + τ[k] * randn(size(z)...)      # add white noise
-		z = batch([GNNGraph(g[k], ndata = z[:, i, :]') for i ∈ 1:m̃[k]])
-		z
+	θ = parameters.θ
+	K = size(θ, 2)
+	m = rand(m, K)
+	Folds.map(1:K) do k
+		L = parameters.chols[k]
+		g = parameters.graphs[k]
+		Z = simulategaussianprocess(L, m[k])  # simulate fields
+		spatialgraph(g, Z)                    # add to graph
 	end
-
-	return Z
 end
 simulate(parameters::Parameters, m::Integer) = simulate(parameters, range(m, m))
 ```
 
-Next we construct an appropriate architecture using [`GNN`](@ref) and [`WeightedGraphConv`](@ref). For example, we might construct a point estimator as:
+Next we construct an appropriate GNN architecture, as illustrated below. Here, our goal is to construct a point estimator, however any other kind of estimator (see [Estimators](@ref)) can be constructed by simply substituting the appropriate estimator class in the final line below.
 
 ```
 # Propagation module
-d = 1      # dimension of response variable
-nh = 32    # dimension of node feature vectors
+d = 1    # dimension of response
+dₕ = 256  # dimension of final node feature vectors
 propagation = GNNChain(
-	WeightedGraphConv(d => nh),
-	WeightedGraphConv(nh => nh),
-	WeightedGraphConv(nh => nh)
+	SpatialGraphConv(d => 32),
+	SpatialGraphConv(32 => 64),
+	SpatialGraphConv(64 => dₕ)
 	)
 
-# Readout module (using the elementwise average)
-no = nh    # dimension of the final summary vector for each graph
-readout = GlobalPool(mean)
+# Readout module and dimension of readout vector
+#readout = SpatialPyramidPool(mean); dᵣ = dₕ * 21
+readout = GlobalPool(max); dᵣ = dₕ  
 
-# Mapping module (use exponential output activation to ensure positive estimates)
-p = 2     # number of parameters in the statistical model
-w = 64    # width of layers used for the mapping network ϕ
-ϕ = Chain(Dense(no, w, relu), Dense(w, w, relu), Dense(w, p, exp))
+# Summary network
+ψ = GNNSummary(propagation, readout)
 
-# Construct the estimator
-θ̂ = GNN(propagation, readout, ϕ)
-θ̂ = PointEstimator(θ̂)
+# Mapping module
+p = 1     # number of parameters in the statistical model
+w = 64    # width of each hidden layer in the mapping network
+ϕ = Chain(Dense(dᵣ, w, relu), Dense(w, w, relu), Dense(w, p))
+
+# Underlying DeepSet object
+deepset = DeepSet(ψ, ϕ)
+
+# Point estimator
+θ̂ = PointEstimator(deepset)
 ```
 
-Next, we train the neural estimator using [`train`](@ref), here using the default absolute-error loss. We'll train the estimator using a single realisation per parameter configuration (i.e., with `m = 1`). Below, we use a very small number of epochs and a small number of training parameter vectors to keep the run time of this example low, and this will of course result in a poor estimator: in practice, one may set `K` to some large value (say, 10,000), and leave `epochs` unspecified so that training halts only when the risk function ceases to decrease.
+Next, we train the estimator using [`train()`](@ref), here using the default absolute-error loss a single realisation per parameter configuration (i.e., with $m = 1$). Below, we use a relatively small number of epochs and a small number of training parameter vectors to keep the run time reasonably low. In practice, one might set `K` to some large value (say, 10000), and leave `epochs` unspecified so that training halts only when the risk function ceases to decrease.
 
 ```
-θ̂ = train(θ̂, Parameters, simulate, m = 1, epochs = 5, K = 500)
+m = 1
+K = 20000
+θ_train = sample(K)
+θ_val = sample(K)
+Z_train = simulate(θ_train, m)
+Z_val = simulate(θ_val, m)
+θ̂ = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 10)
+#θ̂_best = deepcopy(θ̂)
 ```
 
-Finally, once the neural Bayes estimator has been assessed (as illustrated using [`assess`](@ref) in the univariate example above), it may be applied to observed data, with bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`interval`](@ref). Below, we use simulated data as a substitute for observed data:
+The function [`assess`](@ref) can be used to assess the trained estimator.
+
+```
+θ_test = sample(1000)
+Z_test = simulate(θ_test, m)
+assessment = assess(θ̂, θ_test, Z_test)
+bias(assessment)
+rmse(assessment)
+plot(assessment)
+```
+
+Finally, once the estimator has been assessed, it may be applied to observed data, with bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`interval`](@ref). Below, we use simulated data as a substitute for observed data:
 
 ```
 # Generate some toy data
-parameters = Parameters(1)   # sample a single parameter vector
-z = simulate(parameters, 1)  # simulate some data                  
+parameters = sample(1)       # sample a single parameter vector
+z = simulate(parameters, m)  # simulate data                  
 θ = parameters.θ             # true parameters used to generate data
-S = parameters.locations     # observed locations
+S = parameters.S             # observed locations
 
 # Point estimates
 θ̂(z)
 
 # Parametric bootstrap sample and bootstrap confidence interval
-θ̃ = bootstrap(θ̂, Parameters(θ̂(z), S), simulate, 1)   
-interval(θ̃)  					                
+bs = bootstrap(θ̂, Parameters(θ̂(z), S), simulate, 1)   
+interval(bs)				                
 ```

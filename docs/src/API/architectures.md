@@ -10,15 +10,17 @@ Although the user is free to construct their neural estimator however they see f
 ```@docs
 DeepSet
 
-GNN
+GNNSummary
 ```
 
 ## Layers
 
 ```@docs
-DensePositive
+SpatialGraphConv
 
-WeightedGraphConv
+SpatialPyramidPool
 
 UniversalPool
+
+DensePositive
 ```

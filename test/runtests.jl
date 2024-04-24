@@ -220,7 +220,7 @@ end
 	@test size(UW) == (n, n, 2, m)
 end
 
-@testset "WeightedGraphConv" begin
+@testset "SpatialGraphConv" begin
 	# Construct a spatially-weighted adjacency matrix based on k-nearest neighbours
 	# with k = 5, and convert to a graph with random (uncorrelated) dummy data:
 	n = 100
@@ -228,10 +228,10 @@ end
 	d = 1 # dimension of each observation (univariate data here)
 	A = adjacencymatrix(S, 5)
 	Z = GNNGraph(A, ndata = rand(d, n))
-	layer = WeightedGraphConv(d => 16)
+	layer = SpatialGraphConv(d => 16)
 	show(devnull, layer)
 	h = layer(Z) # convolved features
-	@test size(h.ndata.x) == (16, n)
+	@test size(h.ndata.Z) == (16, n)
 end
 
 @testset "loss functions: $dvc" for dvc ∈ devices
@@ -686,6 +686,7 @@ Z = rand(d, m)
 
 #### Graph data
 
+#TODO need to test training
 @testset "GNN" begin
 
 	# Propagation module
@@ -702,13 +703,16 @@ Z = rand(d, m)
     	)
 	show(devnull, readout)
 
+	# Summary network
+	ψ = GNNSummary(propagation, readout)
+
     # Mapping module
     p = 3     # number of parameters in the statistical model
     w = 64    # width of layers used for the outer network ϕ
     ϕ = Chain(Dense(no, w, relu), Dense(w, w, relu), Dense(w, p))
 
     # Construct the estimator
-    θ̂ = GNN(propagation, readout, ϕ)
+    θ̂ = DeepSet(ψ, ϕ)
 	show(devnull, θ̂)
 
     # Apply the estimator to:
@@ -957,7 +961,7 @@ end
 end
 
 @testset "QuantileEstimatorContinuous" begin
-	using NeuralEstimators, Flux, Distributions, Statistics
+	using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
 
 	# Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
 	d = 1         # dimension of each independent replicate
@@ -1015,6 +1019,56 @@ end
 
 	# Check monotonicty
 	@test all(q̂(z, 0.1f0) .<= q̂(z, 0.11f0) .<= q̂(z, 0.9f0) .<= q̂(z, 0.91f0))
+
+	# ---- Full conditionals ----
+
+	# Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
+	d = 1         # dimension of each independent replicate
+	p = 2         # number of unknown parameters in the statistical model
+	m = 30        # number of independent replicates in each data set
+	function sample(K)
+		μ = randn32(K)
+		σ = rand(InverseGamma(3, 1), K)
+		θ = hcat(μ, σ)'
+		θ = Float32.(θ)
+		return θ
+	end
+	simulateZ(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
+	simulateZ(θ::Matrix, m) = simulateZ.(eachcol(θ), m)
+	simulateτ(K)    = [rand32(1) for k in 1:K]
+	simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
+
+	# Architecture: partially monotonic network to preclude quantile crossing
+	w = 64  # width of each hidden layer
+	q = 16  # number of learned summary statistics
+	ψ = Chain(
+		Dense(d, w, relu),
+		Dense(w, w, relu),
+		Dense(w, q, relu)
+		)
+	ϕ = Chain(
+		DensePositive(Dense(q + p, w, relu); last_only = true),
+		DensePositive(Dense(w, w, relu)),
+		DensePositive(Dense(w, 1))
+		)
+	deepset = DeepSet(ψ, ϕ)
+
+	# Initialise the estimator for the first parameter, targetting μ∣Z,σ
+	i = 1
+	q̂ = QuantileEstimatorContinuous(deepset; i = i)
+
+	# Train the estimator
+	q̂ = train(q̂, sample, simulate, m = m, epochs = 1, verbose = false)
+
+	# Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
+	θ = prior(1000)
+	Z = simulateZ(θ, m)
+	θ₋ᵢ = 0.5f0    # for mulatiparameter scenarios, use θ[Not(i), :] to determine the order that the conditioned parameters should be given
+	τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
+	q̂(Z, θ₋ᵢ, τ)
+
+	# Estimate quantiles for a single data set
+	q̂(Z[1], θ₋ᵢ, τ)
 end
 
 @testset "RatioEstimator" begin

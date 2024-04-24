@@ -39,6 +39,8 @@ removedata
 
 rowwisenorm
 
+spatialgraph
+
 stackarrays
 
 vectotril

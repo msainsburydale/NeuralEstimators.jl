@@ -62,7 +62,7 @@ Expert summary statistics can be incorporated as,
 
 where `S` is a function that returns a vector of user-defined summary statistics.
 These user-defined summary statistics are typically provided either as a
-`Function` that returns a `Vector`, or a vector of such functions.
+`Function` that returns a `Vector`, or a vector of functions.
 
 To ensure that the architecture is agnostic to the sample size ``m``, the
 aggregation function `a` must aggregate over the replicates. It can be specified
@@ -140,21 +140,12 @@ Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network
 
 # Single data set
 function (d::DeepSet)(Z::A) where A
-	d.ϕ(summary(d, Z))
+	d.ϕ(summarystatistics(d, Z))
 end
-function summary(d::DeepSet, Z::A) where A
-	t = d.a(d.ψ(Z))
-	if !isnothing(d.S)
-		s = d.S(Z)
-		t = vcat(t, s)
-	end
-	return t
-end
-
 # Single data set with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractVector{T}} where T
 	Z, x = tup
-	t = summary(d, Z)
+	t = summarystatistics(d, Z)
 	u = vcat(t, x)
 	d.ϕ(u)
 end
@@ -167,61 +158,22 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: Abstra
 	else
 		# Designed for situations where we have a fixed data set and want to
 		# evaluate the deepset object for many different set-level information
-		t = summary(d, Z) # summary statistics only need to be computed once
+		t = summarystatistics(d, Z) # only needs to be computed once
 		tx = vcat(repeat(t, 1, size(x, 2)), x) # NB ideally we'd avoid copying t so many times here, using @view
 		d.ϕ(tx) # Sanity check: stackarrays([d((Z, vec(x̃))) for x̃ in eachcol(x)])
 	end
 end
-
-# Multiple data sets: simple fallback method using broadcasting
+# Multiple data sets
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where A
-  	stackarrays(d.(Z))
+	# Stack into a single array before applying the outer network
+	d.ϕ(stackarrays(summarystatistics(d, Z)))
 end
-
-# Multiple data sets: optimised version for array data.
-function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-
-	# Convert to a single large array
-	z = stackarrays(Z)
-
-	# Apply the inner neural network
-	ψa = d.ψ(z)
-
-	# Compute the indices needed for aggregation and construct a tuple of colons
-	# used to subset all but the last dimension of ψa.
-	indices = _getindices(Z)
-	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
-
-	# Construct the summary statistics
-	# NB for some reason, with the new "explicit" gradient() required by
-	# Flux/Zygote, an error is caused if one uses the same variable name outside
-	# and inside a broadcast like this. For instance, if for the object "stats"
-	# below we had called it "t", then error would be thrown by gradient().
-	stats = map(eachindex(Z)) do i
-		idx = indices[i]
-		t = d.a(ψa[colons..., idx])
-		if !isnothing(d.S)
-			s = d.S(Z[i])
-			t = vcat(t, s)
-		end
-		t
-	end
-
-	# Stack into a single array and apply the outer network
-	return d.ϕ(stackarrays(stats))
-end
-
 # Multiple data sets with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
 	Z, x = tup
-	t = d.a.(d.ψ.(Z))
-	if !isnothing(d.S)
-		s = d.S.(Z)
-		t = vcat.(t, s)
-	end
-	# TODO can the above be replaced by?: t = summary.(Ref(d), Z)
-	t = vcat.(t, x)
-	stackarrays(d.ϕ.(t))
+	t = summarystatistics(d, Z)
+	tx = vcat.(t, x)
+	d.ϕ(stackarrays(tx))
 end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractMatrix{T}} where {A, T}
 	Z, x = tup
@@ -237,27 +189,86 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	end
 end
 
-# Multiple data sets: optimised version for array data + vector set-level covariates.
-# (basically the same code as array method without covariates)
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
-	Z, X = tup
-	z = stackarrays(Z)
-	ψa = d.ψ(z)
+#TODO document and test summarystatistics(). Add this functionality somewhere in the documentation.
+# Fallback method to allow neural estimators to be called directly
+summarystatistics(est, Z) = summarystatistics(est.deepset, Z)
+# Single data set
+function summarystatistics(d::DeepSet, Z::A) where A
+	t = d.a(d.ψ(Z))
+	if !isnothing(d.S)
+		s = d.S(Z)
+		t = vcat(t, s)
+	end
+	return t
+end
+# Multiple data sets: general fallback using broadcasting
+function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where A
+  	summary.(Ref(d), Z)
+end
+# Multiple data sets: optimised version for array data
+function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+
+	# Convert to a single large array and then applythe inner network
+	ψa = d.ψ(stackarrays(Z))
+
+	# Compute the indices needed for aggregation and construct a tuple of colons
+	# used to subset all but the last dimension of ψa.
 	indices = _getindices(Z)
 	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
-	stats = map(eachindex(Z)) do i
+
+	# Construct the summary statistics
+	# NB with the new "explicit" gradient() required by Flux/Zygote, an error is
+	# caused if one uses the same variable name outside and inside a broadcast
+	# like this. For instance, if were to name the result of the following call
+	# "t", an error would be thrown by gradient(), since "t" already appears
+	map(eachindex(Z)) do i
 		idx = indices[i]
 		t = d.a(ψa[colons..., idx])
 		if !isnothing(d.S)
 			s = d.S(Z[i])
 			t = vcat(t, s)
 		end
-		u = vcat(t, X[i])
-		u
+		t
 	end
-	d.ϕ(stackarrays(stats))
 end
+# Multiple data sets: optimised version for graph data
+function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
 
+	# For efficiency, convert Z from a vector of (super)graphs into a single
+	# supergraph before applying the neural network. Since each element of Z
+	# may itself be a supergraph (where each subgraph corresponds to an
+	# independent replicate), recording the gourping of independent replicates
+	# so that they can be combined again later in the function.
+	m = numberreplicates.(Z)
+	local g
+	@ignore_derivatives g = Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
+
+	# Propagation and readout
+	R = d.ψ(g) # TODO ψ must be an object of type GNNSummary, might want to assert this
+
+	# Split R based on the original grouping specified by m
+	if ndims(R) == 2
+		ng = length(m)
+		cs = cumsum(m)
+		indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
+		R̃ = [R[:, idx] for idx ∈ indices]
+	elseif ndims(R) == 3
+		R̃ = [R[:, :, i] for i ∈ 1:size(R, 3)]
+	end
+
+	# Now we have a vector of matrices, where each matrix corresponds to the
+	# readout vectors R₁, …, Rₘ for a given data set. Now, to aggregate these
+	# readout vectors into a single summary statistic for each data set, we
+	# apply similar code to that used when Z is a vector of arrays:
+	map(eachindex(Z)) do i
+		t = d.a(R̃[i])
+		if !isnothing(d.S)
+			s = d.S(Z[i])
+			t = vcat(t, s)
+		end
+		t
+	end
+end
 
 
 
@@ -605,7 +616,7 @@ Wrapper around the standard
 [Dense](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dense) layer that
 ensures positive weights (biases are left unconstrained).
 
-This layer can be useful for constucting (partially) monotonic neural networks (see, e.g., [`QuantileEstimatorContinuous`])(@ref).
+This layer can be useful for constucting (partially) monotonic neural networks (see, e.g., [`QuantileEstimatorContinuous`](@ref).
 
 # Examples
 ```
