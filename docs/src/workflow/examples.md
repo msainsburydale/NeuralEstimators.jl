@@ -104,6 +104,10 @@ Note that, when estimating a full covariance matrix, one may wish to constrain t
 
 ## Gridded data
 
+```
+using NeuralEstimators, Flux, Distributions, Distances, LinearAlgebra
+```
+
 For data collected over a regular grid, the neural Bayes estimator is typically based on a convolutional neural network (CNN).
 
 In these settings, each data set must be stored as a ($D + 2$)-dimensional array, where $D$ is the dimension of the grid (e.g., $D = 1$ for time series, $D = 2$ for two-dimensional spatial grids, etc.). The first $D$ dimensions of the array correspond to the dimensions of the grid; the penultimate dimension stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes, etc.); and the final dimension stores the independent replicates. For example, to store 50 independent replicates of a bivariate spatial process measured over a 10x15 grid, one would construct an array of dimension 10x15x2x50.
@@ -111,14 +115,12 @@ In these settings, each data set must be stored as a ($D + 2$)-dimensional array
 Below, we develop a neural Bayes estimator for the spatial Gaussian process model with exponential covariance function and unknown range parameter. The spatial domain is taken to be the unit square and we adopt the prior $\theta \sim U(0.05, 0.5)$.
 
 ```
-sample(K) = rand(Uniform(0.05, 0.5), 1, K)
+prior(K) = rand(Uniform(0.05, 0.5), 1, K)
 ```
 
 Below, we give example code for simulating from the statistical model, where the data is collected over a 16x16 grid:
 
 ```
-using Distances, LinearAlgebra
-
 function simulate(θ, m = 1)
 
 	# Spatial locations
@@ -174,8 +176,8 @@ Now we train the estimators. Since simulation from this statistical model involv
 
 ```
 K = 20000
-θ_train = sample(K)
-θ_val   = sample(K ÷ 10)
+θ_train = prior(K)
+θ_val   = prior(K ÷ 10)
 Z_train = simulate(θ_train)
 Z_val   = simulate(θ_val)
 
@@ -183,17 +185,22 @@ Z_val   = simulate(θ_val)
 θ̂₂ = train(θ̂₂, θ_train, θ_val, Z_train, Z_val)
 ```
 
+
+
 Once the estimators have been trained, we assess them using empirical simulation-based methods:
 
 ```
-θ_test = sample(1000)
+θ_test = prior(1000)
 Z_test = simulate(θ_test)
 assessment = assess([θ̂, θ̂₂], θ_test, Z_test)
+assessment = assess(θ̂, θ_test, Z_test)
 
 bias(assessment)
 rmse(assessment)
 coverage(assessment)
 plot(assessment)
+figure = plot(assessment)
+save("CNN.png", figure, px_per_unit = 3, size = (450, 450))
 ```
 
 ![Gridded spatial Gaussian process example: Estimates vs. truth](../assets/figures/gridded.png)
@@ -201,7 +208,7 @@ plot(assessment)
 Finally, we can apply our neural Bayes estimators to observed data. Note that when we have a single replicate only (which is often the case in spatial statistics), non-parametric bootstrap is not possible, and we instead use parametric bootstrap:
 
 ```
-θ = sample(1)                          # true parameter
+θ = prior(1)                           # true parameter
 Z = simulate(θ)                        # "observed" data
 θ̂(Z)                                   # point estimates
 interval(θ̂₂, Z)                        # 95% marginal posterior credible intervals

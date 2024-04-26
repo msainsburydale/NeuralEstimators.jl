@@ -103,7 +103,9 @@ function plot(assessment::Assessment)
   return figure
 end
 # figure = plot(assessment)
+# using CairoMakie # for save()
 # save("docs/src/assets/figures/gridded.png", figure, px_per_unit = 3, size = (600, 300))
+# save("CNN.png", figure, px_per_unit = 3, size = (600, 300))
 
 @doc raw"""
 	risk(assessment::Assessment; ...)

@@ -120,11 +120,8 @@ end
 # # 	b(x, y)
 # # end
 
-
-#TODO add proper documentation (maths from the paper)
-#TODO allow for more general formulation, like we give in the ARSIA paper
 @doc raw"""
-    SpatialGraphConv(in => out, g=relu; aggr=mean, bias=true, init=glorot_uniform)
+    SpatialGraphConv(in => out, g=relu; aggr=mean, bias=true, init=glorot_uniform, w_width=16, w_g=relu)
 
 Implements the graph convolution
 ```math
@@ -147,9 +144,8 @@ elementwise multiplication, $\mathcal{N}(j)$ denotes the indices of neighbours
 of $\mathbf{s}_j$, and $\mathbf{b}^{(l)}$ is a trainable bias vector.
 
 The function $\mathbf{w}(\cdot, \cdot)$ is modelled using a multilayer
-perceptron.
-When modelling stationary processes, it can be made a
-function of spatial displacement, so that
+perceptron with a single hidden layer. When modelling stationary processes, it
+can be made a function of spatial displacement, so that
 $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\mathbf{s}_{j'} - \mathbf{s}_j)$.
 Similarly, when modelling isotropic processes, it can be made a
 function of spatial distance, so that
@@ -162,6 +158,8 @@ $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\|\mathbf{s}_{j'} -
 - `aggr`: Aggregation operator $\mathbf{a}(\cdot)$ (e.g. `+`, `*`, `max`, `min`, and `mean`).
 - `bias`: Add learnable bias?
 - `init`: Weights' initializer.
+- `w_width`: Width of the hidden layer of the MLP $\mathbf{w}(\cdot, \cdot)$.
+- `w_g`: Activation function used in the MLP $\mathbf{w}(\cdot, \cdot)$.
 
 # Examples
 ```
@@ -199,22 +197,26 @@ end
 WeightedGraphConv = SpatialGraphConv; export WeightedGraphConv # alias for backwards compatability
 function SpatialGraphConv(
 	ch::Pair{Int,Int},
-	g = identity;
+	g = relu;
 	aggr = mean,
 	init = glorot_uniform,
-	bias::Bool = true
+	bias::Bool = true,
+	w_width::Integer = 16,
+	w_g = relu
 	)
 
     in, out = ch
     Γ1 = init(out, in)
     Γ2 = init(out, in)
-	f = relu
-	#TODO should allow multiple layers
-	w = Dense(1 => in, f)           # isotropic process
+
+	w_init = rand32 # initialise w with positive weights to prevent zero outputs
+	w = Chain( # isotropic process
+		Dense(1 => w_width, w_g, init=w_init),
+		Dense(w_width => in, w_g, init=w_init)
+		)
 	# d = 2 # spatial dimension
-	#w = Dense(d => in, f)          # stationary process
-	#w = Bilinear((d, d) => in, f)  # nonstationary process (or no assumptions)
-	w = Dense(abs.(w.weight), abs.(w.bias), f) # initialise w with positive weights to prevent all-zero outputs, which can cause issues during training
+	#w = Dense(d => in, w_g)          # stationary process
+	#w = Bilinear((d, d) => in, w_g)  # nonstationary process (or no assumptions)
     b = bias ? Flux.create_bias(Γ1, true, out) : false
     SpatialGraphConv(Γ1, Γ2, w, b, g, aggr)
 end
@@ -228,8 +230,8 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::AbstractMatrix)
     check_num_nodes(g, x)
     d = permutedims(g.graph[3]) # spatial distances
     e = l.w(d) # spatial weighting
-	# NB if e is a vector, can use w_mul_j: m = propagate(w_mul_xj, g, l.a, xj=x, e=e)
 	# TODO I'll need to repeat dims here too..
+	# NB if e is a vector, can do h = propagate(w_mul_xj, g, l.a, xj=x, e=e)
 	h = propagate(e_mul_xj, g, l.a, xj=x, e=e)
 	l.g.(l.Γ1 * x .+ l.Γ2 * h .+ l.b) # ⊠ is shorthand for batched_mul
 end
@@ -237,8 +239,8 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3}
     check_num_nodes(g, x)
 	d = permutedims(g.graph[3]) # spatial distances
     e = l.w(d) # spatial weighting
-	# NB if e is a vector, can use w_mul_j: m = propagate(w_mul_xj, g, l.a, xj=x, e=e)
 	# repeat e to match the number of independent replicates
+	# NB if e is a vector, can do h = propagate(w_mul_xj, g, l.a, xj=x, e=e)
 	m = size(x, 2)
 	e = permutedims(stackarrays([e for _ in 1:m], merge = false), (1, 3, 2))
 	h = propagate(e_mul_xj, g, l.a, xj=x, e=e)
