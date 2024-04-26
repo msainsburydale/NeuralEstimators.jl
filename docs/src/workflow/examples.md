@@ -179,7 +179,7 @@ K = 20000
 Z_train = simulate(θ_train)
 Z_val   = simulate(θ_val)
 
-θ̂  = train(θ̂,  θ_train, θ_val, Z_train, Z_val, use_gpu = false)
+θ̂  = train(θ̂,  θ_train, θ_val, Z_train, Z_val)
 θ̂₂ = train(θ̂₂, θ_train, θ_val, Z_train, Z_val)
 ```
 
@@ -264,11 +264,12 @@ function Parameters(θ::Matrix, S)
 	K = size(θ, 2)
 
 	# Construct spatial graphs
-	graphs = spatialgraph.(S)
+	graph = spatialgraph(S[1])
+	graphs = repeat([graph], length(S))
 
 	# Cholesky factor of covariance matrix
-	  chols = Folds.map(1:K) do k
-		D = pairwise(Euclidean(), S[k], dims = 1)
+	D = pairwise(Euclidean(), S[1], dims = 1)
+	chols = Folds.map(1:K) do k
 		ρ = θ[1, k]
 		Σ = exp.(-D ./ ρ)
 		L = cholesky(Symmetric(Σ)).L
@@ -302,13 +303,16 @@ Next we construct an appropriate GNN architecture, as illustrated below. Here, o
 
 ```
 # Propagation module
-d = 1    # dimension of response
 dₕ = 256  # dimension of final node feature vectors
 propagation = GNNChain(
-	SpatialGraphConv(d => 32),
+	SpatialGraphConv(1 => 32),
 	SpatialGraphConv(32 => 64),
 	SpatialGraphConv(64 => dₕ)
 	)
+#propagation = GNNChain(
+#	SpatialGraphConv(1 => 64),
+#	SpatialGraphConv(64 => dₕ)
+#	)
 
 # Readout module and dimension of readout vector
 #readout = SpatialPyramidPool(mean); dᵣ = dₕ * 21
@@ -318,11 +322,10 @@ readout = GlobalPool(max); dᵣ = dₕ
 ψ = GNNSummary(propagation, readout)
 
 # Mapping module
-p = 1     # number of parameters in the statistical model
-w = 64    # width of each hidden layer in the mapping network
-ϕ = Chain(Dense(dᵣ, w, relu), Dense(w, w, relu), Dense(w, p))
+p = 1 # number of parameters in the statistical model
+ϕ = Chain(Dense(dᵣ, 64, relu), Dense(64, p))
 
-# Underlying DeepSet object
+# DeepSet object
 deepset = DeepSet(ψ, ϕ)
 
 # Point estimator
@@ -335,7 +338,7 @@ Next, we train the estimator using [`train()`](@ref), here using the default abs
 m = 1
 K = 20000
 θ_train = sample(K)
-θ_val = sample(K)
+θ_val = sample(K ÷ 10)
 Z_train = simulate(θ_train, m)
 Z_val = simulate(θ_val, m)
 θ̂ = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 10)
@@ -345,9 +348,9 @@ Z_val = simulate(θ_val, m)
 The function [`assess`](@ref) can be used to assess the trained estimator.
 
 ```
-θ_test = sample(1000)
-Z_test = simulate(θ_test, m)
-assessment = assess(θ̂, θ_test, Z_test)
+θ = sample(1000)
+Z = simulate(θ, m)
+assessment = assess(θ̂, θ, Z, use_gpu = false)
 bias(assessment)
 rmse(assessment)
 plot(assessment)
@@ -358,14 +361,14 @@ Finally, once the estimator has been assessed, it may be applied to observed dat
 ```
 # Generate some toy data
 parameters = sample(1)       # sample a single parameter vector
-z = simulate(parameters, m)  # simulate data                  
+Z = simulate(parameters, m)  # simulate data                  
 θ = parameters.θ             # true parameters used to generate data
 S = parameters.S             # observed locations
 
 # Point estimates
-θ̂(z)
+θ̂(Z)
 
 # Parametric bootstrap sample and bootstrap confidence interval
-bs = bootstrap(θ̂, Parameters(θ̂(z), S), simulate, 1)   
+bs = bootstrap(θ̂, Parameters(θ̂(Z), S), simulate, 1)   
 interval(bs)				                
 ```
