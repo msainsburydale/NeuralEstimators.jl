@@ -221,17 +221,18 @@ end
 end
 
 @testset "SpatialGraphConv" begin
-	# Construct a spatially-weighted adjacency matrix based on k-nearest neighbours
-	# with k = 5, and convert to a graph with random (uncorrelated) dummy data:
-	n = 100
-	S = rand(n, 2)
-	d = 1 # dimension of each observation (univariate data here)
-	A = adjacencymatrix(S, 5)
-	Z = GNNGraph(A, ndata = rand(d, n))
-	layer = SpatialGraphConv(d => 16)
-	show(devnull, layer)
-	h = layer(Z) # convolved features
-	@test size(h.ndata.Z) == (16, n)
+	m = 5            # number of replicates
+	d = 2            # spatial dimension
+	n = 100          # number of spatial locations
+	S = rand(n, d)   # spatial locations
+	Z = rand(n, m)   # toy data
+	g = spatialgraph(S, Z)
+	layer1 = SpatialGraphConv(1 => 16)
+	layer2 = SpatialGraphConv(16 => 32)
+	show(devnull, layer1)
+	h = layer1(g)
+	@test size(h.ndata.Z) == (16, m, n)
+	layer2(h)
 end
 
 @testset "loss functions: $dvc" for dvc ∈ devices

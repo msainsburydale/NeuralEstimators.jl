@@ -84,7 +84,8 @@ function spatialgraph(S::AbstractMatrix; store_S::Bool = false, pyramid_pool::Bo
 		clusterings = computeclusters(S)
 		ndata = (ndata..., clusterings = clusterings)
 	end
-	GNNGraph(A, ndata = ndata)
+	g = GNNGraph(A, ndata = ndata)
+
 end
 spatialgraph(S::AbstractVector; kwargs...) = batch(spatialgraph.(S)) # spatial locations varying between replicates
 #TODO multivariate data with spatial locations varying between replicates
@@ -121,27 +122,27 @@ end
 # # end
 
 @doc raw"""
-    SpatialGraphConv(in => out, g=relu; aggr=mean, bias=true, init=glorot_uniform, w_width=16, w_g=relu)
+    SpatialGraphConv(in => out, g=relu; aggr=mean, bias=true, init=glorot_uniform, width=16, f=relu, c=1)
 
 Implements the graph convolution
 ```math
  \mathbf{h}^{(l)}_{j} =
  g\Big(
- \mathbf{\Gamma}_{\!1}^{(l)} \mathbf{h}^{(l-1)}_{j}
- +
- \mathbf{\Gamma}_{\!2}^{(l)}\mathbf{a}\big(\{\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}; \mathbf{\Gamma}_{\!3}^{(l)}) \odot \mathbf{h}^{(l-1)}_{j'} : j' \in \mathcal{N}(j) \}\big) + \mathbf{b}^{(l)}
+ \mathbf{\Gamma}^{(l)} \bar{\mathbf{h}}^{(l)}_{j}
+ + \mathbf{\gamma}^{(l)}
  \Big),
+ \quad
+ \bar{\mathbf{h}}^{(l)}_{j} = \sum_{j' \in \mathcal{N}(j)}\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}; \mathbf{\beta}^{(l)}) \odot \mathbf{h}^{(l-1)}_{j'},
 ```
-where $\mathbf{h}^{(l)}_{j}$ is the hidden-feature vector at location
+where $\mathbf{h}^{(l)}_{j}$ is the feature vector at location
 $\mathbf{s}_j$ at layer $l$, $g(\cdot)$ is a non-linear activation function
-applied elementwise, $\mathbf{\Gamma}_{\!1}^{(l)}$ and
-$\mathbf{\Gamma}_{\!2}^{(l)}$ are trainable parameter matrices,
-$\mathbf{a}(\cdot)$ is an aggregation function
-(e.g., elementwise sum, mean or maximum),
-$\mathbf{w}(\cdot, \cdot; \mathbf{\Gamma}_{\!3}^{(l)})$ is a learnable weighting
-function parameterised by $\mathbf{\Gamma}_{\!3}^{(l)}$, the notation $\odot$ denotes
-elementwise multiplication, $\mathcal{N}(j)$ denotes the indices of neighbours
-of $\mathbf{s}_j$, and $\mathbf{b}^{(l)}$ is a trainable bias vector.
+applied elementwise, $\mathbf{\Gamma}^{(l)}$ is a trainable parameter matrix,
+$\mathbf{\gamma}^{(l)}$ is a trainable bias vector, $\mathcal{N}(j)$ denotes the
+indices of neighbours of $\mathbf{s}_j$ and $j$ itself,
+$\mathbf{w}(\cdot, \cdot)$ is a learnable weight function parameterised by
+$\mathbf{\beta}^{(l)}$, and $\odot$ denotes elementwise multiplication. Note
+that summation over the weighted feature vectors may be replaced by another aggregation
+function, such as the elementwise mean or maximum.
 
 The function $\mathbf{w}(\cdot, \cdot)$ is modelled using a multilayer
 perceptron with a single hidden layer. When modelling stationary processes, it
@@ -151,6 +152,35 @@ Similarly, when modelling isotropic processes, it can be made a
 function of spatial distance, so that
 $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\|\mathbf{s}_{j'} - \mathbf{s}_j\|)$.
 
+The function $\mathbf{w}(\cdot, \cdot)$ returns a vector that is of the same
+dimension as the feature vectors of the previous layer. At the first layer,
+the "feature" vectors correspond to the spatial data and, for univariate
+spatial processes, the dimension of $\mathbf{w}(\cdot, \cdot)$ will be equal to
+one, which may be a source of inflexibility. To increase flexibility, one may
+construct several "channels" in an analogous manner to conventional
+convolution, specifically, by constructing the intermediate representation as
+
+```math
+\bar{\mathbf{h}}^{(l)}_{j} =
+\sum_{j' \in \mathcal{N}(j)}
+\Big(
+\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}; \mathbf{\beta}_{1}^{(l)})
+\oplus
+\dots
+\oplus
+\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}; \mathbf{\beta}_{c}^{(l)})
+\Big)
+\odot
+\Big(
+ \mathbf{h}^{(l-1)}_{j'}
+\oplus
+\dots
+\oplus
+ \mathbf{h}^{(l-1)}_{j'}
+\Big),
+```
+where $c$ denotes the number of channels and $\oplus$ denote vector concatentation.
+
 # Arguments
 - `in`: The dimension of input features.
 - `out`: The dimension of output features.
@@ -158,8 +188,9 @@ $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\|\mathbf{s}_{j'} -
 - `aggr`: Aggregation operator $\mathbf{a}(\cdot)$ (e.g. `+`, `*`, `max`, `min`, and `mean`).
 - `bias`: Add learnable bias?
 - `init`: Weights' initializer.
-- `w_width`: Width of the hidden layer of the MLP $\mathbf{w}(\cdot, \cdot)$.
-- `w_g`: Activation function used in the MLP $\mathbf{w}(\cdot, \cdot)$.
+- `width`: Width of the hidden layer of $\mathbf{w}(\cdot, \cdot)$.
+- `f`: Activation function used in $\mathbf{w}(\cdot, \cdot)$.
+- `c`: The number of "channels" of $\mathbf{w}(\cdot, \cdot)$.
 
 # Examples
 ```
@@ -178,15 +209,13 @@ g = spatialgraph(S, Z)
 # Construct and apply spatial graph convolution layers
 layer1 = SpatialGraphConv(1 => 16)
 layer2 = SpatialGraphConv(16 => 32)
-layer1(g)
 layer2(layer1(g))
 ```
 """
 struct SpatialGraphConv{W<:AbstractMatrix,NN,B,F,A} <: GNNLayer
-    Γ1::W
-    Γ2::W
+    Γ::W
+	b::B
 	w::NN
-    b::B
     g::F
     a::A
 	# d::Integer # TODO spatial dimension of the process (needed to define the input size of the weight function)
@@ -201,24 +230,32 @@ function SpatialGraphConv(
 	aggr = mean,
 	init = glorot_uniform,
 	bias::Bool = true,
-	w_width::Integer = 16,
-	w_g = relu
-	)
+	width::Integer = 16,
+	f = relu,
+	c::Integer = 1)
 
     in, out = ch
-    Γ1 = init(out, in)
-    Γ2 = init(out, in)
 
+	# Weight matrix
+    Γ = init(out, in*c)
+
+	# Bias vector
+	b = bias ? Flux.create_bias(Γ, true, out) : false
+
+	# Spatial weighting function
 	w_init = rand32 # initialise w with positive weights to prevent zero outputs
-	w = Chain( # isotropic process
-		Dense(1 => w_width, w_g, init=w_init),
-		Dense(w_width => in, w_g, init=w_init)
-		)
-	# d = 2 # spatial dimension
-	#w = Dense(d => in, w_g)          # stationary process
-	#w = Bilinear((d, d) => in, w_g)  # nonstationary process (or no assumptions)
-    b = bias ? Flux.create_bias(Γ1, true, out) : false
-    SpatialGraphConv(Γ1, Γ2, w, b, g, aggr)
+	w = map(1:c) do _
+		Chain( # isotropic process
+			Dense(1 => width, f, init = w_init),
+			Dense(width => in, f, init = w_init)
+			)
+		#d = 2 # spatial dimension
+		#w = Dense(d => in, f)          # stationary process
+		#w = Bilinear((d, d) => in, f)  # nonstationary process (or no assumptions)
+	end
+	w = c == 1 ? w[1] : Parallel(vcat, w...)
+
+    SpatialGraphConv(Γ, b, w, g, aggr)
 end
 function (l::SpatialGraphConv)(g::GNNGraph)
 	# update the data slot Z, pass everything else on unchanged
@@ -226,131 +263,43 @@ function (l::SpatialGraphConv)(g::GNNGraph)
 	h = l(g, Z)
 	@ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = h))
 end
-function (l::SpatialGraphConv)(g::GNNGraph, x::AbstractMatrix)
-    check_num_nodes(g, x)
-    d = permutedims(g.graph[3]) # spatial distances
-    e = l.w(d) # spatial weighting
-	# TODO I'll need to repeat dims here too..
-	# NB if e is a vector, can do h = propagate(w_mul_xj, g, l.a, xj=x, e=e)
-	h = propagate(e_mul_xj, g, l.a, xj=x, e=e)
-	l.g.(l.Γ1 * x .+ l.Γ2 * h .+ l.b) # ⊠ is shorthand for batched_mul
-end
 function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
     check_num_nodes(g, x)
 	d = permutedims(g.graph[3]) # spatial distances
     e = l.w(d) # spatial weighting
 	# repeat e to match the number of independent replicates
-	# NB if e is a vector, can do h = propagate(w_mul_xj, g, l.a, xj=x, e=e)
+	# NB if e were a vector, could do h = propagate(w_mul_xj, g, l.a, xj=x, e=e)
 	m = size(x, 2)
 	e = permutedims(stackarrays([e for _ in 1:m], merge = false), (1, 3, 2))
 	h = propagate(e_mul_xj, g, l.a, xj=x, e=e)
-	l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h .+ l.b) # ⊠ is shorthand for batched_mul
+	l.g.(l.Γ ⊠ h .+ l.b) # ⊠ is shorthand for batched_mul
 end
 function Base.show(io::IO, l::SpatialGraphConv)
-    in_channel  = size(l.Γ1, ndims(l.Γ1))
-    out_channel = size(l.Γ1, ndims(l.Γ1)-1)
+    in_channel  = size(l.Γ, ndims(l.Γ))
+    out_channel = size(l.Γ, ndims(l.Γ)-1)
     print(io, "SpatialGraphConv(", in_channel, " => ", out_channel)
     l.g == identity || print(io, ", ", l.g)
     print(io, ", aggr=", l.a)
     print(io, ")")
 end
-#TODO maybe remove self connections, don't want to count the central node twice
+# m = 5            # number of replicates
+# d = 2            # spatial dimension
+# n = 100          # number of spatial locations
+# S = rand(n, d)   # spatial locations
+# Z = rand(n, m)   # toy data
+# g = spatialgraph(S, Z)
+# x = g.ndata.Z
+# l = SpatialGraphConv(1 => 16)
+# d = permutedims(g.graph[3]) # spatial distances
+# e = l.w(d)
+# l(g)
+# l(g).ndata.Z
+# l = SpatialGraphConv(1 => 16, c = 5)
+# d = permutedims(g.graph[3]) # spatial distances
+# e = l.w(d)
+# l(g)
+# l(g).ndata.Z
 
-
-# # ---- SpatialGraphConv ----
-#
-# #TODO add proper documentation (maths from the paper)
-# #TODO allow for more general formulation, like we give in the ARSIA paper
-# @doc raw"""
-#     SpatialGraphConv(in => out, σ=identity; aggr=mean, bias=true, init=glorot_uniform)
-# Same as regular [`GraphConv`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/conv/#GraphNeuralNetworks.GraphConv) layer, but where the neighbours of a node are weighted by their spatial distance to that node.
-#
-# # Arguments
-# - `in`: The dimension of input features.
-# - `out`: The dimension of output features.
-# - `σ`: Activation function.
-# - `aggr`: Aggregation operator for the incoming messages (e.g. `+`, `*`, `max`, `min`, and `mean`).
-# - `bias`: Add learnable bias.
-# - `init`: Weights' initializer.
-#
-# # Examples
-# ```
-# using NeuralEstimators, GraphNeuralNetworks
-#
-# # Construct a spatially-weighted adjacency matrix based on k-nearest neighbours
-# # with k = 5, and convert to a graph with random dummy data
-# n = 100         # number of spatial locations
-# S = rand(n, 2)  # spatial locations
-# d = 1           # dimension of each observation (univariate)
-# A = adjacencymatrix(S, 5)
-# Z = GNNGraph(A, ndata = rand(d, n))
-#
-# # Construct the layer and apply it to the data to generate convolved features
-# layer = SpatialGraphConv(d => 16)
-# layer(Z)
-# ```
-# """
-# struct SpatialGraphConv{W<:AbstractMatrix,B,F,A,C} <: GNNLayer
-#     W1::W
-#     W2::W
-#     W3::C
-#     bias::B
-#     σ::F
-#     aggr::A
-# end
-# @layer SpatialGraphConv
-# WeightedGraphConv = SpatialGraphConv; export WeightedGraphConv # alias for backwards compatability
-# function SpatialGraphConv(
-# 	ch::Pair{Int,Int},
-# 	σ = identity;
-# 	aggr = mean,
-# 	init = glorot_uniform,
-# 	bias::Bool = true
-# 	)
-#
-#     in, out = ch
-#     W1 = init(out, in)
-#     W2 = init(out, in)
-#     # NB Even though W3 is a scalar, it needs to be stored as an array so that
-#     # it is recognised as a trainable field. Note that we could have a different
-#     # range parameter for each channel, in which case W3 would be an array of parameters.
-#     W3 = init(1)
-#     b = bias ? Flux.create_bias(W1, true, out) : false
-#     SpatialGraphConv(W1, W2, W3, b, σ, aggr)
-# end
-# rangeparameter(l::SpatialGraphConv) = exp.(l.W3)
-# function (l::SpatialGraphConv)(g::GNNGraph)
-# 	# update the data slot Z, pass everything else on unchanged
-# 	Z = :Z ∈ keys(g.ndata) ? g.ndata.Z : first(values(g.ndata))
-# 	h = l(g, Z)
-# 	@ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = h))
-# end
-# function (l::SpatialGraphConv)(g::GNNGraph, x::AbstractMatrix)
-#     check_num_nodes(g, x)
-#     r = rangeparameter(l)  # strictly positive range parameter
-#     d = g.graph[3]         # vector of spatial distances
-#     w = exp.(-d ./ r)      # weights defined by exponentially decaying function of distance
-#     m = propagate(w_mul_xj, g, l.aggr, xj=x, e=w)
-#     x = l.σ.(l.W1 * x .+ l.W2 * m .+ l.bias)
-#     return x
-# end
-# function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
-#     check_num_nodes(g, x)
-# 	r = rangeparameter(l)  # strictly positive range parameter
-# 	d = g.graph[3]         # vector of spatial distances
-# 	w = exp.(-d ./ r)      # weights defined by exponentially decaying function of distance
-# 	m = propagate(w_mul_xj, g, l.aggr, xj=x, e=w)
-# 	x = l.σ.(l.W1 ⊠ x .+ l.W2 ⊠ m .+ l.bias) # ⊠ is shorthand for batched_mul
-# 	return x
-# end
-# function Base.show(io::IO, l::SpatialGraphConv)
-#     in_channel  = size(l.W1, ndims(l.W1))
-#     out_channel = size(l.W1, ndims(l.W1)-1)
-#     print(io, "SpatialGraphConv(", in_channel, " => ", out_channel)
-#     l.σ == identity || print(io, ", ", l.σ)
-#     print(io, ", aggr=", l.aggr)
-#     print(io, ")")
-# end
 
 # ---- Clustering ----
 

@@ -199,8 +199,6 @@ bias(assessment)
 rmse(assessment)
 coverage(assessment)
 plot(assessment)
-figure = plot(assessment)
-save("CNN.png", figure, px_per_unit = 3, size = (450, 450))
 ```
 
 ![Gridded spatial Gaussian process example: Estimates vs. truth](../assets/figures/gridded.png)
@@ -316,10 +314,6 @@ propagation = GNNChain(
 	SpatialGraphConv(32 => 64),
 	SpatialGraphConv(64 => dₕ)
 	)
-#propagation = GNNChain(
-#	SpatialGraphConv(1 => 64),
-#	SpatialGraphConv(64 => dₕ)
-#	)
 
 # Readout module and dimension of readout vector
 #readout = SpatialPyramidPool(mean); dᵣ = dₕ * 21
@@ -346,18 +340,15 @@ m = 1
 K = 20000
 θ_train = sample(K)
 θ_val = sample(K ÷ 10)
-Z_train = simulate(θ_train, m)
-Z_val = simulate(θ_val, m)
-θ̂ = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 10)
-#θ̂_best = deepcopy(θ̂)
+θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs_per_Z_refresh = 3)
 ```
 
 The function [`assess`](@ref) can be used to assess the trained estimator.
 
 ```
-θ = sample(1000)
-Z = simulate(θ, m)
-assessment = assess(θ̂, θ, Z, use_gpu = false)
+θ_test = sample(1000)
+Z_test = simulate(θ_test, m)
+assessment = assess(θ̂, θ_test, Z_test)
 bias(assessment)
 rmse(assessment)
 plot(assessment)

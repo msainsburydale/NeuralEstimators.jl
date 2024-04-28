@@ -102,10 +102,10 @@ function plot(assessment::Assessment)
   figure = draw(figure, facet=(; linkxaxes=:none, linkyaxes=:none)) #, axis=(; aspect=1)) # couldn't fix the aspect ratio without messing up the positioning of the titles
   return figure
 end
-# figure = plot(assessment)
 # using CairoMakie # for save()
+# figure = plot(assessment)
 # save("docs/src/assets/figures/gridded.png", figure, px_per_unit = 3, size = (600, 300))
-# save("CNN.png", figure, px_per_unit = 3, size = (600, 300))
+# save("GNN.png", figure, px_per_unit = 3, size = (450, 450))
 
 @doc raw"""
 	risk(assessment::Assessment; ...)

@@ -643,7 +643,7 @@ function (d::DensePositive)(x::AbstractVecOrMat)
   σ = NNlib.fast_act(a.σ, x) # replaces tanh => tanh_fast, etc
   xT = _match_eltype(a, x)   # fixes Float64 input, etc.
   if d.last_only
-	  weight = d.g.(hcat(a.weight[:, 1:end-1], a.weight[:, end:end]))
+	  weight = hcat(a.weight[:, 1:end-1], d.g.(a.weight[:, end:end]))
   else
 	  weight = d.g.(a.weight)
   end
