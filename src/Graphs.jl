@@ -128,20 +128,24 @@ Implements the graph convolution
 ```math
  \mathbf{h}^{(l)}_{j} =
  g\Big(
- \mathbf{\Gamma}^{(l)} \bar{\mathbf{h}}^{(l)}_{j}
- + \mathbf{\gamma}^{(l)}
+ \mathbf{\Gamma}_{\!1}^{(l)} \mathbf{h}^{(l-1)}_{j}
+ +
+ \mathbf{\Gamma}_{\!2}^{(l)} \bar{\mathbf{h}}^{(l)}_{j}
+ +
+ \mathbf{\gamma}^{(l)}
  \Big),
  \quad
  \bar{\mathbf{h}}^{(l)}_{j} = \sum_{j' \in \mathcal{N}(j)}\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}; \mathbf{\beta}^{(l)}) \odot \mathbf{h}^{(l-1)}_{j'},
 ```
 where $\mathbf{h}^{(l)}_{j}$ is the feature vector at location
 $\mathbf{s}_j$ at layer $l$, $g(\cdot)$ is a non-linear activation function
-applied elementwise, $\mathbf{\Gamma}^{(l)}$ is a trainable parameter matrix,
+applied elementwise, $\mathbf{\Gamma}_{\!1}^{(l)}$ and
+$\mathbf{\Gamma}_{\!2}^{(l)}$ are trainable parameter matrices,
 $\mathbf{\gamma}^{(l)}$ is a trainable bias vector, $\mathcal{N}(j)$ denotes the
 indices of neighbours of $\mathbf{s}_j$ and $j$ itself,
 $\mathbf{w}(\cdot, \cdot)$ is a learnable weight function parameterised by
 $\mathbf{\beta}^{(l)}$, and $\odot$ denotes elementwise multiplication. Note
-that summation over the weighted feature vectors may be replaced by another aggregation
+that summation over $\mathcal{N}(j)$ may be replaced by another aggregation
 function, such as the elementwise mean or maximum.
 
 The function $\mathbf{w}(\cdot, \cdot)$ is modelled using a multilayer
@@ -179,7 +183,7 @@ convolution, specifically, by constructing the intermediate representation as
  \mathbf{h}^{(l-1)}_{j'}
 \Big),
 ```
-where $c$ denotes the number of channels and $\oplus$ denote vector concatentation.
+where $c$ denotes the number of channels and $\oplus$ denotes vector concatentation.
 
 # Arguments
 - `in`: The dimension of input features.
@@ -213,7 +217,8 @@ layer2(layer1(g))
 ```
 """
 struct SpatialGraphConv{W<:AbstractMatrix,NN,B,F,A} <: GNNLayer
-    Γ::W
+    Γ1::W
+    Γ2::W
 	b::B
 	w::NN
     g::F
@@ -234,13 +239,13 @@ function SpatialGraphConv(
 	f = relu,
 	c::Integer = 1)
 
-    in, out = ch
-
 	# Weight matrix
-    Γ = init(out, in*c)
+	in, out = ch
+    Γ1 = init(out, in*c)
+    Γ2 = init(out, in*c)
 
 	# Bias vector
-	b = bias ? Flux.create_bias(Γ, true, out) : false
+	b = bias ? Flux.create_bias(Γ1, true, out) : false
 
 	# Spatial weighting function
 	w_init = rand32 # initialise w with positive weights to prevent zero outputs
@@ -255,10 +260,9 @@ function SpatialGraphConv(
 	end
 	w = c == 1 ? w[1] : Parallel(vcat, w...)
 
-    SpatialGraphConv(Γ, b, w, g, aggr)
+    SpatialGraphConv(Γ1, Γ2, b, w, g, aggr)
 end
 function (l::SpatialGraphConv)(g::GNNGraph)
-	# update the data slot Z, pass everything else on unchanged
 	Z = :Z ∈ keys(g.ndata) ? g.ndata.Z : first(values(g.ndata))
 	h = l(g, Z)
 	@ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = h))
@@ -272,11 +276,11 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3}
 	m = size(x, 2)
 	e = permutedims(stackarrays([e for _ in 1:m], merge = false), (1, 3, 2))
 	h = propagate(e_mul_xj, g, l.a, xj=x, e=e)
-	l.g.(l.Γ ⊠ h .+ l.b) # ⊠ is shorthand for batched_mul
+	l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h .+ l.b) # ⊠ is shorthand for batched_mul
 end
 function Base.show(io::IO, l::SpatialGraphConv)
-    in_channel  = size(l.Γ, ndims(l.Γ))
-    out_channel = size(l.Γ, ndims(l.Γ)-1)
+    in_channel  = size(l.Γ1, ndims(l.Γ1))
+    out_channel = size(l.Γ1, ndims(l.Γ1)-1)
     print(io, "SpatialGraphConv(", in_channel, " => ", out_channel)
     l.g == identity || print(io, ", ", l.g)
     print(io, ", aggr=", l.a)
