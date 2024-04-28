@@ -211,9 +211,16 @@ Z = rand(n, m)   # toy data
 g = spatialgraph(S, Z)
 
 # Construct and apply spatial graph convolution layers
-layer1 = SpatialGraphConv(1 => 16)
+layer1 = SpatialGraphConv(1 => 16, c = 8)
 layer2 = SpatialGraphConv(16 => 32)
 layer2(layer1(g))
+
+# With a skip connection
+GNN = GNNChain(
+	GraphSkipConnection(SpatialGraphConv(1 => 16)),
+	SpatialGraphConv(16 + 1 => 32) # one extra input dimension corresponding to the input data
+)
+GNN(g)
 ```
 """
 struct SpatialGraphConv{W<:AbstractMatrix,NN,B,F,A} <: GNNLayer
@@ -241,7 +248,7 @@ function SpatialGraphConv(
 
 	# Weight matrix
 	in, out = ch
-    Γ1 = init(out, in*c)
+    Γ1 = init(out, in)
     Γ2 = init(out, in*c)
 
 	# Bias vector
@@ -303,6 +310,20 @@ end
 # e = l.w(d)
 # l(g)
 # l(g).ndata.Z
+
+#TODO document
+struct GraphSkipConnection{T} <: GNNLayer
+	layers::T
+end
+@layer GraphSkipConnection
+function (skip::GraphSkipConnection)(g::GNNGraph)
+  h = skip.layers(g)
+  x = cat(h.ndata.Z, g.ndata.Z; dims = 1)
+  @ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = x))
+end
+function Base.show(io::IO, b::GraphSkipConnection)
+  print(io, "GraphSkipConnection(", b.layers, ")")
+end
 
 
 # ---- Clustering ----

@@ -55,7 +55,7 @@ include("Estimators.jl")
 export sampleposterior, mlestimate, mapestimate, bootstrap, interval
 include("inference.jl")
 
-export spatialgraph, SpatialGraphConv, SpatialPyramidPool, UniversalPool, GNNSummary, adjacencymatrix, maternclusterprocess
+export spatialgraph, SpatialGraphConv, SpatialPyramidPool, UniversalPool, GNNSummary, adjacencymatrix, maternclusterprocess, GraphSkipConnection
 include("Graphs.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
