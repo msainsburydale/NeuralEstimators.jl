@@ -125,7 +125,7 @@ end
 
 
 @doc raw"""
-    SpatialGraphConv(in => out, g=relu; aggr=mean, bias=true, init=glorot_uniform, width=16, f=relu, c=1, d=2, isotropic=true, stationary=true)
+    SpatialGraphConv(in => out, g=relu; aggr=mean, bias=true, init=glorot_uniform, w_init=glorot_uniform, width=16, f=relu, c=1, d=2, isotropic=true, stationary=true)
 
 Implements the spatial graph convolution ([Danel et al., 2020)](https://arxiv.org/abs/1909.05310)) layer,
 ```math
@@ -195,7 +195,8 @@ where $c$ denotes the number of channels and $\oplus$ denotes vector concatentat
 - `g`: Activation function.
 - `aggr`: Aggregation operator (e.g. `+`, `*`, `max`, `min`, and `mean`).
 - `bias`: Add learnable bias?
-- `init`: Weights' initializer.
+- `init`: Initialiser for $\mathbf{\Gamma}_{\!1}^{(l)}$, $\mathbf{\Gamma}_{\!2}^{(l)}$, and $\mathbf{\gamma}^{(l)}$.
+- `w_init` = Initialiser for the weights and biases of $\mathbf{w}(\cdot, \cdot)$.  
 - `width`: Width of the hidden layer of $\mathbf{w}(\cdot, \cdot)$.
 - `f`: Activation function used in $\mathbf{w}(\cdot, \cdot)$.
 - `c`: The number of "channels" of $\mathbf{w}(\cdot, \cdot)$.
@@ -251,6 +252,7 @@ function SpatialGraphConv(
 	g = relu;
 	aggr = mean,
 	init = glorot_uniform,
+	w_init = glorot_uniform,
 	bias::Bool = true,
 	width::Integer = 16,
 	f = relu,
@@ -271,7 +273,6 @@ function SpatialGraphConv(
 	b = bias ? Flux.create_bias(Γ1, true, out) : false
 
 	# Spatial weighting function
-	w_init = rand32 # initialise w with positive weights to prevent zero outputs
 	w = map(1:c) do _
 		if isotropic
 			Chain(
