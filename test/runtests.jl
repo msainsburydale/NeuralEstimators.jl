@@ -1,6 +1,6 @@
 using NeuralEstimators
 import NeuralEstimators: simulate
-using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, _agg, rowwisenorm
+using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, rowwisenorm
 using CUDA
 using DataFrames
 using Distributions
@@ -674,15 +674,6 @@ m  = 10 # default sample size
 		end
 	end
 end
-
-
-#### Small helper functions
-
-d = 5
-m = 10
-Z = rand(d, m)
-@test length(_agg("sum")(Z)) == d
-@test length(_agg("logsumexp")(Z)) == d
 
 
 #### Graph data

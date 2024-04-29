@@ -221,13 +221,12 @@ To cater for data collected over arbitrary spatial locations, one may construct 
 - Sampling spatial locations to cover a wide range of spatial configurations during the training phase. This can be done using an appropriately chosen spatial point process: see, for example, [`maternclusterprocess`](@ref).
 - Computing (spatially-weighted) adjacency matrices: see [`adjacencymatrix`](@ref).
 - Storing the data as a graph: see [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/gnngraph/#GNNGraph-type).
-- Constructing an appropriate architecture: see [`GNNSummary`](@ref), [`SpatialGraphConv`](@ref), and [`SpatialPyramidPool`](@ref).
+- Constructing an appropriate architecture: see [`GNNSummary`](@ref) and [`SpatialGraphConv`](@ref).
 
 Before proceeding, we load the required packages:
 
 ```
-using NeuralEstimators, Flux, GraphNeuralNetworks
-using Distances, Distributions, Folds, LinearAlgebra, Statistics
+using NeuralEstimators, Flux, GraphNeuralNetworks, Distances, Distributions, Folds, LinearAlgebra, Statistics
 ```
 
 First, we define a function to sample parameters from the prior. As before, the sampled parameters are stored as $p \times K$ matrices, with $p$ the number of parameters in the model and $K$ the number of sampled parameter vectors. We use the priors $\tau \sim U(0, 1)$ and $\rho \sim U(0.05, 0.5)$, and we assume that the parameters are independent a priori. Simulation from this model involves the computation of an expensive intermediate object, namely, the Cholesky factor of the covariance matrix. Storing this Cholesky factor for re-use can enable the fast simulation of new data sets (provided that the parameters are held fixed): hence, in this example, we define a class, `Parameters`, which is a subtype of [`ParameterConfigurations`](@ref), for storing the matrix of parameters and the corresponding intermediate objects needed for data simulation.
@@ -316,8 +315,7 @@ propagation = GNNChain(
 	)
 
 # Readout module and dimension of readout vector
-#readout = SpatialPyramidPool(mean); dᵣ = dₕ * 21
-readout = GlobalPool(max); dᵣ = dₕ  
+readout = GlobalPool(mean); dᵣ = dₕ  
 
 # Summary network
 ψ = GNNSummary(propagation, readout)

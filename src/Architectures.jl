@@ -1,30 +1,28 @@
-# ---- Aggregation (pooling) and misc functions ----
-
-elementwise_mean(X::A) where {A <: AbstractArray{T, N}} where {T, N} = mean(X, dims = N)
-elementwise_sum(X::A)  where {A <: AbstractArray{T, N}} where {T, N} = sum(X, dims = N)
-elementwise_logsumexp(X::A)  where {A <: AbstractArray{T, N}} where {T, N} = logsumexp(X, dims = N)
-
-function _agg(a::String)
-	@assert a ∈ ["mean", "sum", "logsumexp"]
-	if a == "mean"
-		elementwise_mean
-	elseif a == "sum"
-		elementwise_sum
-	elseif a == "logsumexp"
-		elementwise_logsumexp
-	end
-end
-
 # ---- DeepSet ----
 
-#TODO Optimised version with expert summary statistics that can be applied to replicates independently (i.e., they can be used like ψ). It might need some special functionality, where there is a second aggregation function associated with the expert summary statistics.
-#TODO In the constructor for DeepSet, check if Parallel appears in any layers of ψ. If it does, provide the information in the comment below:
+"""
+	ElementwiseAggregator(a::Function)
 
-# Note that, internally, data stored as `Vector{Arrays}` are first
-# concatenated along the replicates dimension before being passed into the inner
-# neural network `ψ`; this means that `ψ` is applied to a single large array
-# rather than many small arrays, which can substantially improve computational
-# efficiency, particularly on the GPU.
+# Examples
+```
+using Statistics: mean
+using Flux: logsumexp
+x = rand(3, 5)
+e₁ = ElementwiseAggregator(mean)
+e₂ = ElementwiseAggregator(maximum)
+e₃ = ElementwiseAggregator(logsumexp)
+e₄ = ElementwiseAggregator(sum)
+e₁(x)
+e₂(x)
+e₃(x)
+e₄(x)
+```
+"""
+struct ElementwiseAggregator
+	a::Function
+end
+(e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
+
 
 """
 	(S::Vector{Function})(z)
@@ -44,8 +42,7 @@ S(1)
 # (S::Vector)(z) = vcat([s(z) for s ∈ S]...) # can use a more general construction like this to allow for vectors of NeuralEstimators to be called in this way
 
 """
-    DeepSet(ψ, ϕ, a; S = nothing)
-	DeepSet(ψ, ϕ; a::String = "mean", S = nothing)
+    DeepSet(ψ, ϕ, a = mean; S = nothing)
 The DeepSets representation,
 
 ```math
@@ -53,34 +50,39 @@ The DeepSets representation,
 ```
 
 where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates from the statistical model,
-`ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant function.
-Expert summary statistics can be incorporated as,
+`ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant aggregation
+function. Expert summary statistics can be incorporated as,
 
 ```math
 θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)')'),
 ```
 
 where `S` is a function that returns a vector of user-defined summary statistics.
-These user-defined summary statistics are typically provided either as a
-`Function` that returns a `Vector`, or a vector of functions.
+These user-defined summary statistics are provided either as a
+`Function` that returns a `Vector`, or as a vector of functions.
 
-To ensure that the architecture is agnostic to the sample size ``m``, the
-aggregation function `a` must aggregate over the replicates. It can be specified
-as a positional argument of type `Function`, or as a keyword argument with
-permissible values `"mean"`, `"sum"`, and `"logsumexp"`.
+The aggregation function `a` can be any function that acts on an array and has
+a keyword argument `dims` that allows aggregation over a specific dimension of
+the array (e.g., `sum`, `mean`, `maximum`, `minimum`, `logsumexp`).
 
 `DeepSet` objects act on data of type `Vector{A}`, where each
 element of the vector is associated with one data set (i.e., one set of
 independent replicates from the statistical model), and where the type `A`
 depends on the form of the data and the chosen architecture for `ψ`.
 As a rule of thumb, when `A` is an array, the replicates are stored in the final
-dimension. The final dimension is usually the 'batch' dimension, but batching with `DeepSet`
-objects is done at the data set level (i.e., sets of replicates are batched
-together). For example, with gridded spatial data and `ψ` a CNN, `A` should be a
-4-dimensional array, with the replicates stored in the 4ᵗʰ dimension.
+dimension. For example, with gridded spatial data and `ψ` a CNN, `A` should be
+a 4-dimensional array, with the replicates stored in the 4ᵗʰ dimension.
+Note that in Flux, the final dimension is usually the "batch"
+dimension, but batching with `DeepSet` objects is done at the data set level
+(i.e., sets of replicates are batched together).
+
+Data stored as `Vector{Arrays}` are first concatenated along the replicates
+dimension before being passed into the summary network `ψ`. This means that
+`ψ` is applied to a single large array rather than many small arrays, which can
+substantially improve computational efficiency.
 
 Set-level information, ``𝐱``, that is not a function of the data can be passed
-directly into the outer network `ϕ` in the following manner,
+directly into the inference network `ϕ` in the following manner,
 
 ```math
 θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐱')'),	 	 
@@ -92,10 +94,10 @@ or, in the case that expert summary statistics are also used,
 θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)', 𝐱')').	 
 ```
 
-This is done by providing a `Tuple{Vector{A}, Vector{Vector}}`, where
-the first element of the tuple contains a vector of data sets and the second
-element contains a vector of set-level information (i.e., one vector for each
-data set).
+This is done by calling the `DeepSet` object on a
+`Tuple{Vector{A}, Vector{Vector}}`, where the first element of the tuple
+contains a vector of data sets and the second element contains a vector of
+set-level information (i.e., one vector for each data set).
 
 # Examples
 ```
@@ -104,38 +106,37 @@ using NeuralEstimators, Flux
 n = 10 # dimension of each replicate
 p = 4  # number of parameters in the statistical model
 
-# Construct the neural estimator
+# Construct the deepset object
 S = samplesize
-qₛ = 1  # dimension of expert summary statistic
-qₜ = 16 # dimension of neural summary statistic
-w = 16 # width of each hidden layer
-ψ = Chain(Dense(n, w, relu), Dense(w, qₜ, relu));
-ϕ = Chain(Dense(qₜ + qₛ, w, relu), Dense(w, p));
-θ̂ = DeepSet(ψ, ϕ, S = S)
+qₛ = 1   # dimension of expert summary statistic
+qₜ = 16  # dimension of neural summary statistic
+w = 32  # width of hidden layers
+ψ = Chain(Dense(n, w, relu), Dense(w, qₜ, relu))
+ϕ = Chain(Dense(qₜ + qₛ, w, relu), Dense(w, p))
+θ̂ = DeepSet(ψ, ϕ; S = S)
 
 # Toy data
-Z = [rand32(n, m) for m ∈ (3, 4)]; # two data sets containing 3 and 4 replicates
+Z = [rand32(n, m) for m ∈ (3, 4)] # two data sets containing 3 and 4 replicates
 
-# Apply the data
+# Apply the deepset object
 θ̂(Z)
 
-# Inference with set-level information
+# Toy data with set-level information
 qₓ = 2 # dimension of set-level vector
-ϕ  = Chain(Dense(qₜ + qₛ + qₓ, w, relu), Dense(w, p));
-θ̂  = DeepSet(ψ, ϕ; S = S)
-x  = [rand32(qₓ) for _ ∈ eachindex(Z)]
+ϕ = Chain(Dense(qₜ + qₛ + qₓ, w, relu), Dense(w, p))
+θ̂ = DeepSet(ψ, ϕ; S = S)
+x = [rand32(qₓ) for _ ∈ eachindex(Z)]
 θ̂((Z, x))
 ```
 """
-struct DeepSet{T, F, G, K}
+struct DeepSet{T, G, K}
 	ψ::T
 	ϕ::G
-	a::F
+	a::ElementwiseAggregator
 	S::K
 end
 @layer DeepSet
-DeepSet(ψ, ϕ, a; S = nothing) = DeepSet(ψ, ϕ, a, S)
-DeepSet(ψ, ϕ; a::String = "mean", S = nothing) = DeepSet(ψ, ϕ, _agg(a), S)
+DeepSet(ψ, ϕ, a::Function = mean; S = nothing) = DeepSet(ψ, ϕ, ElementwiseAggregator(a), S)
 Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)")
 
 # Single data set
@@ -190,6 +191,7 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 end
 
 #TODO document and test summarystatistics(). Add this functionality somewhere in the documentation.
+
 # Fallback method to allow neural estimators to be called directly
 summarystatistics(est, Z) = summarystatistics(est.deepset, Z)
 # Single data set
@@ -616,7 +618,7 @@ Wrapper around the standard
 [Dense](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dense) layer that
 ensures positive weights (biases are left unconstrained).
 
-This layer can be useful for constucting (partially) monotonic neural networks (see, e.g., [`QuantileEstimatorContinuous`](@ref).
+This layer can be useful for constucting (partially) monotonic neural networks (see, e.g., [`QuantileEstimatorContinuous`](@ref)).
 
 # Examples
 ```
