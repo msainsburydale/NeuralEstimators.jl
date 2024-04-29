@@ -32,7 +32,7 @@ and `S` should be given as an $m$-dimensional vector of $n_i \times d$ matrices.
 
 # Examples
 ```
-using NeuralEstimators, BenchmarkTools
+using NeuralEstimators
 
 # Dimension of the response, number of replicates, and spatial dimension
 q = 1  # dimension of response (here, univariate data)
@@ -46,8 +46,6 @@ Z = rand(n, m)
 g = spatialgraph(S)
 g = spatialgraph(g, Z)
 g = spatialgraph(S, Z)
-@btime spatialgraph($S)
-@btime spatialgraph($S, pyramid_pool = false)
 
 # Spatial locations varying between replicates
 n = rand(50:100, m)
@@ -56,8 +54,6 @@ Z = rand.(n)
 g = spatialgraph(S)
 g = spatialgraph(g, Z)
 g = spatialgraph(S, Z)
-@btime spatialgraph($S)
-@btime spatialgraph($S, pyramid_pool = false)
 ```
 """
 function spatialgraph(S::AbstractMatrix; store_S::Bool = false, pyramid_pool::Bool = false, k = 10, maxmin = true)
@@ -224,6 +220,20 @@ g = spatialgraph(S, Z)
 # Construct and apply spatial graph convolution layers
 layer = SpatialGraphConv(1 => 16)
 layer(g)
+
+
+# Matrix method
+m = 1            # number of replicates
+d = 2            # spatial dimension
+n = 100          # number of spatial locations
+S = rand(n, d)   # spatial locations
+Z = rand(n, m)   # toy data
+g = spatialgraph(S, Z)
+g = GNNGraph(g, ndata = (Z = dropdims(g.ndata.Z, dims = 1), ))
+layer = SpatialGraphConv(1 => 16)
+x = g.ndata.Z
+l = layer
+
 ```
 """
 struct SpatialGraphConv{W<:AbstractMatrix,NN,B,F,A} <: GNNLayer
@@ -289,13 +299,23 @@ function (l::SpatialGraphConv)(g::GNNGraph)
 	h = l(g, Z)
 	@ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = h))
 end
+function (l::SpatialGraphConv)(g::GNNGraph, x::M) where M <: AbstractMatrix{T} where {T}
+	# method for when the replicates are not stored as an array but as a batched graph
+	# (this is not really used anymore, mainly keep this here for backwards compatability)
+    check_num_nodes(g, x)
+	# TODO might be better to call the spatial information "s" rather than "e" in g.edata
+	s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3]) # spatial information
+    e = l.w(s) # spatial weighting
+	h = propagate(e_mul_xj, g, l.a, xj=x, e=e)
+	l.g.(l.Γ1 * x .+ l.Γ2 * h .+ l.b)
+end
 function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
     check_num_nodes(g, x)
-    e = l.w(g.edata.e) # spatial weighting
+	# TODO might be better to call the spatial information "s" rather than "e" in g.edata
+	s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3]) # spatial information
+    e = l.w(s) # spatial weighting
 	# repeat e to match the number of independent replicates
-	# NB if e were a vector, could do h = propagate(w_mul_xj, g, l.a, xj=x, e=e)
-	m = size(x, 2)
-	e = permutedims(stackarrays([e for _ in 1:m], merge = false), (1, 3, 2))
+	e = permutedims(stackarrays([e for _ in 1:size(x, 2)], merge = false), (1, 3, 2))
 	h = propagate(e_mul_xj, g, l.a, xj=x, e=e)
 	l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h .+ l.b) # ⊠ is shorthand for batched_mul
 end
