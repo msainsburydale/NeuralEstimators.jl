@@ -584,8 +584,8 @@ m  = 10 # default sample size
 				θ̂ = train(θ̂, Parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, ξ = ξ, simulate_just_in_time = true)
 				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose)
 				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
-				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 1, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
-				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 1, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
+				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
+				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 3, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
 				Z_train = simulator(parameters, 2m);
 				Z_val   = simulator(parameters, m);
 				train(θ̂, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")

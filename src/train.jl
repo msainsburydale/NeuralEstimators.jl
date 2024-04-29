@@ -273,6 +273,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 	local early_stopping_counter = 0
 	train_time = @elapsed for epoch in 1:epochs
 
+		sim_time = 0.0
 		if store_entire_train_set
 			# Simulate new training data if needed
 			if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
@@ -286,7 +287,6 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 			epoch_time = @elapsed train_risk = _risk(θ̂, loss, train_set, device, optimiser)
 		else
 			# Update θ̂ and compute the training risk
-			sim_time = 0.0
 			epoch_time = 0.0
 			train_risk = []
 			for θ ∈ _ParameterLoader(θ_train, batchsize = batchsize)
@@ -523,7 +523,7 @@ end
 
 function _constructset(θ̂::QuantileEstimatorContinuous, Zτ, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 	θ = θtoFloat32(_extractθ(θ))
-	Z, τ = Zτ 
+	Z, τ = Zτ
 	Z = ZtoFloat32(Z)
 	# τ = Float32.(τ) #TODO come back to this once we've settled on format for τ
 
