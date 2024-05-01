@@ -100,6 +100,7 @@ end
 # - Check that training with CovarianceMatrix/CorrelationMatrix works.
 
 # ---- long term:
+# - SpatialPyramidPool for CNNs (maybe someone already has this code in Julia?)
 # - Proper citations: https://juliadocs.org/DocumenterCitations.jl/stable/
 # - Might also be useful to store the parameter_names in NeuralEstimator: if they are present in the estimator, they can be compared to other sources of parameter_names as a sanity check, and they can be used in bootstrap() so that the bootstrap estimates and resulting intervals are given informative names.
 # - Would be good if interval(θ̂::IntervalEstimator, Z) and interval(bs) also displayed the parameter names... this could be done if the estimator stores the parameter names.

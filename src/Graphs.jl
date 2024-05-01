@@ -2,33 +2,39 @@
 
 # ---- Spatial Graph ----
 
+# NB not documenting pyramid_pool for now because it is experimental
+
 #TODO q is not currently being used in the example... think I need to allow Z to be a three-dimensional array
 #TODO elsewhere in the package, I think I use d to denote the dimension of the response variable... this will cause confusion, so get this right (check with the papers)
-#TODO documentation (keyword arguments: pyramid_pool, k = 10, maxmin = true)
-#TODO isotropic=false  (need to modify adjacencymatrix() to do this)
-#TODO stationary=false (need to modify adjacencymatrix() to do this)
+#TODO documentation (keyword arguments: k = 10, maxmin = true)
 @doc raw"""
-	spatialgraph(S)
-	spatialgraph(S, Z)
+	spatialgraph(S; stationary = true, isotropic = true)
+	spatialgraph(S, Z; stationary = true, isotropic = true)
 	spatialgraph(g::GNNGraph, Z)
 Given data `Z` and spatial locations `S`, constructs a
 [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/gnngraph/#GNNGraph-type)
-ready for use in a graph neural network.
+ready for use in a graph neural network that employs [`SpatialGraphConv`](@ref) layers.
 
 Let $\mathcal{D} \subset \mathbb{R}^d$ denote the spatial domain of interest.
-In the case that $m$ independent replicates are collected over the same set of
+When $m$ independent replicates are collected over the same set of
 $n$ spatial locations,
 ```math
 \{\mathbf{s}_1, \dots, \mathbf{s}_n\} \subset \mathcal{D},
 ```
 `Z` and `S` should be given as $n \times m$ and $n \times d$ matrices,
-respectively. Otherwise, in the case that $m$ independent replicates
+respectively. Otherwise, when $m$ independent replicates
 are collected over differing sets of spatial locations,
 ```math
 \{\mathbf{s}_{ij}, \dots, \mathbf{s}_{in_i}\} \subset \mathcal{D}, \quad i = 1, \dots, m,
 ```
 `Z` should be given as an $m$-dimensional vector of $n_i$-dimensional vectors,
 and `S` should be given as an $m$-dimensional vector of $n_i \times d$ matrices.
+
+The spatial information between neighbours is stored as an edge feature. Specifically, 
+the edge feature between node 
+$j$ and node $j'$ stores the spatial distance $\|\mathbf{s}_{j'} - \mathbf{s}_j\|$ (if `isotropic`), 
+the spatial displacement $\mathbf{s}_{j'} - \mathbf{s}_j$ (if `stationary`), or the matrix of  
+locations $(\mathbf{s}_{j'}, \mathbf{s}_j)$ (if `!stationary`).   
 
 # Examples
 ```
@@ -56,7 +62,13 @@ g = spatialgraph(g, Z)
 g = spatialgraph(S, Z)
 ```
 """
-function spatialgraph(S::AbstractMatrix; store_S::Bool = false, pyramid_pool::Bool = false, k = 10, maxmin = true)
+function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, store_S::Bool = false, pyramid_pool::Bool = false, k = 10, maxmin = true)
+	if !isotropic #TODO (need to modify adjacencymatrix() to do this)
+		error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
+	end
+	if !stationary #TODO (need to modify adjacencymatrix() to do this)
+		error("Nonstationaryity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
+	end
 	ndata = DataStore()
 	S = Float32.(S)
 	A = adjacencymatrix(S, k; maxmin = maxmin)
@@ -71,7 +83,7 @@ function spatialgraph(S::AbstractMatrix; store_S::Bool = false, pyramid_pool::Bo
 	g = GNNGraph(A, ndata = ndata, edata = permutedims(A.nzval))
 
 end
-spatialgraph(S::AbstractVector; kwargs...) = batch(spatialgraph.(S)) # spatial locations varying between replicates
+spatialgraph(S::AbstractVector; kwargs...) = batch(spatialgraph.(S; kwargs...)) # spatial locations varying between replicates
 #TODO multivariate data with spatial locations varying between replicates
 
 # Wrappers that allow data to be passed into an already-constructed graph
@@ -94,6 +106,67 @@ function spatialgraph(S, Z; kwargs...)
 	g = spatialgraph(S; kwargs...)
 	spatialgraph(g, Z)
 end
+
+# ---- GraphConv ----
+
+# 3D array version of GraphConv to allow the option to forego spatial information
+
+import GraphNeuralNetworks: GraphConv
+export GraphConv
+
+#TODO clean up documentation
+"""
+	(l::GraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
+
+Given an array `x` with dimensions d × m × n, where m is the
+number of replicates of the graph and n is the number of nodes in the graph,
+this method yields an array with dimensions `out` × m × n, where `out` is the
+number of output channels for the given layer.
+
+# Examples
+```
+using NeuralEstimators, Flux, GraphNeuralNetworks
+
+d = 2                       # dimension of response variable
+n = 100                     # number of nodes in the graph
+e = 200                     # number of edges in the graph
+m = 30                      # number of replicates of the graph
+g = rand_graph(n, e)        # fixed structure for all graphs
+Z = rand(d, m, n)           # node data varies between graphs
+g = GNNGraph(g; ndata = Z)
+
+# Construct and apply graph convolution layer
+l = GraphConv(d => 16)
+l(g)
+```
+"""
+function (l::GraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
+    check_num_nodes(g, x)
+    m = GraphNeuralNetworks.propagate(copy_xj, g, l.aggr, xj = x)
+    l.σ.(l.weight1 ⊠ x .+ l.weight2 ⊠ m .+ l.bias) # ⊠ is shorthand for batched_mul
+end
+
+#TODO incorporate some of these tests:
+# check that gnn(g) == gnn(all_graphs)
+# using Test
+# Z = rand(d, m, n)
+# gnn = GNNChain(
+# 	GraphConv(d => out),
+# 	GraphConv(out => out),
+# 	GlobalPool(+)
+# )
+# g₁ = Flux.batch([GNNGraph(g; ndata = Z[:, i, :]) for i ∈ 1:m])
+# g₂ = GNNGraph(g; ndata = Z)
+# gnn(g₁)
+# gnn(g₂)
+# u₁ = gnn(g₁).gdata.u
+# u₂ = gnn(g₂).gdata.u
+# y = gnn(g₂)
+# dropsingleton(y.gdata.u)
+# @test size(u₁)[1:2] == size(u₂)[1:2]
+# @test size(u₂, 3) == 1
+# @test all(u₁ .≈ u₂)
+
 
 # ---- SpatialGraphConv ----
 
@@ -123,11 +196,10 @@ end
 # layer = SpatialGraphConv(1 => 16; stationary = false)
 # layer(g)
 
-
 @doc raw"""
-    SpatialGraphConv(in => out, g=relu; aggr=mean, bias=true, init=glorot_uniform, w_init=glorot_uniform, width=16, f=relu, c=1, d=2, isotropic=true, stationary=true)
+    SpatialGraphConv(in => out, g=relu; aggr=mean, bias=true, init=glorot_uniform, w_arguments...)
 
-Implements the spatial graph convolution ([Danel et al., 2020)](https://arxiv.org/abs/1909.05310)) layer,
+Implements spatial graph convolution ([Danel et al., 2020)](https://arxiv.org/abs/1909.05310)),
 ```math
  \mathbf{h}^{(l)}_{j} =
  g\Big(
@@ -140,33 +212,39 @@ Implements the spatial graph convolution ([Danel et al., 2020)](https://arxiv.or
  \quad
  \bar{\mathbf{h}}^{(l)}_{j} = \sum_{j' \in \mathcal{N}(j)}\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}; \mathbf{\beta}^{(l)}) \odot \mathbf{h}^{(l-1)}_{j'},
 ```
-where $\mathbf{h}^{(l)}_{j}$ is the feature vector at location
+where $\mathbf{h}^{(l)}_{j}$ is the hidden feature vector at location
 $\mathbf{s}_j$ at layer $l$, $g(\cdot)$ is a non-linear activation function
 applied elementwise, $\mathbf{\Gamma}_{\!1}^{(l)}$ and
 $\mathbf{\Gamma}_{\!2}^{(l)}$ are trainable parameter matrices,
 $\mathbf{\gamma}^{(l)}$ is a trainable bias vector, $\mathcal{N}(j)$ denotes the
-indices of neighbours of $\mathbf{s}_j$, $\mathbf{w}(\cdot, \cdot)$ is a
+indices of neighbours of $\mathbf{s}_j$, $\mathbf{w}(\cdot, \cdot; \mathbf{\beta}^{(l)})$ is a
 learnable weight function parameterised by $\mathbf{\beta}^{(l)}$, and $\odot$
-denotes elementwise multiplication. Note that summation over $\mathcal{N}(j)$
+denotes elementwise multiplication. Note that summation 
 may be replaced by another aggregation function, such as the elementwise mean or
 maximum.
 
-The function $\mathbf{w}(\cdot, \cdot)$ is modelled using a multilayer
-perceptron with a single hidden layer. When modelling stationary processes, it
-can be made a function of spatial displacement, so that
-$\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\mathbf{s}_{j'} - \mathbf{s}_j)$.
-Similarly, when modelling isotropic processes, it can be made a
-function of spatial distance, so that
-$\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\|\mathbf{s}_{j'} - \mathbf{s}_j\|)$.
-In all cases, the spatial information should be stored as edge features of the graph.
+The spatial information should be stored as edge features. In the general case, 
+the edge feature between node $j$ and node $j'$ should contain the matrix of locations 
+locations $(\mathbf{s}_{j'}, \mathbf{s}_j)$. When modelling stationary processes,  
+$\mathbf{w}(\cdot, \cdot)$ can be made a function of spatial displacement, so that
+$\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\mathbf{s}_{j'} - \mathbf{s}_j)$, 
+in which case the edge feature between node $j$ and node $j'$ should contain 
+$\mathbf{s}_{j'} - \mathbf{s}_j$. When modelling isotropic processes, $\mathbf{w}(\cdot, \cdot)$ 
+can be made a function of spatial distance, so that
+$\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\|\mathbf{s}_{j'} - \mathbf{s}_j\|)$, 
+in which case the edge feature between node 
+$j$ and node $j'$ should contain $\|\mathbf{s}_{j'} - \mathbf{s}_j\|$. 
+Note that this preprocessing is facilitated by [`spatialgraph()`](@ref). 
 
-The output of $\mathbf{w}(\cdot, \cdot)$ is of the same dimension as the feature
-vectors of the previous layer. At the first layer, the "feature" vectors
-correspond to the spatial data and, for univariate spatial processes, the
+One may model $\mathbf{w}(\cdot, \cdot)$ using a multilayer perceptron with a single hidden layer or, in 
+the isotropic case, an exponentially decaying function of spatial distance.
+
+The output of $\mathbf{w}(\cdot, \cdot)$ may be chosen to be scalar or a vector 
+of the same dimension as the feature vectors of the previous layer. At the first 
+layer, the "feature" vector corresponds to the spatial datum and, for univariate spatial processes, the
 dimension of $\mathbf{w}(\cdot, \cdot)$ will be equal to
 one, which may be a source of inflexibility. To increase flexibility, one may
-construct several "channels" in an analogous manner to conventional
-convolution, specifically, by constructing the intermediate representation as
+construct several "channels" by constructing the intermediate representation as
 
 ```math
 \bar{\mathbf{h}}^{(l)}_{j} =
@@ -189,20 +267,24 @@ convolution, specifically, by constructing the intermediate representation as
 ```
 where $c$ denotes the number of channels and $\oplus$ denotes vector concatentation.
 
+Note that one may use a [`GraphConv`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/conv/#GraphNeuralNetworks.GraphConv) layer that foregoes the use of spatial information entirely. 
+
 # Arguments
 - `in`: The dimension of input features.
 - `out`: The dimension of output features.
-- `g`: Activation function.
-- `aggr`: Aggregation operator (e.g. `+`, `*`, `max`, `min`, and `mean`).
-- `bias`: Add learnable bias?
-- `init`: Initialiser for $\mathbf{\Gamma}_{\!1}^{(l)}$, $\mathbf{\Gamma}_{\!2}^{(l)}$, and $\mathbf{\gamma}^{(l)}$.
-- `w_init` = Initialiser for the weights and biases of $\mathbf{w}(\cdot, \cdot)$.  
-- `width`: Width of the hidden layer of $\mathbf{w}(\cdot, \cdot)$.
-- `f`: Activation function used in $\mathbf{w}(\cdot, \cdot)$.
-- `c`: The number of "channels" of $\mathbf{w}(\cdot, \cdot)$.
-- `d`: Dimension of spatial locations (typically 2).
-- `isotropic`:  If `true`, $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\|\mathbf{s}_{j'} - \mathbf{s}_j\|)$.
-- `stationary`:  If `true`, $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\mathbf{s}_{j'} - \mathbf{s}_j)$.
+- `g = relu`: Activation function.
+- `aggr = mean`: Aggregation operator (e.g. `+`, `*`, `max`, `min`, and `mean`).
+- `bias = true`: Add learnable bias?
+- `init = glorot_uniform`: Initialiser for $\mathbf{\Gamma}_{\!1}^{(l)}$, $\mathbf{\Gamma}_{\!2}^{(l)}$, and $\mathbf{\gamma}^{(l)}$.
+- `d = 2`: Dimension of spatial locations.
+- `stationary = true`:  If `true`, $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\mathbf{s}_{j'} - \mathbf{s}_j)$.
+- `isotropic = true`:  If `true` and `stationary` is also `true`, $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\|\mathbf{s}_{j'} - \mathbf{s}_j\|)$.
+- `w_scalar = false`: If `true`, $\mathbf{w}(\cdot, \cdot)$ is defined to be a scalar function, that is, $\mathbf{w}(\cdot, \cdot) \equiv  w(\cdot, \cdot)$.
+- `w_exponential_decay = true`: If `true` and the process is isotropic, $\mathbf{w}(\cdot, \cdot)$ is constrained to be an exponentially decaying function of spatial distance, that is, $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \exp(-\|\mathbf{s}_{j'} - \mathbf{s}_j\| \oslash \mathbf{\beta}^{(l)})$ where $\mathbf{\beta}^{(l)}$ denotes a vector of positive trainable parameters, $\oslash$ denotes elementwise division, and the exponential function is applied elementwise. Note also that this option can be used in conjunction with `w_scalar`.
+- `w_width`: Width of the hidden layer of $\mathbf{w}(\cdot, \cdot)$ (when modelled as an MLP).
+- `w_g`: Activation function used in $\mathbf{w}(\cdot, \cdot)$ (when modelled as an MLP).
+- `w_channels = 1`: The number of "channels" of $\mathbf{w}(\cdot, \cdot)$.
+- `w_init`: Initialiser for the parameters of $\mathbf{w}(\cdot, \cdot)$.
 
 # Examples
 ```
@@ -219,22 +301,14 @@ Z = rand(n, m)   # toy data
 g = spatialgraph(S, Z)
 
 # Construct and apply spatial graph convolution layers
-layer = SpatialGraphConv(1 => 16)
-layer(g)
+layer1 = SpatialGraphConv(1 => 16)
+layer2 = SpatialGraphConv(16 => 32)
+g |> layer1 |> layer2
 
-
-# Matrix method
-m = 1            # number of replicates
-d = 2            # spatial dimension
-n = 100          # number of spatial locations
-S = rand(n, d)   # spatial locations
-Z = rand(n, m)   # toy data
-g = spatialgraph(S, Z)
-g = GNNGraph(g, ndata = (Z = dropdims(g.ndata.Z, dims = 1), ))
-layer = SpatialGraphConv(1 => 16)
-x = g.ndata.Z
-l = layer
-
+# Construct and apply spatial graph convolution layers
+layer1 = SpatialGraphConv(1 => 16, w_exponential_decay = true)
+layer2 = SpatialGraphConv(16 => 32, w_exponential_decay = true)
+g |> layer1 |> layer2
 ```
 """
 struct SpatialGraphConv{W<:AbstractMatrix,NN,B,F,A} <: GNNLayer
@@ -252,46 +326,58 @@ function SpatialGraphConv(
 	g = relu;
 	aggr = mean,
 	init = glorot_uniform,
-	w_init = glorot_uniform,
 	bias::Bool = true,
-	width::Integer = 16,
-	f = relu,
-	c::Integer = 1,
 	d::Integer = 2,
 	isotropic::Bool = true,
-	stationary::Bool = true
+	stationary::Bool = true,
+	w_channels::Integer = 1,
+	w_init = glorot_uniform, #TODO maybe use rand32 by default (play with this and see what would be best)
+	w_scalar = false, 
+	w_exponential_decay = true, 
+	w_width::Integer = 16,
+	w_g = relu
 	)
-
-	if !stationary isotropic = false end
 
 	# Weight matrix
 	in, out = ch
     Γ1 = init(out, in)
-    Γ2 = init(out, in*c)
+    Γ2 = init(out, in * w_channels)
 
 	# Bias vector
 	b = bias ? Flux.create_bias(Γ1, true, out) : false
 
 	# Spatial weighting function
-	w = map(1:c) do _
+	w_dim = w_scalar ? 1 : in
+	if !stationary isotropic = false end
+	if !isotropic #TODO (need to modify adjacencymatrix() to do this)
+		error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
+	end
+	if !stationary #TODO (need to modify adjacencymatrix() to do this)
+		error("Nonstationaryity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
+	end
+	w = map(1:w_channels) do _
 		if isotropic
+			if w_exponential_decay
+				ExponentialDecay(w_dim, init = init)
+			else
+				Chain(
+					Dense(1 => w_width, w_g, init = w_init),
+					Dense(w_width => w_dim, w_g, init = w_init)
+					)
+			end
+		elseif stationary 
 			Chain(
-				Dense(1 => width, f, init = w_init),
-				Dense(width => in, f, init = w_init)
-				)
-		elseif stationary
-			Chain(
-				Dense(d => width, f, init = w_init),
-				Dense(width => in, f, init = w_init)
+				Dense(d => w_width, w_g, init = w_init),
+				Dense(w_width => w_dim, w_g, init = w_init)
 				)
 		else
 			Chain(
-				Bilinear((d, d) => width, f, init = w_init),  # nonstationary process (or no assumptions)
-				Dense(width => in, f, init = w_init)
+				Bilinear((d, d) => w_width, w_g, init = w_init),  
+				Dense(w_width => w_dim, w_g, init = w_init)
 				)
-		end
+		end 
 	end
-	w = c == 1 ? w[1] : Parallel(vcat, w...)
+	w = w_channels == 1 ? w[1] : Parallel(vcat, w...)
 
     SpatialGraphConv(Γ1, Γ2, b, w, g, aggr)
 end
@@ -304,7 +390,6 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::M) where M <: AbstractMatrix{T} w
 	# method for when the replicates are not stored as an array but as a batched graph
 	# (this is not really used anymore, mainly keep this here for backwards compatability)
     check_num_nodes(g, x)
-	# TODO might be better to call the spatial information "s" rather than "e" in g.edata
 	s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3]) # spatial information
     e = l.w(s) # spatial weighting
 	h = propagate(e_mul_xj, g, l.a, xj=x, e=e)
@@ -312,7 +397,6 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::M) where M <: AbstractMatrix{T} w
 end
 function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
     check_num_nodes(g, x)
-	# TODO might be better to call the spatial information "s" rather than "e" in g.edata
 	s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3]) # spatial information
     e = l.w(s) # spatial weighting
 	# repeat e to match the number of independent replicates
@@ -346,7 +430,20 @@ end
 # l(g)
 # l(g).ndata.Z
 
-#TODO document
+struct ExponentialDecay{T}
+	β::T # trainable parameters
+end
+@layer ExponentialDecay
+function ExponentialDecay(dim::Integer; init = glorot_uniform)
+	ExponentialDecay(init(dim))
+end
+function (l::ExponentialDecay)(d)
+	ρ = exp.(l.β) # positive range parameter
+	exp.(-d ./ ρ)
+end
+export ExponentialDecay
+
+#TODO document if we end up using this
 struct GraphSkipConnection{T} <: GNNLayer
 	layers::T
 end
