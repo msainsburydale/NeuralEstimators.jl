@@ -6,7 +6,7 @@
 
 #TODO q is not currently being used in the example... think I need to allow Z to be a three-dimensional array
 #TODO elsewhere in the package, I think I use d to denote the dimension of the response variable... this will cause confusion, so get this right (check with the papers)
-#TODO documentation (keyword arguments: k = 10, maxmin = true)
+#TODO documentation (keyword arguments: k = 10, maxmin = false... ideally just inherit from adjacencymatrix)
 @doc raw"""
 	spatialgraph(S; stationary = true, isotropic = true)
 	spatialgraph(S, Z; stationary = true, isotropic = true)
@@ -62,7 +62,7 @@ g = spatialgraph(g, Z)
 g = spatialgraph(S, Z)
 ```
 """
-function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, store_S::Bool = false, pyramid_pool::Bool = false, k = 10, maxmin = true)
+function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, store_S::Bool = false, pyramid_pool::Bool = false, k = 10, maxmin = false)
 	if !isotropic #TODO (need to modify adjacencymatrix() to do this)
 		error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
 	end
