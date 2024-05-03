@@ -43,9 +43,3 @@ stackarrays
 
 vectotril
 ```
-
-## Other
-
-```@docs
-EM
-```
