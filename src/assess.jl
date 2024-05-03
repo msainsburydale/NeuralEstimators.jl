@@ -73,6 +73,7 @@ function join(assessment::Assessment, assessments::Assessment...)
 	Assessment(df, runtime)
 end
 
+#TODO Can we make a facet by estimator? 
 function plot(assessment::Assessment)
 
   df = assessment.df

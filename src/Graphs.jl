@@ -80,8 +80,7 @@ function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, st
 		clusterings = computeclusters(S)
 		ndata = (ndata..., clusterings = clusterings)
 	end
-	g = GNNGraph(A, ndata = ndata, edata = permutedims(A.nzval))
-
+	GNNGraph(A, ndata = ndata, edata = permutedims(A.nzval))
 end
 spatialgraph(S::AbstractVector; kwargs...) = batch(spatialgraph.(S; kwargs...)) # spatial locations varying between replicates
 #TODO multivariate data with spatial locations varying between replicates
@@ -280,7 +279,7 @@ Note that one may use a [`GraphConv`](https://carlolucibello.github.io/GraphNeur
 - `stationary = true`:  If `true`, $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\mathbf{s}_{j'} - \mathbf{s}_j)$.
 - `isotropic = true`:  If `true` and `stationary` is also `true`, $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \mathbf{w}(\|\mathbf{s}_{j'} - \mathbf{s}_j\|)$.
 - `w_scalar = false`: If `true`, $\mathbf{w}(\cdot, \cdot)$ is defined to be a scalar function, that is, $\mathbf{w}(\cdot, \cdot) \equiv  w(\cdot, \cdot)$.
-- `w_exponential_decay = true`: If `true` and the process is isotropic, $\mathbf{w}(\cdot, \cdot)$ is constrained to be an exponentially decaying function of spatial distance, that is, $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \exp(-\|\mathbf{s}_{j'} - \mathbf{s}_j\| \oslash \mathbf{\beta}^{(l)})$ where $\mathbf{\beta}^{(l)}$ denotes a vector of positive trainable parameters, $\oslash$ denotes elementwise division, and the exponential function is applied elementwise. Note also that this option can be used in conjunction with `w_scalar`.
+- `w_exponential_decay = true`: If `true` and the process is isotropic, $\mathbf{w}(\cdot, \cdot)$ is constrained to be an exponentially decaying function of spatial distance, that is, $\mathbf{w}(\mathbf{s}_j, \mathbf{s}_{j'}) \equiv \exp(-\mathbf{\beta}^{(l)}\|\mathbf{s}_{j'} - \mathbf{s}_j\|)$ where $\mathbf{\beta}^{(l)}$ denotes a vector of trainable positive parameters and the exponential function is applied elementwise. Note also that this option can be used in conjunction with `w_scalar`.
 - `w_width`: Width of the hidden layer of $\mathbf{w}(\cdot, \cdot)$ (when modelled as an MLP).
 - `w_g`: Activation function used in $\mathbf{w}(\cdot, \cdot)$ (when modelled as an MLP).
 - `w_channels = 1`: The number of "channels" of $\mathbf{w}(\cdot, \cdot)$.
@@ -801,6 +800,14 @@ adjacencymatrix(D, r, k)
 
 # Removing self-loops so that a location is not its own neighbour
 adjacencymatrix(S, k) |> dropzeros!
+
+# Gridded locations (good to check that ties don't cause problems)
+pts = range(0, 1, length = 10) 
+S = expandgrid(pts, pts)
+adjacencymatrix(S, k) 
+adjacencymatrix(S, k; maxmin = true)
+adjacencymatrix(S, r)
+adjacencymatrix(S, r, k)
 ```
 """
 function adjacencymatrix(M::Mat, r::F, k::Integer) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
@@ -846,7 +853,8 @@ function adjacencymatrix(M::Mat, r::F, k::Integer) where Mat <: AbstractMatrix{T
 end
 adjacencymatrix(M::Mat, k::Integer, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat} = adjacencymatrix(M, r, k)
 
-#NB would be good to add the keyword argument initialise_centre::Bool = true that makes the starting point fixed to the centre of the spatial domain. This point could just be the closest point to the average of the spatial coordinates.
+#NB would be good to add the keyword argument initialise_centre::Bool = true that makes the starting point fixed to the centre of the spatial domain. 
+# This point could just be the closest point to the average of the spatial coordinates.
 function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Bool = false) where Mat <: AbstractMatrix{T} where T
 
 	@assert k > 0
@@ -861,6 +869,7 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 		D = M
 	else      # otherwise, M is a matrix of spatial locations
 		S = M
+		S = S + 100 * eps(T) * randn(T, size(S, 1), size(S, 2)) # add some random noise to break ties
 	end
 
 	if k >= n # more neighbours than observations: return a dense adjacency matrix
@@ -1095,7 +1104,7 @@ function builddag(NNarray, T = Float32)
   n, k = size(NNarray)
   I = [1]
   J = [1]
-  V = T[1.0] # NB would be better if we could inherit the eltype somehow
+  V = T[1] 
   for j in 2:n
     i = NNarray[j, :]
     i = collect(skipmissing(i))
