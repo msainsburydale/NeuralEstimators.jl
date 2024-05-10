@@ -13,11 +13,11 @@ scaledlogit(f, a, b) = log((f - a) / (b - f))
 
 # The density function is
 # ```math
-# |2\pi\mathbf{\Sigma}|^{-1/2} \exp{-\frac{1}{2}\mathbf{y}^\top \mathbf{\Sigma}^{-1}\mathbf{y}},
+# |2\pi\boldsymbol{\Sigma}|^{-1/2} \exp{-\frac{1}{2}\boldsymbol{y}^\top \boldsymbol{\Sigma}^{-1}\boldsymbol{y}},
 # ```
 # and the log-density is
 # ```math
-# -\frac{n}{2}\ln{2\pi}  -\frac{1}{2}\ln{|\mathbf{\Sigma}|} -\frac{1}{2}\mathbf{y}^\top \mathbf{\Sigma}^{-1}\mathbf{y}.
+# -\frac{n}{2}\ln{2\pi}  -\frac{1}{2}\ln{|\boldsymbol{\Sigma}|} -\frac{1}{2}\boldsymbol{y}^\top \boldsymbol{\Sigma}^{-1}\boldsymbol{y}.
 # ```
 
 @doc raw"""

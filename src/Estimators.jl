@@ -42,10 +42,10 @@ The estimator employs a representation that prevents quantile crossing, namely,
 it constructs marginal posterior credible intervals for each parameter
 ``\theta_i``, ``i = 1, \dots, p,``  of the form,
 ```math
-[c_i(u_i(\mathbf{Z})), \;\; c_i(u_i(\mathbf{Z})) + g(v_i(\mathbf{Z})))],
+[c_i(u_i(\boldsymbol{Z})), \;\; c_i(u_i(\boldsymbol{Z})) + g(v_i(\boldsymbol{Z})))],
 ```
-where  ``\mathbf{u}(⋅) \equiv (u_1(\cdot), \dots, u_p(\cdot))'`` and
-``\mathbf{v}(⋅) \equiv (v_1(\cdot), \dots, v_p(\cdot))'`` are neural networks
+where  ``\boldsymbol{u}(⋅) \equiv (u_1(\cdot), \dots, u_p(\cdot))'`` and
+``\boldsymbol{v}(⋅) \equiv (v_1(\cdot), \dots, v_p(\cdot))'`` are neural networks
 that transform data into ``p``-dimensional vectors; $g(\cdot)$ is a
 monotonically increasing function (e.g., exponential or softplus); and each
 ``c_i(⋅)`` is a monotonically increasing function that maps its input to the
@@ -56,7 +56,7 @@ The functions ``c_i(⋅)`` may be defined by a ``p``-dimensional object of type
 identity function so that the range of the intervals will be unrestricted.
 
 If only a single neural-network architecture is provided, it will be used
-for both ``\mathbf{u}(⋅)`` and ``\mathbf{v}(⋅)``.
+for both ``\boldsymbol{u}(⋅)`` and ``\boldsymbol{v}(⋅)``.
 
 The return value  when applied to data is a matrix with ``2p`` rows, where the
 first and second ``p`` rows correspond to the lower and upper bounds, respectively.
@@ -126,15 +126,15 @@ The estimator employs a representation that prevents quantile crossing, namely,
 
 ```math
 \begin{aligned}
-\hat{\mathbf{q}}^{(\tau_1)}(\mathbf{Z}) &= \mathbf{v}^{(\tau_1)}(\mathbf{Z}),\\
-\hat{\mathbf{q}}^{(\tau_t)}(\mathbf{Z}) &= \mathbf{v}^{(\tau_1)}(\mathbf{Z}) + \sum_{j=2}^t g(\mathbf{v}^{(\tau_j)}(\mathbf{Z})), \quad t = 2, \dots, T,
+\hat{\boldsymbol{q}}^{(\tau_1)}(\boldsymbol{Z}) &= \boldsymbol{v}^{(\tau_1)}(\boldsymbol{Z}),\\
+\hat{\boldsymbol{q}}^{(\tau_t)}(\boldsymbol{Z}) &= \boldsymbol{v}^{(\tau_1)}(\boldsymbol{Z}) + \sum_{j=2}^t g(\boldsymbol{v}^{(\tau_j)}(\boldsymbol{Z})), \quad t = 2, \dots, T,
 \end{aligned}
 ```
-where $\mathbf{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$, are unconstrained neural
+where $\boldsymbol{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$, are unconstrained neural
 networks that transform data into $p$-dimensional vectors, and $g(\cdot)$ is a
 non-negative function (e.g., exponential or softplus) applied elementwise to
 its arguments. In this implementation, the same neural-network architecture `v`
-is used for each $\mathbf{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$.
+is used for each $\boldsymbol{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$.
 
 Note that one may use a simple [`PointEstimator`](@ref) and the
 [`quantileloss`](@ref) to target a specific quantile.
@@ -223,30 +223,30 @@ end
 	(estimator::ConditionalQuantileEstimator)(Z, θ₋ᵢ, τ)
 A neural estimator targetting posterior quantiles.
 
-Given as input data $\mathbf{Z}$ and the desired probability level
+Given as input data $\boldsymbol{Z}$ and the desired probability level
 $\tau ∈ (0, 1)$, by default the estimator approximates the $\tau$-quantile of
 ```math
-\theta_i \mid \mathbf{Z}
+\theta_i \mid \boldsymbol{Z}
 ```
-for parameters $\mathbf{\theta} \equiv (\theta_1, \dots, \theta_p)'$.
+for parameters $\boldsymbol{\theta} \equiv (\theta_1, \dots, \theta_p)'$.
 Alternatively, if initialised with `i` set to a positive integer
 (or collection of integers), the estimator approximates the $\tau$-quantile of
 the full conditional distribution
 ```math
-\theta_i \mid \mathbf{Z}, \mathbf{\theta}_{-i},
+\theta_i \mid \boldsymbol{Z}, \boldsymbol{\theta}_{-i},
 ```
-where $\mathbf{\theta}_{-i}$ denotes the parameter vector with its $i$th
+where $\boldsymbol{\theta}_{-i}$ denotes the parameter vector with its $i$th
 element(s) removed. For ease of exposition, when targetting marginal
-posteriors of the form $\theta_i \mid \mathbf{Z}$ (i.e., the default behaviour),
-we define $\text{dim}(\mathbf{\theta}_{-i}) ≡ 0$.
+posteriors of the form $\theta_i \mid \boldsymbol{Z}$ (i.e., the default behaviour),
+we define $\text{dim}(\boldsymbol{\theta}_{-i}) ≡ 0$.
 
 The estimator leverages the [`DeepSet`](@ref) architecture, subject to two
 requirements. First, the number of input neurons in the first layer of the
 inference network (i.e., the outer network) must be equal to the number of
 neurons in the final layer of the summary network plus
-$1 + \text{dim}(\mathbf{\theta}_{-i})$. Second, the number of output neurons in
+$1 + \text{dim}(\boldsymbol{\theta}_{-i})$. Second, the number of output neurons in
 the final layer of the inference network must be equal to
-$p - \text{dim}(\mathbf{\theta}_{-i})$.
+$p - \text{dim}(\boldsymbol{\theta}_{-i})$.
 
 Although not a requirement, one may employ a (partially) monotonic neural
 network to prevent quantile crossing (i.e., to ensure that the
@@ -258,8 +258,8 @@ $\tau$ are strictly positive
 and this can be done using the [`DensePositive`](@ref) layer as illustrated in
 the examples below.
 
-The return value is a matrix with $p - \text{dim}(\mathbf{\theta}_{-i})$ rows,
-corresponding to the estimated quantile for each parameter not in $\mathbf{\theta}_{-i}$.
+The return value is a matrix with $p - \text{dim}(\boldsymbol{\theta}_{-i})$ rows,
+corresponding to the estimated quantile for each parameter not in $\boldsymbol{\theta}_{-i}$.
 
 # Examples
 ```
@@ -423,9 +423,9 @@ end
 
 A neural estimator that estimates the likelihood-to-evidence ratio,
 ```math
-r(\mathbf{Z}, \mathbf{\theta}) \equiv p(\mathbf{Z} \mid \mathbf{\theta})/p(\mathbf{Z}),
+r(\boldsymbol{Z}, \boldsymbol{\theta}) \equiv p(\boldsymbol{Z} \mid \boldsymbol{\theta})/p(\boldsymbol{Z}),
 ```
-where $p(\mathbf{Z} \mid \mathbf{\theta})$ is the likelihood and $p(\mathbf{Z})$
+where $p(\boldsymbol{Z} \mid \boldsymbol{\theta})$ is the likelihood and $p(\boldsymbol{Z})$
 is the marginal likelihood, also known as the model evidence.
 
 The estimator leverages the [`DeepSet`](@ref) architecture, subject to two
@@ -438,23 +438,23 @@ final layer of the inference network must be equal to one.
 The ratio estimator is trained by solving a relatively straightforward binary
 classification problem. Specifically, consider the problem of distinguishing
 dependent parameter--data pairs
-${(\mathbf{\theta}', \mathbf{Z}')' \sim p(\mathbf{Z}, \mathbf{\theta})}$ with
+${(\boldsymbol{\theta}', \boldsymbol{Z}')' \sim p(\boldsymbol{Z}, \boldsymbol{\theta})}$ with
 class labels $Y=1$ from independent parameter--data pairs
-${(\tilde{\mathbf{\theta}}', \tilde{\mathbf{Z}}')' \sim p(\mathbf{\theta})p(\mathbf{Z})}$
+${(\tilde{\boldsymbol{\theta}}', \tilde{\boldsymbol{Z}}')' \sim p(\boldsymbol{\theta})p(\boldsymbol{Z})}$
 with class labels $Y=0$, and where the classes are balanced. Then the Bayes
 classifier under binary cross-entropy loss is given by
 ```math
-c(\mathbf{Z}, \mathbf{\theta}) = \frac{p(\mathbf{Z}, \mathbf{\theta})}{p(\mathbf{Z}, \mathbf{\theta}) + p(\mathbf{\theta})p(\mathbf{Z})},
+c(\boldsymbol{Z}, \boldsymbol{\theta}) = \frac{p(\boldsymbol{Z}, \boldsymbol{\theta})}{p(\boldsymbol{Z}, \boldsymbol{\theta}) + p(\boldsymbol{\theta})p(\boldsymbol{Z})},
 ```
 and hence,
 ```math
-r(\mathbf{Z}, \mathbf{\theta}) = \frac{c(\mathbf{Z}, \mathbf{\theta})}{1 - c(\mathbf{Z}, \mathbf{\theta})}.
+r(\boldsymbol{Z}, \boldsymbol{\theta}) = \frac{c(\boldsymbol{Z}, \boldsymbol{\theta})}{1 - c(\boldsymbol{Z}, \boldsymbol{\theta})}.
 ```
 For numerical stability, training is done on the log-scale using
-$\log r(\mathbf{Z}, \mathbf{\theta}) = \text{logit}(c(\mathbf{Z}, \mathbf{\theta}))$.
+$\log r(\boldsymbol{Z}, \boldsymbol{\theta}) = \text{logit}(c(\boldsymbol{Z}, \boldsymbol{\theta}))$.
 
 When applying the estimator to data, by default the likelihood-to-evidence ratio
-$r(\mathbf{Z}, \mathbf{\theta})$ is returned (setting the keyword argument
+$r(\boldsymbol{Z}, \boldsymbol{\theta})$ is returned (setting the keyword argument
 `classifier = true` will yield class probability estimates). The estimated ratio
 can then be used in various downstream Bayesian
 (e.g., [Hermans et al., 2020](https://proceedings.mlr.press/v119/hermans20a.html))
@@ -555,21 +555,21 @@ Specifically, with $l$ estimators and sample-size changepoints
 $m_1 < m_2 < \dots < m_{l-1}$, the piecewise etimator takes the form,
 
 ```math
-\hat{\mathbf{\theta}}(\mathbf{Z})
+\hat{\boldsymbol{\theta}}(\boldsymbol{Z})
 =
 \begin{cases}
-\hat{\mathbf{\theta}}_1(\mathbf{Z}) & m \leq m_1,\\
-\hat{\mathbf{\theta}}_2(\mathbf{Z}) & m_1 < m \leq m_2,\\
+\hat{\boldsymbol{\theta}}_1(\boldsymbol{Z}) & m \leq m_1,\\
+\hat{\boldsymbol{\theta}}_2(\boldsymbol{Z}) & m_1 < m \leq m_2,\\
 \quad \vdots \\
-\hat{\mathbf{\theta}}_l(\mathbf{Z}) & m > m_{l-1}.
+\hat{\boldsymbol{\theta}}_l(\boldsymbol{Z}) & m > m_{l-1}.
 \end{cases}
 ```
 
-For example, given an estimator  ``\hat{\mathbf{\theta}}_1(\cdot)`` trained for small
-sample sizes (e.g., m ≤ 30) and an estimator ``\hat{\mathbf{\theta}}_2(\cdot)``
+For example, given an estimator  ``\hat{\boldsymbol{\theta}}_1(\cdot)`` trained for small
+sample sizes (e.g., m ≤ 30) and an estimator ``\hat{\boldsymbol{\theta}}_2(\cdot)``
 trained for moderate-to-large sample sizes (e.g., m > 30), we may construct a
-`PiecewiseEstimator` that dispatches ``\hat{\mathbf{\theta}}_1(\cdot)`` if
-m ≤ 30 and ``\hat{\mathbf{\theta}}_2(\cdot)`` otherwise.
+`PiecewiseEstimator` that dispatches ``\hat{\boldsymbol{\theta}}_1(\cdot)`` if
+m ≤ 30 and ``\hat{\boldsymbol{\theta}}_2(\cdot)`` otherwise.
 
 See also [`trainx()`](@ref) for training estimators for a range of sample sizes.
 

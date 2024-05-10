@@ -95,7 +95,7 @@ To utilise a GPU for improved computational efficiency, one may simply move the 
 
 ## Unstructured multivariate data
 
-Suppose now that each data set now consists of $m$ replicates $\mathbf{Z}_1, \dots, \mathbf{Z}_m$ of a $d$-dimensional multivariate distribution. Everything remains as given in the univariate example above, except that we now store each data set as a $d \times m$ matrix (previously they were stored as $1\times m$ matrices), and the summary network of the DeepSets representation takes a $d$-dimensional input (previously it took a 1-dimensional input).
+Suppose now that each data set now consists of $m$ replicates $\boldsymbol{Z}_1, \dots, \boldsymbol{Z}_m$ of a $d$-dimensional multivariate distribution. Everything remains as given in the univariate example above, except that we now store each data set as a $d \times m$ matrix (previously they were stored as $1\times m$ matrices), and the summary network of the DeepSets representation takes a $d$-dimensional input (previously it took a 1-dimensional input).
 
 Note that, when estimating a full covariance matrix, one may wish to constrain the neural estimator to only produce parameters that imply a valid (i.e., positive definite) covariance matrix. This can be achieved by appending a  [`CovarianceMatrix`](@ref) layer to the end of the outer network of the DeepSets representation. However, the estimator will often learn to provide valid estimates, even if not constrained to do so.
 
@@ -236,7 +236,7 @@ To cater for spatial data collected over arbitrary spatial locations, one may co
 - Storing the spatial data as a graph: see [`spatialgraph`](@ref).
 - Constructing an appropriate architecture: see [`GNNSummary`](@ref) and [`SpatialGraphConv`](@ref).
 
-For illustration, we again consider the spatial Gaussian process model with exponential covariance function. We again construct a custom type for storing expensive intermediate objects needed for data simulation. Now, these objects include the Cholesky factors and the spatial graphs (which include the adjacency matrices needed to perform graph convolution): 
+For illustration, we again consider the spatial Gaussian process model with exponential covariance function, and we define a struct for storing expensive intermediate objects needed for data simulation. In this case, these objects include Cholesky factors and spatial graphs (which store the adjacency matrices needed to perform graph convolution): 
 
 ```
 struct Parameters{T} <: ParameterConfigurations

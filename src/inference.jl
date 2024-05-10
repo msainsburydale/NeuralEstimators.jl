@@ -8,7 +8,7 @@
 @doc raw"""
 	sampleposterior(estimator::RatioEstimator, Z, N::Integer = 1000; θ_grid, prior::Function = θ -> 1f0)
 Samples from the approximate posterior distribution
-$p(\mathbf{\theta} \mid \mathbf{Z})$ implied by `estimator`.
+$p(\boldsymbol{\theta} \mid \boldsymbol{Z})$ implied by `estimator`.
 
 The positional argument `N` controls the size of the posterior sample.
 
@@ -16,7 +16,7 @@ The keyword agument `θ_grid` requires a (fine) gridding of the parameter
 space, given as a matrix with ``p`` rows, with ``p`` the number of parameters
 in the statistical model.
 
-The prior distribution $p(\mathbf{\theta})$ is controlled through the keyword
+The prior distribution $p(\boldsymbol{\theta})$ is controlled through the keyword
 argument `prior` (by default, a uniform prior is used).
 """
 function sampleposterior(est::RatioEstimator,
@@ -58,9 +58,9 @@ end
 
 @doc raw"""
 	mlestimate(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, penalty::Function = θ -> 1, use_gpu = true)
-Computes the (approximate) maximum likelihood estimate given data $\mathbf{Z}$,
+Computes the (approximate) maximum likelihood estimate given data $\boldsymbol{Z}$,
 ```math
-\argmax_{\mathbf{\theta}} \ell(\mathbf{\theta} ; \mathbf{Z})
+\argmax_{\boldsymbol{\theta}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z})
 ```
 where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function
 derived from `estimator`.
@@ -72,10 +72,10 @@ likelihood is maximised by gradient descent. Otherwise, if a matrix of parameter
 A maximum penalised likelihood estimate,
 
 ```math
-\argmax_{\mathbf{\theta}} \ell(\mathbf{\theta} ; \mathbf{Z}) + \log p(\mathbf{\theta}),
+\argmax_{\boldsymbol{\theta}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta}),
 ```
 
-can be obtained by specifying the keyword argument `penalty` that defines the penalty term $p(\mathbf{\theta})$.
+can be obtained by specifying the keyword argument `penalty` that defines the penalty term $p(\boldsymbol{\theta})$.
 
 See also [`mapestimate()`](@ref) for computing (approximate) maximum a posteriori estimates.
 """
@@ -84,12 +84,12 @@ mlestimate(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, mle
 
 @doc raw"""
 	mapestimate(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, prior::Function = θ -> 1, use_gpu = true)
-Computes the (approximate) maximum a posteriori estimate given data $\mathbf{Z}$,
+Computes the (approximate) maximum a posteriori estimate given data $\boldsymbol{Z}$,
 ```math
-\argmax_{\mathbf{\theta}} \ell(\mathbf{\theta} ; \mathbf{Z}) + \log p(\mathbf{\theta})
+\argmax_{\boldsymbol{\theta}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta})
 ```
 where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function
-derived from `estimator`, and $p(\mathbf{\theta})$ denotes the prior density
+derived from `estimator`, and $p(\boldsymbol{\theta})$ denotes the prior density
 function controlled through the keyword argument `prior`
 (by default, a uniform prior is used).
 

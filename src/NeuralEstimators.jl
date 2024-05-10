@@ -6,6 +6,7 @@ using Base.GC: gc
 import Base: join, merge, show, size, summary
 using BSON: @save, load
 using CairoMakie
+import CairoMakie: plot; export plot # method for Assessment objects
 using ChainRulesCore: @non_differentiable, @ignore_derivatives
 using Clustering
 using ColorSchemes
@@ -22,6 +23,7 @@ using Flux: ofeltype, params, DataLoader, update!, glorot_uniform, onehotbatch, 
 using Flux: @functor; var"@layer" = var"@functor" # NB did this because even semi-recent versions of Flux do not include @layer
 using GraphNeuralNetworks
 using GraphNeuralNetworks: check_num_nodes
+import GraphNeuralNetworks: GraphConv; export GraphConv # method that acts on 3D arrays
 using GaussianRandomFields
 using Graphs
 using InvertedIndices
@@ -83,6 +85,7 @@ include("missingdata.jl")
 end
 
 #TODO
+# - I sometimes use d to denote the dimension of the response variable, and sometimes q... try to be consistent
 # - Fix warnings that appear when running the test code
 # - assess(est::QuantileEstimatorDiscrete). Here, we can use simulation-based calibration (e.g., qq plots).
 # - assess(est::RatioEstimator). Here, we can use simulation-based calibration (e.g., qq plots).

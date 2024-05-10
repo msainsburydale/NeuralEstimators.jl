@@ -162,6 +162,45 @@ end
 	adjacencymatrix(D, r, k)
 end
 
+@testset "spatialgraph" begin 
+	# Number of replicates, and spatial dimension
+	m = 5  # number of replicates
+	d = 2  # spatial dimension
+
+	# Spatial locations fixed for all replicates
+	n = 100
+	S = rand(n, d)
+	Z = rand(n, m)
+	g = spatialgraph(S)
+	g = spatialgraph(g, Z)
+	g = spatialgraph(S, Z)
+
+	# Spatial locations varying between replicates
+	n = rand(50:100, m)
+	S = rand.(n, d)
+	Z = rand.(n)
+	g = spatialgraph(S)
+	g = spatialgraph(g, Z)
+	g = spatialgraph(S, Z)
+
+	# Mutlivariate processes: spatial locations fixed for all replicates
+	q = 2 # bivariate spatial process
+	n = 100
+	S = rand(n, d)
+	Z = rand(q, n, m)  
+	g = spatialgraph(S)
+	g = spatialgraph(g, Z)
+	g = spatialgraph(S, Z)
+
+	# Mutlivariate processes: spatial locations varying between replicates
+	n = rand(50:100, m)
+	S = rand.(n, d)
+	Z = rand.(q, n)
+	g = spatialgraph(S)
+	g = spatialgraph(g, Z) 
+	g = spatialgraph(S, Z) 
+end
+
 
 @testset "missingdata" begin
 
@@ -219,6 +258,8 @@ end
 	@test ndims(UW) == 4
 	@test size(UW) == (n, n, 2, m)
 end
+
+
 
 @testset "SpatialGraphConv" begin
 	m = 5            # number of replicates
