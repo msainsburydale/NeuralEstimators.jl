@@ -12,6 +12,7 @@ using Graphs
 using GraphNeuralNetworks
 using LinearAlgebra
 using Random: seed!
+using SparseArrays: nnz
 using SpecialFunctions: gamma
 using Statistics
 using Statistics: mean, sum
@@ -134,6 +135,7 @@ end
 	A₂ = adjacencymatrix(S, r)
 	A = adjacencymatrix(S, k, maxmin = true)
 	A = adjacencymatrix(S, k, maxmin = true, moralise = true)
+	A = adjacencymatrix(S, k, maxmin = true, combined = true)
 
 	# Construct from full distance matrix D
 	D = pairwise(Euclidean(), S, S, dims = 1)
@@ -144,12 +146,29 @@ end
 	@test Ã₁ ≈ A₁
 	@test Ã₂ ≈ A₂
 
-	# Randomly selecting k nodes within a node's neighbourhood disc.
+	# Randomly selecting k nodes within a node's neighbourhood disc
 	seed!(1); A₃ = adjacencymatrix(S, k, r)
 	@test A₃.n == A₃.m == n
 	@test length(adjacencymatrix(S, k, 0.02).nzval) < k*n
 	seed!(1); Ã₃ = adjacencymatrix(D, k, r)
 	@test Ã₃ ≈ A₃
+
+	# Test that the number of neighbours is correct 
+	f(A) = collect(mapslices(nnz, A; dims = 1))
+	@test all(f(adjacencymatrix(S, k)) .== k + 1)
+	@test all(1 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k+1)
+	@test all(k+1 .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k+1)
+	@test all(1 .<= f(adjacencymatrix(S, r, k)) .<= k+1)
+	@test all(f(adjacencymatrix(S, 2.0, k)) .== k+1) 
+
+	# Gridded locations (useful for checking functionality in the event of ties)
+	pts = range(0, 1, length = 10) 
+	S = expandgrid(pts, pts)
+	@test all(f(adjacencymatrix(S, k)) .== k + 1) 
+	@test all(1 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k+1)
+	@test all(k+1 .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k+1) 
+	@test all(1 .<= f(adjacencymatrix(S, r, k)) .<= k+1) 
+	@test all(f(adjacencymatrix(S, 2.0, k)) .== k+1) 
 
 	# check for the case k > n
 	n = 3

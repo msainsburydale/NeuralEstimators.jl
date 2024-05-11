@@ -409,7 +409,7 @@ function SpatialGraphConv(
     SpatialGraphConv(Γ1, Γ2, b, w, g, aggr)
 end
 function (l::SpatialGraphConv)(g::GNNGraph)
-	Z = :Z ∈ keys(g.ndata) ? g.ndata.Z : first(values(g.ndata))
+	Z = :Z ∈ keys(g.ndata) ? g.ndata.Z : first(values(g.ndata)) 
 	h = l(g, Z)
 	@ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = h))
 end
@@ -773,12 +773,12 @@ end
 # ---- Adjacency matrices ----
 
 """
-	adjacencymatrix(M::Matrix, k::Integer; maxmin::Bool = false)
-	adjacencymatrix(M::Matrix, r::Float)
-	adjacencymatrix(M::Matrix, r::Float, k::Integer)
+	adjacencymatrix(S::Matrix, k::Integer; maxmin = false, combined = false)
+	adjacencymatrix(S::Matrix, r::AbstractFloat)
+	adjacencymatrix(S::Matrix, r::AbstractFloat, k::Integer)
 
-Computes a spatially weighted adjacency matrix from `M` based on either the
-`k`-nearest neighbours of each location; all nodes within a disc of radius `r`;
+Computes a spatially weighted adjacency matrix from spatial locations `S` based 
+on either the `k`-nearest neighbours of each location; all nodes within a disc of radius `r`;
 or, if both `r` and `k` are provided, a random set of `k` neighbours with a disc
 of radius `r`.
 
@@ -787,13 +787,22 @@ the graph. If `maxmin=true`, a so-called maxmin ordering is applied,
 whereby an initial point is selected, and each subsequent point is selected to
 maximise the minimum distance to those points that have already been selected.
 Then, the neighbours of each point are defined as the `k`-nearest neighbours
-amongst the points that have already appeared in the ordering.
+amongst the points that have already appeared in the ordering. If
+`maxmin=true` and `combined=true`, the neighbours of of a node are taken to be
+the union of the `k`-nearest neighbours and the `k`-nearest neighbours subject 
+to a maxmin ordering (these neighbours will eventually coincide towards the end of the ordering). 
 
-If `M` is a square matrix, it is treated as a distance matrix; otherwise, it
+If `S` is a square matrix, it is treated as a distance matrix; otherwise, it
 should be an ``n`` x d matrix, where ``n`` is the number of spatial locations
 and ``d`` is the spatial dimension (typically ``d`` = 2). In the latter case,
-the distance metric is taken to be the Euclidean distance. Note that the maxmin
-ordering currently requires a set of spatial locations (not a distance matrix).
+the distance metric is taken to be the Euclidean distance. Note that use of a 
+maxmin ordering currently requires a of spatial locations (not a distance matrix).
+
+By convention with the functionality in `GraphNeuralNetworks.jl` which is based on directed graphs, 
+the neighbours of location `i` are stored in the column `A[:, i]` where `A` is the 
+returned adjacency matrix. Therefore, the number of neighbours for each location is
+given by `collect(mapslices(nnz, A; dims = 1))`, and the number of times each locations is 
+a neighbour of another location is given by `collect(mapslices(nnz, A; dims = 2))`.
 
 By convention, we consider a location to neighbour itself and, hence,
 `k`-neighbour methods will yield `k`+1 neighbours for each location. Note that
@@ -806,32 +815,25 @@ using NeuralEstimators, Distances, SparseArrays
 
 n = 100
 d = 2
-S = rand(n, d)
+S = rand(Float32, n, d)
 k = 10
 r = 0.1
 
 # Memory efficient constructors (avoids constructing the full distance matrix D)
 adjacencymatrix(S, k)
 adjacencymatrix(S, k; maxmin = true)
+adjacencymatrix(S, k; maxmin = true, combined = true)
 adjacencymatrix(S, r)
 adjacencymatrix(S, r, k)
 
 # Construct from full distance matrix D
-D = pairwise(Euclidean(), S, S, dims = 1)
+D = pairwise(Euclidean(), S, dims = 1)
 adjacencymatrix(D, k)
 adjacencymatrix(D, r)
 adjacencymatrix(D, r, k)
 
 # Removing self-loops so that a location is not its own neighbour
 adjacencymatrix(S, k) |> dropzeros!
-
-# Gridded locations (good to check that ties don't cause problems)
-pts = range(0, 1, length = 10) 
-S = expandgrid(pts, pts)
-adjacencymatrix(S, k) 
-adjacencymatrix(S, k; maxmin = true)
-adjacencymatrix(S, r)
-adjacencymatrix(S, r, k)
 ```
 """
 function adjacencymatrix(M::Matrix; k::Union{Integer, Nothing} = nothing, r::Union{F, Nothing} = nothing, maxmin::Bool = false) where F <: AbstractFloat
@@ -862,39 +864,53 @@ function adjacencymatrix(M::Mat, r::F, k::Integer) where Mat <: AbstractMatrix{T
 		sᵢ = M[i, :]
 		kᵢ = 0
 		iter = shuffle(collect(1:n)) # shuffle to prevent weighting observations based on their ordering in M
-
 		for j ∈ iter
-
-			if m == n # square matrix, so assume M is a distance matrix
-				dᵢⱼ = M[i, j]
-			else
-				sⱼ  = M[j, :]
-				dᵢⱼ = norm(sᵢ - sⱼ)
+			if i != j # add self loops after construction, to ensure consistent number of neighbours
+				if m == n # square matrix, so assume M is a distance matrix
+					dᵢⱼ = M[i, j]
+				else
+					sⱼ  = M[j, :]
+					dᵢⱼ = norm(sᵢ - sⱼ)
+				end
+				if dᵢⱼ <= r
+					push!(I, i)
+					push!(J, j)
+					push!(V, dᵢⱼ)
+					kᵢ += 1
+				end
 			end
-
-			if dᵢⱼ <= r
-				push!(I, i)
-				push!(J, j)
-				push!(V, dᵢⱼ)
-				kᵢ += 1
+			if kᵢ == k 
+				break 
 			end
-			if kᵢ == k break end
 		end
-
 	end
-
-	A = sparse(I,J,V,n,n)
-
-
+	A = sparse(J,I,V,n,n)
+	# add diagonal elements so that each node is considered its own neighbour
+	for i ∈ 1:size(A, 1)
+		A[i, i] = one(T)  # make element structurally nonzero
+		A[i, i] = zero(T) # set to zero
+	end
 	return A
 end
 adjacencymatrix(M::Mat, k::Integer, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat} = adjacencymatrix(M, r, k)
 
 #NB would be good to add the keyword argument initialise_centre::Bool = true that makes the starting point fixed to the centre of the spatial domain. 
 # This point could just be the closest point to the average of the spatial coordinates.
-function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Bool = false) where Mat <: AbstractMatrix{T} where T
+function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Bool = false, combined::Bool = false) where Mat <: AbstractMatrix{T} where T
 
 	@assert k > 0
+
+	if combined 
+		a1 = adjacencymatrix(M, k; maxmin = false, combined = false)
+		a2 = adjacencymatrix(M, k; maxmin = true, combined = false) 
+		A = a1 + (a1 .!= a2) .* a2 
+		# add diagonal elements so that each node is considered its own neighbour
+		for i ∈ 1:size(A, 1)
+			A[i, i] = one(T)  # make element structurally nonzero
+			A[i, i] = zero(T) # set to zero
+		end
+		return A 
+	end
 
 	I = Int64[]
 	J = Int64[]
@@ -906,7 +922,7 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 		D = M
 	else      # otherwise, M is a matrix of spatial locations
 		S = M
-		S = S + 100 * eps(T) * randn(T, size(S, 1), size(S, 2)) # add some random noise to break ties
+		# S = S + 50 * eps(T) * rand(T, size(S, 1), size(S, 2)) # add some random noise to break ties
 	end
 
 	if k >= n # more neighbours than observations: return a dense adjacency matrix
@@ -927,12 +943,12 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 
 			# Find the neighbours of s
 			j, v = findneighbours(d, k)
-
+ 
 			push!(I, repeat([i], inner = k)...)
 			push!(J, j...)
 			push!(V, v...)
 		end
-		A = sparse(I,J,V,n,n)
+		A = sparse(J,I,V,n,n) # NB the neighbours of location i are stored in the column A[:, i]
 	else
 		@assert m != n "`adjacencymatrix` with maxmin-ordering requires a matrix of spatial locations, not a distance matrix"
 		ord     = ordermaxmin(S)          # calculate ordering
@@ -942,11 +958,10 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 		A = moralise ?  R' * R : R        # moralise
 
 		# Add distances to A
-		# TODO This is memory inefficient, especially for large n;
-		# only optimise if we find that this approach works well and this is a bottleneck
+		# TODO This is memory inefficient, especially for large n; only optimise if we find that this approach works well and this is a bottleneck
 		D = pairwise(Euclidean(), Sord')
 		I, J, V = findnz(A)
-		indices = collect(zip(I,J))
+		indices = collect(zip(I,J))  
 		indices = CartesianIndex.(indices)
 		A.nzval .= D[indices]
 
@@ -958,6 +973,43 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 
 	return A
 end
+
+
+
+# Number of neighbours 
+
+# # How it should be:
+# s = [1,1,2,2,2,3,4,4,5,5]
+# t = [2,3,1,4,5,3,2,5,2,4]
+# v = [-5,-5,2,2,2,3,4,4,5,5]
+# g = GNNGraph(s, t, v; ndata = (Z = ones(1, 5), )) #TODO shouldn't need to specify name Z
+# A = adjacency_matrix(g)
+# @test A == sparse(s, t, v)
+
+# l = SpatialGraphConv(1 => 1, identity; aggr = +, bias = false) 
+# l.w.β .= ones(Float32, 1)
+# l.Γ1  .= zeros(Float32, 1)
+# l.Γ2  .= ones(Float32, 1)
+# node_features(l(g)) 
+
+# # First node:
+# i = 1
+# ρ = exp.(l.w.β) # positive range parameter
+# d = [A[2, i]]
+# e = exp.(-d ./ ρ)
+# sum(e)
+
+# # Second node:
+# i = 2
+# ρ = exp.(l.w.β) # positive range parameter
+# d = [A[1, i], A[4, i], A[5, i]]
+# e = exp.(-d ./ ρ)
+# sum(e)
+
+
+
+
+
 
 # using NeuralEstimators, Distances, SparseArrays
 # import NeuralEstimators: adjacencymatrix, ordermaxmin, findorderednn, builddag, findneighbours
@@ -982,7 +1034,7 @@ function adjacencymatrix(M::Mat, r::F) where Mat <: AbstractMatrix{T} where {T, 
 
 	if m == n # square matrix, so assume M is a distance matrix, D:
 		D = M
-		A = D .< r # bit-matrix specifying which locations are d-neighbours
+		A = D .< r # bit-matrix specifying which locations are within a disc or r
 
 		# replace non-zero elements of A with the corresponding distance in D
 		indices = copy(A)
@@ -1016,8 +1068,11 @@ end
 
 function findneighbours(d, k::Integer)
 	V = partialsort(d, 1:k)
-	J = [findfirst(v .== d) for v ∈ V]
-    return J, V
+	J = [findall(v .== d) for v ∈ V]
+	J = reduce(vcat, J)
+	J = unique(J)
+	J = J[1:k] # in the event of ties, there can be too many elements in J, so use only the first 1:k
+    return J, V 
 end
 
 # TODO this function is much, much slower than the R version... need to optimise
