@@ -19,9 +19,9 @@ simulateschlather
 maternclusterprocess
 ```
 
-## Low-level functions
+## Covariance functions
 
-These low-level functions may be of use for various models.
+These covariance functions may be of use for various models.
 
 ```@docs
 matern

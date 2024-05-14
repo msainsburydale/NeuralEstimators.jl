@@ -772,37 +772,47 @@ end
 
 # ---- Adjacency matrices ----
 
-"""
+@doc raw"""
 	adjacencymatrix(S::Matrix, k::Integer; maxmin = false, combined = false)
 	adjacencymatrix(S::Matrix, r::AbstractFloat)
-	adjacencymatrix(S::Matrix, r::AbstractFloat, k::Integer)
+	adjacencymatrix(S::Matrix, r::AbstractFloat, k::Integer; random = true)
 
 Computes a spatially weighted adjacency matrix from spatial locations `S` based 
-on either the `k`-nearest neighbours of each location; all nodes within a disc of radius `r`;
-or, if both `r` and `k` are provided, a random set of `k` neighbours with a disc
-of radius `r`.
+on either the `k`-nearest neighbours of each location; all nodes within a disc of fixed radius `r`;
+or, if both `r` and `k` are provided, a subset of `k` neighbours within a disc
+of fixed radius `r`.
+
+Several subsampling strategies are possible when choosing a subset of `k` neighbours within 
+a disc of fixed radius `r`. If `random=true` (default), the neighbours are randomly selected from 
+within the disc (note that this also approximately preserves the distribution of 
+distances within the neighbourhood set). If `random=false`, a deterministic algorithm is used 
+that aims to preserve the distribution of distances within the neighbourhood set, by choosing 
+those nodes with distances to the central node corresponding to the 
+$\{0, \frac{1}{k}, \frac{2}{k}, \dots, \frac{k-1}{k}, 1\}$ quantiles of the empirical 
+distribution function of distances within the disc. 
+(This algorithm in fact yields $k+1$ neighbours, since both the closest and furthest nodes are always included.) 
+Otherwise, 
 
 If `maxmin=false` (default) the `k`-nearest neighbours are chosen based on all points in
 the graph. If `maxmin=true`, a so-called maxmin ordering is applied,
 whereby an initial point is selected, and each subsequent point is selected to
 maximise the minimum distance to those points that have already been selected.
 Then, the neighbours of each point are defined as the `k`-nearest neighbours
-amongst the points that have already appeared in the ordering. If
-`maxmin=true` and `combined=true`, the neighbours of of a node are taken to be
-the union of the `k`-nearest neighbours and the `k`-nearest neighbours subject 
-to a maxmin ordering (these neighbours will eventually coincide towards the end of the ordering). 
+amongst the points that have already appeared in the ordering. If `combined=true`, the 
+neighbours are defined to be the union of the `k`-nearest neighbours and the 
+`k`-nearest neighbours subject to a maxmin ordering. 
 
 If `S` is a square matrix, it is treated as a distance matrix; otherwise, it
-should be an ``n`` x d matrix, where ``n`` is the number of spatial locations
-and ``d`` is the spatial dimension (typically ``d`` = 2). In the latter case,
+should be an $n$ x $d$ matrix, where $n$ is the number of spatial locations
+and $d$ is the spatial dimension (typically $d$ = 2). In the latter case,
 the distance metric is taken to be the Euclidean distance. Note that use of a 
-maxmin ordering currently requires a of spatial locations (not a distance matrix).
+maxmin ordering currently requires a matrix of spatial locations (not a distance matrix).
 
 By convention with the functionality in `GraphNeuralNetworks.jl` which is based on directed graphs, 
 the neighbours of location `i` are stored in the column `A[:, i]` where `A` is the 
 returned adjacency matrix. Therefore, the number of neighbours for each location is
-given by `collect(mapslices(nnz, A; dims = 1))`, and the number of times each locations is 
-a neighbour of another location is given by `collect(mapslices(nnz, A; dims = 2))`.
+given by `collect(mapslices(nnz, A; dims = 1))`, and the number of times each node is 
+a neighbour of another node is given by `collect(mapslices(nnz, A; dims = 2))`.
 
 By convention, we consider a location to neighbour itself and, hence,
 `k`-neighbour methods will yield `k`+1 neighbours for each location. Note that
@@ -813,27 +823,29 @@ adjacency matrix (see below).
 ```
 using NeuralEstimators, Distances, SparseArrays
 
-n = 100
+n = 250
 d = 2
 S = rand(Float32, n, d)
 k = 10
-r = 0.1
+r = 0.10
 
-# Memory efficient constructors (avoids constructing the full distance matrix D)
+# Memory efficient constructors
 adjacencymatrix(S, k)
 adjacencymatrix(S, k; maxmin = true)
 adjacencymatrix(S, k; maxmin = true, combined = true)
 adjacencymatrix(S, r)
-adjacencymatrix(S, r, k)
+@elapsed adjacencymatrix(S, r, k)
+@elapsed adjacencymatrix(S, r, k; random = false)
 
 # Construct from full distance matrix D
 D = pairwise(Euclidean(), S, dims = 1)
 adjacencymatrix(D, k)
 adjacencymatrix(D, r)
 adjacencymatrix(D, r, k)
+adjacencymatrix(D, r, k; random = false)
 
 # Removing self-loops so that a location is not its own neighbour
-adjacencymatrix(S, k) |> dropzeros!
+dropzeros!(adjacencymatrix(S, k))
 ```
 """
 function adjacencymatrix(M::Matrix; k::Union{Integer, Nothing} = nothing, r::Union{F, Nothing} = nothing, maxmin::Bool = false) where F <: AbstractFloat
@@ -849,10 +861,16 @@ function adjacencymatrix(M::Matrix; k::Union{Integer, Nothing} = nothing, r::Uni
 	end
 end
 
-function adjacencymatrix(M::Mat, r::F, k::Integer) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
+function adjacencymatrix(M::Mat, r::F, k::Integer; random::Bool = true) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
 
 	@assert k > 0
 	@assert r > 0
+
+	if random == false
+		A = adjacencymatrix(M, r) 
+		A = subsetneighbours(A, k)
+		return A 
+	end 
 
 	I = Int64[]
 	J = Int64[]
@@ -868,7 +886,7 @@ function adjacencymatrix(M::Mat, r::F, k::Integer) where Mat <: AbstractMatrix{T
 			if i != j # add self loops after construction, to ensure consistent number of neighbours
 				if m == n # square matrix, so assume M is a distance matrix
 					dᵢⱼ = M[i, j]
-				else
+				else  # rectangular matrix, so assume S is a matrix of spatial locations
 					sⱼ  = M[j, :]
 					dᵢⱼ = norm(sᵢ - sⱼ)
 				end
@@ -885,12 +903,7 @@ function adjacencymatrix(M::Mat, r::F, k::Integer) where Mat <: AbstractMatrix{T
 		end
 	end
 	A = sparse(J,I,V,n,n)
-	# add diagonal elements so that each node is considered its own neighbour
-	for i ∈ 1:size(A, 1)
-		A[i, i] = one(T)  # make element structurally nonzero
-		A[i, i] = zero(T) # set to zero
-	end
-	return A
+	selfloops!(A)
 end
 adjacencymatrix(M::Mat, k::Integer, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat} = adjacencymatrix(M, r, k)
 
@@ -974,6 +987,46 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 	return A
 end
 
+## helper functions
+deletecol!(A,cind) = SparseArrays.fkeep!(A,(i,j,v) -> j != cind)
+findnearest(A::AbstractArray, x) = argmin(abs.(A .- x))
+findnearest(V::SparseVector, q) = V.nzind[findnearest(V.nzval, q)] # efficient version for SparseVector that doesn't materialise a dense array
+function selfloops!(A)
+	# add diagonal elements so that each node is considered its own neighbour
+	T = eltype(A)
+	for i ∈ 1:size(A, 1)
+		A[i, i] = one(T)  # make element structurally nonzero
+		A[i, i] = zero(T) # set to zero
+	end
+	return A
+end
+function subsetneighbours(A, k) 
+
+	τ = [i/k for i ∈ 0:k] # probability levels (k+1 values)
+	n = size(A, 1)
+
+	# drop self loops 
+	dropzeros!(A)
+
+	for j ∈ 1:n 
+		Aⱼ = A[:, j] # neighbours of node j 
+		if nnz(Aⱼ) > k+1 # if there are fewer than k+1 neighbours already, we don't need to do anything 
+			# compute the empirical τ-quantiles of the nonzero entries in Aⱼ
+			quantiles = quantile(nonzeros(Aⱼ), τ) 
+			# zero-out previous neighbours in Aⱼ
+			deletecol!(A, j) 
+			# find the entries in Aⱼ that are closest to the empirical quantiles 
+			for q ∈ quantiles
+				i = findnearest(Aⱼ, q)
+				v = Aⱼ[i]
+				A[i, j] = v
+			end 
+		end
+	end
+
+	# add self loops back in 
+	selfloops!(A)
+end
 
 
 # Number of neighbours 
@@ -1005,10 +1058,6 @@ end
 # d = [A[1, i], A[4, i], A[5, i]]
 # e = exp.(-d ./ ρ)
 # sum(e)
-
-
-
-
 
 
 # using NeuralEstimators, Distances, SparseArrays

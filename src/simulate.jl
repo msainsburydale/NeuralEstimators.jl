@@ -306,6 +306,7 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
 	return L
 end
 
+
 function maternchols(D::V, ρ, ν, σ² = one(nested_eltype(D)); stack::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
 	if stack

@@ -126,7 +126,7 @@ end
 
 	n = 100
 	d = 2
-	S = rand(n, d)
+	S = rand(Float32, n, d) #TODO add test that adjacencymatrix is type stable when S or D are Float32 matrices
 	k = 5
 	r = 0.3
 
@@ -158,8 +158,10 @@ end
 	@test all(f(adjacencymatrix(S, k)) .== k + 1)
 	@test all(1 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k+1)
 	@test all(k+1 .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k+1)
-	@test all(1 .<= f(adjacencymatrix(S, r, k)) .<= k+1)
-	@test all(f(adjacencymatrix(S, 2.0, k)) .== k+1) 
+	@test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k+1)
+	@test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+2)
+	@test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k+1) 
+	@test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+2) 
 
 	# Gridded locations (useful for checking functionality in the event of ties)
 	pts = range(0, 1, length = 10) 
@@ -167,8 +169,10 @@ end
 	@test all(f(adjacencymatrix(S, k)) .== k + 1) 
 	@test all(1 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k+1)
 	@test all(k+1 .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k+1) 
-	@test all(1 .<= f(adjacencymatrix(S, r, k)) .<= k+1) 
-	@test all(f(adjacencymatrix(S, 2.0, k)) .== k+1) 
+	@test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k+1) 
+	@test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+2) 
+	@test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k+1) 
+	@test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+2) 
 
 	# check for the case k > n
 	n = 3
