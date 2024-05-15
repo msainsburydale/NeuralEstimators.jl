@@ -220,7 +220,7 @@ function (l::NeighbourhoodVariogram)(g::GNNGraph)
 	z = apply_edges(message, g, x, x, h) # (Zⱼ - Zᵢ)², possibly replicated 
 	z = mean(z, dims = 2) # average over the replicates TODO possibly losing information here, should think about it... might be ok since we average anyway
 	z = vec(z)
-	
+
 	# Bin the distances, e.g., 0 < h <= 0.03, 0.03 < h <= 0.06, ..., 0.12 < h <= 0.15
 	h_cutoffs = l.h_cutoffs
 	bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
@@ -229,8 +229,9 @@ function (l::NeighbourhoodVariogram)(g::GNNGraph)
 	N = reduce(hcat, N)
 
 	# Compute the average over each bin
-	N_card = sum(N, dims = 1)   # number of occurences in each distance bin 
-	Σ = sum(z .* N, dims = 1)  # ∑(Zⱼ - Zᵢ)² in each bin
+	N_card = sum(N, dims = 1)        # number of occurences in each distance bin 
+	N_card = N_card + (N_card .== 0) # prevent division by zero #TODO document this
+	Σ = sum(z .* N, dims = 1)        # ∑(Zⱼ - Zᵢ)² in each bin
 	vec(Σ ./ 2N_card)
 end
 @layer NeighbourhoodVariogram
