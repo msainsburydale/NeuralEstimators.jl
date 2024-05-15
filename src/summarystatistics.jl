@@ -203,7 +203,7 @@ struct NeighbourhoodVariogram{T} <: GNNLayer
     h_cutoffs::T
 	# TODO inner construct, add 0 into h_cutoffs if it is not already in there 
 end 
-NeighbourhoodVariogram(h_max, n_bins::Integer) = NeighbourhoodVariogram(range(0, stop=h_max, length=n_bins+1))
+NeighbourhoodVariogram(h_max, n_bins::Integer) = NeighbourhoodVariogram(range(0f0, stop=Float32(h_max), length=n_bins+1))
 function (l::NeighbourhoodVariogram)(g::GNNGraph)
 	
 	# NB in the case of a batched graph, see the comments in the method summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
