@@ -185,6 +185,7 @@ end
 #TODO citations (Cressie and Hawkins 1980), Maybe "Efficient variography with partition variograms"
 @doc raw"""
 Matheron's estimator of the variogram is given by
+	NeighbourhoodVariogram(h_max, n_bins::Integer)
 
 ```math
 \widehat{\gamma_M}(h) = \frac{1}{2|N(h)|} \sum_{(i,j) \in N(h)} (Z_i - Z_j)^2
@@ -200,9 +201,9 @@ of the set. Alternatively, Cressie's robust estimator is given by
 """
 struct NeighbourhoodVariogram{T} <: GNNLayer
     h_cutoffs::T
-	# TODO add 0 into h_cutoffs if it is not already in there 
+	# TODO inner construct, add 0 into h_cutoffs if it is not already in there 
 end 
-@layer NeighbourhoodVariogram
+NeighbourhoodVariogram(h_max, n_bins::Integer) = NeighbourhoodVariogram(range(0, stop=h_max, length=n_bins+1))
 function (l::NeighbourhoodVariogram)(g::GNNGraph)
 	
 	# NB in the case of a batched graph, see the comments in the method summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
@@ -216,18 +217,19 @@ function (l::NeighbourhoodVariogram)(g::GNNGraph)
 	z = mean(z, dims = 2) # average over the replicates TODO possibly losing information here, should think about it... might be ok since we average anyway
 	z = vec(z)
 
-	# Create bins, e.g., 0 < h <= 0.03, 0.03 < h <= 0.06, ..., 0.12 < h <= 0.15
-	#h_cutoffs = [0, 0.03, 0.06, 0.09, 0.12, 0.15] 
+	# Bin the distances, e.g., 0 < h <= 0.03, 0.03 < h <= 0.06, ..., 0.12 < h <= 0.15
 	h_cutoffs = l.h_cutoffs
 	bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
 	bins_lower = h_cutoffs[1:end-1] # lower bounds of the distance bins 
-	N = [bins_lower[i] .< h .<= bins_upper[i] for i in eachindex(bins_upper)]
+	N = [bins_lower[i] .< h .<= bins_upper[i] for i in eachindex(bins_upper)] 
 	N = reduce(hcat, N)
+
+	# Compute the average over each bin
 	N_card = sum(N, dims = 1)   # number of occurences in each distance bin 
 	Σ = sum(z .* N, dims = 1)  # ∑(Zⱼ - Zᵢ)² in each bin
 	vec(Σ ./ 2N_card)
 end
-
+# @layer NeighbourhoodVariogram # TODO h_cutoffs should not be moved to the GPU, I think 
 
 
 
