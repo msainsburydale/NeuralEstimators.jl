@@ -198,7 +198,7 @@ summarystatistics(est, Z) = summarystatistics(est.deepset, Z)
 function summarystatistics(d::DeepSet, Z::A) where A
 	t = d.a(d.ψ(Z))
 	if !isnothing(d.S)
-		s = d.S(Z)
+		s = @ignore_derivatives d.S(Z)
 		t = vcat(t, s)
 	end
 	return t
@@ -227,7 +227,7 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
 		idx = indices[i]
 		t = d.a(ψa[colons..., idx])
 		if !isnothing(d.S)
-			s = d.S(Z[i])
+			s = @ignore_derivatives d.S(Z[i])
 			t = vcat(t, s)
 		end
 		t
@@ -242,8 +242,7 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 	# independent replicate), record the grouping of independent replicates
 	# so that they can be combined again later in the function
 	m = numberreplicates.(Z)
-	local g
-	@ignore_derivatives g = Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
+	g = @ignore_derivatives Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
 
 	# Propagation and readout
 	R = d.ψ(g) # TODO ψ must be an object of type GNNSummary, might want to assert this
@@ -265,7 +264,7 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 	map(eachindex(Z)) do i
 		t = d.a(R̃[i])
 		if !isnothing(d.S)
-			s = d.S(Z[i]) # NB any expert summary statistics are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
+			s = @ignore_derivatives d.S(Z[i]) # NB any expert summary statistics are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
 			t = vcat(t, s)
 		end
 		t

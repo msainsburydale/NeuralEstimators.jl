@@ -203,7 +203,11 @@ struct NeighbourhoodVariogram{T} <: GNNLayer
     h_cutoffs::T
 	# TODO inner construct, add 0 into h_cutoffs if it is not already in there 
 end 
-NeighbourhoodVariogram(h_max, n_bins::Integer) = NeighbourhoodVariogram(range(0f0, stop=Float32(h_max), length=n_bins+1))
+function NeighbourhoodVariogram(h_max, n_bins::Integer) 
+	h_cutoffs = range(0, stop= h_max, length = n_bins+1)
+	h_cutoffs = collect(h_cutoffs)
+	NeighbourhoodVariogram(h_cutoffs)
+end
 function (l::NeighbourhoodVariogram)(g::GNNGraph)
 	
 	# NB in the case of a batched graph, see the comments in the method summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
@@ -216,12 +220,12 @@ function (l::NeighbourhoodVariogram)(g::GNNGraph)
 	z = apply_edges(message, g, x, x, h) # (Zⱼ - Zᵢ)², possibly replicated 
 	z = mean(z, dims = 2) # average over the replicates TODO possibly losing information here, should think about it... might be ok since we average anyway
 	z = vec(z)
-
+	
 	# Bin the distances, e.g., 0 < h <= 0.03, 0.03 < h <= 0.06, ..., 0.12 < h <= 0.15
 	h_cutoffs = l.h_cutoffs
 	bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
 	bins_lower = h_cutoffs[1:end-1] # lower bounds of the distance bins 
-	N = [bins_lower[i] .< h .<= bins_upper[i] for i in eachindex(bins_upper)] 
+	N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
 	N = reduce(hcat, N)
 
 	# Compute the average over each bin
@@ -229,8 +233,8 @@ function (l::NeighbourhoodVariogram)(g::GNNGraph)
 	Σ = sum(z .* N, dims = 1)  # ∑(Zⱼ - Zᵢ)² in each bin
 	vec(Σ ./ 2N_card)
 end
-# @layer NeighbourhoodVariogram # TODO h_cutoffs should not be moved to the GPU, I think 
-
+@layer NeighbourhoodVariogram
+Flux.trainable(l::NeighbourhoodVariogram) =  ()
 
 
 
