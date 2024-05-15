@@ -239,8 +239,8 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 	# For efficiency, convert Z from a vector of (super)graphs into a single
 	# supergraph before applying the neural network. Since each element of Z
 	# may itself be a supergraph (where each subgraph corresponds to an
-	# independent replicate), recording the gourping of independent replicates
-	# so that they can be combined again later in the function.
+	# independent replicate), record the grouping of independent replicates
+	# so that they can be combined again later in the function
 	m = numberreplicates.(Z)
 	local g
 	@ignore_derivatives g = Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
@@ -265,7 +265,7 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 	map(eachindex(Z)) do i
 		t = d.a(R̃[i])
 		if !isnothing(d.S)
-			s = d.S(Z[i])
+			s = d.S(Z[i]) # NB any expert summary statistics are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
 			t = vcat(t, s)
 		end
 		t

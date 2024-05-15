@@ -76,7 +76,7 @@ include("assess.jl")
 export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches, rowwisenorm
 include("utility.jl")
 
-export samplesize, samplecorrelation, samplecovariance
+export samplesize, samplecorrelation, samplecovariance, NeighbourhoodVariogram, DistanceQuantiles
 include("summarystatistics.jl")
 
 export EM, removedata, encodedata

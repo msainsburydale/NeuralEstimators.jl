@@ -55,7 +55,7 @@ g = spatialgraph(S, Z)
 """
 function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, store_S::Bool = false, pyramid_pool::Bool = false, kwargs...)
 
-	# Determine neighbourhood based on keyword arguments 
+	# Determine neighbourhood based on keyword arguments #TODO change default to whatever I decide in the paper
 	kwargs = (;kwargs...)
 	k = haskey(kwargs, :k) ? kwargs.k : nothing
 	r = haskey(kwargs, :r) ? kwargs.r : nothing
@@ -426,8 +426,7 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3}
     check_num_nodes(g, x)
 	s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3]) # spatial information
     e = l.w(s) # spatial weighting
-	# repeat e to match the number of independent replicates
-	e = permutedims(stackarrays([e for _ in 1:size(x, 2)], merge = false), (1, 3, 2))
+	e = permutedims(stackarrays([e for _ in 1:size(x, 2)], merge = false), (1, 3, 2)) # repeat e to match the number of independent replicates
 	h = propagate(e_mul_xj, g, l.a, xj=x, e=e)
 	l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h .+ l.b) # ⊠ is shorthand for batched_mul
 end
@@ -776,6 +775,7 @@ end
 	adjacencymatrix(S::Matrix, k::Integer; maxmin = false, combined = false)
 	adjacencymatrix(S::Matrix, r::AbstractFloat)
 	adjacencymatrix(S::Matrix, r::AbstractFloat, k::Integer; random = true)
+	adjacencymatrix(M::Matrix; k, r, kwargs...)
 
 Computes a spatially weighted adjacency matrix from spatial locations `S` based 
 on either the `k`-nearest neighbours of each location; all nodes within a disc of fixed radius `r`;
@@ -834,8 +834,8 @@ adjacencymatrix(S, k)
 adjacencymatrix(S, k; maxmin = true)
 adjacencymatrix(S, k; maxmin = true, combined = true)
 adjacencymatrix(S, r)
-@elapsed adjacencymatrix(S, r, k)
-@elapsed adjacencymatrix(S, r, k; random = false)
+adjacencymatrix(S, r, k)
+adjacencymatrix(S, r, k; random = false)
 
 # Construct from full distance matrix D
 D = pairwise(Euclidean(), S, dims = 1)
@@ -848,16 +848,16 @@ adjacencymatrix(D, r, k; random = false)
 dropzeros!(adjacencymatrix(S, k))
 ```
 """
-function adjacencymatrix(M::Matrix; k::Union{Integer, Nothing} = nothing, r::Union{F, Nothing} = nothing, maxmin::Bool = false) where F <: AbstractFloat
+function adjacencymatrix(M::Matrix; k::Union{Integer, Nothing} = nothing, r::Union{F, Nothing} = nothing, kwargs...) where F <: AbstractFloat
 	# convenience keyword-argument function, used internally by spatialgraph()
 	if isnothing(r) & isnothing(k)
 		error("One of k or r must be set")
 	elseif isnothing(r) 
-		adjacencymatrix(M, k; maxmin = maxmin)
+		adjacencymatrix(M, k; kwargs...)
 	elseif isnothing(k)
 		adjacencymatrix(M, r)
 	else
-		adjacencymatrix(M, r, k)
+		adjacencymatrix(M, r, k; kwargs...)
 	end
 end
 
@@ -907,8 +907,6 @@ function adjacencymatrix(M::Mat, r::F, k::Integer; random::Bool = true) where Ma
 end
 adjacencymatrix(M::Mat, k::Integer, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat} = adjacencymatrix(M, r, k)
 
-#NB would be good to add the keyword argument initialise_centre::Bool = true that makes the starting point fixed to the centre of the spatial domain. 
-# This point could just be the closest point to the average of the spatial coordinates.
 function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Bool = false, combined::Bool = false) where Mat <: AbstractMatrix{T} where T
 
 	@assert k > 0
