@@ -108,7 +108,7 @@ samplecorrelation(z::AbstractVector) = samplecorrelation(reshape(z, :, 1))
 
 
 
-## Summary statisstics for spatial point processes 
+## Summary statistics for spatial point processes 
 #TODO unit testing, document and export
 #TODO Don't use S for the expert summary statistics... clashes with the spatial locations 
 """
@@ -181,27 +181,54 @@ function (l::DistanceQuantiles)(g::GNNGraph)
 	h_sorted[idx]
 end
 
-#TODO robust::Bool = true
-#TODO citations (Cressie and Hawkins 1980), Maybe "Efficient variography with partition variograms"
+#TODO clean up this documentation (e.g., don't bother with the bin notation)
 @doc raw"""
-Matheron's estimator of the variogram is given by
-	NeighbourhoodVariogram(h_max, n_bins::Integer)
+	NeighbourhoodVariogram(h_max, n_bins) 
+	(l::NeighbourhoodVariogram)(g::GNNGraph)
+
+Computes the empirical variogram, 
 
 ```math
-\widehat{\gamma_M}(h) = \frac{1}{2|N(h)|} \sum_{(i,j) \in N(h)} (Z_i - Z_j)^2
+\hat{\gamma}(h \pm \delta) = \frac{1}{2|N(h \pm \delta)|} \sum_{(i,j) \in N(h \pm \delta)} (Z_i - Z_j)^2
 ```
 
-where $N(h) \equiv \left\{(i,j) \mid ||\boldsymbol{s}_i - \boldsymbol{s}_j|| = h\right\}$ is the set
-of pairs of locations at a distance $h$ and $|N(h)|$ is the cardinality
-of the set. Alternatively, Cressie's robust estimator is given by
+where $N(h \pm \delta) \equiv \left\{(i,j) : \|\boldsymbol{s}_i - \boldsymbol{s}_j\| \in (h-\delta, h+\delta)\right\}$ 
+is the set of pairs of locations separated by a distance within $(h-\delta, h+\delta)$, and $|\cdot|$ denotes set cardinality. 
 
-```math
-\widehat{\gamma_C}(h) = \frac{1}{2}\frac{\left\{\frac{1}{|N(h)|} \sum_{(i,j) \in N(h)} |Z_i - Z_j|^{1/2}\right\}^4}{0.457 + \frac{0.494}{|N(h)|} + \frac{0.045}{|N(h)|^2}}.
+The distance bins are constructed to have constant width $2\delta$, chosen based on the maximum distance 
+`h_max` to be considered, and the specified number of bins `n_bins`. 
+
+The input type is a `GNNGraph`, and the empirical variogram is computed based on the corresponding graph structure. 
+Specifically, only locations that are considered neighbours will be used when computing the empirical variogram. 
+
+# Examples 
+```
+using NeuralEstimators, Distances, LinearAlgebra
+  
+# Simulate Gaussian spatial data with exponential covariance function 
+θ = 0.1                                 # true range parameter 
+n = 250                                 # number of spatial locations 
+S = rand(n, 2)                          # spatial locations 
+D = pairwise(Euclidean(), S, dims = 1)  # distance matrix 
+Σ = exp.(-D ./ θ)                       # covariance matrix 
+L = cholesky(Symmetric(Σ)).L            # Cholesky factor 
+m = 5                                   # number of independent replicates 
+Z = L * randn(n, m)                     # simulated data 
+
+# Construct the spatial graph 
+r = 0.15                                # radius of neighbourhood set
+g = spatialgraph(S, Z, r = r)
+
+# Construct the variogram object wth 10 bins
+nv = NeighbourhoodVariogram(r, 10) 
+
+# Compute the empirical variogram 
+nv(g)
 ```
 """
 struct NeighbourhoodVariogram{T} <: GNNLayer
     h_cutoffs::T
-	# TODO inner construct, add 0 into h_cutoffs if it is not already in there 
+	# TODO inner constructor, add 0 into h_cutoffs if it is not already in there 
 end 
 function NeighbourhoodVariogram(h_max, n_bins::Integer) 
 	h_cutoffs = range(0, stop= h_max, length = n_bins+1)
@@ -213,15 +240,15 @@ function (l::NeighbourhoodVariogram)(g::GNNGraph)
 	# NB in the case of a batched graph, see the comments in the method summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
 
 	# Note that we do not need to remove self-loops, since we define the bins to be greater than 0
-	x = g.ndata.Z
+	Z = g.ndata.Z
 	h = g.graph[3]
 
 	message(xi, xj, e) = (xi - xj).^2
-	z = apply_edges(message, g, x, x, h) # (Zⱼ - Zᵢ)², possibly replicated 
-	z = mean(z, dims = 2) # average over the replicates TODO possibly losing information here, should think about it... might be ok since we average anyway
+	z = apply_edges(message, g, Z, Z, h) # (Zⱼ - Zᵢ)², possibly replicated 
+	z = mean(z, dims = 2) # average over the replicates 
 	z = vec(z)
 
-	# Bin the distances, e.g., 0 < h <= 0.03, 0.03 < h <= 0.06, ..., 0.12 < h <= 0.15
+	# Bin the distances
 	h_cutoffs = l.h_cutoffs
 	bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
 	bins_lower = h_cutoffs[1:end-1] # lower bounds of the distance bins 
@@ -230,12 +257,14 @@ function (l::NeighbourhoodVariogram)(g::GNNGraph)
 
 	# Compute the average over each bin
 	N_card = sum(N, dims = 1)        # number of occurences in each distance bin 
-	N_card = N_card + (N_card .== 0) # prevent division by zero #TODO document this
+	N_card = N_card + (N_card .== 0) # prevent division by zero 
 	Σ = sum(z .* N, dims = 1)        # ∑(Zⱼ - Zᵢ)² in each bin
 	vec(Σ ./ 2N_card)
 end
 @layer NeighbourhoodVariogram
 Flux.trainable(l::NeighbourhoodVariogram) =  ()
+
+#TODO there is a more general structure that we could define, that has message(xi, xj, e) as a slot
 
 
 

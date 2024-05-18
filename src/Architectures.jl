@@ -41,6 +41,7 @@ S(1)
 (S::Vector{Function})(z) = vcat([s(z) for s ∈ S]...)
 # (S::Vector)(z) = vcat([s(z) for s ∈ S]...) # can use a more general construction like this to allow for vectors of NeuralEstimators to be called in this way
 
+#TODO show example with only user-defined summary statistics
 """
     DeepSet(ψ, ϕ, a = mean; S = nothing)
 The DeepSets representation,
@@ -59,7 +60,8 @@ function. Expert summary statistics can be incorporated as,
 
 where `S` is a function that returns a vector of user-defined summary statistics.
 These user-defined summary statistics are provided either as a
-`Function` that returns a `Vector`, or as a vector of functions.
+`Function` that returns a `Vector`, or as a vector of functions. In the case that 
+`ψ` is set to `nothing`, only expert summary statistics will be used. 
 
 The aggregation function `a` can be any function that acts on an array and has
 a keyword argument `dims` that allows aggregation over a specific dimension of
@@ -103,8 +105,10 @@ set-level information (i.e., one vector for each data set).
 ```
 using NeuralEstimators, Flux
 
+# Two dummy data sets containing 3 and 4 replicates
+p = 5  # number of parameters in the statistical model
 n = 10 # dimension of each replicate
-p = 4  # number of parameters in the statistical model
+Z = [rand32(n, m) for m ∈ (3, 4)]
 
 # Construct the deepset object
 S = samplesize
@@ -115,13 +119,10 @@ w = 32  # width of hidden layers
 ϕ = Chain(Dense(qₜ + qₛ, w, relu), Dense(w, p))
 θ̂ = DeepSet(ψ, ϕ; S = S)
 
-# Toy data
-Z = [rand32(n, m) for m ∈ (3, 4)] # two data sets containing 3 and 4 replicates
-
 # Apply the deepset object
 θ̂(Z)
 
-# Toy data with set-level information
+# Data with set-level information
 qₓ = 2 # dimension of set-level vector
 ϕ = Chain(Dense(qₜ + qₛ + qₓ, w, relu), Dense(w, p))
 θ̂ = DeepSet(ψ, ϕ; S = S)
@@ -136,7 +137,10 @@ struct DeepSet{T, G, K}
 	S::K
 end
 @layer DeepSet
-DeepSet(ψ, ϕ, a::Function = mean; S = nothing) = DeepSet(ψ, ϕ, ElementwiseAggregator(a), S)
+function DeepSet(ψ, ϕ, a::Function = mean; S = nothing) 
+	@assert !isnothing(ψ) | !isnothing(S) "At least one of `ψ` or `S` must be given"
+	DeepSet(ψ, ϕ, ElementwiseAggregator(a), S)
+end
 Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)")
 
 # Single data set
@@ -167,14 +171,14 @@ end
 # Multiple data sets
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where A
 	# Stack into a single array before applying the outer network
-	d.ϕ(stackarrays(summarystatistics(d, Z)))
+	d.ϕ(stackarrays(summarystatistics(d, Z))) # TODO should stackarrays be replaced with reduce(hcat, )?
 end
 # Multiple data sets with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
 	Z, x = tup
 	t = summarystatistics(d, Z)
 	tx = vcat.(t, x)
-	d.ϕ(stackarrays(tx))
+	d.ϕ(stackarrays(tx))  # TODO should stackarrays be replaced with reduce(hcat, )?
 end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractMatrix{T}} where {A, T}
 	Z, x = tup
@@ -190,85 +194,109 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	end
 end
 
-#TODO document and test summarystatistics(). Add this functionality somewhere in the documentation.
+#TODO document summarystatistics()
 
 # Fallback method to allow neural estimators to be called directly
 summarystatistics(est, Z) = summarystatistics(est.deepset, Z)
 # Single data set
 function summarystatistics(d::DeepSet, Z::A) where A
-	t = d.a(d.ψ(Z))
+	if !isnothing(d.ψ) 
+		t = d.a(d.ψ(Z))
+	end	
 	if !isnothing(d.S)
 		s = @ignore_derivatives d.S(Z)
-		t = vcat(t, s)
+		if !isnothing(d.ψ)
+			t = vcat(t, s)
+		else 
+			t = s
+		end 
 	end
 	return t
 end
 # Multiple data sets: general fallback using broadcasting
 function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where A
-  	summary.(Ref(d), Z)
+  	summarystatistics.(Ref(d), Z)
 end
 # Multiple data sets: optimised version for array data
 function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
-	# Convert to a single large array and then applythe inner network
-	ψa = d.ψ(stackarrays(Z))
 
-	# Compute the indices needed for aggregation and construct a tuple of colons
-	# used to subset all but the last dimension of ψa.
-	indices = _getindices(Z)
-	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
+	if !isnothing(d.ψ) 
+		# Convert to a single large array and then apply the inner network
+		ψa = d.ψ(stackarrays(Z)) # TODO should stackarrays be replaced with reduce(hcat, )?
 
-	# Construct the summary statistics
-	# NB with the new "explicit" gradient() required by Flux/Zygote, an error is
-	# caused if one uses the same variable name outside and inside a broadcast
-	# like this. For instance, if were to name the result of the following call
-	# "t", an error would be thrown by gradient(), since "t" already appears
-	map(eachindex(Z)) do i
-		idx = indices[i]
-		t = d.a(ψa[colons..., idx])
-		if !isnothing(d.S)
-			s = @ignore_derivatives d.S(Z[i])
-			t = vcat(t, s)
-		end
-		t
+		# Compute the indices needed for aggregation and construct a tuple of colons
+		# used to subset all but the last dimension of ψa.
+		indices = _getindices(Z)
+		colons  = ntuple(_ -> (:), ndims(ψa) - 1)
+
+		# Construct the summary statistics
+		# NB with the new "explicit" gradient() required by Flux/Zygote, an error is
+		# caused if one uses the same variable name outside and inside a broadcast
+		# like this. For instance, if I were to name the result of the following call
+		# "t" and include a variable inside the broadcast called "t", an error would
+		# be thrown by gradient(), since "t" already appears
+		t = map(indices) do idx
+			d.a(ψa[colons..., idx])
+		end 
 	end
+
+	if !isnothing(d.S)
+		s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
+		if !isnothing(d.ψ)
+			t = vcat.(t, s)
+		else 
+			t = s
+		end 
+	end 
+
+	return t
 end
 # Multiple data sets: optimised version for graph data
 function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
 
-	# For efficiency, convert Z from a vector of (super)graphs into a single
-	# supergraph before applying the neural network. Since each element of Z
-	# may itself be a supergraph (where each subgraph corresponds to an
-	# independent replicate), record the grouping of independent replicates
-	# so that they can be combined again later in the function
-	m = numberreplicates.(Z)
-	g = @ignore_derivatives Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
+	# TODO assert that d.ψ is nothing or an object of type GNNSummary
 
-	# Propagation and readout
-	R = d.ψ(g) # TODO ψ must be an object of type GNNSummary, might want to assert this
+	if !isnothing(d.ψ) 
+		# For efficiency, convert Z from a vector of (super)graphs into a single
+		# supergraph before applying the neural network. Since each element of Z
+		# may itself be a supergraph (where each subgraph corresponds to an
+		# independent replicate), record the grouping of independent replicates
+		# so that they can be combined again later in the function
+		m = numberreplicates.(Z)
+		g = @ignore_derivatives Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
 
-	# Split R based on the original grouping specified by m
-	if ndims(R) == 2
-		ng = length(m)
-		cs = cumsum(m)
-		indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
-		R̃ = [R[:, idx] for idx ∈ indices]
-	elseif ndims(R) == 3
-		R̃ = [R[:, :, i] for i ∈ 1:size(R, 3)]
-	end
+		# Propagation and readout
+		R = d.ψ(g) 
 
-	# Now we have a vector of matrices, where each matrix corresponds to the
-	# readout vectors R₁, …, Rₘ for a given data set. Now, to aggregate these
-	# readout vectors into a single summary statistic for each data set, we
-	# apply similar code to that used when Z is a vector of arrays:
-	map(eachindex(Z)) do i
-		t = d.a(R̃[i])
-		if !isnothing(d.S)
-			s = @ignore_derivatives d.S(Z[i]) # NB any expert summary statistics are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
-			t = vcat(t, s)
+		# Split R based on the original vector of data sets Z 
+		if ndims(R) == 2
+			# R is a matrix, with column dimension M = sum(m), and we split R 
+			# based on the original grouping specified by m 
+			ng = length(m)
+			cs = cumsum(m)
+			indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
+			R̃ = [R[:, idx] for idx ∈ indices]
+		elseif ndims(R) == 3
+			R̃ = [R[:, :, i] for i ∈ 1:size(R, 3)]
 		end
-		t
+
+		# Now we have a vector of matrices, where each matrix corresponds to the
+		# readout vectors R₁, …, Rₘ for a given data set. Now, aggregate these
+		# readout vectors into a single summary statistic for each data set:
+		t = d.a.(R̃)
 	end
+
+	if !isnothing(d.S)
+		s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
+		if !isnothing(d.ψ)
+			t = vcat.(t, s)
+		else 
+			t = s
+		end 
+	end 
+
+	return t
 end
 
 

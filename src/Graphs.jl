@@ -29,8 +29,8 @@ displacement $\boldsymbol{s}_{j'} - \boldsymbol{s}_j$ (if `stationary`), or the 
 locations $(\boldsymbol{s}_{j'}, \boldsymbol{s}_j)$ (if `!stationary`).  
 
 Additional keyword arguments inherit from the arguments [`adjacencymatrix()`](@ref) to determined the 
-structure of the neighbourhoods of each node, with the default being $k$-nearest neighbours 
-with `k=10` neighbours.
+structure of the neighbourhoods of each node, with the default being a randomly selected set of 
+`k=30` neighbours within a disc of radius `r=0.15`.
 
 # Examples
 ```
@@ -55,14 +55,11 @@ g = spatialgraph(S, Z)
 """
 function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, store_S::Bool = false, pyramid_pool::Bool = false, kwargs...)
 
-	# Determine neighbourhood based on keyword arguments #TODO change default to whatever I decide in the paper
+	# Determine neighbourhood based on keyword arguments 
+	#TODO change default to whatever I decide in the paper
 	kwargs = (;kwargs...)
-	k = haskey(kwargs, :k) ? kwargs.k : nothing
-	r = haskey(kwargs, :r) ? kwargs.r : nothing
-	if isnothing(k) & isnothing(r)
-		k = 10
-	end
-	maxmin = haskey(kwargs, :maxmin) ? kwargs.maxmin : false
+	k = haskey(kwargs, :k) ? kwargs.k : 30
+	r = haskey(kwargs, :r) ? kwargs.r : 0.15
 
 	if !isotropic #TODO (need to modify adjacencymatrix() to do this)
 		error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
@@ -72,7 +69,7 @@ function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, st
 	end
 	ndata = DataStore()
 	S = Float32.(S)
-	A = adjacencymatrix(S; maxmin = maxmin, k = k, r = r)
+	A = adjacencymatrix(S; k = k, r = r) #TODO figure out what I'm doing with kwargs
 	S = permutedims(S) # need final dimension to be n-dimensional
 	if store_S
 		ndata = (ndata..., S = S)
@@ -223,6 +220,8 @@ end
 # layer = SpatialGraphConv(1 => 16; stationary = false)
 # layer(g)
 
+
+#TODO update documentation
 @doc raw"""
     SpatialGraphConv(in => out, g=relu; aggr=mean, bias=true, init=glorot_uniform, w_arguments...)
 
@@ -263,8 +262,7 @@ in which case the edge feature between node
 $j$ and node $j'$ should contain $\|\boldsymbol{s}_{j'} - \boldsymbol{s}_j\|$. 
 Note that this preprocessing is facilitated by [`spatialgraph()`](@ref). 
 
-One may model $\boldsymbol{w}(\cdot, \cdot)$ using a multilayer perceptron with a single hidden layer or, in 
-the isotropic case, an exponentially decaying function of spatial distance.
+The model for $\boldsymbol{w}(\cdot, \cdot)$ is a multilayer perceptron with a single hidden layer. 
 
 The output of $\boldsymbol{w}(\cdot, \cdot)$ may be chosen to be scalar or a vector 
 of the same dimension as the feature vectors of the previous layer. At the first 
@@ -307,7 +305,6 @@ Note that one may use a [`GraphConv`](https://carlolucibello.github.io/GraphNeur
 - `stationary = true`:  If `true`, $\boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}) \equiv \boldsymbol{w}(\boldsymbol{s}_{j'} - \boldsymbol{s}_j)$.
 - `isotropic = true`:  If `true` and `stationary` is also `true`, $\boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}) \equiv \boldsymbol{w}(\|\boldsymbol{s}_{j'} - \boldsymbol{s}_j\|)$.
 - `w_scalar = false`: If `true`, $\boldsymbol{w}(\cdot, \cdot)$ is defined to be a scalar function, that is, $\boldsymbol{w}(\cdot, \cdot) \equiv  w(\cdot, \cdot)$.
-- `w_exponential_decay = true`: If `true` and the process is isotropic, $\boldsymbol{w}(\cdot, \cdot)$ is constrained to be an exponentially decaying function of spatial distance, that is, $\boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}) \equiv \exp(-\boldsymbol{\beta}^{(l)}\|\boldsymbol{s}_{j'} - \boldsymbol{s}_j\|)$ where $\boldsymbol{\beta}^{(l)}$ denotes a vector of trainable positive parameters and the exponential function is applied elementwise. Note also that this option can be used in conjunction with `w_scalar`.
 - `w_width`: Width of the hidden layer of $\boldsymbol{w}(\cdot, \cdot)$ (when modelled as an MLP).
 - `w_g`: Activation function used in $\boldsymbol{w}(\cdot, \cdot)$ (when modelled as an MLP).
 - `w_channels = 1`: The number of "channels" of $\boldsymbol{w}(\cdot, \cdot)$.
@@ -316,35 +313,83 @@ Note that one may use a [`GraphConv`](https://carlolucibello.github.io/GraphNeur
 # Examples
 ```
 using NeuralEstimators, Flux, GraphNeuralNetworks
+using Statistics: mean
 
-# Generate some toy data
-m = 5            # number of replicates
-d = 2            # spatial dimension
-n = 100          # number of spatial locations
-S = rand(n, d)   # spatial locations
-Z = rand(n, m)   # toy data
-
-# Construct the graph
-g = spatialgraph(S, Z)
-
-# Construct and apply spatial graph convolution layers
-layer1 = SpatialGraphConv(1 => 16)
-layer2 = SpatialGraphConv(16 => 32)
-g |> layer1 |> layer2
+# Toy spatial data
+m = 5                  # number of replicates
+d = 2                  # spatial dimension
+n = 250                # number of spatial locations
+S = rand(n, d)         # spatial locations
+Z = rand(n, m)         # data
+g = spatialgraph(S, Z) # construct the graph
+G = Flux.batch([g, g]) # super graph 
 
 # Construct and apply spatial graph convolution layers
-layer1 = SpatialGraphConv(1 => 16, w_exponential_decay = true)
-layer2 = SpatialGraphConv(16 => 32, w_exponential_decay = true)
-g |> layer1 |> layer2
+#layer1 = SpatialGraphConv(1 => 16)
+#layer2 = SpatialGraphConv(16 => 32)
+#g |> layer1 |> layer2
+
+
+function SGC(ch::Pair{Int,Int}, glob)
+	in, out = ch
+	wi = 32
+	w = Chain(
+		Dense(1 => wi, relu),
+		Dense(wi => wi, relu),
+		Dense(wi => out, relu)
+	)
+	ψ = Chain(
+		Dense(1 => wi, relu),
+		Dense(wi => wi, relu),
+		Dense(wi => out, relu)
+	)
+	ρ = Chain(
+		Dense(2*out => wi, relu),
+		Dense(wi => wi, relu),
+		Dense(wi => out, relu)
+	)
+	SpatialGraphConv(w, ψ, ρ, glob)
+end 
+
+
+l1 = SGC(1 => 10, true)
+l1 = SGC(1 => 10, false)
+l2 = SGC(1 => 10, false) 
+
+l2(l1(g))
+
+propagation = GNNChain(
+	SGC(1 => 10, false),
+	SGC(1 => 10, false) 
+	)
+readout = GlobalPool(mean)
+ψ = GNNSummary(propagation, readout)
+R = ψ(g)
+R = ψ(G)
+
+globalfeatures = SGC(1 => 10, true)
+globalfeatures(g)
+globalfeatures(G)
+
+ψ = GNNSummary(propagation, readout, globalfeatures)
+ψ(g)
+ψ(G)
+
+ϕ = Chain(Dense(20, 32, relu), Dense(32, 3))
+θ̂ = DeepSet(ψ, ϕ)
+θ̂(g) 
+θ̂(G)
+
+θ̂([g, g]) 
+θ̂([G, G]) 
 ```
 """
-struct SpatialGraphConv{W<:AbstractMatrix,NN,B,F,A} <: GNNLayer
-    Γ1::W
-    Γ2::W
-	b::B
-	w::NN
-    g::F
-    a::A
+struct SpatialGraphConv{A, B, C} <: GNNLayer
+    w::C
+	ψ::A
+	ρ::B
+    #f::D #TODO
+    glob::Bool 
 end
 @layer SpatialGraphConv
 WeightedGraphConv = SpatialGraphConv; export WeightedGraphConv # alias for backwards compatability
@@ -360,10 +405,12 @@ function SpatialGraphConv(
 	w_channels::Integer = 1,
 	w_init = glorot_uniform, #TODO maybe use rand32 by default (play with this and see what would be best)
 	w_scalar = false, 
-	w_exponential_decay = true, 
 	w_width::Integer = 16,
-	w_g = relu
+	w_g = relu, 
+	glob::Bool = false # TODO
 	)
+
+	#TODO need to update this constructor
 
 	# Weight matrix
 	in, out = ch
@@ -373,6 +420,24 @@ function SpatialGraphConv(
 	# Bias vector
 	b = bias ? Flux.create_bias(Γ1, true, out) : false
 
+	# Spatial locations summary network 
+	ψ = if isotropic
+		Chain(
+			Dense(1 => w_width, w_g, init = w_init),
+			Dense(w_width => w_dim, w_g, init = w_init)
+			)
+	elseif stationary 
+		Chain(
+			Dense(d => w_width, w_g, init = w_init),
+			Dense(w_width => w_dim, w_g, init = w_init)
+			)
+	else
+		Chain(
+			Bilinear((d, d) => w_width, w_g, init = w_init),  
+			Dense(w_width => w_dim, w_g, init = w_init)
+			)
+	end 
+
 	# Spatial weighting function
 	w_dim = w_scalar ? 1 : in
 	if !stationary isotropic = false end
@@ -380,29 +445,10 @@ function SpatialGraphConv(
 		error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
 	end
 	if !stationary #TODO (need to modify adjacencymatrix() to do this)
-		error("Nonstationaryity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
+		error("Nonstationarity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
 	end
 	w = map(1:w_channels) do _
-		if isotropic
-			if w_exponential_decay
-				ExponentialDecay(w_dim, init = init)
-			else
-				Chain(
-					Dense(1 => w_width, w_g, init = w_init),
-					Dense(w_width => w_dim, w_g, init = w_init)
-					)
-			end
-		elseif stationary 
-			Chain(
-				Dense(d => w_width, w_g, init = w_init),
-				Dense(w_width => w_dim, w_g, init = w_init)
-				)
-		else
-			Chain(
-				Bilinear((d, d) => w_width, w_g, init = w_init),  
-				Dense(w_width => w_dim, w_g, init = w_init)
-				)
-		end 
+		_spatialMLP(isotropic, stationary, d, w_dim, w_width, w_g, w_init)
 	end
 	w = w_channels == 1 ? w[1] : Parallel(vcat, w...)
 
@@ -410,64 +456,89 @@ function SpatialGraphConv(
 end
 function (l::SpatialGraphConv)(g::GNNGraph)
 	Z = :Z ∈ keys(g.ndata) ? g.ndata.Z : first(values(g.ndata)) 
-	h = l(g, Z)
-	@ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = h))
+	if l.glob 
+		@ignore_derivatives GNNGraph(g, gdata = (g.gdata..., R = l(g, Z)))
+	else 
+		@ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = l(g, Z)))
+	end
 end
 function (l::SpatialGraphConv)(g::GNNGraph, x::M) where M <: AbstractMatrix{T} where {T}
-	# method for when the replicates are not stored as an array but as a batched graph
-	# (this is not really used anymore, mainly keep this here for backwards compatability)
-    check_num_nodes(g, x)
-	s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3]) # spatial information
-    e = l.w(s) # spatial weighting
-	h = propagate(e_mul_xj, g, l.a, xj=x, e=e)
-	l.g.(l.Γ1 * x .+ l.Γ2 * h .+ l.b)
+	l(g, reshape(x, size(x, 1), 1, size(x, 2)))
 end
 function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
+
     check_num_nodes(g, x)
-	s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3]) # spatial information
-    e = l.w(s) # spatial weighting
-	e = permutedims(stackarrays([e for _ in 1:size(x, 2)], merge = false), (1, 3, 2)) # repeat e to match the number of independent replicates
-	h = propagate(e_mul_xj, g, l.a, xj=x, e=e)
-	l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h .+ l.b) # ⊠ is shorthand for batched_mul
+	
+	# Number of independent replicates
+	m = size(x, 2)
+
+	# Extract spatial information (typically the spatial distance between neighbours)
+	# and coerce to three-dimensional array 
+	s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3]) 
+	if isa(s, Matrix)
+		s = reshape(s, size(s, 1), 1, size(s, 2))
+	end
+
+	# Compute T₁(S)
+	msg1 = apply_edges((l, xi, xj, e) -> l.ψ(e) , g, l, nothing, nothing, s)
+	if l.glob 
+		# average over the entire data set (not the replicates, however)
+		# note that we use reduce_edges, which, for a batched graph g, returns the 
+		# graph-wise aggregation of the edge features 
+		t₁ = reduce_edges(mean, g, msg1)  # equivalent to mean(msg1, dims = 3) in the case of a single graph
+	else 
+		t₁ = aggregate_neighbors(g, mean, msg1)  # average over each neighbourhood 
+		
+	end 
+	t₁ = repeat(t₁, 1, m, 1) # repeat to match the number of independent replicates (NB memory inefficient)
+
+	# Compute T₂(Z, S) 
+	w = l.w(s) # spatial weights 
+	w = repeat(w, 1, m, 1)       # repeat to match the number of independent replicates (NB memory inefficient)
+	# TODO replace with parameterised function f(Zᵢ, Zⱼ), which will be stored in l (see https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/conv/#GraphNeuralNetworks.EdgeConv)
+	# TODO l will also be passed in when we do the above change 
+	msg2 = apply_edges((xi, xj, e) -> e .* (xi - xj).^2, g, x, x, w)         
+	if l.glob 
+		t₂ = reduce_edges(mean, g, msg2)
+	else 
+		t₂ = aggregate_neighbors(g, mean, msg2) # average over each neighbourhood 
+	end 
+
+	# Concatenate T₁(S) and T₂(Z, S) 
+	t = vcat(t₁, t₂)
+
+	# Map T₁(S) and T₂(Z, S) into final summary statistics 
+	l.ρ(t) 
 end
 function Base.show(io::IO, l::SpatialGraphConv)
-    in_channel  = size(l.Γ1, ndims(l.Γ1))
-    out_channel = size(l.Γ1, ndims(l.Γ1)-1)
-    print(io, "SpatialGraphConv(", in_channel, " => ", out_channel)
-    l.g == identity || print(io, ", ", l.g)
-    print(io, ", aggr=", l.a)
-    print(io, ")")
+	#TODO update 
+    # in_channel  = size(l.Γ1, ndims(l.Γ1))
+    # out_channel = size(l.Γ1, ndims(l.Γ1)-1)
+    # print(io, "SpatialGraphConv(", in_channel, " => ", out_channel)
+    # l.g == identity || print(io, ", ", l.g)
+    # print(io, ", aggr=", l.a)
+    # print(io, ")")
+	"hi"
 end
-# m = 5            # number of replicates
-# d = 2            # spatial dimension
-# n = 100          # number of spatial locations
-# S = rand(n, d)   # spatial locations
-# Z = rand(n, m)   # toy data
-# g = spatialgraph(S, Z)
-# x = g.ndata.Z
-# l = SpatialGraphConv(1 => 16)
-# d = permutedims(g.graph[3]) # spatial distances
-# e = l.w(d)
-# l(g)
-# l(g).ndata.Z
-# l = SpatialGraphConv(1 => 16, c = 5)
-# d = permutedims(g.graph[3]) # spatial distances
-# e = l.w(d)
-# l(g)
-# l(g).ndata.Z
 
-struct ExponentialDecay{T}
-	β::T # trainable parameters
+function _spatialMLP(isotropic, stationary, d, dim, width, g, init)
+	if isotropic
+		Chain(
+			Dense(1 => w_width, w_g, init = w_init),
+			Dense(w_width => w_dim, w_g, init = w_init)
+			)
+	elseif stationary 
+		Chain(
+			Dense(d => w_width, w_g, init = w_init),
+			Dense(w_width => w_dim, w_g, init = w_init)
+			)
+	else
+		Chain(
+			Bilinear((d, d) => w_width, w_g, init = w_init),  
+			Dense(w_width => w_dim, w_g, init = w_init)
+			)
+	end 
 end
-@layer ExponentialDecay
-function ExponentialDecay(dim::Integer; init = glorot_uniform)
-	ExponentialDecay(init(dim))
-end
-function (l::ExponentialDecay)(d)
-	ρ = exp.(l.β) # positive range parameter
-	exp.(-d ./ ρ)
-end
-export ExponentialDecay
 
 #TODO document if I ever end up using this
 struct GraphSkipConnection{T} <: GNNLayer
@@ -677,10 +748,8 @@ end
 Base.show(io::IO, D::UniversalPool) = print(io, "\nUniversal pooling layer:\nInner network ψ ($(nparams(D.ψ)) parameters):  $(D.ψ)\nOuter network ϕ ($(nparams(D.ϕ)) parameters):  $(D.ϕ)")
 
 
-# ---- GNNSummary ----
-
-"""
-	GNNSummary(propagation, readout)
+@doc raw"""
+	GNNSummary(propagation, readout; globalfeatures = nothing)
 
 A graph neural network (GNN) module designed to serve as the summary network `ψ`
 in the [`DeepSet`](@ref) representation when the data are graphical (e.g.,
@@ -691,6 +760,11 @@ hidden-feature graphs. The `readout` module aggregates these feature graphs into
 a single hidden feature vector of fixed length (i.e., a vector of summary
 statistics). The summary network is then defined as the composition of the
 propagation and readout modules.
+
+Optionally, one may also include a module that extracts features directly 
+using all information stored in the graph simultaneously, through the keyword 
+argument `globalfeatures`. This module, when applied to a `GNNGraph`, should 
+return a matrix of features. TODO explain the dimenson of the feature matrix 
 
 The data should be stored as a `GNNGraph` or `Vector{GNNGraph}`, where
 each graph is associated with a single parameter vector. The graphs may contain
@@ -733,31 +807,45 @@ g₃ = batch([g₁, g₂])
 θ̂([g₁, g₂, g₃])
 ```
 """
-struct GNNSummary{F, G}
+struct GNNSummary{F, G, H}
 	propagation::F   # propagation module
 	readout::G       # readout module
+	globalfeatures::H
 end
+GNNSummary(propagation, readout; globalfeatures = nothing) = GNNSummary(propagation, readout, globalfeatures)
 @layer GNNSummary
 Base.show(io::IO, D::GNNSummary) = print(io, "\nThe propagation and readout modules of a graph neural network (GNN), with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)")
 
-function (pr::GNNSummary)(g::GNNGraph)
+function (ψ::GNNSummary)(g::GNNGraph)
 
-	# Propagation module, a graph-to-graph transformation
-	h = pr.propagation(g)
+	# Propagation module
+	h = ψ.propagation(g)
 
-	# Readout module, computes a fixed-length vector for each replicate
+	# Readout module, computes a fixed-length vector (a summary statistic) for each replicate
 	# R is a matrix with:
-	# nrows = number of readout summary statistics
+	# nrows = number of summary statistics
 	# ncols = number of independent replicates
-	if isa(pr.readout, SpatialPyramidPool)
-		R = pr.readout(h)
+	if isa(ψ.readout, SpatialPyramidPool)
+		R = ψ.readout(h)
 	else
-		# Ensure that we can still use standard pooling layers
+		# Standard pooling layers
 		Z = :Z ∈ keys(h.ndata) ? h.ndata.Z : first(values(h.ndata))
-		R = GNNGraph(h, gdata = pr.readout(h, Z))
-		R = R.gdata.u
-		reshape(R, size(R, 1), :)
+		R = ψ.readout(h, Z)
 	end
+
+	if !isnothing(ψ.globalfeatures)
+		R₂ = ψ.globalfeatures(g)
+		if isa(R₂, GNNGraph)
+			#TODO add assertion that there is data stored in gdata @assert  "The `globalfeatures` field of a `GNNSummary` object must return either an array or a graph with a non-empty field `gdata`"
+			R₂ = first(values(R₂.gdata)) #TODO maybe want to enforce that it has an appropriate name (e.g., R)
+		end
+		R = vcat(R, R₂)
+	end
+
+	# reshape from three-dimensional array to matrix 
+	R = reshape(R, size(R, 1), :) #TODO not ideal to do this here, I think, makes the output of summarystatistics() quite confusing. (keep in mind the behaviour of summarystatistics on a vector of graphs and a single graph) 
+
+	return R
 end
 # Code from GNN example:
 # θ = sample(1)
@@ -771,6 +859,7 @@ end
 
 # ---- Adjacency matrices ----
 
+#TODO why is the fixed adjacencymatrix(S::Matrix, k::Integer) still having self loops? 
 @doc raw"""
 	adjacencymatrix(S::Matrix, k::Integer; maxmin = false, combined = false)
 	adjacencymatrix(S::Matrix, r::AbstractFloat)
@@ -814,11 +903,6 @@ returned adjacency matrix. Therefore, the number of neighbours for each location
 given by `collect(mapslices(nnz, A; dims = 1))`, and the number of times each node is 
 a neighbour of another node is given by `collect(mapslices(nnz, A; dims = 2))`.
 
-By convention, we consider a location to neighbour itself and, hence,
-`k`-neighbour methods will yield `k`+1 neighbours for each location. Note that
-one may use `dropzeros!()` to remove these self-loops from the constructed
-adjacency matrix (see below).
-
 # Examples
 ```
 using NeuralEstimators, Distances, SparseArrays
@@ -843,9 +927,6 @@ adjacencymatrix(D, k)
 adjacencymatrix(D, r)
 adjacencymatrix(D, r, k)
 adjacencymatrix(D, r, k; random = false)
-
-# Removing self-loops so that a location is not its own neighbour
-dropzeros!(adjacencymatrix(S, k))
 ```
 """
 function adjacencymatrix(M::Matrix; k::Union{Integer, Nothing} = nothing, r::Union{F, Nothing} = nothing, kwargs...) where F <: AbstractFloat
@@ -869,6 +950,7 @@ function adjacencymatrix(M::Mat, r::F, k::Integer; random::Bool = true) where Ma
 	if random == false
 		A = adjacencymatrix(M, r) 
 		A = subsetneighbours(A, k)
+		A = dropzeros!(A) # remove self loops
 		return A 
 	end 
 
@@ -903,7 +985,8 @@ function adjacencymatrix(M::Mat, r::F, k::Integer; random::Bool = true) where Ma
 		end
 	end
 	A = sparse(J,I,V,n,n)
-	selfloops!(A)
+	A = dropzeros!(A) # remove self loops 
+	return A
 end
 adjacencymatrix(M::Mat, k::Integer, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat} = adjacencymatrix(M, r, k)
 
@@ -990,6 +1073,13 @@ deletecol!(A,cind) = SparseArrays.fkeep!(A,(i,j,v) -> j != cind)
 findnearest(A::AbstractArray, x) = argmin(abs.(A .- x))
 findnearest(V::SparseVector, q) = V.nzind[findnearest(V.nzval, q)] # efficient version for SparseVector that doesn't materialise a dense array
 function selfloops!(A)
+	#TODO export function, and replace previous documentation:
+	# By convention, we consider a location to neighbour itself and, hence,
+	# `k`-neighbour methods will yield `k`+1 neighbours for each location. Note that
+	# one may use `dropzeros!()` to remove these self-loops from the constructed
+	# adjacency matrix (see below).
+
+	
 	# add diagonal elements so that each node is considered its own neighbour
 	T = eltype(A)
 	for i ∈ 1:size(A, 1)
@@ -1005,7 +1095,6 @@ function subsetneighbours(A, k)
 
 	# drop self loops 
 	dropzeros!(A)
-
 	for j ∈ 1:n 
 		Aⱼ = A[:, j] # neighbours of node j 
 		if nnz(Aⱼ) > k+1 # if there are fewer than k+1 neighbours already, we don't need to do anything 
@@ -1021,9 +1110,8 @@ function subsetneighbours(A, k)
 			end 
 		end
 	end
-
-	# add self loops back in 
-	selfloops!(A)
+	A = dropzeros!(A) # remove self loops TODO Don't think is needed, since we already dropped them 
+	return A
 end
 
 
@@ -1109,6 +1197,8 @@ function adjacencymatrix(M::Mat, r::F) where Mat <: AbstractMatrix{T} where {T, 
 		end
 		A = sparse(I,J,V,n,n)
 	end
+
+	A = dropzeros!(A) # remove self loops
 
 	return A
 end

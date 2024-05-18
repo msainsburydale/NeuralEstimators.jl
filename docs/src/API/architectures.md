@@ -29,6 +29,8 @@ samplesize
 samplecorrelation
 
 samplecovariance
+
+NeighbourhoodVariogram
 ```
 
 ## Layers
