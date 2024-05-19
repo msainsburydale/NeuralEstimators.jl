@@ -475,7 +475,10 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3}
 	# Extract spatial information (typically the spatial distance between neighbours)
 	# and coerce to three-dimensional array 
 	s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3]) 
-	if isa(s, Matrix)
+	if isa(s, AbstractVector)
+		s = permutedims(s)
+	end
+	if isa(s, AbstractMatrix)
 		s = reshape(s, size(s, 1), 1, size(s, 2))
 	end
 
