@@ -427,6 +427,12 @@ function SpatialGraphConv(
 		# TODO need to add checks that w_out is consistent with the three allowed scenarios for w() described above 
 	end
 
+	# Function of Z
+	if isnothing(ρ)
+		# other nonparametric option: ρ = (Zᵢ, Zⱼ) -> (Zᵢ - Zⱼ).^2
+		ρ = PowerDifference([0.5f0], [1.0f0])
+	end
+
 	# Weight matrices 
 	Γ1 = init(out, in)
 	Γ2 = init(out, w_out)
@@ -434,8 +440,7 @@ function SpatialGraphConv(
 	# Bias vector
 	b = bias ? Flux.create_bias(Γ1, true, out) : false
 
-    #SpatialGraphConv(Γ1, Γ2, b, w, ρ, g, glob)
-	SpatialGraphConv(Γ1, Γ2, b, w, g, glob)
+    SpatialGraphConv(Γ1, Γ2, b, w, ρ, g, glob)
 end
 function (l::SpatialGraphConv)(g::GNNGraph)
 	Z = :Z ∈ keys(g.ndata) ? g.ndata.Z : first(values(g.ndata)) 
@@ -489,9 +494,10 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3}
 	w̃ = repeat(w̃, 1, m, 1)   
 
 	# Compute spatially-weighted sum of input features over each neighbourhood 
-	# TODO replace with parameterised function f(Zᵢ, Zⱼ), which will be stored in l (see https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/conv/#GraphNeuralNetworks.EdgeConv)
+	# TODO replace with parameterised function ρ(Zᵢ, Zⱼ), which will be stored in l (see https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/conv/#GraphNeuralNetworks.EdgeConv)
 	# TODO l will also be passed in when we do the above change 
-	msg = apply_edges((xi, xj, w̃) -> w̃ .* (xi - xj).^2, g, x, x, w̃)         
+	# msg = apply_edges((xi, xj, w̃) -> w̃ .* (xi - xj).^2, g, x, x, w̃)
+	msg = apply_edges((l, xi, xj, w̃) -> w̃ .* l.ρ(xi, xj), g, l, x, x, w̃)
 	if l.glob 
 		h̄ = reduce_edges(+, g, msg) # sum over all neighbourhoods in the graph 
 	else 
@@ -517,6 +523,30 @@ function Base.show(io::IO, l::SpatialGraphConv)
     print(io, ", w=", l.w)
     print(io, ")")
 end
+
+
+#TODO parameters need to be stored as an array to be trainable 
+"""
+
+# Examples 
+```
+f = PowerDifference([0.5f0], [1.0f0])
+x = rand32(3, 4)
+y = rand32(3, 4)
+f(x, y)
+
+f = gpu(f)
+x = gpu(x)
+y = gpu(y)
+f(x, y)
+```
+"""
+struct PowerDifference{A, B}
+	a::A
+	b::B
+end 
+(ρ::PowerDifference)(x, y) = (abs.(ρ.a .* x - (1 .- ρ.a).* y)).^ρ.b
+@layer PowerDifference
 
 
 using GraphNeuralNetworks: scatter, gather
@@ -566,7 +596,7 @@ function IndicatorWeights(h_max, n_bins::Integer)
 	IndicatorWeights(h_cutoffs)
 end
 function (l::IndicatorWeights)(h::M) where M <: AbstractMatrix{T} where T
-	#TODO might not be GPU friendly or differentiable... can use apply_edges instead (and this might be neater in any case)
+	#TODO might be faster to use apply_edges or another GNN function instead (and this might be neater in any case)
 	# Bin the distances
 	h_cutoffs = l.h_cutoffs
 	bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
