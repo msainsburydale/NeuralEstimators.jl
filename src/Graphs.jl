@@ -472,11 +472,11 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3}
 	# 3. Vector output with vector input features, in which case the dimensionalities must match 
 	w = l.w(s) 
 
-	# TODO not sure it's necessary to exponentiate (i.e., we don't need the softmax per se, we can just divide by the sum) 
 	if l.glob 
-		w̃ = softmax_edges(g, w) # Sanity check: sum(w̃; dims = 1) 
+		w̃ = normalise_edges(g, w) # Sanity check: sum(w̃; dims = 2)   # close to one 
 	else 
-		w̃ = softmax_edge_neighbors(g, w)  # Sanity check: all(aggregate_neighbors(g, +, w̃) .≈ 1)
+		# w̃ = softmax_edge_neighbors(g, w)  # Sanity check: all(aggregate_neighbors(g, +, w̃) .≈ 1)
+		w̃ = normalise_edge_neighbors(g, w) # Sanity check: aggregate_neighbors(g, +, w̃) # zeros and ones 
 	end 
 	
 	# Coerce to three-dimensional array and repeat to match the number of independent replicates (NB memory inefficient)
@@ -516,6 +516,44 @@ function Base.show(io::IO, l::SpatialGraphConv)
     l.g == identity || print(io, ", ", l.g)
     print(io, ", w=", l.w)
     print(io, ")")
+end
+
+
+using GraphNeuralNetworks: scatter, gather
+"""
+    normalise_edges(g, e)
+
+Graph-wise normalisation of the edge features `e` to sum to one.
+"""
+function normalise_edges(g::GNNGraph, e)
+    @assert size(e)[end] == g.num_edges
+    gi = graph_indicator(g, edges = true)
+    den = reduce_edges(+, g, e)
+    den = gather(den, gi)
+    return e ./ (den .+ eps(eltype(e)))
+end
+
+@doc raw"""
+    softmax_edge_neighbors(g, e)
+
+Normalise the edge features `e` to sum to one over each node's neighborhood, 
+
+```math
+\mathbf{e}'_{j\to i} = \frac{\mathbf{e}_{j\to i}}
+                    {\sum_{j'\in N(i)} \mathbf{e}_{j'\to i}}.
+```
+"""
+function normalise_edge_neighbors(g::AbstractGNNGraph, e)
+    if g isa GNNHeteroGraph
+        for (key, value) in g.num_edges
+            @assert size(e)[end] == value
+        end
+    else
+        @assert size(e)[end] == g.num_edges
+    end
+    s, t = edge_index(g)
+    den = gather(scatter(+, e, t), t)
+    return e ./ (den .+ eps(eltype(e)))
 end
 
 # TODO documentation 
