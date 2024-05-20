@@ -220,6 +220,40 @@ end
 # layer = SpatialGraphConv(1 => 16; stationary = false)
 # layer(g)
 
+# At the first 
+# layer, the "feature" vector corresponds to the spatial datum and, for univariate spatial processes, the
+# dimension of $\boldsymbol{w}(\cdot, \cdot)$ will be equal to
+# one, which may be a source of inflexibility. To increase flexibility, one may
+# construct several "channels" by constructing the intermediate representation as
+# ```math
+# \bar{\boldsymbol{h}}^{(l)}_{j} =
+# \sum_{j' \in \mathcal{N}(j)}
+# \Big(
+# \boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}; \boldsymbol{\beta}_{1}^{(l)})
+# \oplus
+# \dots
+# \oplus
+# \boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}; \boldsymbol{\beta}_{c}^{(l)})
+# \Big)
+# \odot
+# \Big(
+#  \boldsymbol{h}^{(l-1)}_{j'}
+# \oplus
+# \dots
+# \oplus
+#  \boldsymbol{h}^{(l-1)}_{j'}
+# \Big),
+# ```
+# where $c$ denotes the number of channels and $\oplus$ denotes vector concatentation.
+# - `w_channels = 1`: The number of "channels" of $\boldsymbol{w}(\cdot, \cdot)$.
+# - `d = 2`: Dimension of spatial locations.
+# - `stationary = true`:  If `true`, $\boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}) \equiv \boldsymbol{w}(\boldsymbol{s}_{j'} - \boldsymbol{s}_j)$.
+# - `isotropic = true`:  If `true` and `stationary` is also `true`, $\boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}) \equiv \boldsymbol{w}(\|\boldsymbol{s}_{j'} - \boldsymbol{s}_j\|)$.
+# - `w_scalar = false`: If `true`, $\boldsymbol{w}(\cdot, \cdot)$ is defined to be a scalar function, that is, $\boldsymbol{w}(\cdot, \cdot) \equiv  w(\cdot, \cdot)$.
+# - `w_width`: Width of the hidden layer of $\boldsymbol{w}(\cdot, \cdot)$ (when modelled as an MLP).
+# - `w_g`: Activation function used in $\boldsymbol{w}(\cdot, \cdot)$ (when modelled as an MLP).
+# - `w_init`: Initialiser for the parameters of $\boldsymbol{w}(\cdot, \cdot)$.
+
 
 #TODO update documentation
 @doc raw"""
@@ -262,35 +296,10 @@ in which case the edge feature between node
 $j$ and node $j'$ should contain $\|\boldsymbol{s}_{j'} - \boldsymbol{s}_j\|$. 
 Note that this preprocessing is facilitated by [`spatialgraph()`](@ref). 
 
+The output of $\boldsymbol{w}(\cdot, \cdot)$ may be a scalar or a vector 
+of the same dimension as the feature vectors of the previous layer. 
 The model for $\boldsymbol{w}(\cdot, \cdot)$ is a multilayer perceptron with a single hidden layer. 
 
-The output of $\boldsymbol{w}(\cdot, \cdot)$ may be chosen to be scalar or a vector 
-of the same dimension as the feature vectors of the previous layer. At the first 
-layer, the "feature" vector corresponds to the spatial datum and, for univariate spatial processes, the
-dimension of $\boldsymbol{w}(\cdot, \cdot)$ will be equal to
-one, which may be a source of inflexibility. To increase flexibility, one may
-construct several "channels" by constructing the intermediate representation as
-
-```math
-\bar{\boldsymbol{h}}^{(l)}_{j} =
-\sum_{j' \in \mathcal{N}(j)}
-\Big(
-\boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}; \boldsymbol{\beta}_{1}^{(l)})
-\oplus
-\dots
-\oplus
-\boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}; \boldsymbol{\beta}_{c}^{(l)})
-\Big)
-\odot
-\Big(
- \boldsymbol{h}^{(l-1)}_{j'}
-\oplus
-\dots
-\oplus
- \boldsymbol{h}^{(l-1)}_{j'}
-\Big),
-```
-where $c$ denotes the number of channels and $\oplus$ denotes vector concatentation.
 
 Note that one may use a [`GraphConv`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/conv/#GraphNeuralNetworks.GraphConv) layer that foregoes the use of spatial information entirely. 
 
@@ -301,14 +310,7 @@ Note that one may use a [`GraphConv`](https://carlolucibello.github.io/GraphNeur
 - `aggr = mean`: Aggregation operator (e.g. `+`, `*`, `max`, `min`, and `mean`).
 - `bias = true`: Add learnable bias?
 - `init = glorot_uniform`: Initialiser for $\boldsymbol{\Gamma}_{\!1}^{(l)}$, $\boldsymbol{\Gamma}_{\!2}^{(l)}$, and $\boldsymbol{\gamma}^{(l)}$.
-- `d = 2`: Dimension of spatial locations.
-- `stationary = true`:  If `true`, $\boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}) \equiv \boldsymbol{w}(\boldsymbol{s}_{j'} - \boldsymbol{s}_j)$.
-- `isotropic = true`:  If `true` and `stationary` is also `true`, $\boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}) \equiv \boldsymbol{w}(\|\boldsymbol{s}_{j'} - \boldsymbol{s}_j\|)$.
-- `w_scalar = false`: If `true`, $\boldsymbol{w}(\cdot, \cdot)$ is defined to be a scalar function, that is, $\boldsymbol{w}(\cdot, \cdot) \equiv  w(\cdot, \cdot)$.
-- `w_width`: Width of the hidden layer of $\boldsymbol{w}(\cdot, \cdot)$ (when modelled as an MLP).
-- `w_g`: Activation function used in $\boldsymbol{w}(\cdot, \cdot)$ (when modelled as an MLP).
-- `w_channels = 1`: The number of "channels" of $\boldsymbol{w}(\cdot, \cdot)$.
-- `w_init`: Initialiser for the parameters of $\boldsymbol{w}(\cdot, \cdot)$.
+- `w = nothing` 
 
 # Examples
 ```
@@ -325,57 +327,30 @@ g = spatialgraph(S, Z) # construct the graph
 G = Flux.batch([g, g]) # super graph 
 
 # Construct and apply spatial graph convolution layers
-#layer1 = SpatialGraphConv(1 => 16)
-#layer2 = SpatialGraphConv(16 => 32)
-#g |> layer1 |> layer2
+q = 10
+l₁ = SpatialGraphConv(1 => q, relu, w_out = q)
+l₂ = SpatialGraphConv(q => q, relu, w_out = q)
+l₃ = SpatialGraphConv(q => q, relu, w_out = q, glob = true)
+l₂(l₁(g))
+l₃(g)
+l₂(l₁(G))
+l₃(G)
+
+l = SpatialGraphConv(1 => q, relu, w = IndicatorWeights(0.15, q), w_out = q)
+l(g)
+l(G)
+l = SpatialGraphConv(1 => q, relu, w = IndicatorWeights(0.15, q), w_out = q, glob = true)
+l(g)
+l(G)
 
 
-function SGC(ch::Pair{Int,Int}, glob)
-	in, out = ch
-	wi = 32
-	w = Chain(
-		Dense(1 => wi, relu),
-		Dense(wi => wi, relu),
-		Dense(wi => out, relu)
-	)
-	ψ = Chain(
-		Dense(1 => wi, relu),
-		Dense(wi => wi, relu),
-		Dense(wi => out, relu)
-	)
-	ρ = Chain(
-		Dense(2*out => wi, relu),
-		Dense(wi => wi, relu),
-		Dense(wi => out, relu)
-	)
-	SpatialGraphConv(w, ψ, ρ, glob)
-end 
-
-
-l1 = SGC(1 => 10, true)
-l1 = SGC(1 => 10, false)
-l2 = SGC(1 => 10, false) 
-
-l2(l1(g))
-
-propagation = GNNChain(
-	SGC(1 => 10, false),
-	SGC(1 => 10, false) 
-	)
+propagation = GNNChain(l₁, l₂)
 readout = GlobalPool(mean)
-ψ = GNNSummary(propagation, readout)
+ψ = GNNSummary(propagation, readout, globalfeatures = l₃)
 R = ψ(g)
 R = ψ(G)
 
-globalfeatures = SGC(1 => 10, true)
-globalfeatures(g)
-globalfeatures(G)
-
-ψ = GNNSummary(propagation, readout, globalfeatures)
-ψ(g)
-ψ(G)
-
-ϕ = Chain(Dense(20, 32, relu), Dense(32, 3))
+ϕ = Chain(Dense(2q, 32, relu), Dense(32, 3))
 θ̂ = DeepSet(ψ, ϕ)
 θ̂(g) 
 θ̂(G)
@@ -384,11 +359,13 @@ globalfeatures(G)
 θ̂([G, G]) 
 ```
 """
-struct SpatialGraphConv{A, B, C} <: GNNLayer
-    w::C
-	ψ::A
-	ρ::B
-    #f::D #TODO
+struct SpatialGraphConv{W<:AbstractMatrix, A, B, F} <: GNNLayer
+	Γ1::W
+    Γ2::W
+	b::B
+    w::A
+	#ρ::C
+	g::F
     glob::Bool 
 end
 @layer SpatialGraphConv
@@ -396,63 +373,69 @@ WeightedGraphConv = SpatialGraphConv; export WeightedGraphConv # alias for backw
 function SpatialGraphConv(
 	ch::Pair{Int,Int},
 	g = relu;
-	aggr = mean,
 	init = glorot_uniform,
 	bias::Bool = true,
 	d::Integer = 2,
 	isotropic::Bool = true,
 	stationary::Bool = true,
-	w_channels::Integer = 1,
-	w_init = glorot_uniform, #TODO maybe use rand32 by default (play with this and see what would be best)
+	w = nothing,
+	w_out::Union{Integer, Nothing} = nothing, 
 	w_scalar = false, 
 	w_width::Integer = 16,
-	w_g = relu, 
-	glob::Bool = false # TODO
+	glob::Bool = false 
 	)
 
-	#TODO need to update this constructor
-
-	# Weight matrix
 	in, out = ch
-    Γ1 = init(out, in)
-    Γ2 = init(out, in * w_channels)
+
+	# Spatial weighting function
+	if isnothing(w) 
+		# Options for w:
+		# 1. Scalar output 
+		# 2. Vector output with scalar input features, in which case the scalar features will be repeated to be of appropriate dimension 
+		# 3. Vector output with vector input features, in which case the output dimension of w must match the input dimensionalities must match 
+		if isnothing(w_out)
+			w_out = w_scalar ? 1 : in
+		else 
+			@assert in == 1 || w_out == in "With vector-valued input features, the output of w must either be scalar or a vector of the same dimension as the input features"
+		end 
+		if !stationary isotropic = false end
+		if !isotropic #TODO (need to modify adjacencymatrix() to do this)
+			error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
+		end
+		if !stationary #TODO (need to modify adjacencymatrix() to do this)
+			error("Nonstationarity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
+		end
+		w = if isotropic
+			Chain(
+				Dense(1 => w_width, g, init = rand32),
+				Dense(w_width => w_out, g, init = rand32)
+				)
+		elseif stationary 
+			Chain(
+				Dense(d => w_width, g, init = rand32),
+				Dense(w_width => w_out, g, init = rand32)
+				)
+		else
+			Chain(
+				Bilinear((d, d) => w_width, g, init = rand32),  
+				Dense(w_width => w_out, g, init = rand32)
+				)
+		end 
+	else 
+		#TODO actually, in most cases, should be able to just infer this from w...
+		@assert !isnothing(w_out) "Since you have specified the weight function w(), please also specify its output dimension `w_out`"
+		# TODO need to add checks that w_out is consistent with the three allowed scenarios for w() described above 
+	end
+
+	# Weight matrices 
+	Γ1 = init(out, in)
+	Γ2 = init(out, w_out)
 
 	# Bias vector
 	b = bias ? Flux.create_bias(Γ1, true, out) : false
 
-	# Spatial locations summary network 
-	ψ = if isotropic
-		Chain(
-			Dense(1 => w_width, w_g, init = w_init),
-			Dense(w_width => w_dim, w_g, init = w_init)
-			)
-	elseif stationary 
-		Chain(
-			Dense(d => w_width, w_g, init = w_init),
-			Dense(w_width => w_dim, w_g, init = w_init)
-			)
-	else
-		Chain(
-			Bilinear((d, d) => w_width, w_g, init = w_init),  
-			Dense(w_width => w_dim, w_g, init = w_init)
-			)
-	end 
-
-	# Spatial weighting function
-	w_dim = w_scalar ? 1 : in
-	if !stationary isotropic = false end
-	if !isotropic #TODO (need to modify adjacencymatrix() to do this)
-		error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
-	end
-	if !stationary #TODO (need to modify adjacencymatrix() to do this)
-		error("Nonstationarity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
-	end
-	w = map(1:w_channels) do _
-		_spatialMLP(isotropic, stationary, d, w_dim, w_width, w_g, w_init)
-	end
-	w = w_channels == 1 ? w[1] : Parallel(vcat, w...)
-
-    SpatialGraphConv(Γ1, Γ2, b, w, g, aggr)
+    #SpatialGraphConv(Γ1, Γ2, b, w, ρ, g, glob)
+	SpatialGraphConv(Γ1, Γ2, b, w, g, glob)
 end
 function (l::SpatialGraphConv)(g::GNNGraph)
 	Z = :Z ∈ keys(g.ndata) ? g.ndata.Z : first(values(g.ndata)) 
@@ -468,82 +451,100 @@ end
 function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
 
     check_num_nodes(g, x)
-	
+
 	# Number of independent replicates
 	m = size(x, 2)
 
+	#TODO document that w() should act on 1xn matrix of distances 
+
 	# Extract spatial information (typically the spatial distance between neighbours)
-	# and coerce to three-dimensional array 
 	s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3]) 
+
+	# Coerce to matrix
 	if isa(s, AbstractVector)
 		s = permutedims(s)
 	end
-	if isa(s, AbstractMatrix)
-		s = reshape(s, size(s, 1), 1, size(s, 2))
-	end
 
-	# Compute T₁(S)
-	msg1 = apply_edges((l, xi, xj, e) -> l.ψ(e) , g, l, nothing, nothing, s)
+	# Compute spatial weights and normalise over the neigbhourhoods 
+	# Three options for w:
+	# 1. Scalar output 
+	# 2. Vector output with scalar input features, in which case the scalar features will be repeated to be of appropriate dimension 
+	# 3. Vector output with vector input features, in which case the dimensionalities must match 
+	w = l.w(s) 
+
+	# TODO not sure it's necessary to exponentiate (i.e., we don't need the softmax per se, we can just divide by the sum) 
 	if l.glob 
-		# average over the entire data set (not the replicates, however)
-		# note that we use reduce_edges, which, for a batched graph g, returns the 
-		# graph-wise aggregation of the edge features 
-		t₁ = reduce_edges(mean, g, msg1)  # equivalent to mean(msg1, dims = 3) in the case of a single graph
+		w̃ = softmax_edges(g, w) # Sanity check: sum(w̃; dims = 1) 
 	else 
-		t₁ = aggregate_neighbors(g, mean, msg1)  # average over each neighbourhood 
-		
+		w̃ = softmax_edge_neighbors(g, w)  # Sanity check: all(aggregate_neighbors(g, +, w̃) .≈ 1)
 	end 
-	t₁ = repeat(t₁, 1, m, 1) # repeat to match the number of independent replicates (NB memory inefficient)
+	
+	# Coerce to three-dimensional array and repeat to match the number of independent replicates (NB memory inefficient)
+	if isa(w̃, AbstractVector)
+		w̃ = permutedims(w̃)
+	end
+	if isa(w̃, AbstractMatrix)
+		w̃ = reshape(w̃, size(w̃, 1), 1, size(w̃, 2))
+	end
+	w̃ = repeat(w̃, 1, m, 1)   
 
-	# Compute T₂(Z, S) 
-	w = l.w(s) # spatial weights 
-	w = repeat(w, 1, m, 1)       # repeat to match the number of independent replicates (NB memory inefficient)
+	# Compute spatially-weighted sum of input features over each neighbourhood 
 	# TODO replace with parameterised function f(Zᵢ, Zⱼ), which will be stored in l (see https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/conv/#GraphNeuralNetworks.EdgeConv)
 	# TODO l will also be passed in when we do the above change 
-	msg2 = apply_edges((xi, xj, e) -> e .* (xi - xj).^2, g, x, x, w)         
+	msg = apply_edges((xi, xj, w̃) -> w̃ .* (xi - xj).^2, g, x, x, w̃)         
 	if l.glob 
-		t₂ = reduce_edges(mean, g, msg2)
+		h̄ = reduce_edges(+, g, msg) # sum over all neighbourhoods in the graph 
 	else 
-		t₂ = aggregate_neighbors(g, mean, msg2) # average over each neighbourhood 
+		h̄ = aggregate_neighbors(g, +, msg) # sum over each neighbourhood 
 	end 
-
-	# Concatenate T₁(S) and T₂(Z, S) 
-	t = vcat(t₁, t₂)
-
-	# Map T₁(S) and T₂(Z, S) into final summary statistics 
-	l.ρ(t) 
+	
+	if l.glob 
+		#TODO optionally pass through a neural network ζ()
+		# if !isnothing(l.ζ)
+		
+		# else
+			h̄
+		# end 
+	else 
+		l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h̄ .+ l.b) # ⊠ is shorthand for batched_mul
+	end 
 end
 function Base.show(io::IO, l::SpatialGraphConv)
-	#TODO update 
-    # in_channel  = size(l.Γ1, ndims(l.Γ1))
-    # out_channel = size(l.Γ1, ndims(l.Γ1)-1)
-    # print(io, "SpatialGraphConv(", in_channel, " => ", out_channel)
-    # l.g == identity || print(io, ", ", l.g)
-    # print(io, ", aggr=", l.a)
-    # print(io, ")")
-	"hi"
+    in_channel  = size(l.Γ1, ndims(l.Γ1))
+    out_channel = size(l.Γ1, ndims(l.Γ1)-1)
+    print(io, "SpatialGraphConv(", in_channel, " => ", out_channel)
+    l.g == identity || print(io, ", ", l.g)
+    print(io, ", w=", l.w)
+    print(io, ")")
 end
 
-function _spatialMLP(isotropic, stationary, d, dim, width, g, init)
-	if isotropic
-		Chain(
-			Dense(1 => w_width, w_g, init = w_init),
-			Dense(w_width => w_dim, w_g, init = w_init)
-			)
-	elseif stationary 
-		Chain(
-			Dense(d => w_width, w_g, init = w_init),
-			Dense(w_width => w_dim, w_g, init = w_init)
-			)
-	else
-		Chain(
-			Bilinear((d, d) => w_width, w_g, init = w_init),  
-			Dense(w_width => w_dim, w_g, init = w_init)
-			)
-	end 
+# TODO documentation 
+struct IndicatorWeights{T} 
+    h_cutoffs::T
+end 
+function IndicatorWeights(h_max, n_bins::Integer) 
+	h_cutoffs = range(0, stop=h_max, length=n_bins+1)
+	h_cutoffs = collect(h_cutoffs)
+	IndicatorWeights(h_cutoffs)
 end
+function (l::IndicatorWeights)(h::M) where M <: AbstractMatrix{T} where T
+	#TODO might not be GPU friendly or differentiable... can use apply_edges instead (and this might be neater in any case)
+	# Bin the distances
+	h_cutoffs = l.h_cutoffs
+	bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
+	bins_lower = h_cutoffs[1:end-1] # lower bounds of the distance bins 
+	N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
+	N = reduce(vcat, N)
+	Float32.(N)
+end
+@layer IndicatorWeights
+Flux.trainable(l::IndicatorWeights) =  ()
 
-#TODO document if I ever end up using this
+
+
+
+
+#TODO document if I end up using this
 struct GraphSkipConnection{T} <: GNNLayer
 	layers::T
 end
