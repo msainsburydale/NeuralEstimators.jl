@@ -359,12 +359,12 @@ R = ψ(G)
 θ̂([G, G]) 
 ```
 """
-struct SpatialGraphConv{W<:AbstractMatrix, A, B, F} <: GNNLayer
+struct SpatialGraphConv{W<:AbstractMatrix, A, B,C, F} <: GNNLayer
 	Γ1::W
     Γ2::W
 	b::B
     w::A
-	#ρ::C
+	ρ::C
 	g::F
     glob::Bool 
 end
@@ -379,6 +379,7 @@ function SpatialGraphConv(
 	isotropic::Bool = true,
 	stationary::Bool = true,
 	w = nothing,
+	ρ = nothing,
 	w_out::Union{Integer, Nothing} = nothing, 
 	w_scalar = false, 
 	w_width::Integer = 16,
@@ -429,8 +430,10 @@ function SpatialGraphConv(
 
 	# Function of Z
 	if isnothing(ρ)
-		# other nonparametric option: ρ = (Zᵢ, Zⱼ) -> (Zᵢ - Zⱼ).^2
-		ρ = PowerDifference([0.5f0], [1.0f0])
+		# TODO document other options: 
+		# ρ = (Zᵢ, Zⱼ) -> (Zᵢ - Zⱼ).^2
+		# ρ = appropriately constructed MLP
+		ρ = PowerDifference([0.5f0], [2.0f0])
 	end
 
 	# Weight matrices 
