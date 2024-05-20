@@ -364,7 +364,7 @@ struct SpatialGraphConv{W<:AbstractMatrix, A, B,C, F} <: GNNLayer
     Γ2::W
 	b::B
     w::A
-	ρ::C
+	f::C
 	g::F
     glob::Bool 
 end
@@ -379,10 +379,10 @@ function SpatialGraphConv(
 	isotropic::Bool = true,
 	stationary::Bool = true,
 	w = nothing,
-	ρ = nothing,
+	f = nothing,
 	w_out::Union{Integer, Nothing} = nothing, 
 	w_scalar = false, 
-	w_width::Integer = 16,
+	w_width::Integer = 128,
 	glob::Bool = false 
 	)
 
@@ -406,34 +406,37 @@ function SpatialGraphConv(
 		if !stationary #TODO (need to modify adjacencymatrix() to do this)
 			error("Nonstationarity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
 		end
-		w = if isotropic
-			Chain(
-				Dense(1 => w_width, g, init = rand32),
-				Dense(w_width => w_out, g, init = rand32)
-				)
-		elseif stationary 
-			Chain(
-				Dense(d => w_width, g, init = rand32),
-				Dense(w_width => w_out, g, init = rand32)
-				)
-		else
-			Chain(
-				Bilinear((d, d) => w_width, g, init = rand32),  
-				Dense(w_width => w_out, g, init = rand32)
-				)
-		end 
+		# TODO maybe also consider the simpler option for w
+		w = map(1:w_out) do _
+			if isotropic
+				Chain(
+					Dense(1 => w_width, g, init = rand32),
+					Dense(w_width => 1, g, init = rand32)
+					)
+			elseif stationary 
+				Chain(
+					Dense(d => w_width, g, init = rand32),
+					Dense(w_width => 1, g, init = rand32)
+					)
+			else
+				Chain(
+					Bilinear((d, d) => w_width, g, init = rand32),  
+					Dense(w_width => 1, g, init = rand32)
+					)
+			end 	
+		end
+		w = w_out == 1 ? w[1] : Parallel(vcat, w...)
 	else 
-		#TODO actually, in most cases, should be able to just infer this from w...
 		@assert !isnothing(w_out) "Since you have specified the weight function w(), please also specify its output dimension `w_out`"
 		# TODO need to add checks that w_out is consistent with the three allowed scenarios for w() described above 
 	end
 
 	# Function of Z
-	if isnothing(ρ)
+	if isnothing(f)
 		# TODO document other options: 
-		# ρ = (Zᵢ, Zⱼ) -> (Zᵢ - Zⱼ).^2
-		# ρ = appropriately constructed MLP
-		ρ = PowerDifference([0.5f0], [2.0f0])
+		# f = (Zᵢ, Zⱼ) -> (Zᵢ - Zⱼ).^2
+		# f = appropriately constructed MLP
+		f = PowerDifference([0.5f0], [1.0f0])
 	end
 
 	# Weight matrices 
@@ -443,14 +446,15 @@ function SpatialGraphConv(
 	# Bias vector
 	b = bias ? Flux.create_bias(Γ1, true, out) : false
 
-    SpatialGraphConv(Γ1, Γ2, b, w, ρ, g, glob)
+    SpatialGraphConv(Γ1, Γ2, b, w, f, g, glob)
 end
 function (l::SpatialGraphConv)(g::GNNGraph)
 	Z = :Z ∈ keys(g.ndata) ? g.ndata.Z : first(values(g.ndata)) 
+	h = l(g, Z)
 	if l.glob 
-		@ignore_derivatives GNNGraph(g, gdata = (g.gdata..., R = l(g, Z)))
+		@ignore_derivatives GNNGraph(g, gdata = (g.gdata..., R = h))
 	else 
-		@ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = l(g, Z)))
+		@ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = h))
 	end
 end
 function (l::SpatialGraphConv)(g::GNNGraph, x::M) where M <: AbstractMatrix{T} where {T}
@@ -483,7 +487,6 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3}
 	if l.glob 
 		w̃ = normalise_edges(g, w) # Sanity check: sum(w̃; dims = 2)   # close to one 
 	else 
-		# w̃ = softmax_edge_neighbors(g, w)  # Sanity check: all(aggregate_neighbors(g, +, w̃) .≈ 1)
 		w̃ = normalise_edge_neighbors(g, w) # Sanity check: aggregate_neighbors(g, +, w̃) # zeros and ones 
 	end 
 	
@@ -497,10 +500,7 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3}
 	w̃ = repeat(w̃, 1, m, 1)   
 
 	# Compute spatially-weighted sum of input features over each neighbourhood 
-	# TODO replace with parameterised function ρ(Zᵢ, Zⱼ), which will be stored in l (see https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/conv/#GraphNeuralNetworks.EdgeConv)
-	# TODO l will also be passed in when we do the above change 
-	# msg = apply_edges((xi, xj, w̃) -> w̃ .* (xi - xj).^2, g, x, x, w̃)
-	msg = apply_edges((l, xi, xj, w̃) -> w̃ .* l.ρ(xi, xj), g, l, x, x, w̃)
+	msg = apply_edges((l, xi, xj, w̃) -> w̃ .* l.f(xi, xj), g, l, x, x, w̃)
 	if l.glob 
 		h̄ = reduce_edges(+, g, msg) # sum over all neighbourhoods in the graph 
 	else 
@@ -510,12 +510,12 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3}
 	if l.glob 
 		#TODO optionally pass through a neural network ζ()
 		# if !isnothing(l.ζ)
-		
+
 		# else
-			h̄
+			return h̄
 		# end 
 	else 
-		l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h̄ .+ l.b) # ⊠ is shorthand for batched_mul
+		return l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h̄ .+ l.b) # ⊠ is shorthand for batched_mul
 	end 
 end
 function Base.show(io::IO, l::SpatialGraphConv)
@@ -527,13 +527,14 @@ function Base.show(io::IO, l::SpatialGraphConv)
     print(io, ")")
 end
 
-
-#TODO parameters need to be stored as an array to be trainable 
+#TODO export
+#TODO parameters need to be stored as an array to be trainable... make a user-friendly consstructor for this 
+#TODO constrain a ∈ [0, 1] and c ∈ [0.5, 2]
 """
 
 # Examples 
 ```
-f = PowerDifference([0.5f0], [1.0f0])
+f = PowerDifference([0.5f0], [2.0f0])
 x = rand32(3, 4)
 y = rand32(3, 4)
 f(x, y)
@@ -548,9 +549,10 @@ struct PowerDifference{A, B}
 	a::A
 	b::B
 end 
-(ρ::PowerDifference)(x, y) = (abs.(ρ.a .* x - (1 .- ρ.a).* y)).^ρ.b
+function (f::PowerDifference)(x, y) 
+	(abs.(f.a .* x - (1 .- f.a) .* y)).^f.b
+end
 @layer PowerDifference
-
 
 using GraphNeuralNetworks: scatter, gather
 """
