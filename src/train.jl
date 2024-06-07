@@ -273,6 +273,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 	local early_stopping_counter = 0
 	train_time = @elapsed for epoch in 1:epochs
 
+		sim_time = 0.0
 		if store_entire_train_set
 			# Simulate new training data if needed
 			if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
@@ -286,7 +287,6 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 			epoch_time = @elapsed train_risk = _risk(θ̂, loss, train_set, device, optimiser)
 		else
 			# Update θ̂ and compute the training risk
-			sim_time = 0.0
 			epoch_time = 0.0
 			train_risk = []
 			for θ ∈ _ParameterLoader(θ_train, batchsize = batchsize)
@@ -419,7 +419,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
     end
 
-	# save key information 
+	# save key information
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	savebool && _savebestweights(savepath)
 
@@ -456,7 +456,7 @@ function train(θ̂::Union{IntervalEstimator, QuantileEstimatorDiscrete}, args..
 end
 
 function train(θ̂::QuantileEstimatorContinuous, args...; kwargs...)
-	# We define the loss function in the method
+	# We define the loss function in the methods
 	# _risk(θ̂::QuantileEstimatorContinuous)
 	# Here, just notify the user if they've assigned a loss function
 	kwargs = (;kwargs...)
@@ -486,7 +486,7 @@ function _constructset(θ̂, simulator::Function, θ::P, m, batchsize) where {P 
 	_constructset(θ̂, Z, θ, batchsize)
 end
 function _constructset(θ̂, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-	Z = ZtoFloat32(Z)
+	Z = ZtoFloat32(Z) #TODO what if this is a tuple (e.g., RatioEstimator?)
 	θ = θtoFloat32(_extractθ(θ))
 	_DataLoader((Z, θ), batchsize)
 end
@@ -521,6 +521,32 @@ function _constructset(θ̂::RatioEstimator, Z, θ::P, batchsize) where {P <: Un
 	_DataLoader((input, output), batchsize)
 end
 
+function _constructset(θ̂::QuantileEstimatorContinuous, Zτ, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+	θ = θtoFloat32(_extractθ(θ))
+	Z, τ = Zτ
+	Z = ZtoFloat32(Z)
+	# τ = Float32.(τ) #TODO come back to this once we've settled on format for τ
+
+	i = θ̂.i
+	if isnothing(i)
+		input = (Z, τ)
+		output = θ
+	else
+		if isa(τ, Vector) τ = permutedims(τ) end
+		@assert size(θ, 1) >= i "The number of parameters in the model (size(θ, 1) = $(size(θ, 1))) must be at least as large as the value of i stored in the estimator (θ̂.i = $(θ̂.i))"
+		θᵢ  = θ[i:i, :]
+		θ₋ᵢ = θ[Not(i), :]
+		τ = reduce(vcat, τ)  # convert from vector of vectors to single vector
+		θ₋ᵢτ = vcat(θ₋ᵢ, τ') # combine parameters and probability level into single matrix
+		input  = (Z, θ₋ᵢτ)   # "Tupleise" the input
+		output = θᵢ
+	end
+
+	_DataLoader((input, output), batchsize)
+end
+
+# TODO Add unit testing for GNN training
+
 # Computes the risk function in a memory-safe manner, optionally updating the
 # neural-network parameters using stochastic gradient descent
 function _risk(θ̂, loss, set::DataLoader, device, optimiser = nothing)
@@ -530,20 +556,19 @@ function _risk(θ̂, loss, set::DataLoader, device, optimiser = nothing)
         input, output = input |> device, output |> device
 		k = size(output)[end]
 		if !isnothing(optimiser)
-
-			# NB computing the training risk in this way is efficient, but it means that
+			# NB storing the loss in this way is efficient, but it means that
 			# the final training risk that we report for each epoch is slightly inaccurate
-			# (since the weights are updated after each batch). It would be more
+			# (since the neural-network parameters are updated after each batch). It would be more
 			# accurate (but less efficient) if we computed the training risk once again
 			# at the end of each epoch, like we do for the validation risk... might add
 			# an option for this in the future, but will leave it for now.
 
-			# "Implicit" style used by Flux <= 0.14.
+			# "Implicit" style used by Flux <= 0.14
 			γ = Flux.params(θ̂)
 			ls, ∇ = Flux.withgradient(() -> loss(θ̂(input), output), γ)
 			update!(optimiser, γ, ∇)
 
-			# "Explicit" style required by Flux >= 0.15.
+			# "Explicit" style required by Flux >= 0.15
 			# ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(input), output), θ̂)
 			# update!(optimiser, θ̂, ∇[1])
 		else
@@ -562,28 +587,31 @@ end
 # logitbinarycrossentropy loss function
 _risk(θ̂::RatioEstimator, loss, set::DataLoader, device, optimiser = nothing) = _risk(θ̂.deepset, loss, set, device, optimiser)
 
-# Custom _risk function for QuantileEstimatorContinuous since the probability
-# τ is both an input to the neural estimator and a quantity in loss function
-# itself. Note that the positional argument loss is still defined but not called
 function _risk(θ̂::QuantileEstimatorContinuous, loss, set::DataLoader, device, optimiser = nothing)
     sum_loss = 0.0f0
     K = 0
-    for (Zτ, θ) in set
-        Zτ, θ = Zτ |> device, θ |> device
-		τ = reduce(vcat, Zτ[2]) # convert from vector of vectors to single vector
-		k = size(θ)[end]
+    for (input, output) in set
+		k = size(output)[end]
+		input, output = input |> device, output |> device
+		if isnothing(θ̂.i)
+			Z, τ = input
+			τ = reduce(vcat, τ) # convert from vector of vectors to single vector
+		else
+			Z, θ₋ᵢτ = input
+			τ = θ₋ᵢτ[end, :]    # extract vector of probability levels
+		end
 		if !isnothing(optimiser)
 
 			# "Implicit" style used by Flux <= 0.14.
 			γ = Flux.params(θ̂)
-			ls, ∇ = Flux.withgradient(() -> quantileloss(θ̂(Zτ), θ, τ), γ)
+			ls, ∇ = Flux.withgradient(() -> quantileloss(θ̂(input), output, τ), γ)
 			update!(optimiser, γ, ∇)
 
 			# "Explicit" style required by Flux >= 0.15.
-			# ls, ∇ = Flux.withgradient(θ̂ -> quantileloss(θ̂(Zτ), θ, τ), θ̂)
+			# ls, ∇ = Flux.withgradient(θ̂ -> quantileloss(θ̂(input), output, τ), θ̂)
 			# update!(optimiser, θ̂, ∇[1])
 		else
-			ls = quantileloss(θ̂(Zτ), θ, τ)
+			ls = quantileloss(θ̂(input), output, τ)
 		end
         # Assuming loss returns an average, convert to a sum and add to total
 		sum_loss += ls * k
@@ -591,7 +619,6 @@ function _risk(θ̂::QuantileEstimatorContinuous, loss, set::DataLoader, device,
     end
     return cpu(sum_loss/K)
 end
-
 
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 

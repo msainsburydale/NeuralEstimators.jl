@@ -42,10 +42,10 @@ The estimator employs a representation that prevents quantile crossing, namely,
 it constructs marginal posterior credible intervals for each parameter
 ``\theta_i``, ``i = 1, \dots, p,``  of the form,
 ```math
-[c_i(u_i(\mathbf{Z})), \;\; c_i(u_i(\mathbf{Z})) + g(v_i(\mathbf{Z})))],
+[c_i(u_i(\boldsymbol{Z})), \;\; c_i(u_i(\boldsymbol{Z})) + g(v_i(\boldsymbol{Z})))],
 ```
-where  ``\mathbf{u}(⋅) \equiv (u_1(\cdot), \dots, u_p(\cdot))'`` and
-``\mathbf{v}(⋅) \equiv (v_1(\cdot), \dots, v_p(\cdot))'`` are neural networks
+where  ``\boldsymbol{u}(⋅) \equiv (u_1(\cdot), \dots, u_p(\cdot))'`` and
+``\boldsymbol{v}(⋅) \equiv (v_1(\cdot), \dots, v_p(\cdot))'`` are neural networks
 that transform data into ``p``-dimensional vectors; $g(\cdot)$ is a
 monotonically increasing function (e.g., exponential or softplus); and each
 ``c_i(⋅)`` is a monotonically increasing function that maps its input to the
@@ -56,7 +56,7 @@ The functions ``c_i(⋅)`` may be defined by a ``p``-dimensional object of type
 identity function so that the range of the intervals will be unrestricted.
 
 If only a single neural-network architecture is provided, it will be used
-for both ``\mathbf{u}(⋅)`` and ``\mathbf{v}(⋅)``.
+for both ``\boldsymbol{u}(⋅)`` and ``\boldsymbol{v}(⋅)``.
 
 The return value  when applied to data is a matrix with ``2p`` rows, where the
 first and second ``p`` rows correspond to the lower and upper bounds, respectively.
@@ -126,15 +126,15 @@ The estimator employs a representation that prevents quantile crossing, namely,
 
 ```math
 \begin{aligned}
-\hat{\mathbf{q}}^{(\tau_1)}(\mathbf{Z}) &= \mathbf{v}^{(\tau_1)}(\mathbf{Z}),\\
-\hat{\mathbf{q}}^{(\tau_t)}(\mathbf{Z}) &= \mathbf{v}^{(\tau_1)}(\mathbf{Z}) + \sum_{j=2}^t g(\mathbf{v}^{(\tau_j)}(\mathbf{Z})), \quad t = 2, \dots, T,
+\hat{\boldsymbol{q}}^{(\tau_1)}(\boldsymbol{Z}) &= \boldsymbol{v}^{(\tau_1)}(\boldsymbol{Z}),\\
+\hat{\boldsymbol{q}}^{(\tau_t)}(\boldsymbol{Z}) &= \boldsymbol{v}^{(\tau_1)}(\boldsymbol{Z}) + \sum_{j=2}^t g(\boldsymbol{v}^{(\tau_j)}(\boldsymbol{Z})), \quad t = 2, \dots, T,
 \end{aligned}
 ```
-where $\mathbf{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$, are unconstrained neural
+where $\boldsymbol{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$, are unconstrained neural
 networks that transform data into $p$-dimensional vectors, and $g(\cdot)$ is a
 non-negative function (e.g., exponential or softplus) applied elementwise to
 its arguments. In this implementation, the same neural-network architecture `v`
-is used for each $\mathbf{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$.
+is used for each $\boldsymbol{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$.
 
 Note that one may use a simple [`PointEstimator`](@ref) and the
 [`quantileloss`](@ref) to target a specific quantile.
@@ -214,21 +214,39 @@ function (est::QuantileEstimatorDiscrete)(Z)
 	reduce(vcat, cumsum(q))
 end
 
-@doc raw"""
-	QuantileEstimatorContinuous(deepset::DeepSet)
-A neural estimator that estimates marginal posterior $\tau$-quantiles given as
-input the data $\mathbf{Z}$ and the desired probability level $\tau ∈ (0, 1)$,
-therefore taking the form
-```math
-\hat{\mathbf{q}}(\mathbf{Z}, \tau), \quad \tau ∈ (0, 1).
-```
 
-The estimator leverages the [`DeepSet`](@ref) architecture. The first
-requirement is that number of input neurons in the first layer of the inference
-network (i.e., the outer network) is one greater than the number of output
-neurons in the final layer of the summary network. The second requirement is
-that the number of output neurons in the final layer of the inference network
-is equal to the number ``p`` of parameters in the statistical model.
+#TODO change QuantileEstimatorContinuous to simply QuantileEstimator? Maybe we can just alias it.
+#TODO Closed-form posterior for full conditionals for comparison
+@doc raw"""
+	QuantileEstimatorContinuous(deepset::DeepSet; i = nothing)
+	(estimator::ConditionalQuantileEstimator)(Z, τ)
+	(estimator::ConditionalQuantileEstimator)(Z, θ₋ᵢ, τ)
+A neural estimator targetting posterior quantiles.
+
+Given as input data $\boldsymbol{Z}$ and the desired probability level
+$\tau ∈ (0, 1)$, by default the estimator approximates the $\tau$-quantile of
+```math
+\theta_i \mid \boldsymbol{Z}
+```
+for parameters $\boldsymbol{\theta} \equiv (\theta_1, \dots, \theta_p)'$.
+Alternatively, if initialised with `i` set to a positive integer
+(or collection of integers), the estimator approximates the $\tau$-quantile of
+the full conditional distribution
+```math
+\theta_i \mid \boldsymbol{Z}, \boldsymbol{\theta}_{-i},
+```
+where $\boldsymbol{\theta}_{-i}$ denotes the parameter vector with its $i$th
+element(s) removed. For ease of exposition, when targetting marginal
+posteriors of the form $\theta_i \mid \boldsymbol{Z}$ (i.e., the default behaviour),
+we define $\text{dim}(\boldsymbol{\theta}_{-i}) ≡ 0$.
+
+The estimator leverages the [`DeepSet`](@ref) architecture, subject to two
+requirements. First, the number of input neurons in the first layer of the
+inference network (i.e., the outer network) must be equal to the number of
+neurons in the final layer of the summary network plus
+$1 + \text{dim}(\boldsymbol{\theta}_{-i})$. Second, the number of output neurons in
+the final layer of the inference network must be equal to
+$p - \text{dim}(\boldsymbol{\theta}_{-i})$.
 
 Although not a requirement, one may employ a (partially) monotonic neural
 network to prevent quantile crossing (i.e., to ensure that the
@@ -240,13 +258,12 @@ $\tau$ are strictly positive
 and this can be done using the [`DensePositive`](@ref) layer as illustrated in
 the examples below.
 
-The return value when applied to data is a matrix with ``p`` rows, corresponding
-to the estimated marginal posterior quantiles for each parameter in the
-statistical model.
+The return value is a matrix with $p - \text{dim}(\boldsymbol{\theta}_{-i})$ rows,
+corresponding to the estimated quantile for each parameter not in $\boldsymbol{\theta}_{-i}$.
 
 # Examples
 ```
-using NeuralEstimators, Flux, Distributions, Statistics
+using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
 
 # Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
 d = 1         # dimension of each independent replicate
@@ -299,22 +316,105 @@ quantile.(posterior.(Z), τ)'   # true quantiles
 # Estimate several quantiles for a single data set
 z = Z[1]
 τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
-reduce(vcat, q̂.(Ref(z), τ))    # neural quantiles
-quantile.(posterior(z), τ)     # true quantiles
+q̂(z, τ')                     # neural quantiles (note that τ is given as row vector)
+quantile.(posterior(z), τ)   # true quantiles
+
+
+# ---- Full conditionals ----
+
+# Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
+d = 1         # dimension of each independent replicate
+p = 2         # number of unknown parameters in the statistical model
+m = 30        # number of independent replicates in each data set
+function sample(K)
+	μ = randn32(K)
+	σ = rand(InverseGamma(3, 1), K)
+	θ = hcat(μ, σ)'
+	θ = Float32.(θ)
+	return θ
+end
+simulateZ(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
+simulateZ(θ::Matrix, m) = simulateZ.(eachcol(θ), m)
+simulateτ(K)    = [rand32(1) for k in 1:K]
+simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
+
+# Architecture: partially monotonic network to preclude quantile crossing
+w = 64  # width of each hidden layer
+q = 16  # number of learned summary statistics
+ψ = Chain(
+	Dense(d, w, relu),
+	Dense(w, w, relu),
+	Dense(w, q, relu)
+	)
+ϕ = Chain(
+	DensePositive(Dense(q + p, w, relu); last_only = true),
+	DensePositive(Dense(w, w, relu)),
+	DensePositive(Dense(w, 1))
+	)
+deepset = DeepSet(ψ, ϕ)
+
+# Initialise the estimator for the first parameter, targetting μ∣Z,σ
+i = 1
+q̂ = QuantileEstimatorContinuous(deepset; i = i)
+
+# Train the estimator
+q̂ = train(q̂, sample, simulate, m = m)
+
+# Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
+θ = prior(1000)
+Z = simulateZ(θ, m)
+θ₋ᵢ = 0.5f0    # for mulatiparameter scenarios, use θ[Not(i), :] to determine the order that the conditioned parameters should be given
+τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
+q̂(Z, θ₋ᵢ, τ)
+
+# Estimate quantiles for a single data set
+q̂(Z[1], θ₋ᵢ, τ)
 ```
 """
 struct QuantileEstimatorContinuous <: NeuralEstimator
 	deepset::DeepSet
+	i::Union{Integer, Nothing}
+end
+function QuantileEstimatorContinuous(deepset::DeepSet; i::Union{Integer, Nothing} = nothing)
+	if !isnothing(i) @assert i > 0 end
+	QuantileEstimatorContinuous(deepset, i)
 end
 @layer QuantileEstimatorContinuous
-function (est::QuantileEstimatorContinuous)(Z::A, τ::Number) where A
+# core method (used internally)
+(est::QuantileEstimatorContinuous)(tup::Tuple) = est.deepset(tup)
+# user-level convenience functions (not used internally)
+function (est::QuantileEstimatorContinuous)(Z, τ)
+	if !isnothing(est.i)
+		error("To estimate the τ-quantile of the full conditional θᵢ|Z,θ₋ᵢ the call should be of the form estimator(Z, θ₋ᵢ, τ)")
+	end
+	est((Z, τ)) # "Tupleise" input and pass to Tuple method
+end
+function (est::QuantileEstimatorContinuous)(Z, τ::Number)
 	est(Z, [τ])
 end
 function (est::QuantileEstimatorContinuous)(Z::V, τ::Number) where V <: AbstractVector{A} where A
-	est(Z, repeat([[τ]], length(Z)))
+	est(Z, repeat([[τ]],  length(Z)))
 end
-(est::QuantileEstimatorContinuous)(Z, τ) = est((Z, τ)) # "Tupleise" input and pass to Tuple method
-(est::QuantileEstimatorContinuous)(Zτ::Tuple) = est.deepset(Zτ)
+# user-level convenience functions (not used internally) for full conditional estimation
+function (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Matrix)
+	i = est.i
+	@assert !isnothing(i) "slot i must be specified when approximating a full conditional"
+	if size(θ₋ᵢ, 2) != size(τ, 2)
+		@assert size(θ₋ᵢ, 2) == 1 "size(θ₋ᵢ, 2)=$(size(θ₋ᵢ, 2)) and size(τ, 2)=$(size(τ, 2)) do not match"
+		θ₋ᵢ = repeat(θ₋ᵢ, outer = (1, size(τ, 2)))
+	end
+	θ₋ᵢτ = vcat(θ₋ᵢ, τ) # combine parameters and probability level into single pxK matrix
+	q = est((Z, θ₋ᵢτ))  # "Tupleise" the input and pass to tuple method
+	if !isa(q, Vector) q = [q] end
+	reduce(hcat, permutedims.(q))
+end
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Vector) = est(Z, θ₋ᵢ, permutedims(reduce(vcat, τ)))
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Number) = est(Z, θ₋ᵢ, repeat([τ], size(θ₋ᵢ, 2)))
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Vector, τ::Vector) = est(Z, permutedims(θ₋ᵢ), permutedims(τ))
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Vector, τ::Number) = est(Z, θ₋ᵢ, [τ])
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Number) = est(Z, [θ₋ᵢ], τ)
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Vector) = est(Z, [θ₋ᵢ], τ)
+
 
 # ---- RatioEstimator  ----
 
@@ -323,9 +423,9 @@ end
 
 A neural estimator that estimates the likelihood-to-evidence ratio,
 ```math
-r(\mathbf{Z}, \mathbf{\theta}) \equiv p(\mathbf{Z} \mid \mathbf{\theta})/p(\mathbf{Z}),
+r(\boldsymbol{Z}, \boldsymbol{\theta}) \equiv p(\boldsymbol{Z} \mid \boldsymbol{\theta})/p(\boldsymbol{Z}),
 ```
-where $p(\mathbf{Z} \mid \mathbf{\theta})$ is the likelihood and $p(\mathbf{Z})$
+where $p(\boldsymbol{Z} \mid \boldsymbol{\theta})$ is the likelihood and $p(\boldsymbol{Z})$
 is the marginal likelihood, also known as the model evidence.
 
 The estimator leverages the [`DeepSet`](@ref) architecture, subject to two
@@ -338,23 +438,23 @@ final layer of the inference network must be equal to one.
 The ratio estimator is trained by solving a relatively straightforward binary
 classification problem. Specifically, consider the problem of distinguishing
 dependent parameter--data pairs
-${(\mathbf{\theta}', \mathbf{Z}')' \sim p(\mathbf{Z}, \mathbf{\theta})}$ with
+${(\boldsymbol{\theta}', \boldsymbol{Z}')' \sim p(\boldsymbol{Z}, \boldsymbol{\theta})}$ with
 class labels $Y=1$ from independent parameter--data pairs
-${(\tilde{\mathbf{\theta}}', \tilde{\mathbf{Z}}')' \sim p(\mathbf{\theta})p(\mathbf{Z})}$
+${(\tilde{\boldsymbol{\theta}}', \tilde{\boldsymbol{Z}}')' \sim p(\boldsymbol{\theta})p(\boldsymbol{Z})}$
 with class labels $Y=0$, and where the classes are balanced. Then the Bayes
 classifier under binary cross-entropy loss is given by
 ```math
-c(\mathbf{Z}, \mathbf{\theta}) = \frac{p(\mathbf{Z}, \mathbf{\theta})}{p(\mathbf{Z}, \mathbf{\theta}) + p(\mathbf{\theta})p(\mathbf{Z})},
+c(\boldsymbol{Z}, \boldsymbol{\theta}) = \frac{p(\boldsymbol{Z}, \boldsymbol{\theta})}{p(\boldsymbol{Z}, \boldsymbol{\theta}) + p(\boldsymbol{\theta})p(\boldsymbol{Z})},
 ```
 and hence,
 ```math
-r(\mathbf{Z}, \mathbf{\theta}) = \frac{c(\mathbf{Z}, \mathbf{\theta})}{1 - c(\mathbf{Z}, \mathbf{\theta})}.
+r(\boldsymbol{Z}, \boldsymbol{\theta}) = \frac{c(\boldsymbol{Z}, \boldsymbol{\theta})}{1 - c(\boldsymbol{Z}, \boldsymbol{\theta})}.
 ```
 For numerical stability, training is done on the log-scale using
-$\log r(\mathbf{Z}, \mathbf{\theta}) = \text{logit}(c(\mathbf{Z}, \mathbf{\theta}))$.
+$\log r(\boldsymbol{Z}, \boldsymbol{\theta}) = \text{logit}(c(\boldsymbol{Z}, \boldsymbol{\theta}))$.
 
 When applying the estimator to data, by default the likelihood-to-evidence ratio
-$r(\mathbf{Z}, \mathbf{\theta})$ is returned (setting the keyword argument
+$r(\boldsymbol{Z}, \boldsymbol{\theta})$ is returned (setting the keyword argument
 `classifier = true` will yield class probability estimates). The estimated ratio
 can then be used in various downstream Bayesian
 (e.g., [Hermans et al., 2020](https://proceedings.mlr.press/v119/hermans20a.html))
@@ -455,21 +555,21 @@ Specifically, with $l$ estimators and sample-size changepoints
 $m_1 < m_2 < \dots < m_{l-1}$, the piecewise etimator takes the form,
 
 ```math
-\hat{\mathbf{\theta}}(\mathbf{Z})
+\hat{\boldsymbol{\theta}}(\boldsymbol{Z})
 =
 \begin{cases}
-\hat{\mathbf{\theta}}_1(\mathbf{Z}) & m \leq m_1,\\
-\hat{\mathbf{\theta}}_2(\mathbf{Z}) & m_1 < m \leq m_2,\\
+\hat{\boldsymbol{\theta}}_1(\boldsymbol{Z}) & m \leq m_1,\\
+\hat{\boldsymbol{\theta}}_2(\boldsymbol{Z}) & m_1 < m \leq m_2,\\
 \quad \vdots \\
-\hat{\mathbf{\theta}}_l(\mathbf{Z}) & m > m_{l-1}.
+\hat{\boldsymbol{\theta}}_l(\boldsymbol{Z}) & m > m_{l-1}.
 \end{cases}
 ```
 
-For example, given an estimator  ``\hat{\mathbf{\theta}}_1(\cdot)`` trained for small
-sample sizes (e.g., m ≤ 30) and an estimator ``\hat{\mathbf{\theta}}_2(\cdot)``
+For example, given an estimator  ``\hat{\boldsymbol{\theta}}_1(\cdot)`` trained for small
+sample sizes (e.g., m ≤ 30) and an estimator ``\hat{\boldsymbol{\theta}}_2(\cdot)``
 trained for moderate-to-large sample sizes (e.g., m > 30), we may construct a
-`PiecewiseEstimator` that dispatches ``\hat{\mathbf{\theta}}_1(\cdot)`` if
-m ≤ 30 and ``\hat{\mathbf{\theta}}_2(\cdot)`` otherwise.
+`PiecewiseEstimator` that dispatches ``\hat{\boldsymbol{\theta}}_1(\cdot)`` if
+m ≤ 30 and ``\hat{\boldsymbol{\theta}}_2(\cdot)`` otherwise.
 
 See also [`trainx()`](@ref) for training estimators for a range of sample sizes.
 
@@ -563,7 +663,7 @@ one to specify the type of their data (either "unstructured", "gridded", or
 - `activation_output::Function = identity`: the activation function of the output layer.
 - `variance_stabiliser::Union{Nothing, Function} = nothing`: a function that will be applied directly to the input, usually to stabilise the variance.
 - `kernel_size = nothing`: (applicable only to CNNs) a vector of length `depth[1]` containing integer tuples of length `D`, where `D` is the dimension of the convolution (e.g., `D = 2` for two-dimensional convolution).
-- `weight_by_distance::Bool = false`: (applicable only to GNNs) flag indicating whether the estimator will weight by spatial distance; if true, a `WeightedGraphConv` layer is used in the propagation module; otherwise, a regular `GraphConv` layer is used.
+- `weight_by_distance::Bool = false`: (applicable only to GNNs) flag indicating whether the estimator will weight by spatial distance; if true, a `SpatialGraphConv` layer is used in the propagation module; otherwise, a regular `GraphConv` layer is used.
 
 # Examples
 ```
@@ -586,7 +686,7 @@ function initialise_estimator(
     activation::Function = relu,
     activation_output::Function = identity,
     kernel_size = nothing,
-	weight_by_distance::Bool = false
+	weight_by_distance::Bool = false #TODO why should this be false?
     )
 
 	# "`kernel_size` should be a vector of integer tuples: see the documentation for details"
@@ -627,7 +727,7 @@ function initialise_estimator(
 	ϕ = Chain(ϕ...)
 
 	# summary (inner) network
-	if architecture == "DNN"
+	if architecture == "DNN" #TODO change DNN to MLP
 		ψ = Chain(
 			Dense(d => width[1], activation),
 			[Dense(width[l-1] => width[l], activation) for l ∈ 2:depth[1]]...
@@ -639,7 +739,7 @@ function initialise_estimator(
 			Flux.flatten
 			)
 	elseif architecture == "GNN"
-		propagation = weight_by_distance ? WeightedGraphConv : GraphConv
+		propagation = weight_by_distance ? SpatialGraphConv : GraphConv
 		# propagation_module = GNNChain(
 		# 	propagation(d => width[1], activation),
 		# 	[propagation(width[l-1] => width[l], relu) for l ∈ 2:depth[1]]...

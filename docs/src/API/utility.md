@@ -31,6 +31,8 @@ estimateinbatches
 
 expandgrid
 
+IndicatorWeights
+
 initialise_estimator
 
 loadbestweights
@@ -38,6 +40,8 @@ loadbestweights
 removedata
 
 rowwisenorm
+
+spatialgraph
 
 stackarrays
 

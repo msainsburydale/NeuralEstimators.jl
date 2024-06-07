@@ -2,7 +2,7 @@
 
 ## Saving and loading neural estimators
 
-As training is by far the most computationally demanding part of the workflow, one often trains an estimator and then saves it for later use. As discussed in the [`Flux` documentation](https://fluxml.ai/Flux.jl/stable/saving/), there are a number of ways to do this. Perhaps the simplest approach is to save the parameters of the neural estimator (e.g., the weights and biases of the neural networks) in a BSON file:
+As training is by far the most computationally demanding part of the workflow, one often trains an estimator and then saves it for later use. As discussed in the [Flux documentation](https://fluxml.ai/Flux.jl/stable/saving/), there are a number of ways to do this. Perhaps the simplest approach is to save the parameters (i.e., weights and biases) of the neural network in a BSON file:
 
 ```
 using Flux
@@ -11,36 +11,36 @@ model_state = Flux.state(θ̂)
 @save "estimator.bson" model_state
 ```
 
-Then, to load the neural estimator at a later time, one initialises an estimator with the same architecture used during training, and then loads the saved parameters into this estimator:
+Then, in a later session, one may initialise a neural network with the same architecture used previously, and load the saved parameters:
 
 ```
 @load "estimator.bson" model_state
 Flux.loadmodel!(θ̂, model_state)
 ```
 
-Note that the estimator `θ̂` must be already defined (i.e., only the network parameters are saved, not the architecture). That is, the saved model state should be loaded into a neural estimator with the same architecture as the estimator that we wish to load.
+Note that the estimator `θ̂` must be already defined (i.e., only the network parameters are saved, not the architecture). 
 
-As a convenience, the function [`train`](@ref) allows for the automatic saving of the neural-network parameters during the training stage, via the argument `savepath`. Specifically, if `savepath` is specified, [`train`](@ref) automatically saves the neural estimator's parameters in the folder `savepath`; to load them, one may use the following code:
+For convenience, the function [`train()`](@ref) allows for the automatic saving of the neural-network parameters during the training stage, via the argument `savepath`. Specifically, if `savepath` is specified, neural estimator's parameters will be saved in the folder `savepath` and, to load the optimal parameters post training, one may use the following code, or similar:
 
 ```
 using NeuralEstimators
 Flux.loadparams!(θ̂, loadbestweights(savepath))
 ```
 
-Above, the function `loadparams!` loads the parameters of the best (as determined by [`loadbestweights`](@ref)) neural estimator saved in `savepath`.
+Above, the function `loadparams!()` loads the parameters of the best (as determined by [`loadbestweights()`](@ref)) neural estimator saved in `savepath`.
 
 
 ## Storing expensive intermediate objects for data simulation
 
-Parameters sampled from the prior distribution $\Omega(\cdot)$ may be stored in two ways. Most simply, they can be stored as a $p \times K$ matrix, where $p$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution; this is the approach taken in the example using univariate Gaussian data. Alternatively, they can be stored in a user-defined subtype of the abstract type [`ParameterConfigurations`](@ref), whose only requirement is a field `θ` that stores the $p \times K$ matrix of parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below.
+Parameters sampled from the prior distribution may be stored in two ways. Most simply, they can be stored as a $p \times K$ matrix, where $p$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution. Alternatively, they can be stored in a user-defined struct subtyping [`ParameterConfigurations`](@ref), whose only requirement is a field `θ` that stores the $p \times K$ matrix of parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below.
 
 ## On-the-fly and just-in-time simulation
 
-When data simulation is (relatively) computationally inexpensive, $\mathcal{Z}_{\text{train}}$ can be simulated continuously during training, a technique coined "simulation-on-the-fly". Regularly refreshing $\mathcal{Z}_{\text{train}}$ leads to lower out-of-sample error and to a reduction in overfitting. This strategy therefore facilitates the use of larger, more representationally-powerful networks that are prone to overfitting when $\mathcal{Z}_{\text{train}}$ is fixed. Refreshing $\mathcal{Z}_{\text{train}}$ also has an additional computational benefit; data can be simulated "just-in-time", in the sense that they can be simulated from a small batch of $\vartheta_{\text{train}}$, used to train the neural estimator, and then removed from memory. This can reduce pressure on memory resources when $|\vartheta_{\text{train}}|$ is very large.
+When data simulation is (relatively) computationally inexpensive, the training data set, $\mathcal{Z}_{\text{train}}$, can be simulated continuously during training, a technique coined "simulation-on-the-fly". Regularly refreshing $\mathcal{Z}_{\text{train}}$ leads to lower out-of-sample error and to a reduction in overfitting. This strategy therefore facilitates the use of larger, more representationally-powerful networks that are prone to overfitting when $\mathcal{Z}_{\text{train}}$ is fixed. Further, this technique allows for data be simulated "just-in-time", in the sense that they can be simulated in small batches, used to train the neural estimator, and then removed from memory. This can substantially reduce pressure on memory resources, particularly when working with large data sets. 
 
-One may also regularly refresh $\vartheta_{\text{train}}$, and doing so leads to similar benefits. However, fixing $\vartheta_{\text{train}}$ allows computationally expensive terms, such as Cholesky factors when working with Gaussian process models, to be reused throughout training, which can substantially reduce the training time for some models.  
+One may also regularly refresh the set $\vartheta_{\text{train}}$ of parameter vectors used during training, and doing so leads to similar benefits. However, fixing $\vartheta_{\text{train}}$ allows computationally expensive terms, such as Cholesky factors when working with Gaussian process models, to be reused throughout training, which can substantially reduce the training time for some models. Hybrid approaches are also possible, whereby the parameters (and possibly the data) are held fixed for several epochs (i.e., several passes through the training set when performing stochastic gradient descent) before being refreshed. 
 
-The above strategies are facilitated with various methods of [`train`](@ref).
+The above strategies are facilitated with various methods of [`train()`](@ref).
 
 ## Regularisation
 
@@ -89,9 +89,11 @@ train(θ̂, θ_train, θ_val, Z_train, Z_val; optimiser = optimiser)
 
 Note that when the training data and/or parameters are held fixed during training, L₂ regularisation with penalty coefficient $\lambda = 10^{-4}$ is applied by default.
 
-## Combining learned and expert summary statistics
+## Expert summary statistics
 
-See [`DeepSet`](@ref).
+Implicitly, neural estimators involve the learning of summary statistics. However, some summary statistics are available in closed form, simple to compute, and highly informative (e.g., sample quantiles, the empirical variogram, etc.). Often, explicitly incorporating these expert summary statistics in a neural estimator can simplify the optimisation problem, and lead to a better estimator. 
+
+The fusion of learned and expert summary statistics is facilitated by our implementation of the [`DeepSet`](@ref) framework. Note that this implementation also allows the user to construct a neural estimator using only expert summary statistics, following, for example, [Gerber and Nychka (2021)](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382) and [Rai et al. (2024)](https://onlinelibrary.wiley.com/doi/abs/10.1002/env.2845). Note also that the user may specify arbitrary expert summary statistics, however, for convenience several standard [User-defined summary statistics](@ref) are provided with the package, including a fast approximate version of the empirical variogram. 
 
 ## Variable sample sizes
 
@@ -114,23 +116,23 @@ If data sets with varying $m$ are envisaged, one could train $l$ neural Bayes es
 where, here, $\boldsymbol{\gamma}^* \equiv (\boldsymbol{\gamma}^*_{\tilde{m}_1}, \dots, \boldsymbol{\gamma}^*_{\tilde{m}_{l-1}})$, and where $\boldsymbol{\gamma}^*_{\tilde{m}}$ are the neural-network parameters optimised for sample size $\tilde{m}$ chosen so that $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}^*_{\tilde{m}})$ is near-optimal over the range of sample sizes in which it is applied.
 This approach works well in practice, and it is less computationally burdensome than it first appears when used in conjunction with pre-training.
 
-Piecewise neural estimators are implemented with the struct, [`PiecewiseEstimator`](@ref), and their construction is facilitated with [`trainx`](@ref).  
+Piecewise neural estimators are implemented with the struct, [`PiecewiseEstimator`](@ref), and their construction is facilitated with [`trainx()`](@ref).  
 
 ### Training with variable sample sizes
 
 Alternatively, one could treat the sample size as a random variable, $M$, with support over a set of positive integers, $\mathcal{M}$, in which case, for the neural Bayes estimator, the risk function becomes
 ```math
-R(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}))
-\equiv
 \sum_{m \in \mathcal{M}}
-P(M=m)\left(\int_{\mathcal{S}^m}  L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}; \boldsymbol{\gamma}))p(\boldsymbol{Z}^{(m)} \mid \boldsymbol{\theta}) {\text{d}} \boldsymbol{Z}^{(m)}\right).
+P(M=m)\left(
+\int_\Theta \int_{\mathcal{Z}^m}  L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{z}^{(m)}))f(\boldsymbol{z}^{(m)} \mid \boldsymbol{\theta}) \rm{d} \boldsymbol{z}^{(m)} \rm{d} \Pi(\boldsymbol{\theta})
+\right).
 ```
- This approach does not materially alter the workflow, except that one must also sample the number of replicates before simulating the data.
+This approach does not materially alter the workflow, except that one must also sample the number of replicates before simulating the data during the training phase. 
 
- Below we define data simulation for a range of sample sizes (i.e., a range of integers) under a discrete uniform prior for ``M``, the random variable corresponding to sample size.
+The following pseudocode illustrates how one may modify a general data simulator to train under a range of sample sizes, with the distribution of $M$ defined by passing any object that can be sampled using `rand(m, K)` (e.g., an integer range like `1:30`, an integer-valued distribution from [Distributions.jl](https://juliastats.org/Distributions.jl/stable/univariate/), etc.):
 
 ```
-function simulate(parameters, m::R) where {R <: AbstractRange{I}} where I <: Integer
+function simulate(parameters, m) 
 
 	## Number of parameter vectors stored in parameters
 	K = size(parameters, 2)
@@ -139,10 +141,11 @@ function simulate(parameters, m::R) where {R <: AbstractRange{I}} where I <: Int
 	m̃ = rand(m, K)
 
 	## Pseudocode for data simulation
-	Z = [<simulate m̃[k] iid realisations from the model> for k ∈ 1:K]
+	Z = [<simulate m̃[k] realisations from the model> for k ∈ 1:K]
 
 	return Z
 end
-```
 
-Then, setting the argument `m` in [`train`](@ref) to be an integer range (e.g., `1:30`) will train the neural estimator with the given variable sample sizes.
+## Method that allows an integer to be passed for m
+simulate(parameters, m::Integer) = simulate(parameters, range(m, m))
+```

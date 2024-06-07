@@ -1,6 +1,6 @@
 using NeuralEstimators
 import NeuralEstimators: simulate
-using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, _agg, rowwisenorm
+using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, rowwisenorm
 using CUDA
 using DataFrames
 using Distributions
@@ -12,6 +12,7 @@ using Graphs
 using GraphNeuralNetworks
 using LinearAlgebra
 using Random: seed!
+using SparseArrays: nnz
 using SpecialFunctions: gamma
 using Statistics
 using Statistics: mean, sum
@@ -125,7 +126,7 @@ end
 
 	n = 100
 	d = 2
-	S = rand(n, d)
+	S = rand(Float32, n, d) #TODO add test that adjacencymatrix is type stable when S or D are Float32 matrices
 	k = 5
 	r = 0.3
 
@@ -134,6 +135,7 @@ end
 	A₂ = adjacencymatrix(S, r)
 	A = adjacencymatrix(S, k, maxmin = true)
 	A = adjacencymatrix(S, k, maxmin = true, moralise = true)
+	A = adjacencymatrix(S, k, maxmin = true, combined = true)
 
 	# Construct from full distance matrix D
 	D = pairwise(Euclidean(), S, S, dims = 1)
@@ -144,14 +146,35 @@ end
 	@test Ã₁ ≈ A₁
 	@test Ã₂ ≈ A₂
 
-	# Randomly selecting k nodes within a node's neighbourhood disc.
+	# Randomly selecting k nodes within a node's neighbourhood disc
 	seed!(1); A₃ = adjacencymatrix(S, k, r)
 	@test A₃.n == A₃.m == n
 	@test length(adjacencymatrix(S, k, 0.02).nzval) < k*n
 	seed!(1); Ã₃ = adjacencymatrix(D, k, r)
 	@test Ã₃ ≈ A₃
 
-	# check for the case k > n
+	# Test that the number of neighbours is correct 
+	f(A) = collect(mapslices(nnz, A; dims = 1))
+	@test all(f(adjacencymatrix(S, k)) .== k) 
+	@test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k) 
+	@test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k) 
+	@test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k) 
+	@test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1)
+	@test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k) 
+	@test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+1) 
+
+	# Gridded locations (useful for checking functionality in the event of ties)
+	pts = range(0, 1, length = 10) 
+	S = expandgrid(pts, pts)
+	@test all(f(adjacencymatrix(S, k)) .== k) 
+	@test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k)
+	@test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k) 
+	@test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k) 
+	@test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1) 
+	@test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k) 
+	@test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+1) 
+
+	# Check that k > n doesn't cause an error
 	n = 3
 	d = 2
 	S = rand(n, d)
@@ -160,6 +183,45 @@ end
 	D = pairwise(Euclidean(), S, S, dims = 1)
 	adjacencymatrix(D, k)
 	adjacencymatrix(D, r, k)
+end
+
+@testset "spatialgraph" begin 
+	# Number of replicates, and spatial dimension
+	m = 5  # number of replicates
+	d = 2  # spatial dimension
+
+	# Spatial locations fixed for all replicates
+	n = 100
+	S = rand(n, d)
+	Z = rand(n, m)
+	g = spatialgraph(S)
+	g = spatialgraph(g, Z)
+	g = spatialgraph(S, Z)
+
+	# Spatial locations varying between replicates
+	n = rand(50:100, m)
+	S = rand.(n, d)
+	Z = rand.(n)
+	g = spatialgraph(S)
+	g = spatialgraph(g, Z)
+	g = spatialgraph(S, Z)
+
+	# Mutlivariate processes: spatial locations fixed for all replicates
+	q = 2 # bivariate spatial process
+	n = 100
+	S = rand(n, d)
+	Z = rand(q, n, m)  
+	g = spatialgraph(S)
+	g = spatialgraph(g, Z)
+	g = spatialgraph(S, Z)
+
+	# Mutlivariate processes: spatial locations varying between replicates
+	n = rand(50:100, m)
+	S = rand.(n, d)
+	Z = rand.(q, n)
+	g = spatialgraph(S)
+	g = spatialgraph(g, Z) 
+	g = spatialgraph(S, Z) 
 end
 
 
@@ -220,19 +282,22 @@ end
 	@test size(UW) == (n, n, 2, m)
 end
 
-@testset "WeightedGraphConv" begin
-	# Construct a spatially-weighted adjacency matrix based on k-nearest neighbours
-	# with k = 5, and convert to a graph with random (uncorrelated) dummy data:
-	n = 100
-	S = rand(n, 2)
-	d = 1 # dimension of each observation (univariate data here)
-	A = adjacencymatrix(S, 5)
-	Z = GNNGraph(A, ndata = rand(d, n))
-	layer = WeightedGraphConv(d => 16)
-	show(devnull, layer)
-	h = layer(Z) # convolved features
-	@test size(h.ndata.x) == (16, n)
-end
+
+#TODO update this
+# @testset "SpatialGraphConv" begin
+# 	m = 5            # number of replicates
+# 	d = 2            # spatial dimension
+# 	n = 100          # number of spatial locations
+# 	S = rand(n, d)   # spatial locations
+# 	Z = rand(n, m)   # toy data
+# 	g = spatialgraph(S, Z)
+# 	layer1 = SpatialGraphConv(1 => 16)
+# 	layer2 = SpatialGraphConv(16 => 32)
+# 	show(devnull, layer1)
+# 	h = layer1(g)
+# 	@test size(h.ndata.Z) == (16, m, n)
+# 	layer2(h)
+# end
 
 @testset "loss functions: $dvc" for dvc ∈ devices
 
@@ -583,8 +648,8 @@ m  = 10 # default sample size
 				θ̂ = train(θ̂, Parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, ξ = ξ, simulate_just_in_time = true)
 				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose)
 				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
-				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 1, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
-				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 1, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
+				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
+				θ̂ = train(θ̂, parameters, parameters, simulator, m = m, epochs = 3, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
 				Z_train = simulator(parameters, 2m);
 				Z_val   = simulator(parameters, m);
 				train(θ̂, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
@@ -675,17 +740,9 @@ m  = 10 # default sample size
 end
 
 
-#### Small helper functions
-
-d = 5
-m = 10
-Z = rand(d, m)
-@test length(_agg("sum")(Z)) == d
-@test length(_agg("logsumexp")(Z)) == d
-
-
 #### Graph data
 
+#TODO need to test training
 @testset "GNN" begin
 
 	# Propagation module
@@ -702,13 +759,16 @@ Z = rand(d, m)
     	)
 	show(devnull, readout)
 
+	# Summary network
+	ψ = GNNSummary(propagation, readout)
+
     # Mapping module
     p = 3     # number of parameters in the statistical model
     w = 64    # width of layers used for the outer network ϕ
     ϕ = Chain(Dense(no, w, relu), Dense(w, w, relu), Dense(w, p))
 
     # Construct the estimator
-    θ̂ = GNN(propagation, readout, ϕ)
+    θ̂ = DeepSet(ψ, ϕ)
 	show(devnull, θ̂)
 
     # Apply the estimator to:
@@ -957,7 +1017,7 @@ end
 end
 
 @testset "QuantileEstimatorContinuous" begin
-	using NeuralEstimators, Flux, Distributions, Statistics
+	using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
 
 	# Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
 	d = 1         # dimension of each independent replicate
@@ -1015,6 +1075,56 @@ end
 
 	# Check monotonicty
 	@test all(q̂(z, 0.1f0) .<= q̂(z, 0.11f0) .<= q̂(z, 0.9f0) .<= q̂(z, 0.91f0))
+
+	# ---- Full conditionals ----
+
+	# Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
+	d = 1         # dimension of each independent replicate
+	p = 2         # number of unknown parameters in the statistical model
+	m = 30        # number of independent replicates in each data set
+	function sample(K)
+		μ = randn32(K)
+		σ = rand(InverseGamma(3, 1), K)
+		θ = hcat(μ, σ)'
+		θ = Float32.(θ)
+		return θ
+	end
+	simulateZ(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
+	simulateZ(θ::Matrix, m) = simulateZ.(eachcol(θ), m)
+	simulateτ(K)    = [rand32(1) for k in 1:K]
+	simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
+
+	# Architecture: partially monotonic network to preclude quantile crossing
+	w = 64  # width of each hidden layer
+	q = 16  # number of learned summary statistics
+	ψ = Chain(
+		Dense(d, w, relu),
+		Dense(w, w, relu),
+		Dense(w, q, relu)
+		)
+	ϕ = Chain(
+		DensePositive(Dense(q + p, w, relu); last_only = true),
+		DensePositive(Dense(w, w, relu)),
+		DensePositive(Dense(w, 1))
+		)
+	deepset = DeepSet(ψ, ϕ)
+
+	# Initialise the estimator for the first parameter, targetting μ∣Z,σ
+	i = 1
+	q̂ = QuantileEstimatorContinuous(deepset; i = i)
+
+	# Train the estimator
+	q̂ = train(q̂, sample, simulate, m = m, epochs = 1, verbose = false)
+
+	# Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
+	θ = prior(1000)
+	Z = simulateZ(θ, m)
+	θ₋ᵢ = 0.5f0    # for mulatiparameter scenarios, use θ[Not(i), :] to determine the order that the conditioned parameters should be given
+	τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
+	q̂(Z, θ₋ᵢ, τ)
+
+	# Estimate quantiles for a single data set
+	q̂(Z[1], θ₋ᵢ, τ)
 end
 
 @testset "RatioEstimator" begin

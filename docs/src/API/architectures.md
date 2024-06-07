@@ -5,20 +5,57 @@ Order = [:type, :function]
 Pages   = ["architectures.md"]
 ```
 
-Although the user is free to construct their neural estimator however they see fit (i.e., using arbitrary `Flux` code), `NeuralEstimators` provides several useful architectures described below that are specifically relevant to neural estimation. See also the convenience constructor [`initialise_estimator`](@ref).  
+## Modules
 
 ```@docs
 DeepSet
 
-GNN
+GNNSummary
+```
+
+# User-defined summary statistics
+
+```@index
+Order = [:type, :function]
+Pages   = ["summarystatistics.md"]
+```
+
+The following functions correspond to summary statistics that are often useful
+as user-defined summary statistics in [`DeepSet`](@ref) objects.
+
+```@docs
+samplesize
+
+samplecorrelation
+
+samplecovariance
+
+NeighbourhoodVariogram
 ```
 
 ## Layers
 
 ```@docs
+SpatialGraphConv
+
 DensePositive
-
-WeightedGraphConv
-
-UniversalPool
 ```
+
+
+# Output activation functions
+
+```@index
+Order = [:type, :function]
+Pages   = ["activationfunctions.md"]
+```
+
+In addition to the standard activation functions provided by [Flux](https://fluxml.ai/Flux.jl/stable/models/activation/), the following layers can be used at the end of an architecture, to act as output activation functions that ensure valid estimates for certain models. **NB:** Although we refer to the following objects as "activation functions", they should be treated as layers that are included in the final stage of a Flux `Chain()`. 
+
+```@docs
+Compress
+
+CorrelationMatrix
+
+CovarianceMatrix
+```
+

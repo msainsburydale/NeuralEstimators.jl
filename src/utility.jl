@@ -148,7 +148,7 @@ function numberreplicates(Z::V) where {V <: AbstractVector{T}} where {T <: Numbe
 	numberreplicates(reshape(Z, :, 1))
 end
 function numberreplicates(Z::G) where {G <: GNNGraph}
-	x = Z.ndata.x
+	x = :Z ∈ keys(Z.ndata) ? Z.ndata.Z : first(values(Z.ndata))
 	if ndims(x) == 3
 		size(x, 2)
 	else

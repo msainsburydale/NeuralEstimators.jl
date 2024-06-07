@@ -1,30 +1,28 @@
-# ---- Aggregation (pooling) and misc functions ----
-
-elementwise_mean(X::A) where {A <: AbstractArray{T, N}} where {T, N} = mean(X, dims = N)
-elementwise_sum(X::A)  where {A <: AbstractArray{T, N}} where {T, N} = sum(X, dims = N)
-elementwise_logsumexp(X::A)  where {A <: AbstractArray{T, N}} where {T, N} = logsumexp(X, dims = N)
-
-function _agg(a::String)
-	@assert a ∈ ["mean", "sum", "logsumexp"]
-	if a == "mean"
-		elementwise_mean
-	elseif a == "sum"
-		elementwise_sum
-	elseif a == "logsumexp"
-		elementwise_logsumexp
-	end
-end
-
 # ---- DeepSet ----
 
-#TODO Optimised version with expert summary statistics that can be applied to replicates independently (i.e., they can be used like ψ). It might need some special functionality, where there is a second aggregation function associated with the expert summary statistics.
-#TODO In the constructor for DeepSet, check if Parallel appears in any layers of ψ. If it does, provide the information in the comment below:
+"""
+	ElementwiseAggregator(a::Function)
 
-# Note that, internally, data stored as `Vector{Arrays}` are first
-# concatenated along the replicates dimension before being passed into the inner
-# neural network `ψ`; this means that `ψ` is applied to a single large array
-# rather than many small arrays, which can substantially improve computational
-# efficiency, particularly on the GPU.
+# Examples
+```
+using Statistics: mean
+using Flux: logsumexp
+x = rand(3, 5)
+e₁ = ElementwiseAggregator(mean)
+e₂ = ElementwiseAggregator(maximum)
+e₃ = ElementwiseAggregator(logsumexp)
+e₄ = ElementwiseAggregator(sum)
+e₁(x)
+e₂(x)
+e₃(x)
+e₄(x)
+```
+"""
+struct ElementwiseAggregator
+	a::Function
+end
+(e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
+
 
 """
 	(S::Vector{Function})(z)
@@ -43,9 +41,9 @@ S(1)
 (S::Vector{Function})(z) = vcat([s(z) for s ∈ S]...)
 # (S::Vector)(z) = vcat([s(z) for s ∈ S]...) # can use a more general construction like this to allow for vectors of NeuralEstimators to be called in this way
 
+#TODO show example with only user-defined summary statistics
 """
-    DeepSet(ψ, ϕ, a; S = nothing)
-	DeepSet(ψ, ϕ; a::String = "mean", S = nothing)
+    DeepSet(ψ, ϕ, a = mean; S = nothing)
 The DeepSets representation,
 
 ```math
@@ -53,34 +51,40 @@ The DeepSets representation,
 ```
 
 where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates from the statistical model,
-`ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant function.
-Expert summary statistics can be incorporated as,
+`ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant aggregation
+function. Expert summary statistics can be incorporated as,
 
 ```math
 θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)')'),
 ```
 
 where `S` is a function that returns a vector of user-defined summary statistics.
-These user-defined summary statistics are typically provided either as a
-`Function` that returns a `Vector`, or a vector of such functions.
+These user-defined summary statistics are provided either as a
+`Function` that returns a `Vector`, or as a vector of functions. In the case that 
+`ψ` is set to `nothing`, only expert summary statistics will be used. 
 
-To ensure that the architecture is agnostic to the sample size ``m``, the
-aggregation function `a` must aggregate over the replicates. It can be specified
-as a positional argument of type `Function`, or as a keyword argument with
-permissible values `"mean"`, `"sum"`, and `"logsumexp"`.
+The aggregation function `a` can be any function that acts on an array and has
+a keyword argument `dims` that allows aggregation over a specific dimension of
+the array (e.g., `sum`, `mean`, `maximum`, `minimum`, `logsumexp`).
 
 `DeepSet` objects act on data of type `Vector{A}`, where each
 element of the vector is associated with one data set (i.e., one set of
 independent replicates from the statistical model), and where the type `A`
 depends on the form of the data and the chosen architecture for `ψ`.
 As a rule of thumb, when `A` is an array, the replicates are stored in the final
-dimension. The final dimension is usually the 'batch' dimension, but batching with `DeepSet`
-objects is done at the data set level (i.e., sets of replicates are batched
-together). For example, with gridded spatial data and `ψ` a CNN, `A` should be a
-4-dimensional array, with the replicates stored in the 4ᵗʰ dimension.
+dimension. For example, with gridded spatial data and `ψ` a CNN, `A` should be
+a 4-dimensional array, with the replicates stored in the 4ᵗʰ dimension.
+Note that in Flux, the final dimension is usually the "batch"
+dimension, but batching with `DeepSet` objects is done at the data set level
+(i.e., sets of replicates are batched together).
+
+Data stored as `Vector{Arrays}` are first concatenated along the replicates
+dimension before being passed into the summary network `ψ`. This means that
+`ψ` is applied to a single large array rather than many small arrays, which can
+substantially improve computational efficiency.
 
 Set-level information, ``𝐱``, that is not a function of the data can be passed
-directly into the outer network `ϕ` in the following manner,
+directly into the inference network `ϕ` in the following manner,
 
 ```math
 θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐱')'),	 	 
@@ -92,69 +96,61 @@ or, in the case that expert summary statistics are also used,
 θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)', 𝐱')').	 
 ```
 
-This is done by providing a `Tuple{Vector{A}, Vector{Vector}}`, where
-the first element of the tuple contains a vector of data sets and the second
-element contains a vector of set-level information (i.e., one vector for each
-data set).
+This is done by calling the `DeepSet` object on a
+`Tuple{Vector{A}, Vector{Vector}}`, where the first element of the tuple
+contains a vector of data sets and the second element contains a vector of
+set-level information (i.e., one vector for each data set).
 
 # Examples
 ```
 using NeuralEstimators, Flux
 
+# Two dummy data sets containing 3 and 4 replicates
+p = 5  # number of parameters in the statistical model
 n = 10 # dimension of each replicate
-p = 4  # number of parameters in the statistical model
+Z = [rand32(n, m) for m ∈ (3, 4)]
 
-# Construct the neural estimator
+# Construct the deepset object
 S = samplesize
-qₛ = 1  # dimension of expert summary statistic
-qₜ = 16 # dimension of neural summary statistic
-w = 16 # width of each hidden layer
-ψ = Chain(Dense(n, w, relu), Dense(w, qₜ, relu));
-ϕ = Chain(Dense(qₜ + qₛ, w, relu), Dense(w, p));
-θ̂ = DeepSet(ψ, ϕ, S = S)
+qₛ = 1   # dimension of expert summary statistic
+qₜ = 16  # dimension of neural summary statistic
+w = 32  # width of hidden layers
+ψ = Chain(Dense(n, w, relu), Dense(w, qₜ, relu))
+ϕ = Chain(Dense(qₜ + qₛ, w, relu), Dense(w, p))
+θ̂ = DeepSet(ψ, ϕ; S = S)
 
-# Toy data
-Z = [rand32(n, m) for m ∈ (3, 4)]; # two data sets containing 3 and 4 replicates
-
-# Apply the data
+# Apply the deepset object
 θ̂(Z)
 
-# Inference with set-level information
+# Data with set-level information
 qₓ = 2 # dimension of set-level vector
-ϕ  = Chain(Dense(qₜ + qₛ + qₓ, w, relu), Dense(w, p));
-θ̂  = DeepSet(ψ, ϕ; S = S)
-x  = [rand32(qₓ) for _ ∈ eachindex(Z)]
+ϕ = Chain(Dense(qₜ + qₛ + qₓ, w, relu), Dense(w, p))
+θ̂ = DeepSet(ψ, ϕ; S = S)
+x = [rand32(qₓ) for _ ∈ eachindex(Z)]
 θ̂((Z, x))
 ```
 """
-struct DeepSet{T, F, G, K}
+struct DeepSet{T, G, K}
 	ψ::T
 	ϕ::G
-	a::F
+	a::ElementwiseAggregator
 	S::K
 end
 @layer DeepSet
-DeepSet(ψ, ϕ, a; S = nothing) = DeepSet(ψ, ϕ, a, S)
-DeepSet(ψ, ϕ; a::String = "mean", S = nothing) = DeepSet(ψ, ϕ, _agg(a), S)
+function DeepSet(ψ, ϕ, a::Function = mean; S = nothing) 
+	@assert !isnothing(ψ) | !isnothing(S) "At least one of `ψ` or `S` must be given"
+	DeepSet(ψ, ϕ, ElementwiseAggregator(a), S)
+end
 Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)")
 
 # Single data set
 function (d::DeepSet)(Z::A) where A
-	d.ϕ(summary(d, Z))
+	d.ϕ(summarystatistics(d, Z))
 end
-function summary(d::DeepSet, Z::A) where A
-	t = d.a(d.ψ(Z))
-	if !isnothing(d.S)
-		s = d.S(Z)
-		t = vcat(t, s)
-	end
-	return t
-end
-
 # Single data set with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractVector{T}} where T
 	Z, x = tup
-	t = summary(d, Z)
+	t = summarystatistics(d, Z)
 	u = vcat(t, x)
 	d.ϕ(u)
 end
@@ -167,61 +163,22 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: Abstra
 	else
 		# Designed for situations where we have a fixed data set and want to
 		# evaluate the deepset object for many different set-level information
-		t = summary(d, Z) # summary statistics only need to be computed once
+		t = summarystatistics(d, Z) # only needs to be computed once
 		tx = vcat(repeat(t, 1, size(x, 2)), x) # NB ideally we'd avoid copying t so many times here, using @view
 		d.ϕ(tx) # Sanity check: stackarrays([d((Z, vec(x̃))) for x̃ in eachcol(x)])
 	end
 end
-
-# Multiple data sets: simple fallback method using broadcasting
+# Multiple data sets
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where A
-  	stackarrays(d.(Z))
+	# Stack into a single array before applying the outer network
+	d.ϕ(stackarrays(summarystatistics(d, Z))) # TODO should stackarrays be replaced with reduce(hcat, )?
 end
-
-# Multiple data sets: optimised version for array data.
-function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-
-	# Convert to a single large array
-	z = stackarrays(Z)
-
-	# Apply the inner neural network
-	ψa = d.ψ(z)
-
-	# Compute the indices needed for aggregation and construct a tuple of colons
-	# used to subset all but the last dimension of ψa.
-	indices = _getindices(Z)
-	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
-
-	# Construct the summary statistics
-	# NB for some reason, with the new "explicit" gradient() required by
-	# Flux/Zygote, an error is caused if one uses the same variable name outside
-	# and inside a broadcast like this. For instance, if for the object "stats"
-	# below we had called it "t", then error would be thrown by gradient().
-	stats = map(eachindex(Z)) do i
-		idx = indices[i]
-		t = d.a(ψa[colons..., idx])
-		if !isnothing(d.S)
-			s = d.S(Z[i])
-			t = vcat(t, s)
-		end
-		t
-	end
-
-	# Stack into a single array and apply the outer network
-	return d.ϕ(stackarrays(stats))
-end
-
 # Multiple data sets with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
 	Z, x = tup
-	t = d.a.(d.ψ.(Z))
-	if !isnothing(d.S)
-		s = d.S.(Z)
-		t = vcat.(t, s)
-	end
-	# TODO can the above be replaced by?: t = summary.(Ref(d), Z)
-	t = vcat.(t, x)
-	stackarrays(d.ϕ.(t))
+	t = summarystatistics(d, Z)
+	tx = vcat.(t, x)
+	d.ϕ(stackarrays(tx))  # TODO should stackarrays be replaced with reduce(hcat, )?
 end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractMatrix{T}} where {A, T}
 	Z, x = tup
@@ -237,27 +194,110 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	end
 end
 
-# Multiple data sets: optimised version for array data + vector set-level covariates.
-# (basically the same code as array method without covariates)
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A <: AbstractArray{T, N}, B <: AbstractVector{T}} where {T, N}
-	Z, X = tup
-	z = stackarrays(Z)
-	ψa = d.ψ(z)
-	indices = _getindices(Z)
-	colons  = ntuple(_ -> (:), ndims(ψa) - 1)
-	stats = map(eachindex(Z)) do i
-		idx = indices[i]
-		t = d.a(ψa[colons..., idx])
-		if !isnothing(d.S)
-			s = d.S(Z[i])
-			t = vcat(t, s)
-		end
-		u = vcat(t, X[i])
-		u
-	end
-	d.ϕ(stackarrays(stats))
-end
+#TODO document summarystatistics()
 
+# Fallback method to allow neural estimators to be called directly
+summarystatistics(est, Z) = summarystatistics(est.deepset, Z)
+# Single data set
+function summarystatistics(d::DeepSet, Z::A) where A
+	if !isnothing(d.ψ) 
+		t = d.a(d.ψ(Z))
+	end	
+	if !isnothing(d.S)
+		s = @ignore_derivatives d.S(Z)
+		if !isnothing(d.ψ)
+			t = vcat(t, s)
+		else 
+			t = s
+		end 
+	end
+	return t
+end
+# Multiple data sets: general fallback using broadcasting
+function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where A
+  	summarystatistics.(Ref(d), Z)
+end
+# Multiple data sets: optimised version for array data
+function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+
+
+	if !isnothing(d.ψ) 
+		# Convert to a single large array and then apply the inner network
+		ψa = d.ψ(stackarrays(Z)) # TODO should stackarrays be replaced with reduce(hcat, )?
+
+		# Compute the indices needed for aggregation and construct a tuple of colons
+		# used to subset all but the last dimension of ψa.
+		indices = _getindices(Z)
+		colons  = ntuple(_ -> (:), ndims(ψa) - 1)
+
+		# Construct the summary statistics
+		# NB with the new "explicit" gradient() required by Flux/Zygote, an error is
+		# caused if one uses the same variable name outside and inside a broadcast
+		# like this. For instance, if I were to name the result of the following call
+		# "t" and include a variable inside the broadcast called "t", an error would
+		# be thrown by gradient(), since "t" already appears
+		t = map(indices) do idx
+			d.a(ψa[colons..., idx])
+		end 
+	end
+
+	if !isnothing(d.S)
+		s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
+		if !isnothing(d.ψ)
+			t = vcat.(t, s)
+		else 
+			t = s
+		end 
+	end 
+
+	return t
+end
+# Multiple data sets: optimised version for graph data
+function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
+
+	# TODO assert that d.ψ is nothing or an object of type GNNSummary
+
+	if !isnothing(d.ψ) 
+		# For efficiency, convert Z from a vector of (super)graphs into a single
+		# supergraph before applying the neural network. Since each element of Z
+		# may itself be a supergraph (where each subgraph corresponds to an
+		# independent replicate), record the grouping of independent replicates
+		# so that they can be combined again later in the function
+		m = numberreplicates.(Z)
+		g = @ignore_derivatives Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
+
+		# Propagation and readout
+		R = d.ψ(g) 
+
+		# Split R based on the original vector of data sets Z 
+		if ndims(R) == 2
+			# R is a matrix, with column dimension M = sum(m), and we split R 
+			# based on the original grouping specified by m 
+			ng = length(m)
+			cs = cumsum(m)
+			indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
+			R̃ = [R[:, idx] for idx ∈ indices]
+		elseif ndims(R) == 3
+			R̃ = [R[:, :, i] for i ∈ 1:size(R, 3)]
+		end
+
+		# Now we have a vector of matrices, where each matrix corresponds to the
+		# readout vectors R₁, …, Rₘ for a given data set. Now, aggregate these
+		# readout vectors into a single summary statistic for each data set:
+		t = d.a.(R̃)
+	end
+
+	if !isnothing(d.S)
+		s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
+		if !isnothing(d.ψ)
+			t = vcat.(t, s)
+		else 
+			t = s
+		end 
+	end 
+
+	return t
+end
 
 
 
@@ -605,7 +645,7 @@ Wrapper around the standard
 [Dense](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dense) layer that
 ensures positive weights (biases are left unconstrained).
 
-This layer can be useful for constucting (partially) monotonic neural networks (see, e.g., [`QuantileEstimatorContinuous`])(@ref).
+This layer can be useful for constucting (partially) monotonic neural networks (see, e.g., [`QuantileEstimatorContinuous`](@ref)).
 
 # Examples
 ```
@@ -632,7 +672,7 @@ function (d::DensePositive)(x::AbstractVecOrMat)
   σ = NNlib.fast_act(a.σ, x) # replaces tanh => tanh_fast, etc
   xT = _match_eltype(a, x)   # fixes Float64 input, etc.
   if d.last_only
-	  weight = d.g.(hcat(a.weight[:, 1:end-1], a.weight[:, end:end]))
+	  weight = hcat(a.weight[:, 1:end-1], d.g.(a.weight[:, end:end]))
   else
 	  weight = d.g.(a.weight)
   end

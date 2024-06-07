@@ -218,7 +218,7 @@ For two points separated by `h` units, compute the Matérn covariance function,
 with range parameter `ρ`, smoothness parameter `ν`, and marginal variance parameter `σ²`.
 
 We use the parametrisation
-``C(\|\mathbf{h}\|) = \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \left(\frac{\|\mathbf{h}\|}{\rho}\right)^\nu K_\nu \left(\frac{\|\mathbf{h}\|}{\rho}\right)``,
+``C(\|\boldsymbol{h}\|) = \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \left(\frac{\|\boldsymbol{h}\|}{\rho}\right)^\nu K_\nu \left(\frac{\|\boldsymbol{h}\|}{\rho}\right)``,
 where ``\Gamma(\cdot)`` is the gamma function, and ``K_\nu(\cdot)`` is the modified Bessel
 function of the second kind of order ``\nu``.
 """
@@ -305,6 +305,7 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
 
 	return L
 end
+
 
 function maternchols(D::V, ρ, ν, σ² = one(nested_eltype(D)); stack::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 

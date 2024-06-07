@@ -16,8 +16,6 @@ makedocs(
            "API" => [
                 "API/core.md",
                 "API/architectures.md",
-                "API/summarystatistics.md", 
-                "API/activationfunctions.md",
                 "API/loss.md",
                 "API/simulation.md",
                 "API/utility.md",
