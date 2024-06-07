@@ -1,6 +1,6 @@
 #TODO add example once I add simulateconditionalGP
 #TODO Improve documentation (math display isn't the best here)
-"""
+@doc raw"""
     EM(simulateconditional::Function, MAP::Function, θ₀ = nothing)
 A type that implements the Monte Carlo variant of the expectation-maximisation
 (EM) algorithm, which at ``l``th iteration finds the value of 𝛉 that maximises
