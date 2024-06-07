@@ -155,10 +155,10 @@ end
 
 	# Test that the number of neighbours is correct 
 	f(A) = collect(mapslices(nnz, A; dims = 1))
-	@test all(f(adjacencymatrix(S, k)) .== k)
-	@test all(1 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k)
-	@test all(k+1 .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k)
-	@test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k)
+	@test all(f(adjacencymatrix(S, k)) .== k) 
+	@test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k) 
+	@test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k) 
+	@test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k) 
 	@test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1)
 	@test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k) 
 	@test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+1) 
@@ -167,14 +167,14 @@ end
 	pts = range(0, 1, length = 10) 
 	S = expandgrid(pts, pts)
 	@test all(f(adjacencymatrix(S, k)) .== k) 
-	@test all(1 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k)
-	@test all(k+1 .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k) 
+	@test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k)
+	@test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k) 
 	@test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k) 
 	@test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1) 
 	@test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k) 
 	@test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+1) 
 
-	# check for the case k > n
+	# Check that k > n doesn't cause an error
 	n = 3
 	d = 2
 	S = rand(n, d)

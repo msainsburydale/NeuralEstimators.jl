@@ -240,22 +240,19 @@ For illustration, we again consider the spatial Gaussian process model with expo
 
 ```
 struct Parameters{T} <: ParameterConfigurations
-	θ::Matrix{T}
-	L             # Cholesky factors
-	g             # spatial graphs
-	S             # spatial locations 
+	θ::Matrix{T}   # true parameters  
+	L              # Cholesky factors
+	g              # spatial graphs
+	S              # spatial locations 
 end
 ```
 
-Again, we define two constructors, which will be convenient for sampling an arbitrary number of parameters from the prior during training and assessment, and for performing parametric bootstrap sampling:
+Again, we define two constructors, which will be convenient for sampling parameters from the prior during training and assessment, and for performing parametric bootstrap sampling when making inferences from observed data:
 
 ```
 function sample(K::Integer)
 
 	# Sample parameters from the prior 
-	θ = rand(Uniform(0.05, 0.5), 1, K)
-
-	# Sample parameters from the prior distribution
 	θ = rand(Uniform(0.05, 0.5), 1, K)
 
 	# Simulate spatial configurations over the unit square
@@ -269,9 +266,10 @@ end
 
 function Parameters(θ::Matrix, S)
 
+	# Number of parameter vectors
 	K = size(θ, 2)
 
-	# Distance matrix, covariance matrices, and Cholesky factors
+	# Distance matrices, covariance matrices, and Cholesky factors
 	D = pairwise.(Ref(Euclidean()), S, dims = 1)
 	L = Folds.map(1:K) do k
 		Σ = exp.(-D[k] ./ θ[k])
@@ -302,26 +300,35 @@ end
 simulate(parameters::Parameters, m::Integer = 1) = simulate(parameters, range(m, m))
 ```
 
-Next we construct an appropriate GNN architecture, as illustrated below. Here, our goal is to construct a point estimator, however any other kind of estimator (see [Estimators](@ref)) can be constructed by simply substituting the appropriate estimator class in the final line below.
+Next we construct an appropriate GNN architecture, as illustrated below. Here, our goal is to construct a point estimator, however any other kind of estimator (see [Estimators](@ref)) can be constructed by simply substituting the appropriate estimator class in the final line below:
 
 ```
-# Propagation module
-dₕ = 256  # dimension of final node feature vectors
-propagation = GNNChain(
-	SpatialGraphConv(1 => 32),
-	SpatialGraphConv(32 => 64),
-	SpatialGraphConv(64 => dₕ)
-	)
+# Spatial weight function constructed using 0-1 basis functions 
+h_max = 0.15 # maximum distance to consider 
+q = 10       # output dimension of the spatial weights
+w = IndicatorWeights(h_max, q)
 
-# Readout module and dimension of readout vector
+# Propagation module
+propagation = GNNChain(
+	SpatialGraphConv(1 => q, relu, w = w, w_out = q),
+	SpatialGraphConv(q => q, relu, w = w, w_out = q)
+)
+
+# Readout module
 readout = GlobalPool(mean)
-dᵣ = dₕ  
+
+# Global features 
+globalfeatures = SpatialGraphConv(1 => q, relu, w = w, w_out = q, glob = true)
 
 # Summary network
-ψ = GNNSummary(propagation, readout)
+ψ = GNNSummary(propagation, readout, globalfeatures)
 
 # Mapping module
-ϕ = Chain(Dense(dᵣ, 64, relu), Dense(64, 1))
+ϕ = Chain(
+	Dense(2q => 128, relu), 
+	Dense(128 => 128, relu), 
+	Dense(128 => 1, identity)
+)
 
 # DeepSet object
 deepset = DeepSet(ψ, ϕ)
@@ -330,31 +337,31 @@ deepset = DeepSet(ψ, ϕ)
 θ̂ = PointEstimator(deepset)
 ```
 
-Next, we train the estimator (note that the fast training of a graph neural network requires a GPU):
+Next, we train the estimator:
 
 ```
 m = 1
-K = 10000
+K = 3000
 θ_train = sample(K)
-θ_val = sample(K ÷ 10)
-θ̂ = train(θ̂, θ_train, θ_val, simulate)
+θ_val   = sample(K÷5)
+θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 5)
 ```
 
-Then, we can assess our trained estimator as before: 
+Then, we assess our trained estimator as before: 
 
 ```
 θ_test = sample(1000)
 Z_test = simulate(θ_test, m)
 assessment = assess(θ̂, θ_test, Z_test)
-bias(assessment)    # 0.003
-rmse(assessment)    # 0.051
-risk(assessment)    # 0.039
+bias(assessment)    # 0.001
+rmse(assessment)    # 0.037
+risk(assessment)    # 0.029
 plot(assessment)   
 ```
 
 ![Estimates from a graph neural network (GNN) based neural Bayes estimator](../assets/figures/spatial.png)
 
-Finally, once the estimator has been assessed, it may be applied to observed data, with bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`interval`](@ref). Below, we use simulated data as a substitute for observed data:
+Finally, once the estimator has been assessed and is deemed to be performant, it may be applied to observed data, with bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`interval`](@ref). Below, we use simulated data as a substitute for observed data:
 
 ```
 parameters = sample(1)       # sample a single parameter vector
@@ -363,5 +370,5 @@ Z = simulate(parameters)     # simulate data
 S = parameters.S             # observed locations
 θ̂(Z)                         # point estimates
 bs = bootstrap(θ̂, Parameters(θ̂(Z), S), simulate, m)   
-interval(bs)	 			 # parametric bootstrap confidence interval              
+interval(bs)                 # parametric bootstrap confidence interval              
 ```

@@ -31,6 +31,8 @@ estimateinbatches
 
 expandgrid
 
+IndicatorWeights
+
 initialise_estimator
 
 loadbestweights
