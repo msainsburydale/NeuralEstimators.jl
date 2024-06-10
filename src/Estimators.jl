@@ -115,31 +115,60 @@ end
 
 # ---- QuantileEstimatorDiscrete  ----
 
+#TODO Single shared summary statistic computation for efficiency
+# TODO improve print output
+
 @doc raw"""
-	QuantileEstimatorDiscrete(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus)
+	QuantileEstimatorDiscrete(v::DeepSet; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus, i = nothing)
+	(estimator::QuantileEstimatorDiscrete)(Z)
+	(estimator::QuantileEstimatorDiscrete)(Z, θ₋ᵢ)
 
 A neural estimator that jointly estimates a fixed set of marginal posterior
 quantiles with probability levels $\{\tau_1, \dots, \tau_T\}$, controlled by the
 keyword argument `probs`.
 
-The estimator employs a representation that prevents quantile crossing, namely,
+By default, the estimator approximates the marginal quantiles for all parameters in the model, 
+that is, the quantiles of 
+```math
+\theta_i \mid \boldsymbol{Z}
+```
+for parameters $\boldsymbol{\theta} \equiv (\theta_1, \dots, \theta_p)'$.
+Alternatively, if initialised with `i` set to a positive integer
+(or collection of integers), the estimator approximates the quantiles of
+the full conditional distribution
+```math
+\theta_i \mid \boldsymbol{Z}, \boldsymbol{\theta}_{-i},
+```
+where $\boldsymbol{\theta}_{-i}$ denotes the parameter vector with its $i$th
+element(s) removed. For ease of exposition, when targetting marginal
+posteriors of the form $\theta_i \mid \boldsymbol{Z}$ (i.e., the default behaviour),
+we define $\text{dim}(\boldsymbol{\theta}_{-i}) ≡ 0$.
 
+The estimator leverages the [`DeepSet`](@ref) architecture, subject to two
+requirements. First, the number of input neurons in the first layer of the
+inference network (i.e., the outer network) must be equal to the number of
+neurons in the final layer of the summary network plus
+$\text{dim}(\boldsymbol{\theta}_{-i})$. Second, the number of output neurons in
+the final layer of the inference network must be equal to
+$p - \text{dim}(\boldsymbol{\theta}_{-i})$. 
+ The estimator employs a representation that prevents quantile crossing, namely,
 ```math
 \begin{aligned}
-\hat{\boldsymbol{q}}^{(\tau_1)}(\boldsymbol{Z}) &= \boldsymbol{v}^{(\tau_1)}(\boldsymbol{Z}),\\
-\hat{\boldsymbol{q}}^{(\tau_t)}(\boldsymbol{Z}) &= \boldsymbol{v}^{(\tau_1)}(\boldsymbol{Z}) + \sum_{j=2}^t g(\boldsymbol{v}^{(\tau_j)}(\boldsymbol{Z})), \quad t = 2, \dots, T,
+\boldsymbol{q}^{(\tau_1)}(\boldsymbol{Z}) &= \boldsymbol{v}^{(\tau_1)}(\boldsymbol{Z}),\\
+\boldsymbol{q}^{(\tau_t)}(\boldsymbol{Z}) &= \boldsymbol{v}^{(\tau_1)}(\boldsymbol{Z}) + \sum_{j=2}^t g(\boldsymbol{v}^{(\tau_j)}(\boldsymbol{Z})), \quad t = 2, \dots, T,
 \end{aligned}
 ```
-where $\boldsymbol{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$, are unconstrained neural
+where $\boldsymbol{q}^{(\tau)}(\boldsymbol{Z})$ denotes the vector of $\tau$-quantiles for parameters $\boldsymbol{\theta} \equiv (\theta_1, \dots, \theta_p)'$, 
+and $\boldsymbol{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$, are unconstrained neural
 networks that transform data into $p$-dimensional vectors, and $g(\cdot)$ is a
 non-negative function (e.g., exponential or softplus) applied elementwise to
-its arguments. In this implementation, the same neural-network architecture `v`
-is used for each $\boldsymbol{v}^{(\tau_t)}(\cdot)$, $t = 1, \dots, T$.
+its arguments. If `g=nothing`, the quantiles are estimated independently through the representation,  
+```math
+\boldsymbol{q}^{(\tau_t)}(\boldsymbol{Z}) = \boldsymbol{v}^{(\tau_t)}(\boldsymbol{Z}), \quad t = 1, \dots, T. 
+```
 
-Note that one may use a simple [`PointEstimator`](@ref) and the
-[`quantileloss`](@ref) to target a specific quantile.
-
-The return value  when applied to data is a matrix with ``pT`` rows, where the
+The return value is a matrix with 
+$(p - \text{dim}(\boldsymbol{\theta}_{-i})) \times T$ rows, where the
 first set of ``T`` rows corresponds to the estimated quantiles for the first
 parameter, the second set of ``T`` rows corresponds to the estimated quantiles
 for the second parameter, and so on.
@@ -186,41 +215,95 @@ end
 Z = simulate(θ, m)
 q̂(Z)                                             # neural quantiles
 reduce(hcat, quantile.(posterior.(Z), Ref(τ)))   # true quantiles
+
+
+# ---- Full conditionals ----
+
+
+# Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
+d = 1         # dimension of each independent replicate
+p = 2         # number of unknown parameters in the statistical model
+m = 30        # number of independent replicates in each data set
+function sample(K)
+	μ = randn32(1, K)
+	σ = rand(InverseGamma(3, 1), 1, K)
+	θ = vcat(μ, σ)
+end
+simulate(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
+simulate(θ::Matrix, m) = simulate.(eachcol(θ), m)
+
+# Architecture
+ψ = Chain(Dense(d, 32, relu), Dense(32, 32, relu))
+ϕ = Chain(Dense(32 + 1, 32, relu), Dense(32, 1))
+v = DeepSet(ψ, ϕ)
+
+# Initialise estimators respectively targetting quantiles of μ∣Z,σ and σ∣Z,μ 
+τ = [0.05, 0.25, 0.5, 0.75, 0.95]
+q₁ = QuantileEstimatorDiscrete(v; probs = τ, i = 1)
+q₂ = QuantileEstimatorDiscrete(v; probs = τ, i = 2)
+
+# Train the estimators
+q₁ = train(q₁, sample, simulate, m = m)
+q₂ = train(q₂, sample, simulate, m = m)
+
+# Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
+θ = prior(1000)
+Z = simulate(θ, m)    
+θ₋ᵢ = 0.5f0 
+q₁(Z, θ₋ᵢ)
+
+# Can also apply to a single data set only 
+q₁(Z[1], θ₋ᵢ)
 ```
 """
 struct QuantileEstimatorDiscrete{V, P} <: NeuralEstimator
 	v::V
 	probs::P
-	g::Function
+	g::Union{Function, Nothing}
+	i::Union{Integer, Nothing}
 end
-QuantileEstimatorDiscrete(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus) = QuantileEstimatorDiscrete(deepcopy.(repeat([v], length(probs))), probs, g)
+function QuantileEstimatorDiscrete(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus, i = nothing)
+	if !isnothing(i) @assert i > 0 end 
+	QuantileEstimatorDiscrete(deepcopy.(repeat([v], length(probs))), probs, g, i)
+end
 @layer QuantileEstimatorDiscrete
 Flux.trainable(est::QuantileEstimatorDiscrete) = (v = est.v, )
-function (est::QuantileEstimatorDiscrete)(Z)
+function (est::QuantileEstimatorDiscrete)(input) # input might be Z, or a tuple (Z, θ₋ᵢ)
 
 	# Apply each neural network to Z
 	v = map(est.v) do v
-		v(Z)
+		v(input)
 	end
 
-	# Simple approach: does not ensure monotonicity
-	# return vcat(q...)
+	# If g is specified, impose monotonicity 
+	if isnothing(est.g) 
+		q = v
+	else 
+		gv = broadcast.(est.g, v[2:end])
+		q = cumsum([v[1], gv...])
+	end 
 
-	# Monotonic approach:
-	# Apply the monotonically increasing transformation to all but the first result
-	gv = broadcast.(est.g, v[2:end])
-	# Combine
-	q = [v[1], gv...]
-	reduce(vcat, cumsum(q))
+	# Convert to matrix
+	reduce(vcat, q)
 end
+# user-level convenience methods (not used internally) for full conditional estimation
+function (est::QuantileEstimatorDiscrete)(Z, θ₋ᵢ::Vector)
+	i = est.i
+	@assert !isnothing(i) "slot i must be specified when approximating a full conditional"
+	if isa(Z, Vector) # repeat θ₋ᵢ to match the number of data sets 
+		θ₋ᵢ = [θ₋ᵢ for _ in eachindex(Z)]
+	end 
+	est((Z, θ₋ᵢ))  # "Tupleise" the input and apply the estimator
+end
+(est::QuantileEstimatorDiscrete)(Z, θ₋ᵢ::Number) = est(Z, [θ₋ᵢ])
 
 
-#TODO change QuantileEstimatorContinuous to simply QuantileEstimator? Maybe we can just alias it.
+
 #TODO Closed-form posterior for full conditionals for comparison
 @doc raw"""
 	QuantileEstimatorContinuous(deepset::DeepSet; i = nothing)
-	(estimator::ConditionalQuantileEstimator)(Z, τ)
-	(estimator::ConditionalQuantileEstimator)(Z, θ₋ᵢ, τ)
+	(estimator::QuantileEstimatorContinuous)(Z, τ)
+	(estimator::QuantileEstimatorContinuous)(Z, θ₋ᵢ, τ)
 A neural estimator targetting posterior quantiles.
 
 Given as input data $\boldsymbol{Z}$ and the desired probability level
@@ -261,6 +344,8 @@ the examples below.
 The return value is a matrix with $p - \text{dim}(\boldsymbol{\theta}_{-i})$ rows,
 corresponding to the estimated quantile for each parameter not in $\boldsymbol{\theta}_{-i}$.
 
+See also [`QuantileEstimatorDiscrete`](@ref).
+
 # Examples
 ```
 using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
@@ -276,14 +361,13 @@ simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
 
 # Architecture: partially monotonic network to preclude quantile crossing
 w = 64  # width of each hidden layer
-q = 16  # number of learned summary statistics
 ψ = Chain(
 	Dense(d, w, relu),
 	Dense(w, w, relu),
-	Dense(w, q, relu)
+	Dense(w, w, relu)
 	)
 ϕ = Chain(
-	DensePositive(Dense(q + 1, w, relu); last_only = true),
+	DensePositive(Dense(w + 1, w, relu); last_only = true),
 	DensePositive(Dense(w, w, relu)),
 	DensePositive(Dense(w, p))
 	)
@@ -322,6 +406,7 @@ quantile.(posterior(z), τ)   # true quantiles
 
 # ---- Full conditionals ----
 
+
 # Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
 d = 1         # dimension of each independent replicate
 p = 2         # number of unknown parameters in the statistical model
@@ -340,14 +425,13 @@ simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
 
 # Architecture: partially monotonic network to preclude quantile crossing
 w = 64  # width of each hidden layer
-q = 16  # number of learned summary statistics
 ψ = Chain(
 	Dense(d, w, relu),
 	Dense(w, w, relu),
-	Dense(w, q, relu)
+	Dense(w, w, relu)
 	)
 ϕ = Chain(
-	DensePositive(Dense(q + p, w, relu); last_only = true),
+	DensePositive(Dense(w + p, w, relu); last_only = true),
 	DensePositive(Dense(w, w, relu)),
 	DensePositive(Dense(w, 1))
 	)
@@ -363,7 +447,7 @@ q̂ = train(q̂, sample, simulate, m = m)
 # Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
 θ = prior(1000)
 Z = simulateZ(θ, m)
-θ₋ᵢ = 0.5f0    # for mulatiparameter scenarios, use θ[Not(i), :] to determine the order that the conditioned parameters should be given
+θ₋ᵢ = 0.5f0    # for multiparameter scenarios, use θ[Not(i), :] to determine the order that the conditioned parameters should be given
 τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
 q̂(Z, θ₋ᵢ, τ)
 
@@ -408,9 +492,9 @@ function (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Matrix)
 	if !isa(q, Vector) q = [q] end
 	reduce(hcat, permutedims.(q))
 end
-(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Vector) = est(Z, θ₋ᵢ, permutedims(reduce(vcat, τ)))
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Vector) = est(Z, θ₋ᵢ, permutedims(reduce(vcat, τ)))  # TODO should it be permutedims(), or reshape() to nx1 matrix? 
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Number) = est(Z, θ₋ᵢ, repeat([τ], size(θ₋ᵢ, 2)))
-(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Vector, τ::Vector) = est(Z, permutedims(θ₋ᵢ), permutedims(τ))
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Vector, τ::Vector) = est(Z, permutedims(θ₋ᵢ), permutedims(τ))  # TODO should it be permutedims(), or reshape() to nx1 matrix? 
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Vector, τ::Number) = est(Z, θ₋ᵢ, [τ])
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Number) = est(Z, [θ₋ᵢ], τ)
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Vector) = est(Z, [θ₋ᵢ], τ)
@@ -481,14 +565,13 @@ simulate(θ::AbstractMatrix, m) = simulate.(eachcol(θ), m)
 
 # Architecture
 w = 64 # width of each hidden layer
-q = 2p # number of learned summary statistics
 ψ = Chain(
 	Dense(d, w, relu),
 	Dense(w, w, relu),
 	Dense(w, q, relu)
 	)
 ϕ = Chain(
-	Dense(q + p, w, relu),
+	Dense(w + p, w, relu),
 	Dense(w, w, relu),
 	Dense(w, 1)
 	)

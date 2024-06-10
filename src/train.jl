@@ -456,8 +456,7 @@ function train(θ̂::Union{IntervalEstimator, QuantileEstimatorDiscrete}, args..
 end
 
 function train(θ̂::QuantileEstimatorContinuous, args...; kwargs...)
-	# We define the loss function in the methods
-	# _risk(θ̂::QuantileEstimatorContinuous)
+	# We define the loss function in the method _risk(θ̂::QuantileEstimatorContinuous)
 	# Here, just notify the user if they've assigned a loss function
 	kwargs = (;kwargs...)
 	if haskey(kwargs, :loss)
@@ -486,7 +485,7 @@ function _constructset(θ̂, simulator::Function, θ::P, m, batchsize) where {P 
 	_constructset(θ̂, Z, θ, batchsize)
 end
 function _constructset(θ̂, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-	Z = ZtoFloat32(Z) #TODO what if this is a tuple (e.g., RatioEstimator?)
+	Z = ZtoFloat32(Z) 
 	θ = θtoFloat32(_extractθ(θ))
 	_DataLoader((Z, θ), batchsize)
 end
@@ -517,6 +516,24 @@ function _constructset(θ̂::RatioEstimator, Z, θ::P, batchsize) where {P <: Un
 
 	# Combine data and parameters into a single tuple
 	input = (Z, θ)
+
+	_DataLoader((input, output), batchsize)
+end
+function _constructset(θ̂::QuantileEstimatorDiscrete, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+	Z = ZtoFloat32(Z)
+	θ = θtoFloat32(_extractθ(θ))
+
+	i = θ̂.i
+	if isnothing(i)
+		input  = Z
+		output = θ
+	else
+		@assert size(θ, 1) >= i "The number of parameters in the model (size(θ, 1) = $(size(θ, 1))) must be at least as large as the value of i stored in the estimator (θ̂.i = $(θ̂.i))"
+		θᵢ  = θ[i:i, :]
+		θ₋ᵢ = θ[Not(i), :]
+		input  = (Z, θ₋ᵢ) # "Tupleise" the input
+		output = θᵢ
+	end
 
 	_DataLoader((input, output), batchsize)
 end
