@@ -535,7 +535,7 @@ function assess(
 	use_ξ = false,
 	ξ  = nothing,
 	xi = nothing,
-	use_gpu::Bool = true,
+	use_gpu = true,
 	verbose::Bool = true,
 	kwargs...
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}

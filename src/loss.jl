@@ -11,14 +11,50 @@ _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
 @non_differentiable _check_sizes(ŷ::Any, y::Any)
 
 
-# ---- kpowerloss ----
+# ---- surrogates for 0-1 loss ----
 
-#TODO also implement other loss functions that can be used to approximate the 0-1 loss.
+#TODO use @doc raw and improve documentation 
+
+"""
+    tanhloss(θ̂, y, k; agg = mean, joint = true)
+
+For `k` > 0, computes the loss function,
+
+```math
+L(θ̂, θ) = tanh(|θ̂ - θ|/k),
+```
+
+which approximates the 0-1 loss as `k` → 0. Compared with the [`kpowerloss`](@ref), 
+which may also be used as a continuous surrogate for the 0-1 loss, the gradient of
+the tanh loss is bounded as |θ̂ - θ| → 0, which can improve numerical stability during 
+training. 
+
+If `joint = true`, the L₁ norm is computed over each parameter vector, so that, with 
+`k` close to zero, the resulting Bayes estimator is the mode of the joint posterior distribution;
+otherwise, if `joint = false`, the Bayes estimator is the vector containing the modes of the
+marginal posterior distributions.
+
+See also [`kpowerloss`](@ref).
+"""
+function tanhloss(θ̂, θ, k; agg = mean, joint::Bool = true)
+
+  _check_sizes(θ̂, θ)
+
+  d = abs.(θ̂ .- θ)
+  if joint
+     d = sum(d, dims = 1)
+  end
+
+  L = tanh_fast(d ./ k)
+
+  return agg(L)
+end
+
 
 """
     kpowerloss(θ̂, y, k; agg = mean, joint = true, safeorigin = true, ϵ = 0.1)
 
-For `k` ∈ (0, ∞), the `k`-th power absolute-distance loss,
+For `k` > 0, the `k`-th power absolute-distance loss function,
 
 ```math
 L(θ̂, θ) = |θ̂ - θ|ᵏ,
@@ -29,14 +65,16 @@ cases (the latter obtained in the limit as `k` → 0). It is Lipschitz continuou
 iff `k` = 1, convex iff `k` ≥ 1, and strictly convex iff `k` > 1: it is
 quasiconvex for all `k` > 0.
 
-If `joint = true`, the L₁ norm is computed over each parameter vector, so that
-the resulting Bayes estimator is the mode of the joint posterior distribution;
-otherwise, the Bayes estimator is the vector containing the modes of the
+If `joint = true`, the L₁ norm is computed over each parameter vector, so that, with 
+`k` close to zero, the resulting Bayes estimator is the mode of the joint posterior distribution;
+otherwise, if `joint = false`, the Bayes estimator is the vector containing the modes of the
 marginal posterior distributions.
 
 If `safeorigin = true`, the loss function is modified to avoid pathologies
 around the origin, so that the resulting loss function behaves similarly to the
 absolute-error loss in the `ϵ`-interval surrounding the origin.
+
+See also [`tanhloss`](@ref).
 """
 function kpowerloss(θ̂, θ, k; safeorigin::Bool = true, agg = mean, ϵ = ofeltype(θ̂, 0.1), joint::Bool = true)
 

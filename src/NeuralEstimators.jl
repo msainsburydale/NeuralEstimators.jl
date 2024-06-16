@@ -41,7 +41,7 @@ using StatsBase: wsample
 using Suppressor
 using Zygote
 
-export kpowerloss, intervalscore, quantileloss
+export tanhloss, kpowerloss, intervalscore, quantileloss
 include("loss.jl")
 
 export ParameterConfigurations, subsetparameters

@@ -140,6 +140,9 @@ function numberreplicates(Z::V) where {V <: AbstractVector{A}} where A
 	numberreplicates.(Z)
 end
 
+
+#TODO this falls over with missing data because T is Union{Number, Missing}. Why did I impose T <: Number? If no real reason, remove. 
+
 # specific methods
 function numberreplicates(Z::A) where {A <: AbstractArray{T, N}} where {T <: Number, N}
 	size(Z, N)

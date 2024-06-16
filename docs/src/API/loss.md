@@ -5,6 +5,8 @@ In addition to the standard loss functions provided by `Flux`
 functions.
 
 ```@docs
+tanhloss
+
 kpowerloss
 
 quantileloss
