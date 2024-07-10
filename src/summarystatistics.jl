@@ -108,80 +108,8 @@ samplecorrelation(z::AbstractVector) = samplecorrelation(reshape(z, :, 1))
 
 
 
-## Summary statistics for spatial point processes 
-#TODO unit testing, document and export
-#TODO Don't use S for the expert summary statistics... clashes with the spatial locations 
-"""
-	DistanceQuantiles(probs) <: GNNLayer
-
-# Examples
-```
-using NeuralEstimators, Flux, GraphNeuralNetworks
-using Statistics: mean
-
-# Generate some toy spatial data
-m = 5            # number of replicates
-d = 2            # spatial dimension
-n = 100          # number of spatial locations
-S = rand(n, d)   # spatial locations
-Z = rand(n, m)   # toy data
-g = spatialgraph(S, Z)
-
-# Propagation and readout modules forming the neural-summary network
-propagation = GNNChain(
-	SpatialGraphConv(1 => 16), 
-	SpatialGraphConv(16 => 32)
-	)
-readout = GlobalPool(mean)
-ψ = GNNSummary(propagation, readout)
-
-# Expert summary statistics 
-probs = collect(0.1:0.2:0.9)
-S = DistanceQuantiles(probs)
-S(g) # can apply directly to spatial graph
-
-# Inference network and DeepSeet object
-p = 3 # number of parameters in the statistical model
-ϕ = Chain(Dense(32 + length(probs), 64, relu), Dense(64, p))
-θ̂ = DeepSet(ψ, ϕ; S = S)
-
-# Apply full estimator to spatial graph 
-θ̂(g)
-
-# Batched graph 
-G = Flux.batch([g, g])
-@test S(G) == S(g)
-```
-"""
-struct DistanceQuantiles{T} <: GNNLayer
-    probs::T
-	#TODO assert that all probs are greater than 0 and less than 1, or figure out how to accomodate the zero case 
-	#TODO assert that probs are ascending
-	#TODO convert to Float32 and ensure probs is a vector
-end
-@layer DistanceQuantiles
-function (l::DistanceQuantiles)(g::GNNGraph)
-	
-	# NB in the case of a batched graph, see the comments in the method summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
-
-	h = g.graph[3] # spatial distances 
-
-	# Don't wish to include zero distances... there will be exactly num_nodes 
-	# zero values corresponding to the diagonal of the adjacency matrix. 
-	# Since we need to sort the distances anyway to compute the quantiles, 
-	# we can exploit this as follows:
-	h_sorted = sort(h)[Not(1:g.num_nodes)]
-
-	# quantile() is not implemented yet on the GPU (see https://github.com/JuliaGPU/CUDA.jl/issues/265)
-	# instead, since sort() does work well on the GPU, we will use that (the functionality that I need is 
-	# simpler, and easier to implement, than that provided in the general function quantile()).
-	# quantile(h, l.probs) 
-	n = length(h_sorted)
-	idx = ceil.(Int64, probs .* n)
-	h_sorted[idx]
-end
-
 #TODO clean up this documentation (e.g., don't bother with the bin notation)
+#TODO there is a more general structure that we could define, that has message(xi, xj, e) as a slot
 @doc raw"""
 	NeighbourhoodVariogram(h_max, n_bins) 
 	(l::NeighbourhoodVariogram)(g::GNNGraph)
@@ -263,9 +191,6 @@ function (l::NeighbourhoodVariogram)(g::GNNGraph)
 end
 @layer NeighbourhoodVariogram
 Flux.trainable(l::NeighbourhoodVariogram) =  ()
-
-#TODO there is a more general structure that we could define, that has message(xi, xj, e) as a slot
-
 
 
 """

@@ -1,13 +1,12 @@
 using NeuralEstimators
 import NeuralEstimators: simulate
 using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, rowwisenorm
-using CUDA
 using DataFrames
 using Distributions
 using Distances
+#using CUDA 
 using Flux
 using Flux: batch, DataLoader, mae, mse
-using GaussianRandomFields
 using Graphs
 using GraphNeuralNetworks
 using LinearAlgebra
@@ -22,14 +21,15 @@ array(size...; T = Float32) = T.(reshape(1:prod(size), size...) ./ prod(size))
 arrayn(size...; T = Float32) = array(size..., T = T) .- mean(array(size..., T = T))
 verbose = false # verbose used in NeuralEstimators code (not @testset)
 
-if CUDA.functional()
-	@info "Testing on both the CPU and the GPU... "
-	CUDA.allowscalar(false)
-	devices = (CPU = cpu, GPU = gpu)
-else
+#TODO figure out how to get CUDA installed as a test dependency only
+# if CUDA.functional()
+# 	@info "Testing on both the CPU and the GPU... "
+# 	CUDA.allowscalar(false)
+# 	devices = (CPU = cpu, GPU = gpu)
+# else
 	@info "The GPU is unavailable so we will test on the CPU only... "
 	devices = (CPU = cpu,)
-end
+# end
 
 # ---- Stand-alone functions ----
 
@@ -351,15 +351,6 @@ end
 
 	@test eltype(simulategaussianprocess(L₁, m)) == Float32
 	# @code_warntype simulategaussianprocess(L₁, σ, m)
-
-	# Passing GaussianRandomFields:
-	cov = CovarianceFunction(2, Matern(ρ[1], ν[1]))
-	grf = GaussianRandomField(cov, GaussianRandomFields.Cholesky(), S)
-	y₁  = simulategaussianprocess(L₁)
-	y₂  = simulategaussianprocess(grf)
-	y₃  = simulateschlather(grf)
-	@test length(y₁) == length(y₂) == length(y₃)
-	@test size(grf) == size(grf, 1) == n
 end
 
 # Testing the function simulate(): Univariate Gaussian model with unknown mean and standard deviation
@@ -750,11 +741,7 @@ end
 
     # Readout module
     nt = 32   # dimension of the summary vector for each node
-    no = 128  # dimension of the final summary vector for each graph
-    readout = UniversalPool(
-    	Chain(Dense(nh, nt), Dense(nt, nt)),
-    	Chain(Dense(nt, nt), Dense(nt, no))
-    	)
+    readout = GlobalPool(mean)
 	show(devnull, readout)
 
 	# Summary network
@@ -763,7 +750,7 @@ end
     # Mapping module
     p = 3     # number of parameters in the statistical model
     w = 64    # width of layers used for the outer network ϕ
-    ϕ = Chain(Dense(no, w, relu), Dense(w, w, relu), Dense(w, p))
+    ϕ = Chain(Dense(nt, w, relu), Dense(w, w, relu), Dense(w, p))
 
     # Construct the estimator
     θ̂ = DeepSet(ψ, ϕ)

@@ -252,6 +252,7 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
 
 	return t
 end
+
 # Multiple data sets: optimised version for graph data
 function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
 
@@ -298,7 +299,6 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 
 	return t
 end
-
 
 
 # ---- Activation functions -----

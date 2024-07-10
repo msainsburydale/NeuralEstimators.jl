@@ -43,19 +43,12 @@ end
 
 # ---- Gaussian process ----
 
-# returns the number of locations in the field
-size(grf::GaussianRandomField) = prod(size(grf.mean))
-size(grf::GaussianRandomField, d::Integer) = size(grf)
-
 """
-	simulategaussianprocess(L::Matrix, m = 1)
-	simulategaussianprocess(grf::GaussianRandomField, m = 1)
+	simulategaussianprocess(L::AbstractMatrix, m = 1)
 
 Simulates `m` independent and identically distributed (i.i.d.) realisations from
-a mean-zero Gaussian process.
-
-Accepts either the lower Cholesky factor `L` associated with a Gaussian process
-or an object from the package [`GaussianRandomFields`](https://github.com/PieterjanRobbe/GaussianRandomFields.jl).
+a mean-zero multivariate Gaussian random variable with associated lower Cholesky 
+factor `L`. 
 
 If `m` is not specified, the simulated data are returned as a vector with
 length equal to the number of spatial locations, ``n``; otherwise, the data are
@@ -71,60 +64,38 @@ n = 500
 ρ = 0.6
 ν = 1.0
 S = rand(n, 2)
-
-# Passing a Cholesky factor:
-D = pairwise(Euclidean(), S, S, dims = 1)
+D = pairwise(Euclidean(), S, dims = 1)
 Σ = Symmetric(matern.(D, ρ, ν))
 L = cholesky(Σ).L
 simulategaussianprocess(L)
-
-# Passing a GaussianRandomField with Cholesky decomposition:
-using GaussianRandomFields
-cov = CovarianceFunction(2, Matern(ρ, ν))
-grf = GaussianRandomField(cov, GaussianRandomFields.Cholesky(), S)
-simulategaussianprocess(grf)
-
-# Passing a GaussianRandomField with circulant embedding (fast but requires regular grid):
-pts = range(0.0, 1.0, 20)
-grf = GaussianRandomField(cov, CirculantEmbedding(), pts, pts, minpadding = 100)
-simulategaussianprocess(grf)
 ```
 """
-function simulategaussianprocess(obj::M, m::Integer) where M <: Union{AbstractMatrix{T}, GaussianRandomField} where T <: Number
+function simulategaussianprocess(obj::M, m::Integer) where M <: AbstractMatrix{T} where T <: Number
 	y = [simulategaussianprocess(obj) for _ ∈ 1:m]
 	y = stackarrays(y, merge = false)
 	return y
 end
 
-# TODO This should really dispatch on LowerTriangular, Symmetric, and
-# UpperTriangular. For backwards compatability, we can keep the following
-# method for L::AbstractMatrix.
 function simulategaussianprocess(L::M) where M <: AbstractMatrix{T} where T <: Number
 	L * randn(T, size(L, 1))
 end
-
-function simulategaussianprocess(grf::GaussianRandomField)
-	vec(GaussianRandomFields.sample(grf))
-end
-
 
 # TODO add simulateGH()
 
 # ---- Schlather's max-stable model ----
 
 """
-	simulateschlather(L::Matrix, m = 1)
-	simulateschlather(grf::GaussianRandomField, m = 1)
+	simulateschlather(L::Matrix, m = 1; C = 3.5, Gumbel::Bool = false)
 
 Simulates `m` independent and identically distributed (i.i.d.) realisations from
 Schlather's max-stable model using the algorithm for approximate simulation given
 by [Schlather (2002)](https://link.springer.com/article/10.1023/A:1020977924878).
 
-Accepts either the lower Cholesky factor `L` associated with a Gaussian process
-or an object from the package [`GaussianRandomFields`](https://github.com/PieterjanRobbe/GaussianRandomFields.jl).
+Requires the lower Cholesky factor `L` associated with the covariance matrix of 
+the underlying Gaussian process. 
 
 If `m` is not specified, the simulated data are returned as a vector with
-length equal to the number of spatial locations, ``n``; otherwise, the data are
+length equal to the number of spatial locations, ``n``; otherwise, the data are 
 returned as an ``n``x`m` matrix.
 
 # Keyword arguments
@@ -141,39 +112,23 @@ n = 500
 ρ = 0.6
 ν = 1.0
 S = rand(n, 2)
-
-# Passing a Cholesky factor:
-D = pairwise(Euclidean(), S, S, dims = 1)
+D = pairwise(Euclidean(), S, dims = 1)
 Σ = Symmetric(matern.(D, ρ, ν))
 L = cholesky(Σ).L
 simulateschlather(L)
-
-# Passing a GaussianRandomField with Cholesky decomposition:
-using GaussianRandomFields
-cov = CovarianceFunction(2, Matern(ρ, ν))
-grf = GaussianRandomField(cov, GaussianRandomFields.Cholesky(), S)
-simulateschlather(grf)
-
-# Passing a GaussianRandomField with circulant embedding (fast but requires regular grid):
-pts = range(0.0, 1.0, 20)
-grf = GaussianRandomField(cov, CirculantEmbedding(), pts, pts, minpadding = 100)
-simulateschlather(grf)
 ```
 """
-function simulateschlather(obj::M, m::Integer; C = 3.5, Gumbel::Bool = true) where M <: Union{AbstractMatrix{T}, GaussianRandomField} where T <: Number
-	y = [simulateschlather(obj, C = C, Gumbel = Gumbel) for _ ∈ 1:m]
+function simulateschlather(obj::M, m::Integer; kwargs...) where M <: AbstractMatrix{T} where T <: Number
+	y = [simulateschlather(obj; kwargs...) for _ ∈ 1:m]
 	y = stackarrays(y, merge = false)
 	return y
 end
 
-function simulateschlather(obj::M; C = 3.5, Gumbel::Bool = true) where M <: Union{AbstractMatrix{T}, GaussianRandomField} where T <: Number
-
-	# small hack to get the right eltype
-	if typeof(obj) <: GaussianRandomField G = eltype(obj.cov) else G = T end
+function simulateschlather(obj::M; C = 3.5, Gumbel::Bool = false) where M <: AbstractMatrix{T} where T <: Number
 
 	n   = size(obj, 1)  # number of observations
-	Z   = fill(zero(G), n)
-	ζ⁻¹ = randexp(G)
+	Z   = fill(zero(T), n)
+	ζ⁻¹ = randexp(T)
 	ζ   = 1 / ζ⁻¹
 
 	# We must enforce E(max{0, Yᵢ}) = 1. It can
@@ -191,9 +146,9 @@ function simulateschlather(obj::M; C = 3.5, Gumbel::Bool = true) where M <: Unio
 
 	while (ζ * C) > minimum(Z)
 		Y = simulategaussianprocess(obj)
-		Y = √(G(2π)) * Y
+		Y = √(T(2π)) * Y
 		Z = max.(Z, ζ * Y)
-		E = randexp(G)
+		E = randexp(T)
 		ζ⁻¹ += E
 		ζ = 1 / ζ⁻¹
 	end

@@ -81,6 +81,7 @@ function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, st
 end
 spatialgraph(S::AbstractVector; kwargs...) = batch(spatialgraph.(S; kwargs...)) # spatial locations varying between replicates
 
+
 # Wrappers that allow data to be passed into an already-constructed graph
 # (useful for partial simulation on the fly with the parameters held fixed)
 spatialgraph(g::GNNGraph, Z) = GNNGraph(g, ndata = (g.ndata..., Z = reshapeZ(Z)))
@@ -156,10 +157,57 @@ end
 # g = spatialgraph(S, Z) 
 # ```
 
+
+#TODO think about where to put this 
+@doc raw"""
+	IndicatorWeights(h_max, n_bins::Integer)
+	(w::IndicatorWeights)(h::Matrix) 
+For spatial locations $\boldsymbol{s}$ and  $\boldsymbol{u}$, creates a spatial weight function defined as
+
+```math 
+\boldsymbol{w}(\boldsymbol{s}, \boldsymbol{u}) \equiv (\mathbb{I}(h \in B_k) : k = 1, \dots, K)',
+```
+
+where $\mathbb{I}(\cdot)$ denotes the indicator function, 
+$h \equiv \|\boldsymbol{s} - \boldsymbol{u} \|$ is the spatial distance between $\boldsymbol{s}$ and 
+$\boldsymbol{u}$, and $\{B_k : k = 1, \dots, K\}$ is a set of $K =$`n_bins` equally-sized distance bins covering the spatial distances between 0 and `h_max`. 
+
+# Examples 
+```
+using NeuralEstimators 
+
+h_max = 1
+n_bins = 10
+w = IndicatorWeights(h_max, n_bins)
+h = rand(1, 30) # distances between 30 pairs of spatial locations 
+w(h)
+```
+"""
+struct IndicatorWeights{T} 
+    h_cutoffs::T
+end 
+function IndicatorWeights(h_max, n_bins::Integer) 
+	h_cutoffs = range(0, stop=h_max, length=n_bins+1)
+	h_cutoffs = collect(h_cutoffs)
+	IndicatorWeights(h_cutoffs)
+end
+function (l::IndicatorWeights)(h::M) where M <: AbstractMatrix{T} where T
+	#TODO might be faster to use apply_edges or another GNN function instead (and this might be neater in any case)
+	# Bin the distances
+	h_cutoffs = l.h_cutoffs
+	bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
+	bins_lower = h_cutoffs[1:end-1] # lower bounds of the distance bins 
+	N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
+	N = reduce(vcat, N)
+	Float32.(N)
+end
+@layer IndicatorWeights
+Flux.trainable(l::IndicatorWeights) =  ()
+
+
 # ---- GraphConv ----
 
 # 3D array version of GraphConv to allow the option to forego spatial information
-
 """
 	(l::GraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
 
@@ -447,37 +495,6 @@ function Base.show(io::IO, l::SpatialGraphConv)
     print(io, ")")
 end
 
-#TODO export
-#TODO parameters need to be stored as an array to be trainable... make a user-friendly constructor for this 
-#TODO constrain a ∈ [0, 1] and b ∈ [0.5, 2]
-"""
-
-# Examples 
-```
-f = PowerDifference([0.5f0], [2.0f0])
-x = rand32(3, 4)
-y = rand32(3, 4)
-f(x, y)
-
-ps = Flux.params(f)
-
-f = gpu(f)
-x = gpu(x)
-y = gpu(y)
-f(x, y)
-```
-"""
-struct PowerDifference{A,B}
-	a::A
-	b::B
-end 
-@layer PowerDifference
-export PowerDifference
-(f::PowerDifference)(x, y) = (abs.(f.a .* x - (1 .- f.a) .* y)).^f.b
-(f::PowerDifference)(tup::Tuple) = f(tup[1], tup[2])
-
-
-using GraphNeuralNetworks: scatter, gather
 """
     normalise_edges(g, e)
 
@@ -514,114 +531,37 @@ function normalise_edge_neighbors(g::AbstractGNNGraph, e)
     return e ./ (den .+ eps(eltype(e)))
 end
 
-@doc raw"""
-	IndicatorWeights(h_max, n_bins::Integer)
-	(w::IndicatorWeights)(h::Matrix) 
-For spatial locations $\boldsymbol{s}$ and  $\boldsymbol{u}$, creates a spatial weight function defined as
 
-```math 
-\boldsymbol{w}(\boldsymbol{s}, \boldsymbol{u}) \equiv (\mathbb{I}(h \in B_k) : k = 1, \dots, K)',
-```
-
-where $\mathbb{I}(\cdot)$ denotes the indicator function, 
-$h \equiv \|\boldsymbol{s} - \boldsymbol{u} \|$ is the spatial distance between $\boldsymbol{s}$ and 
-$\boldsymbol{u}$, and $\{B_k : k = 1, \dots, K\}$ is a set of $K =$`n_bins` equally-sized distance bins covering the spatial distances between 0 and `h_max`. 
+#TODO Think about where to put this
+#TODO export
+#TODO parameters need to be stored as an array to be trainable... make a user-friendly constructor for this 
+#TODO constrain a ∈ [0, 1] and b ∈ [0.5, 2]
+"""
 
 # Examples 
 ```
-using NeuralEstimators 
+f = PowerDifference([0.5f0], [2.0f0])
+x = rand32(3, 4)
+y = rand32(3, 4)
+f(x, y)
 
-h_max = 1
-n_bins = 10
-w = IndicatorWeights(h_max, n_bins)
-h = rand(1, 30) # distances between 30 pairs of spatial locations 
-w(h)
+ps = Flux.params(f)
+
+f = gpu(f)
+x = gpu(x)
+y = gpu(y)
+f(x, y)
 ```
 """
-struct IndicatorWeights{T} 
-    h_cutoffs::T
+struct PowerDifference{A,B}
+	a::A
+	b::B
 end 
-function IndicatorWeights(h_max, n_bins::Integer) 
-	h_cutoffs = range(0, stop=h_max, length=n_bins+1)
-	h_cutoffs = collect(h_cutoffs)
-	IndicatorWeights(h_cutoffs)
-end
-function (l::IndicatorWeights)(h::M) where M <: AbstractMatrix{T} where T
-	#TODO might be faster to use apply_edges or another GNN function instead (and this might be neater in any case)
-	# Bin the distances
-	h_cutoffs = l.h_cutoffs
-	bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
-	bins_lower = h_cutoffs[1:end-1] # lower bounds of the distance bins 
-	N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
-	N = reduce(vcat, N)
-	Float32.(N)
-end
-@layer IndicatorWeights
-Flux.trainable(l::IndicatorWeights) =  ()
+@layer PowerDifference
+export PowerDifference
+(f::PowerDifference)(x, y) = (abs.(f.a .* x - (1 .- f.a) .* y)).^f.b
+(f::PowerDifference)(tup::Tuple) = f(tup[1], tup[2])
 
-#TODO document if I end up using this  
-struct GraphSkipConnection{T} <: GNNLayer
-	layers::T
-end
-@layer GraphSkipConnection
-function (skip::GraphSkipConnection)(g::GNNGraph)
-  h = skip.layers(g)
-  x = cat(h.ndata.Z, g.ndata.Z; dims = 1)
-  @ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = x))
-end
-function Base.show(io::IO, b::GraphSkipConnection)
-  print(io, "GraphSkipConnection(", b.layers, ")")
-end
-
-# ---- Universal pooling layer ----
-
-@doc raw"""
-    UniversalPool(ψ, ϕ)
-Pooling layer (i.e., readout layer) from the paper ['Universal Readout for Graph Convolutional Neural Networks'](https://ieeexplore.ieee.org/document/8852103).
-It takes the form,
-```math
-\boldsymbol{V} = ϕ(|G|⁻¹ \sum_{s\in G} ψ(\boldsymbol{h}_s)),
-```
-where ``\boldsymbol{V}`` denotes the summary vector for graph ``G``,
-``\boldsymbol{h}_s`` denotes the vector of hidden features for node ``s \in G``,
-and `ψ` and `ϕ` are dense neural networks.
-
-See also the pooling layers available from [`GraphNeuralNetworks.jl`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/pool/).
-
-# Examples
-```julia
-using NeuralEstimators, Flux, GraphNeuralNetworks
-using Graphs: random_regular_graph
-
-# Construct an input graph G
-n_h     = 16  # dimension of each feature node
-n_nodes = 10
-n_edges = 4
-G = GNNGraph(random_regular_graph(n_nodes, n_edges), ndata = rand(Float32, n_h, n_nodes))
-
-# Construct the pooling layer
-n_t = 32  # dimension of the summary vector for each node
-n_v = 64  # dimension of the final summary vector V
-ψ = Dense(n_h, n_t)
-ϕ = Dense(n_t, n_v)
-pool = UniversalPool(ψ, ϕ)
-
-# Apply the pooling layer
-pool(G)
-```
-"""
-struct UniversalPool{G,F}
-    ψ::G
-    ϕ::F
-end
-@layer UniversalPool
-function (l::UniversalPool)(g::GNNGraph, x::AbstractArray)
-    u = reduce_nodes(mean, g, l.ψ(x))
-    t = l.ϕ(u)
-    return t
-end
-(l::UniversalPool)(g::GNNGraph) = GNNGraph(g, gdata = l(g, node_features(g)))
-Base.show(io::IO, D::UniversalPool) = print(io, "\nUniversal pooling layer:\nInner network ψ ($(nparams(D.ψ)) parameters):  $(D.ψ)\nOuter network ϕ ($(nparams(D.ϕ)) parameters):  $(D.ϕ)")
 
 # TODO explain the required dimenson of the feature matrix extracted by globalfeatures
 @doc raw"""
@@ -730,6 +670,7 @@ end
 # g = simulate(θ, 5)
 # g = Flux.batch(g)
 # ψ(g)
+
 
 # ---- Adjacency matrices ----
 

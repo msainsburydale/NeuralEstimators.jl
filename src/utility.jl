@@ -150,14 +150,6 @@ end
 function numberreplicates(Z::V) where {V <: AbstractVector{T}} where {T <: Number}
 	numberreplicates(reshape(Z, :, 1))
 end
-function numberreplicates(Z::G) where {G <: GNNGraph}
-	x = :Z ∈ keys(Z.ndata) ? Z.ndata.Z : first(values(Z.ndata))
-	if ndims(x) == 3
-		size(x, 2)
-	else
-		Z.num_graphs
-	end
-end
 function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
 	Z = tup[1]
 	X = tup[2]
@@ -170,6 +162,16 @@ function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, M}} where {V₁ <:
 	@assert length(Z) == size(X, 2)
 	numberreplicates(Z)
 end
+
+function numberreplicates(Z::G) where {G <: GNNGraph}
+	x = :Z ∈ keys(Z.ndata) ? Z.ndata.Z : first(values(Z.ndata))
+	if ndims(x) == 3
+		size(x, 2)
+	else
+		Z.num_graphs
+	end
+end
+
 
 #TODO Recall that I set the code up to have ndata as a 3D array; with this format,
 #     non-parametric bootstrap would be exceedingly fast (since we can subset the array data, I think).
@@ -216,6 +218,19 @@ subsetdata(Z, 1:3) # extract first 3 replicates from each data set
 function subsetdata end
 
 
+## NB this method is overloaded in ext/NeuralEstimatorsCUDAExt.jl 
+function subsetdata(Z::G, i) where {G <: AbstractGraph}
+	if typeof(i) <: Integer i = i:i end
+	sym = collect(keys(Z.ndata))[1]
+	if ndims(Z.ndata[sym]) == 3
+		GNNGraph(Z; ndata = Z.ndata[sym][:, i, :])
+	else
+		# @warn "`subsetdata()` is slow for graphical data."
+		# TODO getgraph() doesn’t return duplicates. So subsetdata(Z, [1, 1]) returns just a single graph
+		getgraph(Z, i)
+	end
+end
+
 # ---- Test code ----
 
 # n = 250  # number of observations in each realisation
@@ -259,23 +274,6 @@ function subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
 	Z[colons..., i]
 end
 
-function subsetdata(Z::G, i) where {G <: AbstractGraph}
-	if typeof(i) <: Integer i = i:i end
-	sym = collect(keys(Z.ndata))[1]
-	if ndims(Z.ndata[sym]) == 3
-		GNNGraph(Z; ndata = Z.ndata[sym][:, i, :])
-	else
-		# @warn "`subsetdata()` is slow for graphical data."
-		# TODO getgraph() doesn't currently work with the GPU: see https://github.com/CarloLucibello/GraphNeuralNetworks.jl/issues/161
-		# TODO getgraph() doesn’t return duplicates. So subsetdata(Z, [1, 1]) returns just a single graph
-		flag = Z.ndata[sym] isa CuArray
-		Z = cpu(Z)
-		Z = getgraph(Z, i)
-		if flag Z = gpu(Z) end
-		Z
-	end
-end
-
 function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
 	oldstd = stdout
 	redirect_stderr(devnull)
@@ -284,19 +282,15 @@ function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
 	return data_loader
 end
 
+# Here, we define _checkgpu() for the case that CUDA has not been loaded (so, we will be using the CPU)
+# For the case that CUDA is loaded, _checkgpu() is overloaded in ext/NeuralEstimatorsCUDAExt.jl 
 function _checkgpu(use_gpu::Bool; verbose::Bool = true)
-
-	if use_gpu && CUDA.functional()
-		if verbose @info "Running on CUDA GPU" end
-		CUDA.allowscalar(false)
-		device = gpu
-	else
-		if verbose @info "Running on CPU" end
-		device = cpu
-	end
-
+	if verbose @info "Running on CPU" end
+	device = cpu
 	return(device)
 end
+
+
 
 # ---- Functions for finding, saving, and loading the best neural network ----
 

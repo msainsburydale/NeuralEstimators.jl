@@ -1,34 +1,26 @@
 module NeuralEstimators
 
-#TODO precompilation 
-
 using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
 import Base: join, merge, show, size, summary
 using BSON: @save, load
 using ChainRulesCore: @non_differentiable, @ignore_derivatives
-using Clustering #TODO remove? 
-using CUDA #TODO NeuralEstimatorsCUDAExt
-using CUDA: CuArray #TODO NeuralEstimatorsCUDAExt
-using cuDNN #TODO NeuralEstimatorsCUDAExt
 using CSV
 using DataFrames
-using Distances #TODO remove? 
-using Distributions #TODO remove? 
-using Folds #TODO remove?
+using Distances 
+using Distributions: Poisson, Bernoulli, product_distribution
 using Flux
 using Flux: ofeltype, params, DataLoader, update!, glorot_uniform, onehotbatch, _size_check, _match_eltype # @layer
 using Flux: @functor; var"@layer" = var"@functor" # NB did this because even semi-recent versions of Flux do not include @layer
-using GraphNeuralNetworks #TODO NeuralEstimatorsGNNExt
-using GraphNeuralNetworks: check_num_nodes #TODO NeuralEstimatorsGNNExt
-import GraphNeuralNetworks: GraphConv; export GraphConv # method that acts on 3D arrays #TODO NeuralEstimatorsGNNExt
-using GaussianRandomFields #TODO remove 
-using Graphs #TODO NeuralEstimatorsGNNExt
+using Graphs 
+using GraphNeuralNetworks
+using GraphNeuralNetworks: check_num_nodes, scatter, gather
+import GraphNeuralNetworks: GraphConv 
 using InvertedIndices
 using LinearAlgebra
 using NamedArrays 
-using NearestNeighbors #TODO remove? 
-using Optim 
+using NearestNeighbors: KDTree, knn
+using Optim # needed to obtain the MAP with neural ratio
 using Random: randexp, shuffle
 using RecursiveArrayTools: VectorOfArray, convert
 using SparseArrays
@@ -36,7 +28,6 @@ using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum, quantile
 using StatsBase
 using StatsBase: wsample
-using Suppressor #TODO remove? 
 using Zygote 
 
 export tanhloss, kpowerloss, intervalscore, quantileloss
@@ -55,7 +46,7 @@ include("Estimators.jl")
 export sampleposterior, mlestimate, mapestimate, bootstrap, interval
 include("inference.jl")
 
-export spatialgraph, SpatialGraphConv, SpatialPyramidPool, UniversalPool, GNNSummary, adjacencymatrix, maternclusterprocess, GraphSkipConnection, IndicatorWeights
+export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights
 include("Graphs.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
@@ -74,7 +65,7 @@ include("assess.jl")
 export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches, rowwisenorm
 include("utility.jl")
 
-export samplesize, samplecorrelation, samplecovariance, NeighbourhoodVariogram, DistanceQuantiles
+export samplesize, samplecorrelation, samplecovariance, NeighbourhoodVariogram
 include("summarystatistics.jl")
 
 export EM, removedata, encodedata
@@ -83,6 +74,8 @@ include("missingdata.jl")
 end
 
 #TODO
+# - GPU on MacOS: https://github.com/JuliaGPU/Metal.jl
+# - precompilation 
 # - I sometimes use d to denote the dimension of the response variable, and sometimes q... try to be consistent
 # - Fix warnings that appear when running the test code
 # - assess(est::QuantileEstimatorDiscrete). Here, we can use simulation-based calibration (e.g., qq plots).
@@ -98,6 +91,7 @@ end
 # - Add helper functions for censored data and write an example in the documentation.
 
 # ---- long term:
+# - Separate GNN functionality (tried this with package extensions but not possible currently because we need to define custom structs)
 # - SpatialPyramidPool for CNNs (maybe someone already has this code in Julia?)
 # - Proper citations: https://juliadocs.org/DocumenterCitations.jl/stable/
 # - Might also be useful to store the parameter_names in NeuralEstimator: if they are present in the estimator, they can be compared to other sources of parameter_names as a sanity check, and they can be used in bootstrap() so that the bootstrap estimates and resulting intervals are given informative names.

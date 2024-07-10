@@ -138,7 +138,7 @@ end
 function (em::EM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = nothing; args...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 
 	if isnothing(θ₀)
-		@assert !isnothing(em.θ₀) "Please provide initial estimates `θ₀` either in the function call or in the `EM` object."
+		@assert !isnothing(em.θ₀) "Please provide initial estimates `θ₀` in the function call or in the `EM` object."
 		θ₀ = em.θ₀
 	end
 
@@ -146,10 +146,10 @@ function (em::EM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = nothing; args...
 		θ₀ = repeat(θ₀, 1, length(Z))
 	end
 
-	estimates = Folds.map(eachindex(Z)) do i
+	estimates = map(eachindex(Z)) do i
 		em(Z[i], θ₀[:, i]; args...)
 	end
-	estimates = hcat(estimates...)
+	estimates = reduce(hcat, estimates)
 
 	return estimates
 end

@@ -1,6 +1,6 @@
 # Examples
 
-Before proceeding, we first outline the required package dependencies. The following packages are used throughout these examples:
+Before proceeding, we first load the required packages. The following packages are used throughout these examples:
 
 ```
 using NeuralEstimators
@@ -18,12 +18,20 @@ using Folds                # parallel simulation (start Julia with --threads=aut
 using LinearAlgebra        # Cholesky factorisation
 ```
 
-Finally, the following packages are used only in the example with [Irregular spatial data](@ref): 
+The following packages are used only in the example with [Irregular spatial data](@ref): 
 
 ```
 using GraphNeuralNetworks  # GNN architecture
 using Statistics           # mean()
 ```
+
+Finally, various GPU backends can be used (see the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/gpu/#GPU-Support) for details). For instance, if one wishes to employ an NVIDIA GPU when running the following examples, simply the load the following packages:  
+
+```
+using CUDA
+using cuDNN
+```
+
 
 ## Univariate data
 
