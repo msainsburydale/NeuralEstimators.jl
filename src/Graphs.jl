@@ -23,7 +23,7 @@ and `S` should be given as an $m$-vector of $n_i \times d$ matrices.
 
 The spatial information between neighbours is stored as an edge feature, with the specific 
 information controlled by the keyword arguments `stationary` and `isotropic`. 
-Specifically, the edge feature between node  $j$ and node $j'$ stores the spatial 
+Specifically, the edge feature between node $j$ and node $j'$ stores the spatial 
 distance $\|\boldsymbol{s}_{j'} - \boldsymbol{s}_j\|$ (if `isotropic`), the spatial 
 displacement $\boldsymbol{s}_{j'} - \boldsymbol{s}_j$ (if `stationary`), or the matrix of  
 locations $(\boldsymbol{s}_{j'}, \boldsymbol{s}_j)$ (if `!stationary`).  

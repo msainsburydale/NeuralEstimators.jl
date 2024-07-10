@@ -133,14 +133,13 @@ that is, the quantiles of
 \theta_i \mid \boldsymbol{Z}
 ```
 for parameters $\boldsymbol{\theta} \equiv (\theta_1, \dots, \theta_p)'$.
-Alternatively, if initialised with `i` set to a positive integer
-(or collection of integers), the estimator approximates the quantiles of
+Alternatively, if initialised with `i` set to a positive integer, the estimator approximates the quantiles of
 the full conditional distribution
 ```math
 \theta_i \mid \boldsymbol{Z}, \boldsymbol{\theta}_{-i},
 ```
 where $\boldsymbol{\theta}_{-i}$ denotes the parameter vector with its $i$th
-element(s) removed. For ease of exposition, when targetting marginal
+element removed. For ease of exposition, when targetting marginal
 posteriors of the form $\theta_i \mid \boldsymbol{Z}$ (i.e., the default behaviour),
 we define $\text{dim}(\boldsymbol{\theta}_{-i}) ≡ 0$.
 
@@ -262,7 +261,7 @@ struct QuantileEstimatorDiscrete{V, P} <: NeuralEstimator
 	g::Union{Function, Nothing}
 	i::Union{Integer, Nothing}
 end
-function QuantileEstimatorDiscrete(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus, i = nothing)
+function QuantileEstimatorDiscrete(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus, i::Union{Integer, Nothing} = nothing)
 	if !isnothing(i) @assert i > 0 end 
 	QuantileEstimatorDiscrete(deepcopy.(repeat([v], length(probs))), probs, g, i)
 end
@@ -312,14 +311,14 @@ $\tau ∈ (0, 1)$, by default the estimator approximates the $\tau$-quantile of
 \theta_i \mid \boldsymbol{Z}
 ```
 for parameters $\boldsymbol{\theta} \equiv (\theta_1, \dots, \theta_p)'$.
-Alternatively, if initialised with `i` set to a positive integer
-(or collection of integers), the estimator approximates the $\tau$-quantile of
+Alternatively, if initialised with `i` set to a positive integer, the estimator 
+approximates the $\tau$-quantile of
 the full conditional distribution
 ```math
 \theta_i \mid \boldsymbol{Z}, \boldsymbol{\theta}_{-i},
 ```
 where $\boldsymbol{\theta}_{-i}$ denotes the parameter vector with its $i$th
-element(s) removed. For ease of exposition, when targetting marginal
+element removed. For ease of exposition, when targetting marginal
 posteriors of the form $\theta_i \mid \boldsymbol{Z}$ (i.e., the default behaviour),
 we define $\text{dim}(\boldsymbol{\theta}_{-i}) ≡ 0$.
 
@@ -431,7 +430,7 @@ w = 64  # width of each hidden layer
 	Dense(w, w, relu)
 	)
 ϕ = Chain(
-	DensePositive(Dense(w + p, w, relu); last_only = true),
+	DensePositive(Dense(w + 2, w, relu); last_only = true),
 	DensePositive(Dense(w, w, relu)),
 	DensePositive(Dense(w, 1))
 	)
@@ -445,7 +444,7 @@ q̂ = QuantileEstimatorContinuous(deepset; i = i)
 q̂ = train(q̂, sample, simulate, m = m)
 
 # Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
-θ = prior(1000)
+θ = sample(1000)
 Z = simulateZ(θ, m)
 θ₋ᵢ = 0.5f0    # for multiparameter scenarios, use θ[Not(i), :] to determine the order that the conditioned parameters should be given
 τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
@@ -492,12 +491,61 @@ function (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Matrix)
 	if !isa(q, Vector) q = [q] end
 	reduce(hcat, permutedims.(q))
 end
-(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Vector) = est(Z, θ₋ᵢ, permutedims(reduce(vcat, τ)))  # TODO should it be permutedims(), or reshape() to nx1 matrix? 
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Vector) = est(Z, θ₋ᵢ, permutedims(reduce(vcat, τ)))  
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Number) = est(Z, θ₋ᵢ, repeat([τ], size(θ₋ᵢ, 2)))
-(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Vector, τ::Vector) = est(Z, permutedims(θ₋ᵢ), permutedims(τ))  # TODO should it be permutedims(), or reshape() to nx1 matrix? 
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Vector, τ::Vector) = est(Z, reshape(θ₋ᵢ, :, 1), permutedims(τ))  
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Vector, τ::Number) = est(Z, θ₋ᵢ, [τ])
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Number) = est(Z, [θ₋ᵢ], τ)
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Vector) = est(Z, [θ₋ᵢ], τ)
+
+
+# using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
+# # Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
+# d = 1         # dimension of each independent replicate
+# p = 3         # number of unknown parameters in the statistical model
+# m = 30        # number of independent replicates in each data set
+# function sample(K)
+# 	μ = randn32(K)
+# 	σ = rand(InverseGamma(3, 1), K)
+# 	θ = hcat(μ, σ, σ)'
+# 	θ = Float32.(θ)
+# 	return θ
+# end
+# simulateZ(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
+# simulateZ(θ::Matrix, m) = simulateZ.(eachcol(θ), m)
+# simulateτ(K)    = [rand32(1) for k in 1:K]
+# simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
+
+# # Architecture: partially monotonic network to preclude quantile crossing
+# w = 64  # width of each hidden layer
+# ψ = Chain(
+# 	Dense(d, w, relu),
+# 	Dense(w, w, relu),
+# 	Dense(w, w, relu)
+# 	)
+# ϕ = Chain(
+# 	DensePositive(Dense(w + 3, w, relu); last_only = true),
+# 	DensePositive(Dense(w, w, relu)),
+# 	DensePositive(Dense(w, 1))
+# 	)
+# deepset = DeepSet(ψ, ϕ)
+
+# # Initialise the estimator for the first parameter, targetting μ∣Z,σ
+# i = 1
+# q̂ = QuantileEstimatorContinuous(deepset; i = i)
+
+# # Train the estimator
+# q̂ = train(q̂, sample, simulate, m = m)
+
+# # Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
+# θ = sample(1000)
+# Z = simulateZ(θ, m)
+# θ₋ᵢ = [0.5f0, 0.6f0]    # for multiparameter scenarios, use θ[Not(i), :] to determine the order that the conditioned parameters should be given
+# τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
+# q̂(Z, θ₋ᵢ, τ)
+
+# # Estimate quantiles for a single data set
+# q̂(Z[1], θ₋ᵢ, τ)
 
 
 # ---- RatioEstimator  ----

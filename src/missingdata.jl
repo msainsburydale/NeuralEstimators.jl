@@ -88,7 +88,7 @@ function (em::EM)(
 	end
 
 	if !isnothing(ξ)
-		if use_ξ_in_simulateconditional && use_ξ_in_MAP
+		if !use_ξ_in_simulateconditional && !use_ξ_in_MAP
 			@warn "`ξ` has been provided but it will not be used because `use_ξ_in_simulateconditional` and `use_ξ_in_MAP` are both `false`"
 		end
 	end
@@ -236,11 +236,11 @@ function removedata(Z::A, n::Integer;
 			if contiguous_pattern
 				start = StatsBase.sample(1:n+1, 1)[1]
 				Iᵤ = start:(start+(d-n)-1)
-				Iᵤ = [Iᵤ .+ (i-1) * d for i ∈ 1:m]
 			else
 				Iᵤ = StatsBase.sample(1:d, d-n, replace = false)
-				Iᵤ = [Iᵤ .+ (i-1) * d for i ∈ 1:m]
+				
 			end
+			Iᵤ = [Iᵤ .+ (i-1) * d for i ∈ 1:m]
 		else
 			if contiguous_pattern
 				Iᵤ = map(1:m) do i
@@ -252,7 +252,6 @@ function removedata(Z::A, n::Integer;
 			end
 		end
 		Iᵤ = vcat(Iᵤ...)
-
 	end
 
 	return removedata(Z, Iᵤ)
@@ -260,7 +259,6 @@ end
 function removedata(Z::V, n::Integer; args...) where {V <: AbstractVector{T}} where {T}
 	removedata(reshape(Z, :, 1), n)[:]
 end
-
 
 function removedata(Z::A, p::F; args...) where {A <: AbstractArray{T, N}} where {T, N, F <: AbstractFloat}
 	if isa(Z, Vector) Z = reshape(Z, :, 1) end
@@ -271,7 +269,6 @@ end
 function removedata(Z::V, p::F; args...) where {V <: AbstractVector{T}} where {T, F <: AbstractFloat}
 	removedata(reshape(Z, :, 1), p)[:]
 end
-
 
 function removedata(Z::A, p::Vector{F}; prevent_complete_missing::Bool = true) where {A <: AbstractArray{T, N}} where {T, N, F <: AbstractFloat}
 	if isa(Z, Vector) Z = reshape(Z, :, 1) end

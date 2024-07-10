@@ -1,9 +1,28 @@
 # Examples
 
-The following packages are used throughout these examples:
+Before proceeding, we first outline the required package dependencies. The following packages are used throughout these examples:
 
 ```
-using NeuralEstimators, Flux, GraphNeuralNetworks, Distances, Distributions, Folds, LinearAlgebra, Statistics
+using NeuralEstimators
+using Flux                 # Julia's deep-learning library
+using Distributions        # sampling from probability distributions
+using AlgebraOfGraphics    # visualisation
+using CairoMakie           # visualisation
+```
+
+The following packages will be used in the examples with [Gridded data](@ref) and [Irregular spatial data](@ref):  
+
+```
+using Distances            # computing distance matrices 
+using Folds                # parallel simulation (start Julia with --threads=auto)
+using LinearAlgebra        # Cholesky factorisation
+```
+
+Finally, the following packages are used only in the example with [Irregular spatial data](@ref): 
+
+```
+using GraphNeuralNetworks  # GNN architecture
+using Statistics           # mean()
 ```
 
 ## Univariate data
@@ -102,7 +121,6 @@ Note that, when estimating a full covariance matrix, one may wish to constrain t
 
 ## Gridded data
 
-
 For data collected over a regular grid, neural estimators are typically based on a convolutional neural network (CNN; see, for example, [Dumoulin and Visin, 2016](https://arxiv.org/abs/1603.07285)). 
 
 In these settings, each data set must be stored as an ($N + 2$)-dimensional array, where $N$ is the dimension of the grid (e.g., $N = 1$ for time series, $N = 2$ for images, etc.). The penultimate dimension of the array stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes, etc.), while the final dimension stores independent replicates. For example, to store $50$ independent replicates of a bivariate spatial process measured over a $10\times15$ grid, one would construct an array of dimension $10\times15\times2\times50$.
@@ -139,7 +157,7 @@ function Parameters(θ::Matrix)
 	# Distance matrix, covariance matrices, and Cholesky factors
 	D = pairwise(Euclidean(), S, dims = 1)
 	K = size(θ, 2)
-	L = map(1:K) do k
+	L = Folds.map(1:K) do k
 		Σ = exp.(-D ./ θ[k])
 		cholesky(Symmetric(Σ)).L
 	end
@@ -162,7 +180,12 @@ function simulate(L, m = 1)
 
 	return Z
 end
-simulate(parameters::Parameters, m = 1) = [simulate(L, m) for L ∈ parameters.L]
+function simulate(parameters::Parameters, m = 1) 
+	Z = Folds.map(parameters.L) do L
+		simulate(L, m)
+	end
+	return Z
+end
 ```
 
 A possible architecture is as follows:
@@ -237,6 +260,7 @@ To cater for spatial data collected over arbitrary spatial locations, one may co
 - Constructing an appropriate architecture: see [`GNNSummary`](@ref) and [`SpatialGraphConv`](@ref).
 
 For illustration, we again consider the spatial Gaussian process model with exponential covariance function, and we define a struct for storing expensive intermediate objects needed for data simulation. In this case, these objects include Cholesky factors and spatial graphs (which store the adjacency matrices needed to perform graph convolution): 
+
 
 ```
 struct Parameters{T} <: ParameterConfigurations

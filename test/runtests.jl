@@ -691,8 +691,6 @@ m  = 10 # default sample size
 				rmse(assessment; average_over_sample_sizes = false)
 				rmse(assessment; average_over_parameters = false, average_over_sample_sizes = false)
 
-				figure = plot(assessment)
-
 				# J == 5 > 1
 				Z_test = simulator(parameters, m, 5)
 				assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)

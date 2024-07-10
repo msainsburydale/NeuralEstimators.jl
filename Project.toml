@@ -1,20 +1,19 @@
 name = "NeuralEstimators"
 uuid = "38f6df31-6b4a-4144-b2af-7ace2da57606"
-authors = ["Matthew Sainsbury-Dale <msdale@uow.edu.au> and contributors"]
-version = "0.2.0"
+authors = ["Matthew Sainsbury-Dale <msainsburydale@gmail.com> and contributors"]
+version = "0.2.1"
 
 [deps]
-AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 BSON = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
-CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
-ColorSchemes = "35d6a980-a343-548e-a6ea-1d62b119f2f4"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+FLoops = "cc61a311-1640-44b5-9fba-1b764f453329"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 Folds = "41a02a25-b8f0-4f67-bc48-60067656b558"
 Functors = "d9f16b24-f501-4c13-a1f2-28368ffc5196"
@@ -36,13 +35,22 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
-cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
+
+[weakdeps]
+AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+ColorSchemes = "35d6a980-a343-548e-a6ea-1d62b119f2f4"
+
+[extensions]
+NeuralEstimatorsPlotExt = ["AlgebraOfGraphics", "CairoMakie", "ColorSchemes"] 
 
 [compat]
-julia = "1.7"
+julia = "1.9"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
+
+

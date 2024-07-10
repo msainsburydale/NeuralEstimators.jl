@@ -342,3 +342,146 @@ function _coercetoKvector(x, K)
 	if length(x) == 1  x = repeat(x, K) end
 	return x
 end
+
+
+# ---- Potts model ----
+
+#TODO nsims argument
+
+"""
+	simulatepotts(grid::Matrix{Int}, β)
+	simulatepotts(grid::Matrix{Union{Int, Nothing}}, β)
+	simulatepotts(nrows::Int, ncols::Int, num_states::Int, β)
+
+Chequerboard Gibbs sampling for a 2D Potts model.
+
+# Keyword arguments
+- num_iterations::Int = 2000
+- burn::Int = 1000
+- thin::Int = 10
+- mask::Union{Matrix{Bool}, Nothing} = nothing
+
+# Examples
+```
+
+## Marginal simulation 
+using Random
+Random.seed!(1234)
+nrows, ncols =  10,10
+num_states = 5
+β = 0.8
+simulatepotts(nrows, ncols, num_states, β)
+
+using BenchmarkTools
+num_iterations = 200
+@belapsed simulatepotts(nrows, ncols, num_states, β, num_iterations = num_iterations)
+# sequential: 0.113351459
+# sequential, @inbounds: 0.113351459
+# threaded: 
+
+## Recreate Fig. 8.8 of Marin & Robert (2007) “Bayesian Core”
+using Plots 
+grids = [simulatepotts(100, 100, 2, β) for β ∈ 0.3:0.1:1.2]
+heatmaps = heatmap.(grids, legend = false, aspect_ratio=1)
+Plots.plot(heatmaps...)
+
+## Conditional simulation 
+β = 0.8
+complete_grid   = simulatepotts(100, 100, 2, β)      # simulate from the Ising model 
+incomplete_grid = removedata(complete_grid, 0.3)     # remove 30% of the pixels at random  
+imputed_grid    = simulatepotts(incomplete_grid, β)  # conditionally simulate over missing pixels
+"""
+function simulatepotts(grid::AbstractMatrix{Int}, β; nsims::Integer = 1, burn::Int = 1000, thin::Int = 10, num_iterations::Int = 2000, mask = nothing)
+
+	# TODO burn
+	# TODO thin 
+	# TODO return MCMC chain rather than just the end value 
+	
+	β = β[1] # remove the container if β was passed as a vector or a matrix 
+
+	nrows, ncols = size(grid)
+    num_states = maximum(grid) 
+
+    # Define chequerboard patterns
+    chequerboard1 = [(i+j) % 2 == 0 for i in 1:nrows, j in 1:ncols]
+    chequerboard2 = .!chequerboard1
+	if !isnothing(mask)
+		@assert size(grid) == size(mask)
+		chequerboard1 = chequerboard1 .&& mask 
+		chequerboard2 = chequerboard2 .&& mask 
+	end
+
+    # Define neighbours offsets (assuming 4-neighbour connectivity)
+    neighbour_offsets = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+
+    # Gibbs sampling iterations
+	for _ in 1:num_iterations
+		for chequerboard in (chequerboard1, chequerboard2)
+			for ci in findall(chequerboard)
+	
+				# Get cartesian coordinates of current pixel
+				i, j = Tuple(ci)
+	
+				# Calculate conditional probabilities Pr(zᵢ | z₋ᵢ, β)
+				n = zeros(num_states) # neighbour counts for each state
+				for (di, dj) in neighbour_offsets
+					ni, nj = i + di, j + dj
+					if 1 <= ni <= nrows && 1 <= nj <= ncols
+						@inbounds n[grid[ni, nj]] += 1
+					end
+				end
+				probs = exp.(β * n) 
+				probs /= sum(probs) # normalise 
+				u = rand()
+				new_state = findfirst(x -> x > u, cumsum(probs))
+		
+				# Update grid with new state
+				@inbounds grid[i, j] = new_state
+			end
+		end
+	end
+
+    return grid
+end
+
+
+
+function simulatepotts(nrows::Int, ncols::Int, num_states::Int, β; kwargs...)
+	grid = rand(1:num_states, nrows, ncols)
+	simulatepotts(grid, β; kwargs...)
+end
+
+function simulatepotts(grid::AbstractMatrix{Union{Missing, I}}, β; kwargs...) where I <: Integer 
+
+	# Avoid mutating the user's incomplete grid
+	grid = copy(grid) 
+	
+	# Find the number of states 
+	num_states = maximum(skipmissing(grid)) 
+	
+	# Compute the mask 
+	mask = ismissing.(grid)
+
+	# Replace missing entries with random states 
+	grid[mask] .= rand(1:num_states, sum(mask))
+
+	# Convert eltype of grid to Int 
+	grid = convert(Matrix{I}, grid)
+
+	# Conditionally simulate 
+	simulatepotts(grid, β; kwargs..., mask = mask)
+end
+
+function simulatepotts(Z::A, β; kwargs...) where A <: AbstractArray{T, N} where {T, N}
+
+  @assert all(size(Z)[3:end] .== 1) "Code for the Potts model is not equipped to handle independent replicates"
+
+  # Save the original dimensions
+	dims = size(Z)
+
+	# Convert to matrix and pass to the matrix method
+	Z = simulatepotts(Z[:, :], β; kwargs...)
+
+	# Convert Z to the correct dimensions
+	Z = reshape(Z, dims[1:end-1]..., :)
+end
