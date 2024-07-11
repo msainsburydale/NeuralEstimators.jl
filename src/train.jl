@@ -289,6 +289,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 			# Update θ̂ and compute the training risk
 			epoch_time = 0.0
 			train_risk = []
+			
 			for θ ∈ _ParameterLoader(θ_train, batchsize = batchsize)
 				sim_time   += @elapsed set = _constructset(θ̂, simulator, θ, m, batchsize)
 				epoch_time += @elapsed rsk = _risk(θ̂, loss, set, device, optimiser)

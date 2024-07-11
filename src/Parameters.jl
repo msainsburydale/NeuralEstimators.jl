@@ -91,7 +91,7 @@ struct _ParameterLoader{P <: Union{AbstractMatrix, ParameterConfigurations}, I <
     shuffle::Bool
 end
 
-function _ParameterLoader(parameters::P; batchsize::Integer = 1, shuffle::Bool = false, partial::Bool = true) where {P <: ParameterConfigurations}
+function _ParameterLoader(parameters::P; batchsize::Integer = 1, shuffle::Bool = false, partial::Bool = false) where {P <: ParameterConfigurations}
     @assert batchsize > 0
     K = size(parameters, 2)
     if K <= batchsize batchsize = K end

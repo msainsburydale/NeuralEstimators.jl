@@ -171,14 +171,14 @@ end
 # Multiple data sets
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where A
 	# Stack into a single array before applying the outer network
-	d.ϕ(stackarrays(summarystatistics(d, Z))) # TODO should stackarrays be replaced with reduce(hcat, )?
+	d.ϕ(stackarrays(summarystatistics(d, Z))) 
 end
 # Multiple data sets with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
 	Z, x = tup
 	t = summarystatistics(d, Z)
 	tx = vcat.(t, x)
-	d.ϕ(stackarrays(tx))  # TODO should stackarrays be replaced with reduce(hcat, )?
+	d.ϕ(stackarrays(tx))  
 end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V, M}} where {V <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
 	Z, x = tup
@@ -232,7 +232,7 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
 
 	if !isnothing(d.ψ) 
 		# Convert to a single large array and then apply the inner network
-		ψa = d.ψ(stackarrays(Z)) # TODO should stackarrays be replaced with reduce(hcat, )?
+		ψa = d.ψ(stackarrays(Z)) 
 
 		# Compute the indices needed for aggregation and construct a tuple of colons
 		# used to subset all but the last dimension of ψa.

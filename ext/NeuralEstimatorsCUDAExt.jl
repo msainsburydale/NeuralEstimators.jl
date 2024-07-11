@@ -1,4 +1,4 @@
-module NeuralEstimatorsPlotExt 
+module NeuralEstimatorsCUDAExt 
 
 using NeuralEstimators 
 using CUDA

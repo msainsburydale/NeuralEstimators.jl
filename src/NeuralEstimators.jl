@@ -74,34 +74,15 @@ include("missingdata.jl")
 end
 
 #TODO
-# - GPU on MacOS: https://github.com/JuliaGPU/Metal.jl
-# - precompilation 
-# - I sometimes use d to denote the dimension of the response variable, and sometimes q... try to be consistent
-# - Fix warnings that appear when running the test code
-# - assess(est::QuantileEstimatorDiscrete). Here, we can use simulation-based calibration (e.g., qq plots).
-# - assess(est::RatioEstimator). Here, we can use simulation-based calibration (e.g., qq plots).
-# - Incorporate the following package to very easily add a lot of bootstrap functionality: https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
-# - Examples: show a plot of a single data set within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
-# - Examples: Bivariate data in multivariate section.
-# - Examples: discrete parameter.
-# - Examples: Add functionality for storing and plotting the training-validation risk in the NeuralEstimator. This will involve changing _train() to return both the estimator and the risk, and then defining train(::NeuralEstimator) to update the slot containing the risk. We will also need _train() to take the argument "loss_vs_epoch", so that we can "continue training". Oncce I do this, I can then add a plotting method for plotting the risk.
+# - Update train() with new explicit formulation required by Flux 
+# - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. Seems easy, just need to add precompile(f, (arg_types…)) to whichever methods we want to precompile
+# - Documentation: sometimes use 'd' to denote the dimension of the response variable, and sometimes 'q'... try to be consistent
+# - assess(est::QuantileEstimator) and assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots).
+# - Examples: Bivariate data in multivariate section
+# - Examples: discrete parameter
 # - Add helper functions for censored data and write an example in the documentation.
 
-# ---- long term:
-# - Separate GNN functionality (tried this with package extensions but not possible currently because we need to define custom structs)
-# - SpatialPyramidPool for CNNs (maybe someone already has this code in Julia?)
-# - Proper citations: https://juliadocs.org/DocumenterCitations.jl/stable/
-# - Might also be useful to store the parameter_names in NeuralEstimator: if they are present in the estimator, they can be compared to other sources of parameter_names as a sanity check, and they can be used in bootstrap() so that the bootstrap estimates and resulting intervals are given informative names.
-# - Would be good if interval(θ̂::IntervalEstimator, Z) and interval(bs) also displayed the parameter names... this could be done if the estimator stores the parameter names.
-# - turn some document examples into "doctests"
-# - Add "AR(k) time series" example, or a Ricker model. (An example using partially exchangeable neural networks.)
-# - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. It seems very easy, just need to add precompile(f, (arg_types…)) to whatever methods I want to precompile.
-# - With the fixed parameters method of train, there seems to be overhead with my current implementation of just-in-time simulation. When epochs_per_Z_refresh = 1, the run-time increases by a factor of 4 for the Gaussian process with m = 1. For now, I’ve added an argument simulate_on_the_fly::Bool, which allows us to switch off just-in-time simulation.
-# - Optimise DeepSetExpert on the GPU
-# - NeuralRatioEstimator
-# - Explicit learning of summary statistics
-
-# ---- once the software is polished:
+# ---- once the software is reasonably polished:
 # - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
 # -	Add NeuralEstimators.jl to https://github.com/smsharma/awesome-neural-sbi#code-packages-and-benchmarks.
 # -	Once NeuralEstimators is on the Julia package manager, add the following to index.md:
@@ -111,3 +92,18 @@ end
 # ```
 # using Pkg; Pkg.add("NeuralEstimators")
 # ```
+
+# ---- long term:
+# - Examples: data plots within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
+# - Extension: Incorporate the following package to greatly expand bootstrap functionality: https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
+# - GPU on MacOS with Metal.jl (already have extension written, need to wait until Metal.jl is further developed; in particular, need convolution layers to be implemented)
+# - Explicit learning of summary statistics
+# - Amortised posterior approximation (https://github.com/slimgroup/InvertibleNetworks.jl)
+# - Functionality for storing and plotting the training-validation risk in the NeuralEstimator. This will involve changing _train() to return both the estimator and the risk, and then defining train(::NeuralEstimator) to update the slot containing the risk. We will also need _train() to take the argument "loss_vs_epoch", so that we can "continue training"
+# - Separate GNN functionality (tried this with package extensions but not possible currently because we need to define custom structs)
+# - SpatialPyramidPool for CNNs 
+# - Optionally store parameter_names in NeuralEstimator: they can be used in bootstrap() so that the bootstrap estimates and resulting intervals are given informative names
+# - Turn some document examples into "doctests"
+# - Add "AR(k) time series" example, or a Ricker model (an example using partially exchangeable neural networks)
+
+

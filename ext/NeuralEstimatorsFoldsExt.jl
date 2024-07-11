@@ -1,4 +1,4 @@
-module NeuralEstimatorsPlotExt 
+module NeuralEstimatorsFoldsExt 
 
 using NeuralEstimators 
 using Folds 
