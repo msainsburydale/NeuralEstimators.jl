@@ -151,18 +151,6 @@ function quantileloss(θ̂, θ, τ; agg = mean)
   agg(L)
 end
 
-
-function quantileloss(θ̂, θ, τ::M; agg = mean) where {T, M <: AbstractMatrix{T}}
-
-  d = θ̂ .- θ
-  b = d .> 0
-  b̃ = .!b
-  L₁ = d[b] .* (1 .- τ[b])
-  L₂ = -τ[b̃] .* d[b̃]
-  L = vcat(L₁, L₂)
-  agg(L)
-end
-
 function quantileloss(θ̂, θ, τ::V; agg = mean) where {T, V <: AbstractVector{T}}
 
   τ = convert(containertype(θ̂), τ) # convert τ to the gpu (this line means that users don't need to manually move τ to the gpu)
@@ -188,6 +176,17 @@ function quantileloss(θ̂, θ, τ::V; agg = mean) where {T, V <: AbstractVector
 
     quantileloss(θ̂, θ, τ; agg = agg)
   end
+end
+
+#TODO document matrix version? Although only used internally 
+function quantileloss(θ̂, θ, τ::M; agg = mean) where {T, M <: AbstractMatrix{T}}
+  d = θ̂ .- θ
+  b = d .> 0
+  b̃ = .!b
+  L₁ = d[b] .* (1 .- τ[b])
+  L₂ = -τ[b̃] .* d[b̃]
+  L = vcat(L₁, L₂)
+  agg(L)
 end
 
 

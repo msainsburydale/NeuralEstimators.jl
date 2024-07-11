@@ -478,8 +478,7 @@ end
 
 # ---- Lower level functions ----
 
-# Wrapper function that constructs a set of input and outputs (usually simulated
-# data and corresponding true parameters)
+# Wrapper function that constructs a set of input and outputs (usually simulated data and corresponding true parameters)
 function _constructset(θ̂, simulator::Function, θ::P, m, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 	Z = simulator(θ, m)
 	_constructset(θ̂, Z, θ, batchsize)
@@ -537,32 +536,33 @@ function _constructset(θ̂::QuantileEstimatorDiscrete, Z, θ::P, batchsize) whe
 
 	_DataLoader((input, output), batchsize)
 end
-
 function _constructset(θ̂::QuantileEstimatorContinuous, Zτ, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 	θ = θtoFloat32(_extractθ(θ))
 	Z, τ = Zτ
 	Z = ZtoFloat32(Z)
-	# τ = Float32.(τ) #TODO come back to this once we've settled on format for τ
+	τ = ZtoFloat32.(τ) 
 
 	i = θ̂.i
 	if isnothing(i)
 		input = (Z, τ)
 		output = θ
 	else
-		if isa(τ, Vector) τ = permutedims(τ) end
 		@assert size(θ, 1) >= i "The number of parameters in the model (size(θ, 1) = $(size(θ, 1))) must be at least as large as the value of i stored in the estimator (θ̂.i = $(θ̂.i))"
 		θᵢ  = θ[i:i, :]
 		θ₋ᵢ = θ[Not(i), :]
-		τ = reduce(vcat, τ)  # convert from vector of vectors to single vector
-		θ₋ᵢτ = vcat(θ₋ᵢ, τ') # combine parameters and probability level into single matrix
+		# τ is a vector of vectors. Now, combine each θ₋ᵢ with the corresponding vector of 
+		# probability levels, which requires repeating θ₋ᵢ appropriately
+		θ₋ᵢτ = map(eachindex(τ)) do k 
+			τₖ = τ[k]
+			θ₋ᵢₖ = repeat(θ₋ᵢ[:, k:k], inner = (1, length(τₖ)))
+			vcat(θ₋ᵢₖ, τₖ')
+		end 
 		input  = (Z, θ₋ᵢτ)   # "Tupleise" the input
 		output = θᵢ
 	end
 
 	_DataLoader((input, output), batchsize)
 end
-
-# TODO Add unit testing for GNN training
 
 # Computes the risk function in a memory-safe manner, optionally updating the
 # neural-network parameters using stochastic gradient descent
@@ -604,6 +604,7 @@ end
 # logitbinarycrossentropy loss function
 _risk(θ̂::RatioEstimator, loss, set::DataLoader, device, optimiser = nothing) = _risk(θ̂.deepset, loss, set, device, optimiser)
 
+
 function _risk(θ̂::QuantileEstimatorContinuous, loss, set::DataLoader, device, optimiser = nothing)
     sum_loss = 0.0f0
     K = 0
@@ -612,10 +613,14 @@ function _risk(θ̂::QuantileEstimatorContinuous, loss, set::DataLoader, device,
 		input, output = input |> device, output |> device
 		if isnothing(θ̂.i)
 			Z, τ = input
-			τ = reduce(vcat, τ) # convert from vector of vectors to single vector
+			input1 = Z
+			input2 = permutedims.(τ)
+			input = (input1, input2)
+			τ = reduce(hcat, τ)          # reduce from vector of vectors to matrix 
 		else
 			Z, θ₋ᵢτ = input
-			τ = θ₋ᵢτ[end, :]    # extract vector of probability levels
+			τ = [x[end, :] for x ∈ θ₋ᵢτ] # extract probability levels
+			τ = reduce(hcat, τ)          # reduce from vector of vectors to matrix 
 		end
 		if !isnothing(optimiser)
 

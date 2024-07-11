@@ -300,9 +300,10 @@ end
 
 #TODO Closed-form posterior for full conditionals for comparison
 @doc raw"""
-	QuantileEstimatorContinuous(deepset::DeepSet; i = nothing)
+	QuantileEstimatorContinuous(deepset::DeepSet; i = nothing, num_training_probs::Integer = 1)
 	(estimator::QuantileEstimatorContinuous)(Z, τ)
 	(estimator::QuantileEstimatorContinuous)(Z, θ₋ᵢ, τ)
+
 A neural estimator targetting posterior quantiles.
 
 Given as input data $\boldsymbol{Z}$ and the desired probability level
@@ -355,7 +356,7 @@ p = 1         # number of unknown parameters in the statistical model
 m = 30        # number of independent replicates in each data set
 prior(K) = randn32(p, K)
 simulateZ(θ, m) = [μ .+ randn32(d, m) for μ ∈ eachcol(θ)]
-simulateτ(K)    = [rand32(1) for k in 1:K]
+simulateτ(K)    = [rand32(10) for k in 1:K]  
 simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
 
 # Architecture: partially monotonic network to preclude quantile crossing
@@ -405,12 +406,11 @@ quantile.(posterior(z), τ)   # true quantiles
 
 # ---- Full conditionals ----
 
-
 # Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
 d = 1         # dimension of each independent replicate
 p = 2         # number of unknown parameters in the statistical model
 m = 30        # number of independent replicates in each data set
-function sample(K)
+function prior(K)
 	μ = randn32(K)
 	σ = rand(InverseGamma(3, 1), K)
 	θ = hcat(μ, σ)'
@@ -419,7 +419,7 @@ function sample(K)
 end
 simulateZ(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
 simulateZ(θ::Matrix, m) = simulateZ.(eachcol(θ), m)
-simulateτ(K)    = [rand32(1) for k in 1:K]
+simulateτ(K)    = [rand32(10) for k in 1:K]
 simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
 
 # Architecture: partially monotonic network to preclude quantile crossing
@@ -441,10 +441,10 @@ i = 1
 q̂ = QuantileEstimatorContinuous(deepset; i = i)
 
 # Train the estimator
-q̂ = train(q̂, sample, simulate, m = m)
+q̂ = train(q̂, prior, simulate, m = m)
 
 # Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
-θ = sample(1000)
+θ = prior(1000)
 Z = simulateZ(θ, m)
 θ₋ᵢ = 0.5f0    # for multiparameter scenarios, use θ[Not(i), :] to determine the order that the conditioned parameters should be given
 τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
@@ -497,6 +497,7 @@ end
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Vector, τ::Number) = est(Z, θ₋ᵢ, [τ])
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Number) = est(Z, [θ₋ᵢ], τ)
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Vector) = est(Z, [θ₋ᵢ], τ)
+
 
 
 # using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics

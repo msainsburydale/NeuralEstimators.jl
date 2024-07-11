@@ -365,7 +365,6 @@ simulate(parameters, m) = ([θ[1] .+ θ[2] .* randn(1, m) for θ ∈ eachcol(par
 simulate(parameters, m)
 simulate(parameters, m, 2)
 
-
 @testset "densities" begin
 
 	# "scaledlogistic"
@@ -1001,7 +1000,7 @@ end
 	@test_throws Exception neuralem(Z, θ₀, nsims = H, use_ξ_in_simulateconditional = true)
 end
 
-@testset "QuantileEstimatorContinuous" begin
+@testset "QuantileEstimatorContinuous: marginal" begin
 	using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
 
 	# Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
@@ -1010,7 +1009,7 @@ end
 	m = 30        # number of independent replicates in each data set
 	prior(K) = randn32(p, K)
 	simulateZ(θ, m) = [μ .+ randn32(d, m) for μ ∈ eachcol(θ)]
-	simulateτ(K)    = [rand32(1) for k in 1:K]
+	simulateτ(K)    = [rand32(10) for k in 1:K]
 	simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
 
 	# Architecture: partially monotonic network to preclude quantile crossing
@@ -1032,7 +1031,7 @@ end
 	q̂ = QuantileEstimatorContinuous(deepset)
 
 	# Train the estimator
-	q̂ = train(q̂, prior, simulate, m = m, epochs = 1, verbose = false)
+	q̂ = train(q̂, prior, simulate, m = m, epochs = 2, verbose = false)
 
 	# Closed-form posterior for comparison
 	function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
@@ -1061,13 +1060,17 @@ end
 	# Check monotonicty
 	@test all(q̂(z, 0.1f0) .<= q̂(z, 0.11f0) .<= q̂(z, 0.9f0) .<= q̂(z, 0.91f0))
 
-	# ---- Full conditionals ----
+end 
+
+@testset "QuantileEstimatorContinuous: full conditionals" begin
+	
+	using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
 
 	# Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
 	d = 1         # dimension of each independent replicate
 	p = 2         # number of unknown parameters in the statistical model
 	m = 30        # number of independent replicates in each data set
-	function sample(K)
+	function prior(K)
 		μ = randn32(K)
 		σ = rand(InverseGamma(3, 1), K)
 		θ = hcat(μ, σ)'
@@ -1076,7 +1079,7 @@ end
 	end
 	simulateZ(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
 	simulateZ(θ::Matrix, m) = simulateZ.(eachcol(θ), m)
-	simulateτ(K)    = [rand32(1) for k in 1:K]
+	simulateτ(K)    = [rand32(10) for k in 1:K]
 	simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
 
 	# Architecture: partially monotonic network to preclude quantile crossing
@@ -1099,7 +1102,7 @@ end
 	q̂ = QuantileEstimatorContinuous(deepset; i = i)
 
 	# Train the estimator
-	q̂ = train(q̂, sample, simulate, m = m, epochs = 1, verbose = false)
+	q̂ = train(q̂, prior, simulate, m = m, epochs = 1, verbose = false)
 
 	# Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
 	θ = prior(1000)
