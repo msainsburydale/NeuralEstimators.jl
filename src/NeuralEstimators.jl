@@ -12,6 +12,7 @@ using Distributions: Poisson, Bernoulli, product_distribution
 using Flux
 using Flux: ofeltype, params, DataLoader, update!, glorot_uniform, onehotbatch, _size_check, _match_eltype # @layer
 using Flux: @functor; var"@layer" = var"@functor" # NB did this because even semi-recent versions of Flux do not include @layer
+using Folds
 using Graphs 
 using GraphNeuralNetworks
 using GraphNeuralNetworks: check_num_nodes, scatter, gather

@@ -146,7 +146,7 @@ function (em::EM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = nothing; args...
 		θ₀ = repeat(θ₀, 1, length(Z))
 	end
 
-	estimates = map(eachindex(Z)) do i
+	estimates = Folds.map(eachindex(Z)) do i
 		em(Z[i], θ₀[:, i]; args...)
 	end
 	estimates = reduce(hcat, estimates)
