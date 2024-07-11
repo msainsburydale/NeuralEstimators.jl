@@ -2,8 +2,7 @@ module NeuralEstimatorsFoldsExt
 
 using NeuralEstimators 
 using Folds 
-import NeuralEstimators: EM
-export plot # method for Assessment objects
+import NeuralEstimators: EM; export EM 
 
 ## Identical to main definition, but use parallel version of map() if Folds is available
 function (em::EM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = nothing; args...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
