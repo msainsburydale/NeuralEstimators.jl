@@ -218,7 +218,6 @@ subsetdata(Z, 1:3) # extract first 3 replicates from each data set
 function subsetdata end
 
 
-## NB this method is overloaded in ext/NeuralEstimatorsCUDAExt.jl 
 function subsetdata(Z::G, i) where {G <: AbstractGraph}
 	if typeof(i) <: Integer i = i:i end
 	sym = collect(keys(Z.ndata))[1]
@@ -226,12 +225,18 @@ function subsetdata(Z::G, i) where {G <: AbstractGraph}
 		GNNGraph(Z; ndata = Z.ndata[sym][:, i, :])
 	else
 		# @warn "`subsetdata()` is slow for graphical data."
+		# TODO getgraph() doesn't currently work with the GPU: see https://github.com/CarloLucibello/GraphNeuralNetworks.jl/issues/161
 		# TODO getgraph() doesn’t return duplicates. So subsetdata(Z, [1, 1]) returns just a single graph
-		getgraph(Z, i)
+		# TODO can't check for CuArray (and return to GPU) because CuArray won't always be defined (no longer depend on CUDA) and we can't overload exact signatures in package extensions... it's low priority, but will be good to fix when time permits. Hopefully, the above issue with GraphNeuralNetworks.jl will get fixed, and we can then just remove the call to cpu() below
+		#flag = Z.ndata[sym] isa CuArray
+		Z = cpu(Z)
+		Z = getgraph(Z, i)
+		#if flag Z = gpu(Z) end
+		Z
 	end
 end
 
-# ---- Test code ----
+# ---- Test code for GNN ----
 
 # n = 250  # number of observations in each realisation
 # m = 100  # number of replicates in each data set

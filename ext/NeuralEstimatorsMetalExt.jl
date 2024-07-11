@@ -17,6 +17,4 @@ function _checkgpu(use_gpu::Bool; verbose::Bool = true)
 	return(device)
 end
 
-# TODO might need to overload subsetdata() as done in ext/NeuralEstimatorsCUDAExt.jl
-
 end
