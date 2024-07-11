@@ -284,7 +284,9 @@ end
 
 # Here, we define _checkgpu() for the case that CUDA has not been loaded (so, we will be using the CPU)
 # For the case that CUDA is loaded, _checkgpu() is overloaded in ext/NeuralEstimatorsCUDAExt.jl 
-function _checkgpu(use_gpu::Bool; verbose::Bool = true)
+# NB Julia complains if we overload functions in package extensions... to get around this, here we 
+# use a slightly different function signature (omitting ::Bool)
+function _checkgpu(use_gpu; verbose::Bool = true)
 	if verbose @info "Running on CPU" end
 	device = cpu
 	return(device)

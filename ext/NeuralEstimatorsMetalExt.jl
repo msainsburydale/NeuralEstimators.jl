@@ -2,7 +2,7 @@ module NeuralEstimatorsMetalExt
 
 using NeuralEstimators 
 using Metal
-import NeuralEstimators: _checkgpu, subsetdata
+import NeuralEstimators: _checkgpu
 
 function _checkgpu(use_gpu::Bool; verbose::Bool = true)
 

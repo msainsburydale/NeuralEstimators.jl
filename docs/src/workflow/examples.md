@@ -177,7 +177,7 @@ end
 Next, we define the model simulator: 
 
 ```
-function simulate(L, m = 1)
+function simulate(L::AbstractMatrix, m = 1)
 
 	# Spatial field
 	n = size(L, 1)
