@@ -74,7 +74,7 @@ include("missingdata.jl")
 end
 
 #TODO
-# - Update train() with new explicit formulation required by Flux 
+# - Update train() with new explicit formulation required by recent versions of Flux 
 # - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. Seems easy, just need to add precompile(f, (arg_types…)) to whichever methods we want to precompile
 # - Documentation: sometimes use 'd' to denote the dimension of the response variable, and sometimes 'q'... try to be consistent
 # - assess(est::QuantileEstimator) and assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots).
