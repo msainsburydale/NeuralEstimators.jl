@@ -116,7 +116,7 @@ end
 # ---- QuantileEstimatorDiscrete  ----
 
 #TODO Single shared summary statistic computation for efficiency
-# TODO improve print output
+#TODO improve print output
 
 @doc raw"""
 	QuantileEstimatorDiscrete(v::DeepSet; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus, i = nothing)

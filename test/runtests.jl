@@ -666,9 +666,14 @@ m  = 10 # default sample size
 					assessment = assess(θ̂, parameters, Z_test, use_gpu = use_gpu, verbose = verbose, boot=true)
 
 					coverage(assessment)
-					coverage(assessment; average_over_parameters = false)
+					coverage(assessment; average_over_parameters = true)
 					coverage(assessment; average_over_sample_sizes = false)
-					coverage(assessment; average_over_parameters = false, average_over_sample_sizes = false)
+					coverage(assessment; average_over_parameters = true, average_over_sample_sizes = false)
+				
+					intervalscore(assessment)
+					intervalscore(assessment; average_over_parameters = true)
+					intervalscore(assessment; average_over_sample_sizes = false)
+					intervalscore(assessment; average_over_parameters = true, average_over_sample_sizes = false)
 				end
 				@test typeof(assessment)         == Assessment
 				@test typeof(assessment.df)      == DataFrame
@@ -851,8 +856,16 @@ end
 	@test size(ci) == (p, 2)
 
 	# assess()
-	# assessment = assess(estimator, rand(p, 2), [Z, Z]) # not sure why this isn't working
-	# coverage(assessment)
+	assessment = assess(estimator, rand(p, 2), [Z, Z]) # not sure why this isn't working
+	coverage(assessment)
+	coverage(assessment; average_over_parameters = true)
+	coverage(assessment; average_over_sample_sizes = false)
+	coverage(assessment; average_over_parameters = true, average_over_sample_sizes = false)
+
+	intervalscore(assessment)
+	intervalscore(assessment; average_over_parameters = true)
+	intervalscore(assessment; average_over_sample_sizes = false)
+	intervalscore(assessment; average_over_parameters = true, average_over_sample_sizes = false)
 end
 
 @testset "EM" begin

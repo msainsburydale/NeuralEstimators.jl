@@ -74,16 +74,15 @@ include("missingdata.jl")
 
 end
 
-#TODO
-# - Update train() with new explicit formulation required by recent versions of Flux 
-# - Testing on Windows 
+#---- TODO
+# - Testing on Windows
+# - Landing page: add links to related software (e.g., BayesFlow)
 # - Documentation: sometimes use 'd' to denote the dimension of the response variable, and sometimes 'q'... try to be consistent
 # - assess(est::EM) 
 # - assess(est::QuantileEstimator), assess(est::RatioEstimator), assess(est::GibbsSampler) using simulation-based calibration (e.g., qq plots)
 # - Examples: Bivariate data in multivariate section
-# - Examples: discrete parameter
 # - Helper functions for censored data, and provide an example in the documentation (maybe tied in with the bivariate data example).
-
+ 
 # ---- once the software is reasonably polished:
 # - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
 # -	Add NeuralEstimators.jl to https://github.com/smsharma/awesome-neural-sbi#code-packages-and-benchmarks.
@@ -96,6 +95,7 @@ end
 # ```
 
 # ---- long term:
+# - Examples: discrete parameters (e.g., Chan et al., 2018). Might need extra functionality for this. 
 # - See if DeepSet can be moved to Flux.jl
 # - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. Seems easy, just need to add precompile(f, (arg_types…)) to whichever methods we want to precompile
 # - Examples: data plots within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.

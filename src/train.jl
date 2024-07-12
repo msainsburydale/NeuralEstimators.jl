@@ -215,6 +215,8 @@ function _train(θ̂, sampler, simulator;
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	savebool && _savebestweights(savepath)
 
+	# TODO if the user has relied on using train() as a mutating function, the optimal estimator will not be returned. Can I set θ̂ = θ̂_best to fix this? This also ties in with the other TODO down below above trainx(), regarding which device the estimator is on at the end of training. 
+
     return θ̂_best
 end
 
@@ -645,6 +647,7 @@ end
 
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 
+#TODO (not sure what we want do about the following behaviour, need to think about it): If called as est = trainx(est) then est will be on the GPU; if called as trainx(est) then est will not be on the GPU. Note that the same thing occurs for train(). That is, when the function is treated as mutating, then the estimator will be on the same device that was used during training; otherwise, it will be on whichever device it was when input to the function. Need consistency to improve user experience. 
 """
 	trainx(θ̂, sampler::Function, simulator::Function, m::Vector{Integer}; ...)
 	trainx(θ̂, θ_train, θ_val, simulator::Function, m::Vector{Integer}; ...)
@@ -667,7 +670,7 @@ case, `m` is inferred from the data.
 
 The keyword arguments inherit from `train()`. The keyword arguments `epochs`,
 `batchsize`, `stopping_epochs`, and `optimiser` can each be given as vectors.
-For example, if we are training two estimators, we can use a different number of
+For example, if training two estimators, one may use a different number of
 epochs for each estimator by providing `epochs = [epoch₁, epoch₂]`.
 """
 function trainx end
