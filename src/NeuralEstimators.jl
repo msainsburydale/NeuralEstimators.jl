@@ -75,6 +75,9 @@ include("missingdata.jl")
 end
 
 #TODO
+# - See if DeepSet can be moved to Flux.jl
+# - Testing for latest release of Julia (not sure if the package is working for Julia 1.10)
+# - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. Seems easy, just need to add precompile(f, (arg_types…)) to whichever methods we want to precompile
 # - Update train() with new explicit formulation required by recent versions of Flux 
 # - Documentation: sometimes use 'd' to denote the dimension of the response variable, and sometimes 'q'... try to be consistent
 # - assess(est::QuantileEstimator) and assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots).
@@ -94,7 +97,6 @@ end
 # ```
 
 # ---- long term:
-# - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. Seems easy, just need to add precompile(f, (arg_types…)) to whichever methods we want to precompile
 # - Examples: data plots within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
 # - Extension: Incorporate the following package to greatly expand bootstrap functionality: https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
 # - GPU on MacOS with Metal.jl (already have extension written, need to wait until Metal.jl is further developed; in particular, need convolution layers to be implemented)

@@ -2,7 +2,7 @@ module NeuralEstimatorsMetalExt
 
 using NeuralEstimators 
 using Metal
-using NeuralEstimators: gpu, cpu # load these from NeuralEstimators so that we don't need to also make this extension require Flux to be loaded
+using Flux: gpu, cpu 
 import NeuralEstimators: _checkgpu
 
 function _checkgpu(use_gpu::Bool; verbose::Bool = true)
