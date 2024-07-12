@@ -4,7 +4,6 @@ using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nes
 using DataFrames
 using Distributions
 using Distances
-#using CUDA 
 using Flux
 using Flux: batch, DataLoader, mae, mse
 using Graphs
@@ -19,9 +18,10 @@ using Test
 using Zygote
 array(size...; T = Float32) = T.(reshape(1:prod(size), size...) ./ prod(size))
 arrayn(size...; T = Float32) = array(size..., T = T) .- mean(array(size..., T = T))
-verbose = false # verbose used in NeuralEstimators code (not @testset)
+verbose = false # verbose used in code (not @testset)
 
 #TODO figure out how to get CUDA installed as a test dependency only
+#using CUDA 
 # if CUDA.functional()
 # 	@info "Testing on both the CPU and the GPU... "
 # 	CUDA.allowscalar(false)
@@ -660,11 +660,21 @@ m  = 10 # default sample size
 				Z_test = simulator(parameters, m)
 				assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
 				assessment = assess(θ̂, parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
+				if covar == "set-level covariates"
+					@test_throws Exception assess(θ̂, parameters, Z_test, use_gpu = use_gpu, verbose = verbose, boot=true)
+				else
+					assessment = assess(θ̂, parameters, Z_test, use_gpu = use_gpu, verbose = verbose, boot=true)
+
+					coverage(assessment)
+					coverage(assessment; average_over_parameters = false)
+					coverage(assessment; average_over_sample_sizes = false)
+					coverage(assessment; average_over_parameters = false, average_over_sample_sizes = false)
+				end
 				@test typeof(assessment)         == Assessment
 				@test typeof(assessment.df)      == DataFrame
 				@test typeof(assessment.runtime) == DataFrame
-
 				@test typeof(merge(assessment, assessment)) == Assessment
+				
 				risk(assessment)
 				risk(assessment, loss = (x, y) -> (x - y)^2)
 				risk(assessment; average_over_parameters = false)

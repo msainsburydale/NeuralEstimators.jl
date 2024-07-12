@@ -68,8 +68,6 @@ assess
 
 Assessment
 
-diagnostics
-
 risk
 
 bias

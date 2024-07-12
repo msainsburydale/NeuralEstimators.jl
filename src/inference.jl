@@ -299,6 +299,8 @@ end
 
 function bootstrap(θ̂, Z; B::Integer = 400, use_gpu::Bool = true, blocks = nothing)
 
+	@assert !(typeof(Z) <: Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer" 
+
 	# Generate B bootstrap samples of Z
 	if !isnothing(blocks)
 		Z̃ = _blockresample(Z, B, blocks)

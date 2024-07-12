@@ -50,8 +50,6 @@ function merge(assessment::Assessment, assessments::Assessment...)
 	Assessment(df, runtime)
 end
 
-
-#TODO unit testing
 function join(assessment::Assessment, assessments::Assessment...)
 	df   = assessment.df
 	runtime = assessment.runtime
@@ -166,12 +164,12 @@ function rmse(df::DataFrame; args...)
 	return df
 end
 
-#TODO improve documentation (define more precisly what the coverage means here).
-#TODO document the lower and upper tail assessment
 """
 	coverage(assessment::Assessment; ...)
 
-Computes a Monte Carlo approximation of an interval estimator's expected coverage.
+Computes a Monte Carlo approximation of an interval estimator's expected coverage, 
+as defined in [Hermans et al. (2022, Definition 2.1)](https://arxiv.org/abs/2110.06581), 
+and the proportion of parameters below and above the lower and upper bounds, respectively. 
 
 # Keyword arguments
 - `average_over_parameters::Bool = false`: if true, the coverage is averaged over all parameters; otherwise (default), it is computed over each parameter separately.
@@ -202,8 +200,6 @@ function coverage(assessment::Assessment;
 	return df
 end
 
-
-# TODO add unit testing
 function intervalscore(assessment::Assessment;
 				  	   average_over_parameters::Bool = false,
 				  	   average_over_sample_sizes::Bool = true)
@@ -226,42 +222,6 @@ function intervalscore(assessment::Assessment;
 
 	return df
 end
-
-#TODO unit testing, and add this to the examples (in place of current calls to multiple different diagnostics). Also in the examples it would be good to display a table using markdown tables.
-"""
-	diagnostics(assessment::Assessment; args...)
-Computes all applicable diagnostics.
-
-For a [`PointEstimator`](@ref), the relevant diagnostics are the estimator's
-[`bias`](@ref), [`rmse`](@ref), and [`risk`](@ref), while for an
-[`IntervalEstimator`](@ref) the relevant diagnostics are the [`coverage`](@ref)
-and [`intervalscore`](@ref).
-"""
-function diagnostics(assessment::Assessment; args...)
-
-	df = []
-
-	if "estimate" ∈ names(assessment.df)
-		push!(df, bias(assessment; args...))
-		push!(df, rmse(assessment; args...))
-		push!(df, risk(assessment; args...))
-	end
-
-	if all(["lower", "upper"] .∈ Ref(names(assessment.df)))
-		push!(df, intervalscore(assessment; args...))
-		push!(df, coverage(assessment; args...))
-	end
-
-	intx = intersect(names.(df))
-	if intx == String[]
-		df = hcat(df...)
-	else
-		df = innerjoin(df...; on = intx)
-	end
-
-	return df
-end
-
 
 """
 	assess(estimators, θ, Z)
@@ -424,6 +384,7 @@ function assess(
 		if boot == true
 			verbose && println("	Computing $((probs[2] - probs[1]) * 100)% non-parametric bootstrap intervals...")
 			# bootstrap estimates
+			@assert !(typeof(Z) <: Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer" 
 			bs = bootstrap.(Ref(estimator), Z, use_gpu = use_gpu, B = B)
 		else # if boot is not a Bool, we will assume it is a bootstrap data set. # TODO probably should add some checks on boot in this case (length should be equal to K, for example)
 			verbose && println("	Computing $((probs[2] - probs[1]) * 100)% parametric bootstrap intervals...")
