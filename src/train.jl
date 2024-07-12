@@ -39,7 +39,6 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 ```
 using NeuralEstimators, Flux
 
-# parameter sampler
 function sampler(K)
 	μ = randn(K) # Gaussian prior
 	σ = rand(K)  # Uniform prior
@@ -47,8 +46,9 @@ function sampler(K)
 	return θ
 end
 
-# data simulator
-simulator(θ_matrix, m) = [θ[1] .+ θ[2] * randn32(1, m) for θ ∈ eachcol(θ_matrix)]
+function simulator(θ_matrix, m) 
+	[θ[1] .+ θ[2] * randn(1, m) for θ ∈ eachcol(θ_matrix)]
+end
 
 # architecture
 d = 1   # dimension of each replicate
@@ -67,12 +67,12 @@ m = 15
 K = 10000
 θ_train = sampler(K)
 θ_val   = sampler(K ÷ 5)
-θ̂ 		 = train(θ̂, θ_train, θ_val, simulator, m = m, epochs = 5)
+θ̂       = train(θ̂, θ_train, θ_val, simulator, m = m, epochs = 5)
 
 # training: fixed parameters and fixed data
 Z_train = simulator(θ_train, m)
 Z_val   = simulator(θ_val, m)
-θ̂ 		 = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 5)
+θ̂       = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 5)
 ```
 """
 function train end

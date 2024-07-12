@@ -76,7 +76,8 @@ end
 
 #TODO
 # - See if DeepSet can be moved to Flux.jl
-# - Testing for latest release of Julia (not sure if the package is working for Julia 1.10)
+# - Testing on MacOS 
+# - Testing on Windows 
 # - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. Seems easy, just need to add precompile(f, (arg_types…)) to whichever methods we want to precompile
 # - Update train() with new explicit formulation required by recent versions of Flux 
 # - Documentation: sometimes use 'd' to denote the dimension of the response variable, and sometimes 'q'... try to be consistent
