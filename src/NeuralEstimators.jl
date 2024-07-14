@@ -77,7 +77,7 @@ end
 #---- TODO
 # - Documentation: sometimes use 'd' to denote the dimension of the response variable, and sometimes 'q'... try to be consistent
 # - assess(est::QuantileEstimatorContinuous), assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots)
-# - Examples: add the missing data examples that I wrote earlier (paper will be available soon, so no worries). Maybe show the Potts model as the example. 
+# - Advanced usage: missing-data methodology in docs/src/devel. 
 # - Examples: Bivariate data in multivariate section
 # - Helper functions for censored data, and provide an example in the documentation (maybe tied in with the bivariate data example).
  
@@ -101,6 +101,7 @@ end
 # - GPU on MacOS with Metal.jl (already have extension written, need to wait until Metal.jl is further developed; in particular, need convolution layers to be implemented)
 # - Explicit learning of summary statistics
 # - Amortised posterior approximation (https://github.com/slimgroup/InvertibleNetworks.jl)
+# - Amortised likelihood approximation (https://github.com/slimgroup/InvertibleNetworks.jl)
 # - Functionality for storing and plotting the training-validation risk in the NeuralEstimator. This will involve changing _train() to return both the estimator and the risk, and then defining train(::NeuralEstimator) to update the slot containing the risk. We will also need _train() to take the argument "loss_vs_epoch", so that we can "continue training"
 # - Separate GNN functionality (tried this with package extensions but not possible currently because we need to define custom structs)
 # - SpatialPyramidPool for CNNs 

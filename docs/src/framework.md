@@ -1,17 +1,17 @@
 # Framework
 
-In this section, we provide an overview of point estimation using neural Bayes estimators. For a more detailed discussion on the framework and its implementation, see the paper [Likelihood-Free Parameter Estimation with Neural Bayes Estimators](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522). For an accessible introduction to amortised neural inferential methods more broadly, see the review paper [Neural Methods for Amortised Parameter Inference](https://arxiv.org/abs/2404.12484). 
+In this section, we provide an overview of point estimation using neural Bayes estimators. For a more detailed discussion on the framework and its implementation, see the paper [Likelihood-Free Parameter Estimation with Neural Bayes Estimators](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522). For an accessible introduction to amortised neural inferential methods more broadly, see the review paper [Neural Methods for Amortised Inference](https://arxiv.org/abs/2404.12484). 
 
 ### Neural Bayes estimators
 
-A parametric statistical model is a set of probability distributions on a sample space $\mathcal{Z}$, where the probability distributions are parameterised via some $p$-dimensional parameter vector $\boldsymbol{\theta}$ on a parameter space $\Theta$. Suppose that we have data from one such distribution, which we denote as $\boldsymbol{Z}$. Then, the goal of parameter point estimation is to come up with an estimate of the unknown $\boldsymbol{\theta}$ from $\boldsymbol{Z}$ using an estimator,
+A parametric statistical model is a set of probability distributions on a sample space $\mathcal{Z} \subseteq \mathbb{R}^n$, where the probability distributions are parameterised via some parameter vector $\boldsymbol{\theta}$ on a parameter space $\Theta \subseteq \mathbb{R}^p$. Suppose that we have data from one such distribution, which we denote as $\boldsymbol{Z}$. Then, the goal of parameter point estimation is to come up with an estimate of the unknown $\boldsymbol{\theta}$ from $\boldsymbol{Z}$ using an estimator,
 
 ```math
  \hat{\boldsymbol{\theta}} : \mathcal{Z} \to \Theta,
 ```
 which is a mapping from the sample space to the parameter space.
 
-Estimators can be constructed within a decision-theoretic framework. Assume that the sample space is $\mathcal{Z} = \mathbb{R}^n$, and consider a nonnegative loss function, $L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z}))$, which assesses an estimator $\hat{\boldsymbol{\theta}}(\cdot)$ for a given $\boldsymbol{\theta}$ and data set $\boldsymbol{Z} \sim f(\boldsymbol{z} \mid \boldsymbol{\theta})$, where $f(\boldsymbol{z} \mid \boldsymbol{\theta})$ is the probability density function of the data conditional on $\boldsymbol{\theta}$. An estimator's *Bayes risk* is its loss averaged over all possible parameter values and data realisations,
+Estimators can be constructed within a decision-theoretic framework. Consider a nonnegative loss function, $L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z}))$, which assesses an estimator $\hat{\boldsymbol{\theta}}(\cdot)$ for a given $\boldsymbol{\theta}$ and data set $\boldsymbol{Z} \sim f(\boldsymbol{z} \mid \boldsymbol{\theta})$, where $f(\boldsymbol{z} \mid \boldsymbol{\theta})$ is the probability density function of the data conditional on $\boldsymbol{\theta}$. An estimator's *Bayes risk* is its loss averaged over all possible parameter values and data realisations,
 
 ```math
 \int_\Theta \int_{\mathcal{Z}}  L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{z}))f(\boldsymbol{z} \mid \boldsymbol{\theta}) \rm{d} \boldsymbol{z} \rm{d} \Pi(\boldsymbol{\theta}),  

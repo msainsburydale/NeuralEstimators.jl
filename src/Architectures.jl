@@ -44,7 +44,7 @@ S(1)
 #TODO show example with only user-defined summary statistics
 """
     DeepSet(ψ, ϕ, a = mean; S = nothing)
-The DeepSets representation,
+The DeepSets representation [(Zaheer et al., 2017)](https://arxiv.org/abs/1703.06114),
 
 ```math
 θ̂(𝐙) = ϕ(𝐓(𝐙)),	 	 𝐓(𝐙) = 𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\}),

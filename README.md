@@ -47,6 +47,6 @@ This software was developed as part of academic research. If you would like to s
 
 - **Modern extreme value statistics for Utopian extremes** [[paper]](https://arxiv.org/abs/2311.11054)
 
-- **Neural Methods for Parameter Inference** [[paper]](https://arxiv.org/abs/2404.12484)[[code]](https://github.com/andrewzm/Amortised_Neural_Inference_Review)
+- **Neural Methods for Amortised Inference** [[paper]](https://arxiv.org/abs/2404.12484)[[code]](https://github.com/andrewzm/Amortised_Neural_Inference_Review)
 
 

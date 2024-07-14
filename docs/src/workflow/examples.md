@@ -129,7 +129,7 @@ Note that, when estimating a full covariance matrix, one may wish to constrain t
 
 ## Gridded data
 
-For data collected over a regular grid, neural estimators are typically based on a convolutional neural network (CNN; see, for example, [Dumoulin and Visin, 2016](https://arxiv.org/abs/1603.07285)). 
+For data collected over a regular grid, neural estimators are typically based on a convolutional neural network (CNN; see, e.g., [Dumoulin and Visin, 2016](https://arxiv.org/abs/1603.07285)). 
 
 In these settings, each data set must be stored as an ($N + 2$)-dimensional array, where $N$ is the dimension of the grid (e.g., $N = 1$ for time series, $N = 2$ for images, etc.). The penultimate dimension of the array stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes, etc.), while the final dimension stores independent replicates. For example, to store $50$ independent replicates of a bivariate spatial process measured over a $10\times15$ grid, one would construct an array of dimension $10\times15\times2\times50$.
 
