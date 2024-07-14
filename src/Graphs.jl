@@ -52,7 +52,7 @@ Z = rand.(n)
 g = spatialgraph(S, Z)
 ```
 """
-function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, store_S::Bool = false, pyramid_pool::Bool = false, kwargs...)
+function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, store_S::Bool = false, kwargs...)
 
 	# Determine neighbourhood based on keyword arguments 
 	kwargs = (;kwargs...)
@@ -60,10 +60,10 @@ function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, st
 	r = haskey(kwargs, :r) ? kwargs.r : 0.15
 	random = haskey(kwargs, :random) ? kwargs.random : false
 
-	if !isotropic #TODO (need to modify adjacencymatrix() to do this)
+	if !isotropic 
 		error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
 	end
-	if !stationary #TODO (need to modify adjacencymatrix() to do this)
+	if !stationary 
 		error("Nonstationarity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
 	end
 	ndata = DataStore()
@@ -73,10 +73,6 @@ function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, st
 	if store_S
 		ndata = (ndata..., S = S)
 	end
-	# if pyramid_pool # NB not documenting pyramid_pool for now because it is experimental
-	# 	clusterings = computeclusters(S)
-	# 	ndata = (ndata..., clusterings = clusterings)
-	# end
 	GNNGraph(A, ndata = ndata, edata = permutedims(A.nzval))
 end
 spatialgraph(S::AbstractVector; kwargs...) = batch(spatialgraph.(S; kwargs...)) # spatial locations varying between replicates
@@ -157,8 +153,6 @@ end
 # g = spatialgraph(S, Z) 
 # ```
 
-
-#TODO think about where to put this 
 @doc raw"""
 	IndicatorWeights(h_max, n_bins::Integer)
 	(w::IndicatorWeights)(h::Matrix) 
@@ -192,8 +186,6 @@ function IndicatorWeights(h_max, n_bins::Integer)
 	IndicatorWeights(h_cutoffs)
 end
 function (l::IndicatorWeights)(h::M) where M <: AbstractMatrix{T} where T
-	#TODO might be faster to use apply_edges or another GNN function instead (and this might be neater in any case)
-	# Bin the distances
 	h_cutoffs = l.h_cutoffs
 	bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
 	bins_lower = h_cutoffs[1:end-1] # lower bounds of the distance bins 
@@ -241,35 +233,10 @@ end
 
 # ---- SpatialGraphConv ----
 
-# import Flux: Bilinear
-# # function (b::Bilinear)(Z::A) where A <: AbstractArray{T, 3} where T
-# # 	@assert size(Z, 2) == 2
-# # 	x = Z[:, 1, :]
-# # 	y = Z[:, 2, :]
-# # 	b(x, y)
-# # end
-
-# With a skip connection
-# GNN = GNNChain(
-# 	GraphSkipConnection(SpatialGraphConv(1 => 16)),
-# 	SpatialGraphConv(16 + 1 => 32) # one extra input dimension corresponding to the input data
-# )
-# GNN(g)
-
-#TODO
-# stationary but anisotropic
-# g = spatialgraph(S, Z; isotropic = false)
-# layer = SpatialGraphConv(1 => 16; isotropic = false)
-# layer(g)
-#
-# nonstationary
-# g = spatialgraph(S, Z; stationary = false)
-# layer = SpatialGraphConv(1 => 16; stationary = false)
-# layer(g)
-
-#TODO improve documentation for global features 
+#TODO documentation: global features 
+#TODO documentation: In the isotropic case, w() should act on 1xn matrix of distances 
 @doc raw"""
-    SpatialGraphConv(in => out, g=relu; bias=true, init=glorot_uniform, ...)
+    SpatialGraphConv(in => out, g=relu; args...)
 
 Implements a spatial graph convolution, 
 
@@ -379,10 +346,10 @@ function SpatialGraphConv(
 			@assert in == 1 || w_out == in "With vector-valued input features, the output of w must either be scalar or a vector of the same dimension as the input features"
 		end 
 		if !stationary isotropic = false end
-		if !isotropic #TODO (need to modify adjacencymatrix() to do this)
+		if !isotropic 
 			error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
 		end
-		if !stationary #TODO (need to modify adjacencymatrix() to do this)
+		if !stationary
 			error("Nonstationarity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
 		end
 		w = if isotropic
@@ -403,7 +370,7 @@ function SpatialGraphConv(
 		end 	
 	else 
 		@assert !isnothing(w_out) "Since you have specified the weight function w(), please also specify its output dimension `w_out`"
-		# TODO need to add checks that w_out is consistent with the three allowed scenarios for w() described above 
+		# TODO add checks that w_out is consistent with the three allowed scenarios for w() described above 
 	end
 
 	# Function of Z
@@ -440,8 +407,6 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3}
 	# Number of independent replicates
 	m = size(x, 2)
 
-	#TODO document that w() should act on 1xn matrix of distances 
-
 	# Extract spatial information (typically the spatial distance between neighbours)
 	s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3]) 
 
@@ -458,32 +423,37 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3}
 	w = l.w(s) 
 
 	if l.glob 
-		w̃ = normalise_edges(g, w) # Sanity check: sum(w̃; dims = 2)   # close to one 
+		w̃ = normalise_edges(g, w) # Sanity check: sum(w̃; dims = 2) # all close to one 
 	else 
 		w̃ = normalise_edge_neighbors(g, w) # Sanity check: aggregate_neighbors(g, +, w̃) # zeros and ones 
 	end 
 	
-	# Coerce to three-dimensional array and repeat to match the number of independent replicates (NB memory inefficient)
-	if isa(w̃, AbstractVector)
-		w̃ = permutedims(w̃)
-	end
-	if isa(w̃, AbstractMatrix)
-		w̃ = reshape(w̃, size(w̃, 1), 1, size(w̃, 2))
-	end
-	w̃ = repeat(w̃, 1, m, 1)   
+	# Coerce to three-dimensional array, repeated to match the number of independent replicates
+	w̃ = coerce3Darray(w̃, m)
 
 	# Compute spatially-weighted sum of input features over each neighbourhood 
 	msg = apply_edges((l, xi, xj, w̃) -> w̃ .* l.f(xi, xj), g, l, x, x, w̃)
 	if l.glob 
 		h̄ = reduce_edges(+, g, msg) # sum over all neighbourhoods in the graph 
 	else 
+		#TODO Need this to be a summation that ignores missing
 		h̄ = aggregate_neighbors(g, +, msg) # sum over each neighbourhood 
 	end 
-	
+
+	# Remove elements in which w summed to zero (i.e., deal with possible division by zero by omitting these terms from the convolution)
+	# (currently only do this for locally constructed summary statistics)
+	# if !l.glob 
+	# 	w_sums = aggregate_neighbors(g, +, w) 
+	# 	w_zero = w_sums .== 0
+	# 	w_zero = coerce3Darray(w_zero, m)
+	# 	h̄ = removedata(h̄, vec(w_zero))
+	# end
+
 	if l.glob 
-		return h̄
+		return h̄ 
 	else 
-		return l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h̄ .+ l.b) # ⊠ is shorthand for batched_mul
+		return l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h̄ .+ l.b) # ⊠ is shorthand for batched_mul  #NB any missingness will cause the feature vector to be entirely missing 
+		#return [ismissing(a) ? missing : l.g(a) for a in x .+ h̄ .+ l.b]
 	end 
 end
 function Base.show(io::IO, l::SpatialGraphConv)
@@ -493,6 +463,16 @@ function Base.show(io::IO, l::SpatialGraphConv)
     l.g == identity || print(io, ", ", l.g)
     print(io, ", w=", l.w)
     print(io, ")")
+end
+
+function coerce3Darray(x, m)
+	if isa(x, AbstractVector)
+		x = permutedims(x)
+	end
+	if isa(x, AbstractMatrix)
+		x = reshape(x, size(x, 1), 1, size(x, 2))
+	end
+	x = repeat(x, 1, m, 1)  
 end
 
 """
@@ -509,13 +489,12 @@ function normalise_edges(g::GNNGraph, e)
 end
 
 @doc raw"""
-    softmax_edge_neighbors(g, e)
+    normalise_edge_neighbors(g, e)
 
 Normalise the edge features `e` to sum to one over each node's neighborhood, 
 
 ```math
-\mathbf{e}'_{j\to i} = \frac{\mathbf{e}_{j\to i}}
-                    {\sum_{j'\in N(i)} \mathbf{e}_{j'\to i}}.
+\tilde{\mathbf{e}}_{j\to i} = \frac{\mathbf{e}_{j\to i}} {\sum_{j'\in N(i)} \mathbf{e}_{j'\to i}}.
 ```
 """
 function normalise_edge_neighbors(g::AbstractGNNGraph, e)
@@ -531,39 +510,6 @@ function normalise_edge_neighbors(g::AbstractGNNGraph, e)
     return e ./ (den .+ eps(eltype(e)))
 end
 
-
-#TODO Think about where to put this
-#TODO export
-#TODO parameters need to be stored as an array to be trainable... make a user-friendly constructor for this 
-#TODO constrain a ∈ [0, 1] and b ∈ [0.5, 2]
-"""
-
-# Examples 
-```
-f = PowerDifference([0.5f0], [2.0f0])
-x = rand32(3, 4)
-y = rand32(3, 4)
-f(x, y)
-
-ps = Flux.params(f)
-
-f = gpu(f)
-x = gpu(x)
-y = gpu(y)
-f(x, y)
-```
-"""
-struct PowerDifference{A,B}
-	a::A
-	b::B
-end 
-@layer PowerDifference
-export PowerDifference
-(f::PowerDifference)(x, y) = (abs.(f.a .* x - (1 .- f.a) .* y)).^f.b
-(f::PowerDifference)(tup::Tuple) = f(tup[1], tup[2])
-
-
-# TODO explain the required dimenson of the feature matrix extracted by globalfeatures
 @doc raw"""
 	GNNSummary(propagation, readout; globalfeatures = nothing)
 
@@ -579,7 +525,10 @@ propagation and readout modules.
 
 Optionally, one may also include a module that extracts features directly 
 from the graph, through the keyword argument `globalfeatures`. This module, 
-when applied to a `GNNGraph`, should return a matrix of features. 
+when applied to a `GNNGraph`, should return a matrix of features, 
+where the columns of the matrix correspond to the independent replicates 
+(e.g., a 5x10 matrix is expected for 5 hidden features for each of 10 
+independent replicates stored in the graph).  
 
 The data should be stored as a `GNNGraph` or `Vector{GNNGraph}`, where
 each graph is associated with a single parameter vector. The graphs may contain
@@ -635,42 +584,28 @@ function (ψ::GNNSummary)(g::GNNGraph)
 
 	# Propagation module
 	h = ψ.propagation(g)
+	Z = :Z ∈ keys(h.ndata) ? h.ndata.Z : first(values(h.ndata))
 
 	# Readout module, computes a fixed-length vector (a summary statistic) for each replicate
 	# R is a matrix with:
 	# nrows = number of summary statistics
 	# ncols = number of independent replicates
-	# if isa(ψ.readout, SpatialPyramidPool)
-	# 	R = ψ.readout(h)
-	# else # Standard pooling layers
-		Z = :Z ∈ keys(h.ndata) ? h.ndata.Z : first(values(h.ndata))
-		R = ψ.readout(h, Z)
-	# end
+	R = ψ.readout(h, Z)
 
 	if !isnothing(ψ.globalfeatures)
 		R₂ = ψ.globalfeatures(g)
 		if isa(R₂, GNNGraph)
-			#TODO add assertion that there is data stored in gdata @assert  "The `globalfeatures` field of a `GNNSummary` object must return either an array or a graph with a non-empty field `gdata`"
-			R₂ = first(values(R₂.gdata)) #TODO maybe want to enforce that it has an appropriate name (e.g., R)
+			@assert length(R₂.gdata) > 0 "The `globalfeatures` field of a `GNNSummary` object must return either an array or a graph with a non-empty field `gdata`"
+			R₂ = first(values(R₂.gdata)) 
 		end
 		R = vcat(R, R₂)
 	end
 
-	# reshape from three-dimensional array to matrix 
-	R = reshape(R, size(R, 1), :) #TODO not ideal to do this here, I think, makes the output of summarystatistics() quite confusing. (keep in mind the behaviour of summarystatistics on a vector of graphs and a single graph) 
+	# Reshape from three-dimensional array to matrix 
+	R = reshape(R, size(R, 1), :) #NB not ideal to do this here, I think, makes the output of summarystatistics() quite confusing. (keep in mind the behaviour of summarystatistics on a vector of graphs and a single graph) 
 
 	return R
 end
-# Code from GNN example:
-# θ = sample(1)
-# g = simulate(θ, 7)[1]
-# ψ(g)
-# θ = sample(2)
-# # g = simulate(θ, 1:10) # TODO errors! Currently not allowed to have data sets with differing number of independent replicates
-# g = simulate(θ, 5)
-# g = Flux.batch(g)
-# ψ(g)
-
 
 # ---- Adjacency matrices ----
 
@@ -716,6 +651,8 @@ the neighbours of location `i` are stored in the column `A[:, i]` where `A` is t
 returned adjacency matrix. Therefore, the number of neighbours for each location is
 given by `collect(mapslices(nnz, A; dims = 1))`, and the number of times each node is 
 a neighbour of another node is given by `collect(mapslices(nnz, A; dims = 2))`.
+
+By convention, we do not consider a location to neighbour itself (i.e., the diagonal elements of the adjacency matrix are zero). 
 
 # Examples
 ```
@@ -861,7 +798,7 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 		A = moralise ?  R' * R : R        # moralise
 
 		# Add distances to A
-		# TODO This is memory inefficient, especially for large n; only optimise if we find that this approach works well and this is a bottleneck
+		# NB This is memory inefficient, especially for large n; only optimise if we find that this approach works well and this is a bottleneck
 		D = pairwise(Euclidean(), Sord')
 		I, J, V = findnz(A)
 		indices = collect(zip(I,J))  
@@ -881,22 +818,6 @@ end
 deletecol!(A,cind) = SparseArrays.fkeep!(A,(i,j,v) -> j != cind)
 findnearest(A::AbstractArray, x) = argmin(abs.(A .- x))
 findnearest(V::SparseVector, q) = V.nzind[findnearest(V.nzval, q)] # efficient version for SparseVector that doesn't materialise a dense array
-function selfloops!(A)
-	#TODO export function, and replace previous documentation:
-	# By convention, we consider a location to neighbour itself and, hence,
-	# `k`-neighbour methods will yield `k`+1 neighbours for each location. Note that
-	# one may use `dropzeros!()` to remove these self-loops from the constructed
-	# adjacency matrix (see below).
-
-	
-	# add diagonal elements so that each node is considered its own neighbour
-	T = eltype(A)
-	for i ∈ 1:size(A, 1)
-		A[i, i] = one(T)  # make element structurally nonzero
-		A[i, i] = zero(T) # set to zero
-	end
-	return A
-end
 function subsetneighbours(A, k) 
 
 	τ = [i/k for i ∈ 0:k] # probability levels (k+1 values)
@@ -919,7 +840,7 @@ function subsetneighbours(A, k)
 			end 
 		end
 	end
-	A = dropzeros!(A) # remove self loops TODO Don't think is needed, since we already dropped them 
+	A = dropzeros!(A) # remove self loops 
 	return A
 end
 
@@ -1021,7 +942,7 @@ function findneighbours(d, k::Integer)
     return J, V 
 end
 
-# TODO this function is much, much slower than the R version... need to optimise
+# TODO this function is much, much slower than the R version... need to optimise. Might be slight penalty; try reduce(hcat, .)
 function getknn(S, s, k; args...)
   tree = KDTree(S; args...)
   nn_index, nn_dist = knn(tree, s, k, true)

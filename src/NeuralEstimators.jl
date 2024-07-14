@@ -47,7 +47,7 @@ include("Estimators.jl")
 export sampleposterior, mlestimate, mapestimate, bootstrap, interval
 include("inference.jl")
 
-export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights
+export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights, PowerDifference
 include("Graphs.jl")
 
 export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
@@ -75,11 +75,9 @@ include("missingdata.jl")
 end
 
 #---- TODO
-# - Testing on Windows
-# - Landing page: add links to related software (e.g., BayesFlow)
 # - Documentation: sometimes use 'd' to denote the dimension of the response variable, and sometimes 'q'... try to be consistent
-# - assess(est::EM) 
-# - assess(est::QuantileEstimator), assess(est::RatioEstimator), assess(est::GibbsSampler) using simulation-based calibration (e.g., qq plots)
+# - assess(est::QuantileEstimatorContinuous), assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots)
+# - Examples: add the missing data examples that I wrote earlier (paper will be available soon, so no worries). Maybe show the Potts model as the example. 
 # - Examples: Bivariate data in multivariate section
 # - Helper functions for censored data, and provide an example in the documentation (maybe tied in with the bivariate data example).
  

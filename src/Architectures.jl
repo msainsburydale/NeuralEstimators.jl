@@ -265,7 +265,7 @@ end
 # Multiple data sets: optimised version for graph data
 function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
 
-	# TODO assert that d.ψ is nothing or an object of type GNNSummary
+	@assert isnothing(d.ψ) || typeof(d.ψ) <: GNNSummary "For graph input data, the summary network ψ should be a `GNNSummary` object"
 
 	if !isnothing(d.ψ) 
 		# For efficiency, convert Z from a vector of (super)graphs into a single
@@ -308,6 +308,13 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 
 	return t
 end
+
+# TODO For graph data, currently not allowed to have data sets with variable number of independent replicates, since in this case we can't stack the three-dimensional arrays: 
+# θ = sample(2)
+# g = simulate(θ, 5) 
+# g = Flux.batch(g)
+# g = simulate(θ, 1:30) 
+# g = Flux.batch(g)
 
 
 # ---- Activation functions -----
@@ -692,3 +699,55 @@ function (a::DensePositive)(x::AbstractArray)
   _size_check(a, x, 1 => size(a.weight, 2))
   reshape(a(reshape(x, size(x,1), :)), :, size(x)[2:end]...)
 end
+
+
+#TODO constrain a ∈ [0, 1] and b > 0 
+"""
+	PowerDifference(a, b)
+Function ``f(x, y) = |ax - (1-a)y|^b`` for trainable parameters a ∈ [0, 1] and b > 0.
+
+# Examples 
+```
+using NeuralEstimators, Flux 
+
+# Generate some data 
+d = 5
+K = 10000
+X = randn32(d, K)
+Y = randn32(d, K)
+XY = (X, Y)
+a = 0.2f0
+b = 1.3f0
+Z = (abs.(a .* X - (1 .- a) .* Y)).^b
+
+# Initialise layer
+f = PowerDifference([0.5f0], [2.0f0])
+
+# Optimise the layer 
+loader = Flux.DataLoader((XY, Z), batchsize=32, shuffle=false)
+optim = Flux.setup(Flux.Adam(0.01), f)  
+for epoch in 1:100
+    for (xy, z) in loader
+        loss, grads = Flux.withgradient(f) do m
+            Flux.mae(m(xy), z)
+        end
+        Flux.update!(optim, f, grads[1])
+    end
+end
+
+# Estimates of a and b 
+f.a 
+f.b 
+```
+"""
+struct PowerDifference{A,B}
+	a::A
+	b::B
+end 
+@layer PowerDifference
+export PowerDifference
+PowerDifference() = PowerDifference([0.5f0], [2.0f0])
+PowerDifference(a::Number, b::AbstractArray) = PowerDifference([a], b)
+PowerDifference(a::AbstractArray, b::Number) = PowerDifference(a, [b])
+(f::PowerDifference)(x, y) = (abs.(f.a .* x - (1 .- f.a) .* y)).^f.b
+(f::PowerDifference)(tup::Tuple) = f(tup[1], tup[2])

@@ -396,11 +396,12 @@ plot(assessment)
 Finally, once the estimator has been assessed and is deemed to be performant, it may be applied to observed data, with bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`interval`](@ref). Below, we use simulated data as a substitute for observed data:
 
 ```
-parameters = sample(1)       # sample a single parameter vector
-Z = simulate(parameters)     # simulate data                  
-θ = parameters.θ             # true parameters used to generate data
-S = parameters.S             # observed locations
-θ̂(Z)                         # point estimates
-bs = bootstrap(θ̂, Parameters(θ̂(Z), S), simulate, m)   
-interval(bs)                 # parametric bootstrap confidence interval              
+parameters = sample(1)             # sample a single parameter vector
+Z = simulate(parameters)           # simulate data                  
+θ = parameters.θ                   # true parameters used to generate data
+S = parameters.S                   # observed locations
+θ̂(Z)                               # point estimates
+θ̃ = Parameters(θ̂(Z), S)            # construct Parameters object from the point estimates
+bs = bootstrap(θ̂, θ̃, simulate, m)  # bootstrap estimates
+interval(bs)                       # parametric bootstrap confidence interval              
 ```

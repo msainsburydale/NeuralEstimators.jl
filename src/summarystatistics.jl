@@ -166,8 +166,6 @@ end
 function (l::NeighbourhoodVariogram)(g::GNNGraph)
 	
 	# NB in the case of a batched graph, see the comments in the method summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
-
-	# Note that we do not need to remove self-loops, since we define the bins to be greater than 0
 	Z = g.ndata.Z
 	h = g.graph[3]
 

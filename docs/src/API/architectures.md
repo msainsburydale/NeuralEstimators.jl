@@ -39,6 +39,8 @@ NeighbourhoodVariogram
 SpatialGraphConv
 
 DensePositive
+
+PowerDifference
 ```
 
 
