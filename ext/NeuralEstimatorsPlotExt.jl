@@ -22,6 +22,16 @@ function plot(assessment::Assessment; grid::Bool = false)
 	# figure needs to be created first so that we can add to it below
 	# NB code rep, we have the same call towards the end of the function... is there a better way to initialise an empty figure?
 	figure = mapping([0], [1]) * visual(ABLines, color=:red, linestyle=:dash)
+
+	# Code for QuantileEstimators 
+	#TODO multiple estimators (need to incorporate code below)
+	if "prob" ∈ names(df)
+		df = empiricalprob(assessment)
+		figure = mapping([0], [1]) * visual(ABLines, color=:red, linestyle=:dash) 
+		figure += data(df) * mapping(:prob, :empirical_prob, layout = :parameter) * visual(Lines, color = :black)
+		figure = draw(figure, facet=(; linkxaxes=:none, linkyaxes=linkyaxes), axis = (; xlabel="Probability level, τ", ylabel="Pr(Q(Z, τ) ≤ θ)"))
+		return figure 
+	end
   
 	if all(["lower", "upper"] .∈ Ref(names(df)))
 		# Need line from (truth, lower) to (truth, upper). To do this, we need to
@@ -32,7 +42,7 @@ function plot(assessment::Assessment; grid::Bool = false)
 	end
   
 	linkyaxes=:none
-	if "estimate" ∈ names(df)
+	if "estimate" ∈ names(df) #TODO only want this for point estimates 
 		if num_estimators > 1
 		  colors = [unique(df.estimator)[i] => ColorSchemes.Set1_4.colors[i] for i ∈ 1:num_estimators]
 		  if grid

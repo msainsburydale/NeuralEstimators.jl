@@ -553,7 +553,7 @@ function _constructset(θ̂::QuantileEstimatorContinuous, Zτ, θ::P, batchsize)
 		@assert size(θ, 1) >= i "The number of parameters in the model (size(θ, 1) = $(size(θ, 1))) must be at least as large as the value of i stored in the estimator (θ̂.i = $(θ̂.i))"
 		θᵢ  = θ[i:i, :]
 		θ₋ᵢ = θ[Not(i), :]
-		# τ is a vector of vectors. Now, combine each θ₋ᵢ with the corresponding vector of 
+		# Combine each θ₋ᵢ with the corresponding vector of 
 		# probability levels, which requires repeating θ₋ᵢ appropriately
 		θ₋ᵢτ = map(eachindex(τ)) do k 
 			τₖ = τ[k]
@@ -614,17 +614,25 @@ function _risk(θ̂::QuantileEstimatorContinuous, loss, set::DataLoader, device,
     for (input, output) in set
 		k = size(output)[end]
 		input, output = input |> device, output |> device
+
 		if isnothing(θ̂.i)
 			Z, τ = input
 			input1 = Z
 			input2 = permutedims.(τ)
 			input = (input1, input2)
-			τ = reduce(hcat, τ)          # reduce from vector of vectors to matrix 
+			τ = reduce(hcat, τ)                # reduce from vector of vectors to matrix 
 		else
 			Z, θ₋ᵢτ = input
 			τ = [x[end, :] for x ∈ θ₋ᵢτ] # extract probability levels
 			τ = reduce(hcat, τ)          # reduce from vector of vectors to matrix 
 		end
+
+		# repeat τ and θ to facilitate broadcasting and indexing
+		# note that repeat() cannot be differentiated by Zygote
+		p = size(output, 1)
+		@ignore_derivatives τ = repeat(τ, inner = (p, 1))
+		@ignore_derivatives output = repeat(output, inner = (size(τ, 1) ÷ p, 1))
+		
 		if !isnothing(optimiser)
 
 			# "Implicit" style used by Flux <= 0.14.

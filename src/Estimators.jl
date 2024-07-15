@@ -178,6 +178,7 @@ See also [`IntervalEstimator`](@ref) and
 # Examples
 ```
 using NeuralEstimators, Flux, Distributions
+using AlgebraOfGraphics, CairoMakie
 
 # Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
 d = 1   # dimension of each independent replicate
@@ -198,35 +199,29 @@ q̂ = QuantileEstimatorDiscrete(v; probs = τ)
 # Train the estimator
 q̂ = train(q̂, prior, simulate, m = m)
 
-# Closed-form posterior for comparison
-function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
-
-	# Parameters of posterior distribution
-	μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
-	σ̃ = sqrt((1/σ₀^2 + length(Z)/σ²)^-1)
-
-	# Posterior
-	Normal(μ̃, σ̃)
-end
-
-# Estimate posterior quantiles for 1000 test data sets
+# Assess the estimator 
 θ = prior(1000)
 Z = simulate(θ, m)
-q̂(Z)                                             # neural quantiles
-reduce(hcat, quantile.(posterior.(Z), Ref(τ)))   # true quantiles
+assessment = assess(q̂, θ, Z)
+plot(assessment) 
+
+# Estimate posterior quantiles
+q̂(Z)
 
 
-# ---- Full conditionals ----
+# -------------------------------------------------------------
+# --------------------- Full conditionals ---------------------
+# -------------------------------------------------------------
 
 
 # Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
 d = 1         # dimension of each independent replicate
 p = 2         # number of unknown parameters in the statistical model
 m = 30        # number of independent replicates in each data set
-function sample(K)
-	μ = randn32(1, K)
+function prior(K)
+	μ = randn(1, K)
 	σ = rand(InverseGamma(3, 1), 1, K)
-	θ = vcat(μ, σ)
+	θ = Float32.(vcat(μ, σ))
 end
 simulate(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
 simulate(θ::Matrix, m) = simulate.(eachcol(θ), m)
@@ -242,16 +237,20 @@ q₁ = QuantileEstimatorDiscrete(v; probs = τ, i = 1)
 q₂ = QuantileEstimatorDiscrete(v; probs = τ, i = 2)
 
 # Train the estimators
-q₁ = train(q₁, sample, simulate, m = m)
-q₂ = train(q₂, sample, simulate, m = m)
+q₁ = train(q₁, prior, simulate, m = m)
+q₂ = train(q₂, prior, simulate, m = m)
 
-# Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
+# Assess the estimators 
 θ = prior(1000)
-Z = simulate(θ, m)    
+Z = simulate(θ, m)   
+assessment = assess([q₁, q₂], θ, Z)
+plot(assessment)  
+
+# Estimate quantiles of μ∣Z,σ with σ = 0.5 and for many data sets
 θ₋ᵢ = 0.5f0 
 q₁(Z, θ₋ᵢ)
 
-# Can also apply to a single data set only 
+# Estimate quantiles of μ∣Z,σ with σ = 0.5 for only a single data set 
 q₁(Z[1], θ₋ᵢ)
 ```
 """
@@ -295,6 +294,17 @@ function (est::QuantileEstimatorDiscrete)(Z, θ₋ᵢ::Vector)
 	est((Z, θ₋ᵢ))  # "Tupleise" the input and apply the estimator
 end
 (est::QuantileEstimatorDiscrete)(Z, θ₋ᵢ::Number) = est(Z, [θ₋ᵢ])
+
+# # Closed-form posterior for comparison
+# function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
+
+# 	# Parameters of posterior distribution
+# 	μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
+# 	σ̃ = sqrt((1/σ₀^2 + length(Z)/σ²)^-1)
+
+# 	# Posterior
+# 	Normal(μ̃, σ̃)
+# end
 
 
 
@@ -348,7 +358,12 @@ See also [`QuantileEstimatorDiscrete`](@ref).
 
 # Examples
 ```
-using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
+using NeuralEstimators 
+using Flux
+using Distributions  
+using InvertedIndices 
+using Statistics
+using AlgebraOfGraphics, CairoMakie
 
 # Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
 d = 1         # dimension of each independent replicate
@@ -379,32 +394,25 @@ q̂ = QuantileEstimatorContinuous(deepset)
 # Train the estimator
 q̂ = train(q̂, prior, simulate, m = m)
 
-# Closed-form posterior for comparison
-function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
-
-	# Parameters of posterior distribution
-	μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
-	σ̃ = sqrt((1/σ₀^2 + length(Z)/σ²)^-1)
-
-	# Posterior
-	Normal(μ̃, σ̃)
-end
-
-# Estimate the posterior 0.1-quantile for 1000 test data sets
+# Assess the estimator 
 θ = prior(1000)
 Z = simulateZ(θ, m)
+assessment = assess(q̂, θ, Z)
+plot(assessment) 
+
+# Estimate 0.1-quantile for many data sets 
 τ = 0.1f0
-q̂(Z, τ)                        # neural quantiles
-quantile.(posterior.(Z), τ)'   # true quantiles
+q̂(Z, τ)                       
 
 # Estimate several quantiles for a single data set
+# (note that τ is given as row vector)
 z = Z[1]
-τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
-q̂(z, τ')                     # neural quantiles (note that τ is given as row vector)
-quantile.(posterior(z), τ)   # true quantiles
+τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])'
+q̂(z, τ)   
 
-
-# ---- Full conditionals ----
+# -------------------------------------------------------------
+# --------------------- Full conditionals ---------------------
+# -------------------------------------------------------------
 
 # Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
 d = 1         # dimension of each independent replicate
@@ -443,10 +451,17 @@ q̂ = QuantileEstimatorContinuous(deepset; i = i)
 # Train the estimator
 q̂ = train(q̂, prior, simulate, m = m)
 
-# Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
+# Assess the estimator 
 θ = prior(1000)
 Z = simulateZ(θ, m)
-θ₋ᵢ = 0.5f0    # for multiparameter scenarios, use θ[Not(i), :] to determine the order that the conditioned parameters should be given
+assessment = assess(q̂, θ, Z)
+plot(assessment) 
+
+# Estimate quantiles of μ∣Z,σ with σ = 0.5 and for many data sets
+# (use θ[Not(i), :] to determine the order that the conditioned parameters should be given)
+θ = prior(1000)
+Z = simulateZ(θ, m)
+θ₋ᵢ = 0.5f0    
 τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
 q̂(Z, θ₋ᵢ, τ)
 
@@ -498,56 +513,27 @@ end
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Number) = est(Z, [θ₋ᵢ], τ)
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Vector) = est(Z, [θ₋ᵢ], τ)
 
+# # Closed-form posterior for comparison
+# function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
 
+# 	# Parameters of posterior distribution
+# 	μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
+# 	σ̃ = sqrt((1/σ₀^2 + length(Z)/σ²)^-1)
 
-# using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
-# # Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
-# d = 1         # dimension of each independent replicate
-# p = 3         # number of unknown parameters in the statistical model
-# m = 30        # number of independent replicates in each data set
-# function sample(K)
-# 	μ = randn32(K)
-# 	σ = rand(InverseGamma(3, 1), K)
-# 	θ = hcat(μ, σ, σ)'
-# 	θ = Float32.(θ)
-# 	return θ
+# 	# Posterior
+# 	Normal(μ̃, σ̃)
 # end
-# simulateZ(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
-# simulateZ(θ::Matrix, m) = simulateZ.(eachcol(θ), m)
-# simulateτ(K)    = [rand32(1) for k in 1:K]
-# simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
 
-# # Architecture: partially monotonic network to preclude quantile crossing
-# w = 64  # width of each hidden layer
-# ψ = Chain(
-# 	Dense(d, w, relu),
-# 	Dense(w, w, relu),
-# 	Dense(w, w, relu)
-# 	)
-# ϕ = Chain(
-# 	DensePositive(Dense(w + 3, w, relu); last_only = true),
-# 	DensePositive(Dense(w, w, relu)),
-# 	DensePositive(Dense(w, 1))
-# 	)
-# deepset = DeepSet(ψ, ϕ)
+# # Estimate the posterior 0.1-quantile for 1000 test data sets
+# τ = 0.1f0
+# q̂(Z, τ)                        # neural quantiles
+# quantile.(posterior.(Z), τ)'   # true quantiles
 
-# # Initialise the estimator for the first parameter, targetting μ∣Z,σ
-# i = 1
-# q̂ = QuantileEstimatorContinuous(deepset; i = i)
-
-# # Train the estimator
-# q̂ = train(q̂, sample, simulate, m = m)
-
-# # Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
-# θ = sample(1000)
-# Z = simulateZ(θ, m)
-# θ₋ᵢ = [0.5f0, 0.6f0]    # for multiparameter scenarios, use θ[Not(i), :] to determine the order that the conditioned parameters should be given
+# # Estimate several quantiles for a single data set
+# z = Z[1]
 # τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
-# q̂(Z, θ₋ᵢ, τ)
-
-# # Estimate quantiles for a single data set
-# q̂(Z[1], θ₋ᵢ, τ)
-
+# q̂(z, τ')                     # neural quantiles (note that τ is given as row vector)
+# quantile.(posterior(z), τ)   # true quantiles
 
 # ---- RatioEstimator  ----
 

@@ -50,3 +50,13 @@ This software was developed as part of academic research. If you would like to s
 - **Neural Methods for Amortised Inference** [[paper]](https://arxiv.org/abs/2404.12484)[[code]](https://github.com/andrewzm/Amortised_Neural_Inference_Review)
 
 
+### Related packages 
+
+The following packages may also 
+
+1. [BayesFlow](https://github.com/stefanradev93/BayesFlow) (TensorFlow)
+1. [LAMPE](https://github.com/probabilists/lampe) (PyTorch)
+1. [sbi](https://github.com/sbi-dev/sbi) (PyTorch)
+1. [swyft](https://github.com/undark-lab/swyft) (PyTorch)
+
+

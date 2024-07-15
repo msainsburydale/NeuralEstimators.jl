@@ -1023,6 +1023,81 @@ end
 	@test_throws Exception neuralem(Z, θ₀, nsims = H, use_ξ_in_simulateconditional = true)
 end
 
+
+@testset "QuantileEstimator: marginal" begin
+	using NeuralEstimators, Flux, Distributions
+
+	# Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
+	d = 1   # dimension of each independent replicate
+	p = 1   # number of unknown parameters in the statistical model
+	m = 30  # number of independent replicates in each data set
+	prior(K) = randn32(p, K)
+	simulate(θ, m) = [μ .+ randn32(d, m) for μ ∈ eachcol(θ)]
+
+	# Architecture
+	ψ = Chain(Dense(d, 32, relu), Dense(32, 32, relu))
+	ϕ = Chain(Dense(32, 32, relu), Dense(32, p))
+	v = DeepSet(ψ, ϕ)
+
+	# Initialise the estimator
+	τ = [0.05, 0.25, 0.5, 0.75, 0.95]
+	q̂ = QuantileEstimatorDiscrete(v; probs = τ)
+
+	# Train the estimator
+	q̂ = train(q̂, prior, simulate, m = m, epochs = 2, verbose = false)
+
+	# Assess the estimator 
+	θ = prior(1000)
+	Z = simulate(θ, m)
+	assessment = assess(q̂, θ, Z)
+
+	# Estimate posterior quantiles
+	q̂(Z)
+
+end 
+
+@testset "QuantileEstimatorDiscrete: full conditionals" begin
+	using NeuralEstimators, Flux, Distributions
+	
+	# Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
+	d = 1         # dimension of each independent replicate
+	p = 2         # number of unknown parameters in the statistical model
+	m = 30        # number of independent replicates in each data set
+	function prior(K)
+		μ = randn(1, K)
+		σ = rand(InverseGamma(3, 1), 1, K)
+		θ = Float32.(vcat(μ, σ))
+	end
+	simulate(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
+	simulate(θ::Matrix, m) = simulate.(eachcol(θ), m)
+
+	# Architecture
+	ψ = Chain(Dense(d, 32, relu), Dense(32, 32, relu))
+	ϕ = Chain(Dense(32 + 1, 32, relu), Dense(32, 1))
+	v = DeepSet(ψ, ϕ)
+
+	# Initialise estimators respectively targetting quantiles of μ∣Z,σ and σ∣Z,μ 
+	τ = [0.05, 0.25, 0.5, 0.75, 0.95]
+	q₁ = QuantileEstimatorDiscrete(v; probs = τ, i = 1)
+	q₂ = QuantileEstimatorDiscrete(v; probs = τ, i = 2)
+
+	# Train the estimators
+	q₁ = train(q₁, prior, simulate, m = m, epochs = 2, verbose = false)
+	q₂ = train(q₂, prior, simulate, m = m, epochs = 2, verbose = false)
+
+	# Assess the estimators 
+	θ = prior(1000)
+	Z = simulate(θ, m)   
+	assessment = assess([q₁, q₂], θ, Z, verbose = false)
+
+	# Estimate quantiles of μ∣Z,σ with σ = 0.5 and for many data sets
+	θ₋ᵢ = 0.5f0 
+	q₁(Z, θ₋ᵢ)
+
+	# Estimate quantiles of μ∣Z,σ with σ = 0.5 for only a single data set 
+	q₁(Z[1], θ₋ᵢ)
+end
+
 @testset "QuantileEstimatorContinuous: marginal" begin
 	using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
 
@@ -1055,30 +1130,21 @@ end
 
 	# Train the estimator
 	q̂ = train(q̂, prior, simulate, m = m, epochs = 2, verbose = false)
-
-	# Closed-form posterior for comparison
-	function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
-
-		# Parameters of posterior distribution
-		μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
-		σ̃ = sqrt((1/σ₀^2 + length(Z)/σ²)^-1)
-
-		# Posterior
-		Normal(μ̃, σ̃)
-	end
-
-	# Estimate the posterior 0.1-quantile for 1000 test data sets
+	
+	# Assess the estimator 
 	θ = prior(1000)
 	Z = simulateZ(θ, m)
+	assessment = assess(q̂, θ, Z)
+	empiricalprob(assessment) 
+
+	# Estimate the posterior 0.1-quantile for 1000 test data sets
 	τ = 0.1f0
 	q̂(Z, τ)                        # neural quantiles
-	quantile.(posterior.(Z), τ)'   # true quantiles
 
 	# Estimate several quantiles for a single data set
 	z = Z[1]
 	τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
 	reduce(vcat, q̂.(Ref(z), τ))    # neural quantiles
-	quantile.(posterior(z), τ)     # true quantiles
 
 	# Check monotonicty
 	@test all(q̂(z, 0.1f0) .<= q̂(z, 0.11f0) .<= q̂(z, 0.9f0) .<= q̂(z, 0.91f0))

@@ -13,7 +13,9 @@ with columns:
 - `k`:         the index of the parameter vector
 - `j`:         the index of the data set (in the case that multiple data sets are associated with each parameter vector)
 
-Note that if `estimator` is an `IntervalEstimator`, the column `estimate` will be replaced by the columns `lower` and `upper`, containing the lower and upper bounds of the interval, respectively.
+If `estimator` is an `IntervalEstimator`, the column `estimate` will be replaced by the columns `lower` and `upper`, containing the lower and upper bounds of the interval, respectively.
+
+If `estimator` is a `QuantileEstimator`, the `df` will also contain a column `prob` indicating the probability level of the corresponding quantile estimate. 
 
 Multiple `Assessment` objects can be combined with `merge()`
 (used for combining assessments from multiple point estimators) or `join()`
@@ -200,6 +202,27 @@ function coverage(assessment::Assessment;
 	return df
 end
 
+function empiricalprob(assessment::Assessment;
+					   average_over_parameters::Bool = false,
+					   average_over_sample_sizes::Bool = true)
+
+	df = assessment.df
+
+	@assert all(["prob", "estimate", "truth"] .∈ Ref(names(df))) 
+
+	grouping_variables = [:prob]
+	if "estimator" ∈ names(df) push!(grouping_variables, :estimator) end 
+	if !average_over_parameters push!(grouping_variables, :parameter) end
+	if !average_over_sample_sizes push!(grouping_variables, :m) end
+	df = groupby(df, grouping_variables)
+	df = combine(df, 
+				[:estimate, :truth] => ((x, y) -> x .> y) => :below,
+				ungroup = false)
+	df = combine(df, :below => mean => :empirical_prob)
+
+	return df
+end
+
 function intervalscore(assessment::Assessment;
 				  	   average_over_parameters::Bool = false,
 				  	   average_over_sample_sizes::Bool = true)
@@ -224,9 +247,9 @@ function intervalscore(assessment::Assessment;
 end
 
 """
-	assess(estimators, θ, Z)
+	assess(estimator, θ, Z)
 
-Using a collection of `estimators`, compute estimates from data `Z`
+Using an `estimator` (or a collection of estimators), computes estimates from data `Z`
 simulated based on true parameter vectors stored in `θ`.
 
 The data `Z` should be a `Vector`, with each element corresponding to a single
@@ -243,7 +266,7 @@ The output is of type `Assessment`; see `?Assessment` for details.
 - `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices). Can also be provided as `xi`.
 - `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses `ξ`: if it does, the estimator will be applied as `estimator(Z, ξ)`. This argument is useful when multiple `estimators` are provided, only some of which need `ξ`; hence, if only one estimator is provided and `ξ` is not `nothing`, `use_ξ` is automatically set to `true`. Can also be provided as `use_xi`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
-- `verbose::Bool = true`
+- `probs = range(0.01, stop=0.99, length=100)`: (relevant only for `estimator::QuantileEstimatorContinuous`) a collection of probability levels in (0, 1)
 
 # Examples
 ```
@@ -355,10 +378,7 @@ function assess(
 	θ̂[!, "j"] = repeat(1:J, inner = K)
 
 	# Add estimator name if it was provided
-	# Deprecation coercion
-	if !isnothing(estimator_names)
-		estimator_name = estimator_names
-	end
+	if !isnothing(estimator_names) estimator_name = estimator_names end # deprecation coercion
 	if !isnothing(estimator_name)
 		θ̂[!, "estimator"] .= estimator_name
 		runtime[!, "estimator"] .= estimator_name
@@ -409,6 +429,93 @@ function assess(
 	if typeof(estimator) <: IntervalEstimator
 		probs = estimator.probs
 		df[:, "α"] .= 1 - (probs[2] - probs[1])
+	end
+
+	return Assessment(df, runtime)
+end
+
+function assess(
+	estimator::Union{QuantileEstimatorContinuous, QuantileEstimatorDiscrete}, θ::P, Z;
+	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)], 
+	estimator_name::Union{Nothing, String} = nothing,
+	estimator_names::Union{Nothing, String} = nothing, # for backwards compatibility
+	use_gpu::Bool = true,
+	probs = Float32.(range(0.01, stop=0.99, length=100)) 
+	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+	# Extract the matrix of parameters
+	θ = _extractθ(θ)
+	p, K = size(θ)
+
+	# Check the size of the test data conforms with θ
+	m = numberreplicates(Z)
+	if !(typeof(m) <: Vector{Int}) # indicates that a vector of vectors has been given
+		# The data `Z` should be a a vector, with each element of the vector
+		# corresponding to a single simulated data set... attempted to convert `Z` to the correct format
+		Z = vcat(Z...) # convert to a single vector
+		m = numberreplicates(Z)
+	end
+	@assert K == length(m) "The number of data sets in `Z` must equal the number of parameter vectors in `θ`"
+
+	# Extract the parameter names from θ if provided
+	if typeof(θ) <: NamedMatrix
+		parameter_names = names(θ, 1)
+	end
+	@assert length(parameter_names) == p
+
+	# If the estimator is a QuantileEstimatorDiscrete, then we use its probability levels
+	if typeof(estimator) <: QuantileEstimatorDiscrete
+		probs = estimator.probs
+	else 
+		τ = [permutedims(probs) for _ in eachindex(Z)] # convert from vector to vector of matrices 
+	end 
+	n_probs = length(probs)
+
+	# Construct input set
+	i = estimator.i
+	if isnothing(i)
+		if typeof(estimator) <: QuantileEstimatorDiscrete
+			set_info = nothing 
+		else 
+			set_info = τ
+		end 
+	else 
+		θ₋ᵢ = θ[Not(i), :]
+		if typeof(estimator) <: QuantileEstimatorDiscrete
+			set_info = eachcol(θ₋ᵢ)
+		else 
+			# Combine each θ₋ᵢ with the corresponding vector of 
+			# probability levels, which requires repeating θ₋ᵢ appropriately
+			set_info = map(1:K) do k 
+				θ₋ᵢₖ = repeat(θ₋ᵢ[:, k:k], inner = (1, n_probs))
+				vcat(θ₋ᵢₖ, probs')
+			end 
+		end 
+		θ = θ[i:i, :]
+		parameter_names = parameter_names[i:i]
+	end
+
+	# Compute estimates using memory-safe version of estimator((Z, set_info))
+	runtime = @elapsed θ̂ = estimateinbatches(estimator, Z, set_info, use_gpu = use_gpu) 
+	
+	# Convert to DataFrame and add information
+	p = size(θ, 1)
+	runtime = DataFrame(runtime = runtime)
+	df = DataFrame(
+		parameter = repeat(repeat(parameter_names, inner = n_probs), K),
+		truth = repeat(vec(θ), inner = n_probs), 
+		prob = repeat(repeat(probs, outer = p), K), 
+		estimate = vec(θ̂), 
+		m = repeat(m, inner = n_probs*p),
+		k = repeat(1:K, inner = n_probs*p),
+		j = 1 # just for consistency with other methods
+		)
+
+	# Add estimator name if it was provided
+	if !isnothing(estimator_names) estimator_name = estimator_names end # deprecation coercion
+	if !isnothing(estimator_name)
+		df[!, "estimator"] .= estimator_name
+		runtime[!, "estimator"] .= estimator_name
 	end
 
 	return Assessment(df, runtime)

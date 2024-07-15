@@ -358,10 +358,9 @@ end
 
 
 """
-	estimateinbatches(θ̂, z, θ = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+	estimateinbatches(θ̂, z, t = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
 
-Apply the estimator `θ̂` on minibatches of `z` (and optionally parameter vectors
-or other set-level information `θ`) of size `batchsize`.
+Apply the estimator `θ̂` on minibatches of `z` (and optionally other set-level information `t`) of size `batchsize`.
 
 This can prevent memory issues that can occur with large data sets, particularly
 on the GPU.

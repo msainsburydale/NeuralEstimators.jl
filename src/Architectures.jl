@@ -200,7 +200,7 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	Z, X = tup
 	@assert length(Z) == length(X)
 	result = [d((Z[k], X[k])) for k ∈ eachindex(Z)]
-	permutedims(reduce(vcat, result))
+	reduce(hcat, vec.(permutedims.(result)))
 end
 
 #TODO document summarystatistics()

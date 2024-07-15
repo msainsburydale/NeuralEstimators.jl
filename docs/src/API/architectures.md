@@ -1,10 +1,5 @@
 # Architectures
 
-```@index
-Order = [:type, :function]
-Pages   = ["architectures.md"]
-```
-
 ## Modules
 
 The following high-level modules are often used when constructing a neural-network architecture. In particular, the [`DeepSet`](@ref) is the building block for most classes of [Estimators](@ref) in the package. 

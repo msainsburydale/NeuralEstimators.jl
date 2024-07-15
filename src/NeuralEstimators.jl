@@ -60,7 +60,7 @@ include("densities.jl")
 export train, trainx, subsetdata
 include("train.jl")
 
-export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore
+export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
 include("assess.jl")
 
 export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches, rowwisenorm
@@ -75,9 +75,10 @@ include("missingdata.jl")
 end
 
 #---- TODO
+# - Related software on landing page
 # - Documentation: sometimes use 'd' to denote the dimension of the response variable, and sometimes 'q'... try to be consistent
 # - assess(est::QuantileEstimatorContinuous), assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots)
-# - Advanced usage: missing-data methodology in docs/src/devel. 
+# - Advanced usage: missing-data methodology in docs/src/devel, and also re-add documentation for struct "EM"
 # - Examples: Bivariate data in multivariate section
 # - Helper functions for censored data, and provide an example in the documentation (maybe tied in with the bivariate data example).
  
