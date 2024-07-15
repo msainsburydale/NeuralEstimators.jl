@@ -52,7 +52,7 @@ This software was developed as part of academic research. If you would like to s
 
 ### Related packages 
 
-The following packages may also 
+Several other software packages have been developed to facilitate neural likelihood-free inference. These include:
 
 1. [BayesFlow](https://github.com/stefanradev93/BayesFlow) (TensorFlow)
 1. [LAMPE](https://github.com/probabilists/lampe) (PyTorch)
@@ -60,3 +60,4 @@ The following packages may also
 1. [swyft](https://github.com/undark-lab/swyft) (PyTorch)
 
 
+A summary of the functionality in these packages is given in [Zammit-Mangion et al. (2024, Section 6.1)](https://arxiv.org/abs/2404.12484). Note that this list of related packages was created in July 2024; if you have software to add to this list, please contact the package maintainer. 
