@@ -44,7 +44,7 @@ end
 # ---- Gaussian process ----
 
 """
-	simulategaussianprocess(L::AbstractMatrix, m = 1)
+	simulategaussian(L::AbstractMatrix, m = 1)
 
 Simulates `m` independent and identically distributed (i.i.d.) realisations from
 a mean-zero multivariate Gaussian random variable with associated lower Cholesky 
@@ -67,16 +67,16 @@ S = rand(n, 2)
 D = pairwise(Euclidean(), S, dims = 1)
 Σ = Symmetric(matern.(D, ρ, ν))
 L = cholesky(Σ).L
-simulategaussianprocess(L)
+simulategaussian(L)
 ```
 """
-function simulategaussianprocess(obj::M, m::Integer) where M <: AbstractMatrix{T} where T <: Number
-	y = [simulategaussianprocess(obj) for _ ∈ 1:m]
+function simulategaussian(obj::M, m::Integer) where M <: AbstractMatrix{T} where T <: Number
+	y = [simulategaussian(obj) for _ ∈ 1:m]
 	y = stackarrays(y, merge = false)
 	return y
 end
 
-function simulategaussianprocess(L::M) where M <: AbstractMatrix{T} where T <: Number
+function simulategaussian(L::M) where M <: AbstractMatrix{T} where T <: Number
 	L * randn(T, size(L, 1))
 end
 
@@ -135,7 +135,7 @@ function simulateschlather(obj::M; C = 3.5, Gumbel::Bool = false) where M <: Abs
 	# be shown that this condition is satisfied if the marginal variance of Y(⋅)
 	# is equal to 2π. Now, our simulation design embeds a marginal variance of 1
 	# into fields generated from the cholesky factors, and hence
-	# simulategaussianprocess(L) returns simulations from a Gaussian
+	# simulategaussian(L) returns simulations from a Gaussian
 	# process with marginal variance 1. To scale the marginal variance to
 	# 2π, we therefore need to multiply the field by √(2π).
 
@@ -145,7 +145,7 @@ function simulateschlather(obj::M; C = 3.5, Gumbel::Bool = false) where M <: Abs
 	# Z(s) is initialised to 0 and increases during simulation.
 
 	while (ζ * C) > minimum(Z)
-		Y = simulategaussianprocess(obj)
+		Y = simulategaussian(obj)
 		Y = √(T(2π)) * Y
 		Z = max.(Z, ζ * Y)
 		E = randexp(T)
@@ -301,104 +301,99 @@ end
 
 # ---- Potts model ----
 
-#TODO nsims argument
-
 """
 	simulatepotts(grid::Matrix{Int}, β)
 	simulatepotts(grid::Matrix{Union{Int, Nothing}}, β)
 	simulatepotts(nrows::Int, ncols::Int, num_states::Int, β)
 
-Chequerboard Gibbs sampling for a 2D Potts model.
+Chequerboard Gibbs sampling from 2D Potts model with parameter `β`>0.
 
 # Keyword arguments
 - num_iterations::Int = 2000
-- burn::Int = 1000
-- thin::Int = 10
 - mask::Union{Matrix{Bool}, Nothing} = nothing
 
 # Examples
 ```
+using NeuralEstimators 
 
 ## Marginal simulation 
-using Random
-Random.seed!(1234)
-nrows, ncols =  10,10
-num_states = 5
 β = 0.8
-simulatepotts(nrows, ncols, num_states, β)
+simulatepotts(10, 10, 5, β)
 
-using BenchmarkTools
-num_iterations = 200
-@belapsed simulatepotts(nrows, ncols, num_states, β, num_iterations = num_iterations)
-# sequential: 0.113351459
-# sequential, @inbounds: 0.113351459
-# threaded: 
+## Conditional simulation 
+β = 0.8
+complete_grid   = simulatepotts(50, 50, 2, β)        # simulate marginally from the Ising model 
+incomplete_grid = removedata(complete_grid, 0.1)     # remove 10% of the pixels at random  
+imputed_grid    = simulatepotts(incomplete_grid, β)  # conditionally simulate over missing pixels
 
 ## Recreate Fig. 8.8 of Marin & Robert (2007) “Bayesian Core”
 using Plots 
 grids = [simulatepotts(100, 100, 2, β) for β ∈ 0.3:0.1:1.2]
 heatmaps = heatmap.(grids, legend = false, aspect_ratio=1)
 Plots.plot(heatmaps...)
-
-## Conditional simulation 
-β = 0.8
-complete_grid   = simulatepotts(100, 100, 2, β)      # simulate from the Ising model 
-incomplete_grid = removedata(complete_grid, 0.3)     # remove 30% of the pixels at random  
-imputed_grid    = simulatepotts(incomplete_grid, β)  # conditionally simulate over missing pixels
 """
 function simulatepotts(grid::AbstractMatrix{Int}, β; nsims::Integer = 1, burn::Int = 1000, thin::Int = 10, num_iterations::Int = 2000, mask = nothing)
 
-	# TODO burn
-	# TODO thin 
-	# TODO return MCMC chain rather than just the end value 
+  	# TODO burn
+  	# TODO thin 
+  	# TODO return MCMC chain rather than just the end value 
 	
-	β = β[1] # remove the container if β was passed as a vector or a matrix 
-
-	nrows, ncols = size(grid)
-    num_states = maximum(grid) 
+  	β = β[1] # remove the container if β was passed as a vector or a matrix 
+  
+  	nrows, ncols = size(grid)
+    #num_states = maximum(grid) 
+    states = unique(skipmissing(grid))
+  	num_states = length(states)
 
     # Define chequerboard patterns
     chequerboard1 = [(i+j) % 2 == 0 for i in 1:nrows, j in 1:ncols]
     chequerboard2 = .!chequerboard1
-	if !isnothing(mask)
-		@assert size(grid) == size(mask)
-		chequerboard1 = chequerboard1 .&& mask 
-		chequerboard2 = chequerboard2 .&& mask 
-	end
-
+  	if !isnothing(mask)
+  		@assert size(grid) == size(mask)
+  		chequerboard1 = chequerboard1 .&& mask 
+  		chequerboard2 = chequerboard2 .&& mask 
+  	end
+	
+  	#TODO check sum(mask) != 0 (return unaltered grid in this case, with a warning)
+  	#TODO sum(chequerboard1) != 0 (easy workaround in this case, just do cboard2)
+  	#TODO sum(chequerboard2) != 0 (easy workaround in this case, just do cboard1)
+  	#TODO sum(chequerboard1) == 0 sum(chequerboard2) == 0 (return unaltered grid in this case, with a warning)
+	
     # Define neighbours offsets (assuming 4-neighbour connectivity)
     neighbour_offsets = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 
     # Gibbs sampling iterations
-	for _ in 1:num_iterations
-		for chequerboard in (chequerboard1, chequerboard2)
-			for ci in findall(chequerboard)
-	
-				# Get cartesian coordinates of current pixel
-				i, j = Tuple(ci)
-	
-				# Calculate conditional probabilities Pr(zᵢ | z₋ᵢ, β)
-				n = zeros(num_states) # neighbour counts for each state
-				for (di, dj) in neighbour_offsets
-					ni, nj = i + di, j + dj
-					if 1 <= ni <= nrows && 1 <= nj <= ncols
-						@inbounds n[grid[ni, nj]] += 1
-					end
-				end
-				probs = exp.(β * n) 
-				probs /= sum(probs) # normalise 
-				u = rand()
-				new_state = findfirst(x -> x > u, cumsum(probs))
-		
-				# Update grid with new state
-				@inbounds grid[i, j] = new_state
-			end
-		end
-	end
+  	for _ in 1:num_iterations
+  		for chequerboard in (chequerboard1, chequerboard2)
+  			for ci in findall(chequerboard)
+
+  				# Get cartesian coordinates of current pixel
+  				i, j = Tuple(ci)
+  	
+  				# Calculate conditional probabilities Pr(zᵢ | z₋ᵢ, β)
+  				n = zeros(num_states) # neighbour counts for each state
+  				for (di, dj) in neighbour_offsets
+  					ni, nj = i + di, j + dj
+  					if 1 <= ni <= nrows && 1 <= nj <= ncols
+  						state = grid[ni, nj]
+  						index = findfirst(x -> x == state, states)
+  						n[index] += 1
+  					end
+  				end
+  				probs = exp.(β * n) 
+  				probs /= sum(probs) # normalise 
+  				u = rand()
+  				new_state_index = findfirst(x -> x > u, cumsum(probs))
+  				new_state = states[new_state_index]
+  		
+  				# Update grid with new state
+  				grid[i, j] = new_state
+  			end
+  		end
+  	end
 
     return grid
 end
-
 
 
 function simulatepotts(nrows::Int, ncols::Int, num_states::Int, β; kwargs...)
@@ -412,13 +407,13 @@ function simulatepotts(grid::AbstractMatrix{Union{Missing, I}}, β; kwargs...) w
 	grid = copy(grid) 
 	
 	# Find the number of states 
-	num_states = maximum(skipmissing(grid)) 
+	states = unique(skipmissing(grid))
 	
 	# Compute the mask 
 	mask = ismissing.(grid)
 
-	# Replace missing entries with random states 
-	grid[mask] .= rand(1:num_states, sum(mask))
+	# Replace missing entries with random states # TODO might converge faster with a better initialisation
+	grid[mask] .= rand(states, sum(mask))
 
 	# Convert eltype of grid to Int 
 	grid = convert(Matrix{I}, grid)
@@ -429,9 +424,9 @@ end
 
 function simulatepotts(Z::A, β; kwargs...) where A <: AbstractArray{T, N} where {T, N}
 
-  @assert all(size(Z)[3:end] .== 1) "Code for the Potts model is not equipped to handle independent replicates"
+  	@assert all(size(Z)[3:end] .== 1) "Code for the Potts model is not equipped to handle independent replicates"
 
-  # Save the original dimensions
+  	# Save the original dimensions
 	dims = size(Z)
 
 	# Convert to matrix and pass to the matrix method

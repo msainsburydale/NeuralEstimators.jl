@@ -98,6 +98,14 @@ verbose = false # verbose used in code (not @testset)
 	@test isnothing(_check_sizes(1, 1))
 end
 
+@testset "maternclusterprocess" begin
+
+	S = maternclusterprocess()
+	@test size(S, 2) == 2
+	S = maternclusterprocess(unit_bounding_box = true)
+	@test size(S, 2) == 2
+
+end
 
 using NeuralEstimators: triangularnumber
 @testset "summary statistics: $dvc" for dvc ∈ devices
@@ -112,14 +120,22 @@ using NeuralEstimators: triangularnumber
 	@test samplesize(z) == 1
 	@test_throws Exception samplecovariance(z)
 	@test_throws Exception samplecorrelation(z)
-end
 
-
-@testset "maternclusterprocess" begin
-
-	S = maternclusterprocess()
-	@test size(S, 2) == 2
-
+	# neighbourhood variogram 
+	θ = 0.1                                 # true range parameter 
+	n = 100                                 # number of spatial locations 
+	S = rand(n, 2)                          # spatial locations 
+	D = pairwise(Euclidean(), S, dims = 1)  # distance matrix 
+	Σ = exp.(-D ./ θ)                       # covariance matrix 
+	L = cholesky(Symmetric(Σ)).L            # Cholesky factor 
+	m = 5                                   # number of independent replicates 
+	Z = L * randn(n, m)                     # simulated data 
+	r = 0.15                                # radius of neighbourhood set
+	g = spatialgraph(S, Z, r = r)      |> dvc
+	nv = NeighbourhoodVariogram(r, 10) |> dvc
+	nv(g)
+	@test length(nv(g)) == 10
+	@test all(nv(g) .>= 0)
 end
 
 @testset "adjacencymatrix" begin
@@ -282,22 +298,31 @@ end
 	@test size(UW) == (n, n, 2, m)
 end
 
+@testset "SpatialGraphConv" begin
+	# Toy spatial data
+	m = 5                  # number of replicates
+	d = 2                  # spatial dimension
+	n = 250                # number of spatial locations
+	S = rand(n, d)         # spatial locations
+	Z = rand(n, m)         # data
+	g = spatialgraph(S, Z) # construct the graph
 
-#TODO update this
-# @testset "SpatialGraphConv" begin
-# 	m = 5            # number of replicates
-# 	d = 2            # spatial dimension
-# 	n = 100          # number of spatial locations
-# 	S = rand(n, d)   # spatial locations
-# 	Z = rand(n, m)   # toy data
-# 	g = spatialgraph(S, Z)
-# 	layer1 = SpatialGraphConv(1 => 16)
-# 	layer2 = SpatialGraphConv(16 => 32)
-# 	show(devnull, layer1)
-# 	h = layer1(g)
-# 	@test size(h.ndata.Z) == (16, m, n)
-# 	layer2(h)
-# end
+	# Construct and apply spatial graph convolution layer
+	l = SpatialGraphConv(1 => 10)
+	l(g)
+
+	# Construct and apply spatial graph convolution layer with global features 
+	l = SpatialGraphConv(1 => 10, glob = true)
+	l(g)
+end
+
+@testset "IndicatorWeights" begin
+	h_max = 1
+	n_bins = 10
+	w = IndicatorWeights(h_max, n_bins)
+	h = rand(1, 30) # distances between 30 pairs of spatial locations 
+	w(h)
+end
 
 @testset "loss functions: $dvc" for dvc ∈ devices
 
@@ -349,8 +374,18 @@ end
 	@test eltype(simulateschlather(L₁, m)) == Float32
 	# @code_warntype simulateschlather(L₁, m)
 
-	@test eltype(simulategaussianprocess(L₁, m)) == Float32
-	# @code_warntype simulategaussianprocess(L₁, σ, m)
+	@test eltype(simulategaussian(L₁, m)) == Float32
+	# @code_warntype simulategaussian(L₁, σ, m)
+
+	## Potts model 
+	β = 0.7
+	complete_grid   = simulatepotts(n, n, 2, β)         # simulate marginally from the Ising model 
+	@test size(complete_grid) == (n, n)
+	@test length(unique(complete_grid)) == 2
+	incomplete_grid = removedata(complete_grid, 0.1)     # remove 10% of the pixels at random  
+	imputed_grid    = simulatepotts(incomplete_grid, β)  # conditionally simulate over missing pixels
+	observed_idx = findall(!ismissing, incomplete_grid)
+	@test incomplete_grid[observed_idx] == imputed_grid[observed_idx] 
 end
 
 # Testing the function simulate(): Univariate Gaussian model with unknown mean and standard deviation
@@ -918,7 +953,7 @@ end
 
 		Z = map(1:K) do k
 			L = parameters.cholesky_factors[:, :, k]
-			z = simulategaussianprocess(L, m)
+			z = simulategaussian(L, m)
 			z = z + τ[k] * randn(size(z)...)
 			z = Float32.(z)
 			z = reshape(z, 16, 16, 1, :)

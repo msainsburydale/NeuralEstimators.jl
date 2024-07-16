@@ -8,7 +8,9 @@ The philosophy of `NeuralEstimators` is to cater for arbitrary statistical model
 See also [Distributions.jl](https://juliastats.org/Distributions.jl/stable/) for a large range of distributions implemented in Julia, and the package [RCall](https://juliainterop.github.io/RCall.jl/stable/) for calling R functions within Julia. 
 
 ```@docs
-simulategaussianprocess
+simulategaussian
+
+simualtepotts
 
 simulateschlather
 ```

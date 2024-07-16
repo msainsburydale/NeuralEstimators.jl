@@ -50,7 +50,7 @@ include("inference.jl")
 export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights, PowerDifference
 include("Graphs.jl")
 
-export simulate, simulategaussianprocess, simulateschlather, simulateconditionalextremes
+export simulate, simulategaussian, simulatepotts, simulateschlather
 export matern, maternchols, scaledlogistic, scaledlogit
 include("simulate.jl")
 
@@ -71,6 +71,9 @@ include("summarystatistics.jl")
 
 export EM, removedata, encodedata
 include("missingdata.jl")
+
+# Backwards compatability:
+simulategaussianprocess = simulategaussian; export simulategaussianprocess
 
 end
 
@@ -93,8 +96,10 @@ end
 # ```
 
 # ---- long term:
+# -	Add option to check validation risk (and save the optimal estimator) more frequently than the end of each epoch.
+# - Should have initialise_estimator() as an internal function, and instead have the public API be based on constructors of the various estimator classes. This aligns more with the basic ideas of Julia, where functions returning a certain class should be made as a constructor rather than a separate function. 
 # - Examples: discrete parameters (e.g., Chan et al., 2018). Might need extra functionality for this. 
-# - See if DeepSet can be moved to Flux.jl
+# - Sequence (e.g., time-series) input: https://jldc.ch/post/seq2one-flux/
 # - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. Seems easy, just need to add precompile(f, (arg_types…)) to whichever methods we want to precompile
 # - Examples: data plots within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
 # - Extension: Incorporate the following package to greatly expand bootstrap functionality: https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
@@ -108,5 +113,7 @@ end
 # - Optionally store parameter_names in NeuralEstimator: they can be used in bootstrap() so that the bootstrap estimates and resulting intervals are given informative names
 # - Turn some document examples into "doctests"
 # - Add "AR(k) time series" example, or a Ricker model (an example using partially exchangeable neural networks)
+# - GNN: recall that I set the code up to have ndata as a 3D array; with this format, non-parametric bootstrap would be exceedingly fast (since we can just subset the array data). Non parametric bootstrap is super slow because subsetdata() is super slow with graphical data... would be good to fix this so that non-parametric bootstrap is more efficient, and also so that train() is more efficient (and so that we don’t need to add qualifiers to the subsetting methods). Note that this may also be resolved by improvements made to GraphNeuralNetworks.jl
+# - Automatic checking of examples. 
 
 

@@ -298,7 +298,7 @@ Z = rand(n, m)         # data
 g = spatialgraph(S, Z) # construct the graph
 
 # Construct and apply spatial graph convolution layer
-l = SpatialGraphConv(1 => 10, relu)
+l = SpatialGraphConv(1 => 10)
 l(g)
 ```
 """
