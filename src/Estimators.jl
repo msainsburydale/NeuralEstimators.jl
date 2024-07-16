@@ -305,6 +305,9 @@ end
 # 	Normal(μ̃, σ̃)
 # end
 
+#TODO incorporate this into docs somewhere 
+# It's based on the fact that a pair (θᵏ, Zᵏ) sampled as θᵏ ∼ p(θ), Zᵏ ~ p(Z ∣ θᵏ) is also a sample from θᵏ ∼ p(θ ∣ Zᵏ), Zᵏ ~ p(Z). 
+
 #TODO clarify output structure when we have multiple probability levels (what is the ordering in this case?)
 @doc raw"""
 	QuantileEstimatorContinuous(deepset::DeepSet; i = nothing, num_training_probs::Integer = 1)

@@ -51,16 +51,15 @@ end
 Next, we implicitly define the statistical model through data simulation. In this package, the data are always stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and where the type `A` depends on the multivariate structure of the data. Since in this example each replicate $Z_1, \dots, Z_m$ is univariate, `A` should be a `Matrix` with $d=1$ row and $m$ columns. Below, we define our simulator given a single parameter vector, and given a matrix of parameter vectors (which simply applies the simulator to each column):
 
 ```
-simulate(θ, m) = θ[1] .+ θ[2] .* randn(1, m)
-simulate(θ::AbstractMatrix, m) = simulate.(eachcol(θ), m)
+simulate(θ, m) = [ϑ[1] .+ ϑ[2] .* randn(1, m) for ϑ ∈ eachcol(θ)]
 ```
 
 We now design our neural-network architecture. The workhorse of the package is the [`DeepSet`](@ref) architecture, which provides an elegant framework for making inference with an arbitrary number of independent replicates and for incorporating both neural and user-defined statistics. The DeepSets framework consists of two neural networks, a summary network and an inference network. The inference network (also known as the outer network) is always a multilayer perceptron (MLP). However, the architecture of the summary network (also known as the inner network) depends on the multivariate structure of the data. With unstructured data (i.e., when there is no spatial or temporal correlation within a replicate), we use an MLP with input dimension equal to the dimension of each replicate of the statistical model (i.e., one for univariate data): 
 
 ```
 p = 2                                                # number of parameters 
-ψ = Chain(Dense(1, 32, relu), Dense(32, 32, relu))   # summary network
-ϕ = Chain(Dense(32, 32, relu), Dense(32, p))         # inference network
+ψ = Chain(Dense(1, 64, relu), Dense(64, 64, relu))   # summary network
+ϕ = Chain(Dense(64, 64, relu), Dense(64, p))         # inference network
 architecture = DeepSet(ψ, ϕ)
 ```
 

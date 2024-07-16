@@ -60,6 +60,7 @@ function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, st
 	r = haskey(kwargs, :r) ? kwargs.r : 0.15
 	random = haskey(kwargs, :random) ? kwargs.random : false
 
+	#TODO
 	if !isotropic 
 		error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
 	end
@@ -233,12 +234,10 @@ end
 
 # ---- SpatialGraphConv ----
 
-#TODO documentation: global features 
-#TODO documentation: In the isotropic case, w() should act on 1xn matrix of distances 
 @doc raw"""
     SpatialGraphConv(in => out, g=relu; args...)
 
-Implements a spatial graph convolution, 
+Implements a spatial graph convolution for isotropic processes, 
 
 ```math
  \boldsymbol{h}^{(l)}_{j} =
@@ -250,7 +249,7 @@ Implements a spatial graph convolution,
  \boldsymbol{\gamma}^{(l)}
  \Big),
  \quad
- \bar{\boldsymbol{h}}^{(l)}_{j} = \sum_{j' \in \mathcal{N}(j)}\boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}; \boldsymbol{\beta}^{(l)}) \odot f(\boldsymbol{h}^{(l-1)}_{j}, \boldsymbol{h}^{(l-1)}_{j'}),
+ \bar{\boldsymbol{h}}^{(l)}_{j} = \sum_{j' \in \mathcal{N}(j)}\boldsymbol{w}^{(l)}(\|\boldsymbol{s}_{j'} - \boldsymbol{s}_j\|) \odot f^{(l)}(\boldsymbol{h}^{(l-1)}_{j}, \boldsymbol{h}^{(l-1)}_{j'}),
 ```
 
 where $\boldsymbol{h}^{(l)}_{j}$ is the hidden feature vector at location
@@ -258,19 +257,20 @@ $\boldsymbol{s}_j$ at layer $l$, $g(\cdot)$ is a non-linear activation function
 applied elementwise, $\boldsymbol{\Gamma}_{\!1}^{(l)}$ and
 $\boldsymbol{\Gamma}_{\!2}^{(l)}$ are trainable parameter matrices,
 $\boldsymbol{\gamma}^{(l)}$ is a trainable bias vector, $\mathcal{N}(j)$ denotes the
-indices of neighbours of $\boldsymbol{s}_j$, $\boldsymbol{w}(\cdot, \cdot; \boldsymbol{\beta}^{(l)})$ is a
-learnable weight function parameterised by $\boldsymbol{\beta}^{(l)}$, $\odot$
-denotes elementwise multiplication, and $f(\cdot, \cdot)$ is a (possibly learnable) function. 
+indices of neighbours of $\boldsymbol{s}_j$, $\boldsymbol{w}^{(l)}(\cdot)$ is a
+(learnable) spatial weighting function, $\odot$ denotes elementwise multiplication, 
+and $f^{(l)}(\cdot, \cdot)$ is a (learnable) function. 
 
-The function $f(\cdot, \cdot)$ is by default taken to be $f(\boldsymbol{h}^{(l-1)}_{j}, \boldsymbol{h}^{(l-1)}_{j'}) = |a \boldsymbol{h}^{(l-1)}_{j} - (1 - a) \boldsymbol{h}^{(l-1)}_{j'}|^b$ for learnable parameters $a ∈ [0, 1]$ and $b > 0$. One may alternatively employ a nonlearnable function, for example, `f = (hᵢ, hⱼ) -> (hᵢ - hⱼ).^2`. 
+By default, the function $f^{(l)}(\cdot, \cdot)$ is modelled using a [`PowerDifference`](@ref) function. 
+One may alternatively employ a nonlearnable function, for example, `f = (hᵢ, hⱼ) -> (hᵢ - hⱼ).^2`, 
+specified through the keyword argument `f`.  
 
-The spatial information must be stored as an edge feature, as facilitated by [`spatialgraph()`](@ref): 
-- When modelling isotropic processes (`isotropic = true`), $\boldsymbol{w}(\cdot, \cdot)$ is made a function of spatial distance, so that $\boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}) \equiv \boldsymbol{w}(\|\boldsymbol{s}_{j'} - \boldsymbol{s}_j\|)$. 
-- When modelling stationary processes (`isotropic = false` and `stationary = true`), $\boldsymbol{w}(\cdot, \cdot)$ is made a function of spatial displacement, so that $\boldsymbol{w}(\boldsymbol{s}_j, \boldsymbol{s}_{j'}) \equiv \boldsymbol{w}(\boldsymbol{s}_{j'} - \boldsymbol{s}_j)$. 
-- When modelling nonstationary processes (`stationary = false`), $\boldsymbol{w}(\cdot, \cdot)$ is made a function of the raw spatial locations. 
-In all cases, the output of $\boldsymbol{w}(\cdot, \cdot)$ must be either a scalar; a vector of the same dimension as the feature vectors of the previous layer; or a vector of arbitrary dimension if the features vectors of the previous layer are scalars. 
+The spatial distances between locations must be stored as an edge feature, as facilitated by [`spatialgraph()`](@ref). 
+The input to $\boldsymbol{w}(\cdot)$ is a $1 \times n$ matrix (i.e., a row vector) of spatial distances. 
+The output of $\boldsymbol{w}(\cdot)$ must be either a scalar; a vector of the same dimension as the feature vectors of the previous layer; 
+or, if the features vectors of the previous layer are scalars, a vector of arbitrary dimension. 
 To promote identifiability, the weights are normalised to sum to one (row-wise) within each neighbourhood set. 
-By default, $\boldsymbol{w}(\cdot, \cdot)$ is taken to be a multilayer perceptron with a single hidden layer, 
+By default, $\boldsymbol{w}(\cdot)$ is taken to be a multilayer perceptron with a single hidden layer, 
 although a custom choice for this function can be provided using the keyword argument `w`. 
 
 # Arguments
@@ -279,19 +279,15 @@ although a custom choice for this function can be provided using the keyword arg
 - `g = relu`: Activation function.
 - `bias = true`: Add learnable bias?
 - `init = glorot_uniform`: Initialiser for $\boldsymbol{\Gamma}_{\!1}^{(l)}$, $\boldsymbol{\Gamma}_{\!2}^{(l)}$, and $\boldsymbol{\gamma}^{(l)}$. 
-- `isotropic = true`
-- `stationary = true`
 - `f = nothing`
 - `w = nothing` 
 - `w_width = 128`: (Only applicable if `w = nothing`) The width of the hidden layer in the MLP used to model $\boldsymbol{w}(\cdot, \cdot)$. 
 - `w_out = in`: (Only applicable if `w = nothing`) The output dimension of $\boldsymbol{w}(\cdot, \cdot)$.  
-- `glob = false`: If `true``, a global features will be computed directly from the entire spatial graph.
-
+- `glob = false`: If `true`, global features will be computed directly from the entire spatial graph. These features are of the form: $\boldsymbol{T} = \sum_{j=1}^n\sum_{j' \in \mathcal{N}(j)}\boldsymbol{w}^{(l)}(\|\boldsymbol{s}_{j'} - \boldsymbol{s}_j\|) \odot f^{(l)}(\boldsymbol{h}^{(l-1)}_{j}, \boldsymbol{h}^{(l-1)}_{j'})$. Note that these global features are no longer associated with a graph structure, and should therefore only be used in the final layer of a summary-statistics module. 
 
 # Examples
 ```
 using NeuralEstimators, Flux, GraphNeuralNetworks
-using Statistics: mean
 
 # Toy spatial data
 m = 5                  # number of replicates
@@ -322,9 +318,6 @@ function SpatialGraphConv(
 	g = sigmoid;
 	init = glorot_uniform,
 	bias::Bool = true,
-	d::Integer = 2,
-	isotropic::Bool = true,
-	stationary::Bool = true,
 	w = nothing,
 	f = nothing,
 	w_out::Union{Integer, Nothing} = nothing, 
@@ -345,32 +338,12 @@ function SpatialGraphConv(
 		else 
 			@assert in == 1 || w_out == in "With vector-valued input features, the output of w must either be scalar or a vector of the same dimension as the input features"
 		end 
-		if !stationary isotropic = false end
-		if !isotropic 
-			error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
-		end
-		if !stationary
-			error("Nonstationarity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
-		end
-		w = if isotropic
-			Chain(
+		w = Chain(
 				Dense(1 => w_width, g, init = init),
 				Dense(w_width => w_out, g, init = init)
-				)
-		elseif stationary 
-			Chain(
-				Dense(d => w_width, g, init = init),
-				Dense(w_width => w_out, g, init = init)
-				)
-		else
-			Chain(
-				Bilinear((d, d) => w_width, g, init = init),  
-				Dense(w_width => w_out, g, init = init)
-				)
-		end 	
+			)	
 	else 
 		@assert !isnothing(w_out) "Since you have specified the weight function w(), please also specify its output dimension `w_out`"
-		# TODO add checks that w_out is consistent with the three allowed scenarios for w() described above 
 	end
 
 	# Function of Z
