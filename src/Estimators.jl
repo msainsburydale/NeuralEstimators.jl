@@ -242,7 +242,7 @@ q₂ = train(q₂, prior, simulate, m = m)
 # Assess the estimators 
 θ = prior(1000)
 Z = simulate(θ, m)   
-assessment = assess([q₁, q₂], θ, Z)
+assessment = assess([q₁, q₂], θ, Z, parameter_names = ["μ", "σ"])
 plot(assessment)  
 
 # Estimate quantiles of μ∣Z,σ with σ = 0.5 and for many data sets
