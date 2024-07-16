@@ -29,7 +29,7 @@ function plot(assessment::Assessment; grid::Bool = false)
 		df = empiricalprob(assessment)
 		figure = mapping([0], [1]) * visual(ABLines, color=:red, linestyle=:dash) 
 		figure += data(df) * mapping(:prob, :empirical_prob, layout = :parameter) * visual(Lines, color = :black)
-		figure = draw(figure, facet=(; linkxaxes=:none, linkyaxes=linkyaxes), axis = (; xlabel="Probability level, τ", ylabel="Pr(Q(Z, τ) ≤ θ)"))
+		figure = draw(figure, facet=(; linkxaxes=:none, linkyaxes=:none), axis = (; xlabel="Probability level, τ", ylabel="Pr(Q(Z, τ) ≤ θ)"))
 		return figure 
 	end
   

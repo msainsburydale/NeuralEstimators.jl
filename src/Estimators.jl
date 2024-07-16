@@ -180,16 +180,16 @@ See also [`IntervalEstimator`](@ref) and
 using NeuralEstimators, Flux, Distributions
 using AlgebraOfGraphics, CairoMakie
 
-# Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
+# Model: Z|θ ~ N(θ, 1) with θ ~ N(0, 1)
 d = 1   # dimension of each independent replicate
 p = 1   # number of unknown parameters in the statistical model
 m = 30  # number of independent replicates in each data set
 prior(K) = randn32(p, K)
-simulate(θ, m) = [μ .+ randn32(d, m) for μ ∈ eachcol(θ)]
+simulate(θ, m) = [μ .+ randn32(1, m) for μ ∈ eachcol(θ)]
 
 # Architecture
-ψ = Chain(Dense(d, 32, relu), Dense(32, 32, relu))
-ϕ = Chain(Dense(32, 32, relu), Dense(32, p))
+ψ = Chain(Dense(d, 64, relu), Dense(64, 64, relu))
+ϕ = Chain(Dense(64, 64, relu), Dense(64, p))
 v = DeepSet(ψ, ϕ)
 
 # Initialise the estimator
@@ -214,7 +214,7 @@ q̂(Z)
 # -------------------------------------------------------------
 
 
-# Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
+# Model: Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
 d = 1         # dimension of each independent replicate
 p = 2         # number of unknown parameters in the statistical model
 m = 30        # number of independent replicates in each data set
@@ -223,12 +223,11 @@ function prior(K)
 	σ = rand(InverseGamma(3, 1), 1, K)
 	θ = Float32.(vcat(μ, σ))
 end
-simulate(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
-simulate(θ::Matrix, m) = simulate.(eachcol(θ), m)
+simulate(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(1, m) for ϑ ∈ eachcol(θ)]
 
 # Architecture
-ψ = Chain(Dense(d, 32, relu), Dense(32, 32, relu))
-ϕ = Chain(Dense(32 + 1, 32, relu), Dense(32, 1))
+ψ = Chain(Dense(d, 64, relu), Dense(64, 64, relu))
+ϕ = Chain(Dense(64 + 1, 64, relu), Dense(64, 1))
 v = DeepSet(ψ, ϕ)
 
 # Initialise estimators respectively targetting quantiles of μ∣Z,σ and σ∣Z,μ 
@@ -306,9 +305,7 @@ end
 # 	Normal(μ̃, σ̃)
 # end
 
-
-
-#TODO Closed-form posterior for full conditionals for comparison
+#TODO clarify output structure when we have multiple probability levels (what is the ordering in this case?)
 @doc raw"""
 	QuantileEstimatorContinuous(deepset::DeepSet; i = nothing, num_training_probs::Integer = 1)
 	(estimator::QuantileEstimatorContinuous)(Z, τ)
@@ -358,19 +355,15 @@ See also [`QuantileEstimatorDiscrete`](@ref).
 
 # Examples
 ```
-using NeuralEstimators 
-using Flux
-using Distributions  
-using InvertedIndices 
-using Statistics
+using NeuralEstimators, Flux, Distributions , InvertedIndices, Statistics
 using AlgebraOfGraphics, CairoMakie
 
-# Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
+# Model: Z|θ ~ N(θ, 1) with θ ~ N(0, 1)
 d = 1         # dimension of each independent replicate
 p = 1         # number of unknown parameters in the statistical model
 m = 30        # number of independent replicates in each data set
 prior(K) = randn32(p, K)
-simulateZ(θ, m) = [μ .+ randn32(d, m) for μ ∈ eachcol(θ)]
+simulateZ(θ, m) = [ϑ .+ randn32(1, m) for ϑ ∈ eachcol(θ)]
 simulateτ(K)    = [rand32(10) for k in 1:K]  
 simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
 
@@ -405,7 +398,7 @@ plot(assessment)
 q̂(Z, τ)                       
 
 # Estimate several quantiles for a single data set
-# (note that τ is given as row vector)
+# (note that τ is given as a row vector)
 z = Z[1]
 τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])'
 q̂(z, τ)   
@@ -414,21 +407,20 @@ q̂(z, τ)
 # --------------------- Full conditionals ---------------------
 # -------------------------------------------------------------
 
-# Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
+# Model: Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
 d = 1         # dimension of each independent replicate
 p = 2         # number of unknown parameters in the statistical model
 m = 30        # number of independent replicates in each data set
 function prior(K)
-	μ = randn32(K)
-	σ = rand(InverseGamma(3, 1), K)
-	θ = hcat(μ, σ)'
+	μ = randn(1, K)
+	σ = rand(InverseGamma(3, 1), 1, K)
+	θ = vcat(μ, σ)
 	θ = Float32.(θ)
 	return θ
 end
-simulateZ(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
-simulateZ(θ::Matrix, m) = simulateZ.(eachcol(θ), m)
-simulateτ(K)    = [rand32(10) for k in 1:K]
-simulate(θ, m)  = simulateZ(θ, m), simulateτ(size(θ, 2))
+simulateZ(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(1, m) for ϑ ∈ eachcol(θ)]
+simulateτ(θ)    = [rand32(10) for k in 1:size(θ, 2)]
+simulate(θ, m)  = simulateZ(θ, m), simulateτ(θ)
 
 # Architecture: partially monotonic network to preclude quantile crossing
 w = 64  # width of each hidden layer
@@ -458,7 +450,7 @@ assessment = assess(q̂, θ, Z)
 plot(assessment) 
 
 # Estimate quantiles of μ∣Z,σ with σ = 0.5 and for many data sets
-# (use θ[Not(i), :] to determine the order that the conditioned parameters should be given)
+# (use θ[Not(i), :] to determine the order in which the conditioned parameters should be given)
 θ = prior(1000)
 Z = simulateZ(θ, m)
 θ₋ᵢ = 0.5f0    
