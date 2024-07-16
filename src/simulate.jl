@@ -56,9 +56,7 @@ returned as an ``n``x`m` matrix.
 
 # Examples
 ```
-using NeuralEstimators
-using Distances
-using LinearAlgebra
+using NeuralEstimators, Distances, LinearAlgebra
 
 n = 500
 ρ = 0.6
@@ -104,9 +102,7 @@ returned as an ``n``x`m` matrix.
 
 # Examples
 ```
-using NeuralEstimators
-using Distances
-using LinearAlgebra
+using NeuralEstimators, Distances, LinearAlgebra
 
 n = 500
 ρ = 0.6
@@ -331,6 +327,7 @@ using Plots
 grids = [simulatepotts(100, 100, 2, β) for β ∈ 0.3:0.1:1.2]
 heatmaps = heatmap.(grids, legend = false, aspect_ratio=1)
 Plots.plot(heatmaps...)
+```
 """
 function simulatepotts(grid::AbstractMatrix{Int}, β; nsims::Integer = 1, burn::Int = 1000, thin::Int = 10, num_iterations::Int = 2000, mask = nothing)
 

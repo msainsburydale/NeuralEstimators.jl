@@ -10,7 +10,7 @@ See also [Distributions.jl](https://juliastats.org/Distributions.jl/stable/) for
 ```@docs
 simulategaussian
 
-simualtepotts
+simulatepotts
 
 simulateschlather
 ```
