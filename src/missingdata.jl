@@ -1,41 +1,39 @@
-#TODO add example once I add simulateconditionalGP
-#TODO Improve documentation (math display isn't the best here)
 @doc raw"""
-    EM(simulateconditional::Function, MAP::Function, θ₀ = nothing)
-A type that implements the Monte Carlo variant of the expectation-maximisation
-(EM) algorithm, which at ``l``th iteration finds the value of 𝛉 that maximises
+    EM(simulateconditional::Function, MAP::Union{Function, NeuralEstimator}, θ₀ = nothing)
+Implements the (Bayesian) Monte Carlo expectation-maximisation (EM) algorithm, 
+with ``l``th iteration
 
 ```math
-Σₕᴴ ℓ(𝛉;  𝐙₁,  𝐙₂ˡʰ) + log πᴴ(𝛉),
+\boldsymbol{\theta}^{(l)} = 
+\argmax_{\boldsymbol{\theta}}
+\sum_{h = 1}^H \ell(\boldsymbol{\theta};  \boldsymbol{Z}_1,  \boldsymbol{Z}_2^{(lh)}) + H\log \pi(\boldsymbol{\theta})
 ```
 
-where ℓ(⋅) is the complete-data log-likelihood function, 𝐙 ≡ (𝐙₁', 𝐙₂')'
-denotes the complete data with 𝐙₁ and 𝐙₂ the observed and missing components,
-respectively, the replicate 𝐙₂ˡʰ, h = 1, …, H, is sampled from the conditional probability
-distribution of 𝐙₂ given 𝐙₁ and the previous estimates 𝛉ˡ⁻¹, and
-πᴴ(⋅) ≡ {π(⋅)}ᴴ  is a concentrated version of the original prior density.
+where $\ell(\cdot)$ is the complete-data log-likelihood function, $\boldsymbol{Z} \equiv (\boldsymbol{Z}_1', \boldsymbol{Z}_2')'$
+denotes the complete data with $\boldsymbol{Z}_1$ and $\boldsymbol{Z}_2$ the observed and missing components,
+respectively, $\boldsymbol{Z}_2^{(lh)}$, $h = 1, \dots, H$, is simulated from the 
+distribution of $\boldsymbol{Z}_2 \mid \boldsymbol{Z}_1, \boldsymbol{\theta}^{(l-1)}$, and 
+$\pi(\boldsymbol{\theta})$ denotes the prior density. 
 
-# Fields
+# Fields 
 
-The function `simulateconditional` should be of the form,
+The function `simulateconditional` should have a signature of the form,
 
-	simulateconditional(Z::A, θ; nsims::Integer = 1) where {A <: AbstractArray{Union{Missing, T}}} where T
+	simulateconditional(Z::A, θ; nsims = 1) where {A <: AbstractArray{Union{Missing, T}}} where T
 
-and the completed-data `Z` should be returned in whatever form is
-appropriate to be passed to the MAP estimator as `MAP(Z)`. For example, if the
-data are gridded and the `MAP` is a neural MAP estimator based on a CNN
-architecture, then `Z` should be returned as a four-dimensional array.
+The output of `simulateconditional` should be the completed-data `Z`, and it should be 
+returned in whatever form is appropriate to be passed to the MAP estimator as `MAP(Z)`. For example, if the data are gridded and 
+the `MAP` is a neural MAP estimator based on a CNN architecture, then `Z` should 
+be returned as a four-dimensional array.
 
-Note that the `MAP` estimator should return the *joint* posterior mode;
-therefore, a neural MAP estimator should be trained under (a surrogate for) the
-joint 0-1 loss function (see [`kpowerloss`](@ref)).
+The field `MAP` can be a function (to facilitate the conventional Monte Carlo EM algorithm) or a 
+`NeuralEstimator` (to facilitate the so-called neural EM algorithm). 
 
-The starting values `θ₀` should be a vector, which can be provided either during
-construction of the `EM` object, or when applying the `EM` object to data
-(see below). The starting values given in a function call take precedence over
-those stored in the object.
+The starting values `θ₀` may be provided during initialisation (as a vector), 
+or when applying the `EM` object to data (see below). The starting values 
+ given in a function call take precedence over those stored in the object.
 
-# Methods
+# Methods 
 
 Once constructed, obects of type `EM` can be applied to data via the methods,
 
@@ -47,14 +45,19 @@ Note that the second method caters for the case that one has multiple data sets.
 The keyword arguments are:
 
 - `niterations::Integer = 50`: the maximum number of iterations.
-- `nsims::Integer = 1`: the number of conditional replicates used to approximate the conditional expectation.
+- `ϵ = 0.01`: tolerance used to assess convergence; the algorithm halts if the relative change in parameter values in successive iterations is less than `ϵ`.
+- `return_iterates::Bool`: if `true`, the estimate at each iteration of the algorithm is returned; otherwise, only the final estimate is returned.
+- `nsims::Integer = 1`: the number $H$ of conditional simulations in each iteration. 
 - `ξ = nothing`: model information needed for conditional simulation (e.g., distance matrices) or in the MAP estimator.
 - `use_ξ_in_simulateconditional::Bool = false`: if set to `true`, the conditional simulator is called as `simulateconditional(Z, θ, ξ; nsims = nsims)`.
-- `use_ξ_in_MAP::Bool = false`: if set to `true`, the MAP estimator is applied to the conditionally-completed data as `MAP(Z, ξ)`.
-- `ϵ = 0.01`: tolerance used to assess convergence; The algorithm if the relative change in parameter values from successive iterations is less than `ϵ`.
-- `return_iterates`: if `true`, the estimate at each iteration of the algorithm is returned; otherwise, only the final estimate is returned.
+- `use_ξ_in_MAP::Bool = false`: if set to `true`, the MAP estimator is called as `MAP(Z, ξ)`.
 - `use_gpu::Bool = true`
 - `verbose::Bool = false`
+
+# Examples 
+```
+# See the "Missing data" section in "Advanced usage"
+```
 """
 struct EM{F,T,S}
 	simulateconditional::F

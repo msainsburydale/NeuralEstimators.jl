@@ -149,3 +149,266 @@ end
 ## Method that allows an integer to be passed for m
 simulate(parameters, m::Integer) = simulate(parameters, range(m, m))
 ```
+
+
+## Missing data
+
+Neural networks do not naturally handle missing data, and this property can preclude their use in a broad range of applications. Here, we describe two techniques that alleviate this challenge in the context of parameter point estimation: [The masking approach](@ref) and [The neural EM algorithm](@ref).
+
+As a running example, we consider a Gaussian process model where the data are collected over a regular grid, but where some elements of the grid are unobserved. This situation often arises in, for example, remote-sensing applications, where the presence of cloud cover prevents measurement in some places. Below, we load the packages needed in this example, and define some aspects of the model that will remain constant throughout (e.g., the prior, the spatial domain, etc.). We also define structs and functions for sampling from the prior distribution and for simulating marginally from the data model. 
+
+```
+using Distances 
+using Distributions 
+using Flux
+using LinearAlgebra
+using NeuralEstimators
+#import NeuralEstimators: simulate
+using Statistics: mean
+
+# Set the prior and define the number of parameters in the statistical model
+Π = (
+	τ = Uniform(0, 1.0), 
+	ρ = Uniform(0, 0.4)
+)
+p = length(Π) 
+
+# Define the (gridded) spatial domain and compute the distance matrix 
+points = range(0, 1, 16)
+S = expandgrid(points, points)
+D = pairwise(Euclidean(), S, dims = 1)
+
+# Store model information for later use
+ξ = (
+	Π = Π,
+	S = S,
+	D = D
+)
+
+# Struct for storing parameters+Cholesky factors 
+struct Parameters <: ParameterConfigurations
+	θ
+	L
+end
+
+# Constructor for above struct
+function Parameters(K::Integer, ξ)
+
+	# Sample parameters from the prior
+	Π = ξ.Π
+	τ = rand(Π.τ, K)
+	ρ = rand(Π.ρ, K)
+	ν = 1 # fixed smoothness
+
+	# Compute Cholesky factors  
+	L = maternchols(ξ.D, ρ, ν)
+
+	# Concatenate into matrix
+	θ = permutedims(hcat(τ, ρ))
+
+	Parameters(θ, L)
+end
+
+# Marginal simulation from the data model
+function simulate(parameters::Parameters, m::Integer)
+
+	K = size(parameters, 2)
+	τ = parameters.θ[1, :]
+	L = parameters.L
+	n = isqrt(size(L, 1))
+
+	Z = map(1:K) do k
+		z = simulategaussian(L[:, :, k], m)
+		z = z + τ[k] * randn(size(z)...)
+		z = Float32.(z)
+		z = reshape(z, n, n, 1, :)
+		z
+	end
+
+	return Z
+end
+```
+
+### The masking approach
+
+The first missing-data technique that we consider is the so-called masking approach of [Wang et al. (2024)](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1012184). Their strategy involves completing the data by replacing missing values with zeros, and using auxiliary variables to encode the missingness pattern, which are also passed into the network.
+
+Let $\boldsymbol{Z}$ denote the complete-data vector. Then, the masking approach considers inference based on $\boldsymbol{W}$, a vector of indicator variables that encode the missingness pattern (with elements equal to one or zero if the corresponding element of $\boldsymbol{Z}$ is observed or missing, respectively), and
+
+```math
+\boldsymbol{U} \equiv \boldsymbol{Z} \odot \boldsymbol{W},
+```
+
+where $\odot$ denotes elementwise multiplication. Irrespective of the missingness pattern, $\boldsymbol{U}$ and $\boldsymbol{W}$ have the same fixed dimensions and hence may be processed easily using a single neural network. A neural point estimator is then trained on realisations of $\{\boldsymbol{U}, \boldsymbol{W}\}$ which, by construction, do not contain any missing elements.
+
+Since the missingness pattern $\boldsymbol{W}$ is now an input to the neural network, it must be incorporated during the training phase. When interest lies only in making inference from a single already-observed data set, $\boldsymbol{W}$ is fixed and known, and the Bayes risk remains unchanged. However, amortised inference, whereby one trains a single neural network that will be used to make inference with many data sets, requires a joint model for the data $\boldsymbol{Z}$ and the missingness pattern $\boldsymbol{W}$: 
+
+```
+# Marginal simulation from the data model and a MCAR missingness model
+function simulatemissing(parameters::Parameters, m::Integer)
+
+	Z = simulate(parameters, m)   # simulate completely-observed data
+
+	UW = map(Z) do z
+		prop = rand()             # sample a missingness proportion 
+		z = removedata(z, prop)   # randomly remove a proportion of the data
+		uw = encodedata(z)        # replace missing entries with zero and encode missingness pattern
+		uw
+	end
+
+	return UW
+end
+```
+
+Note that the helper functions [`removedata()`](@ref) and [`encodedata()`](@ref) facilitate the construction of augmented data sets $\{\boldsymbol{U}, \boldsymbol{W}\}$. 
+
+Next, we construct and train a masked neural Bayes estimator. Note that the first convolutional layer takes two input channels, since we store the augmented data $\boldsymbol{U}$ in the first channel and the missingness pattern $\boldsymbol{W}$ in the second. Here, we construct a point estimator, but the masking approach is applicable with any other kind of estimator (see [Estimators](@ref)): 
+
+```
+# Construct DeepSet object 
+ψ = Chain(
+	Conv((10, 10), 2 => 16,  relu),
+	Conv((5, 5),  16 => 32,  relu),
+	Conv((3, 3),  32 => 64, relu),
+	Flux.flatten
+	)
+ϕ = Chain(Dense(64, 256, relu), Dense(256, p, exp))
+deepset = DeepSet(ψ, ϕ)
+
+# Initialise point estimator 
+θ̂ = PointEstimator(deepset)
+
+# Train the masked neural Bayes estimator
+θ̂ = train(θ̂, Parameters, simulatemissing, m = 1, ξ = ξ, K = 1000, epochs = 10)
+```
+
+Once trained, we can apply our masked neural Bayes estimator to (incomplete) observed data. The data must be encoded in the same manner that was done during training. Below, we use simulated data as a surrogate for real data, with a missingness proportion of 0.25: 
+
+```
+θ = Parameters(1, ξ)
+Z = simulate(θ, 1)[1]
+Z = removedata(Z, 0.25) 
+UW = encodedata(Z)
+θ̂(UW)
+```
+
+
+### The neural EM algorithm
+
+Let $\boldsymbol{Z}_1$ and $\boldsymbol{Z}_2$ denote the observed and unobserved (i.e., missing) data, respectively, and let $\boldsymbol{Z} \equiv (\boldsymbol{Z}_1', \boldsymbol{Z}_2')'$ denote the complete data. A classical approach to facilitating inference when data are missing is the expectation-maximisation (EM) algorithm. The *neural EM algorithm* is an approximate version of the conventional (Bayesian) Monte Carlo EM algorithm, which has $l$th iteration,
+
+```math
+\boldsymbol{\theta}^{(l)} = \argmax_{\boldsymbol{\theta}} \sum_{h = 1}^H \ell(\boldsymbol{\theta};  \boldsymbol{Z}_1,  \boldsymbol{Z}_2^{(lh)}) + \log \pi^*(\boldsymbol{\theta}),
+```
+
+where realisations of the missing-data component, $\{\boldsymbol{Z}_2^{(lh)} : h = 1, \dots, H\}$, are sampled from the probability distribution of $\boldsymbol{Z}_2$ given $\boldsymbol{Z}_1$ and $\boldsymbol{\theta}^{(l-1)}$, and where $\pi^*(\boldsymbol{\theta}) \propto \{\pi(\boldsymbol{\theta})\}^H$ is a concentrated version of the original prior density. Given the conditionally sampled data, the neural EM algorithm performs the above EM update using a neural Bayes estimator trained to approximate the MAP estimator (i.e., the posterior mode). 
+
+First, we construct a neural approximation of the MAP estimator. In this example, we will take $H=50$. When $H$ is taken to be reasonably large, one may lean on the [Bernstein-von Mises](https://en.wikipedia.org/wiki/Bernstein%E2%80%93von_Mises_theorem) theorem to train the neural Bayes estimator under linear or quadratic loss; otherwise, one should train the estimator under a continuous relaxation of the 0--1 loss (e.g., the [`tanhloss`](@ref) or [`kpowerloss`](@ref) in the limit $\kappa \to 0$):
+
+```
+# Construct DeepSet object 
+ψ = Chain(
+	Conv((10, 10), 1 => 16,  relu),
+	Conv((5, 5),  16 => 32,  relu),
+	Conv((3, 3),  32 => 64, relu),
+	Flux.flatten
+	)
+ϕ = Chain(
+	Dense(64, 256, relu),
+	Dense(256, p, exp)
+	)
+deepset = DeepSet(ψ, ϕ)
+
+# Initialise point estimator 
+θ̂ = PointEstimator(deepset)
+
+# Train neural Bayes estimator
+H = 50
+θ̂ = train(θ̂, Parameters, simulate, m = H, ξ = ξ, K = 1000, epochs = 10)
+```
+
+Next, we define a function for conditional simulation (see [`EM`](@ref) for details on the required format of this function): 
+
+```
+function simulateconditional(Z::M, θ, ξ; nsims::Integer = 1) where {M <: AbstractMatrix{Union{Missing, T}}} where T
+
+	# Save the original dimensions
+	dims = size(Z)
+
+	# Convert to vector
+	Z = vec(Z)
+
+	# Compute the indices of the observed and missing data
+	I₁ = findall(z -> !ismissing(z), Z) # indices of observed data
+	I₂ = findall(z -> ismissing(z), Z)  # indices of missing data
+	n₁ = length(I₁)
+	n₂ = length(I₂)
+
+	# Extract the observed data and drop Missing from the eltype of the container
+	Z₁ = Z[I₁]
+	Z₁ = [Z₁...]
+
+	# Distance matrices needed for covariance matrices
+	D   = ξ.D # distance matrix for all locations in the grid
+	D₂₂ = D[I₂, I₂]
+	D₁₁ = D[I₁, I₁]
+	D₁₂ = D[I₁, I₂]
+
+	# Extract the parameters from θ
+	τ = θ[1]
+	ρ = θ[2]
+
+	# Compute covariance matrices
+	ν = 1 # fixed smoothness
+	Σ₂₂ = matern.(UpperTriangular(D₂₂), ρ, ν); Σ₂₂[diagind(Σ₂₂)] .+= τ^2
+	Σ₁₁ = matern.(UpperTriangular(D₁₁), ρ, ν); Σ₁₁[diagind(Σ₁₁)] .+= τ^2
+	Σ₁₂ = matern.(D₁₂, ρ, ν)
+
+	# Compute the Cholesky factor of Σ₁₁ and solve the lower triangular system
+	L₁₁ = cholesky(Symmetric(Σ₁₁)).L
+	x = L₁₁ \ Σ₁₂
+
+	# Conditional covariance matrix, cov(Z₂ ∣ Z₁, θ),  and its Cholesky factor
+	Σ = Σ₂₂ - x'x
+	L = cholesky(Symmetric(Σ)).L
+
+	# Conditonal mean, E(Z₂ ∣ Z₁, θ)
+	y = L₁₁ \ Z₁
+	μ = x'y
+
+	# Simulate from the distribution Z₂ ∣ Z₁, θ ∼ N(μ, Σ)
+	z = randn(n₂, nsims)
+	Z₂ = μ .+ L * z
+
+	# Combine the observed and missing data to form the complete data
+	Z = map(1:nsims) do l
+		z = Vector{T}(undef, n₁ + n₂)
+		z[I₁] = Z₁
+		z[I₂] = Z₂[:, l]
+		z
+	end
+	Z = stackarrays(Z, merge = false)
+
+	# Convert Z to an array with appropriate dimensions
+	Z = reshape(Z, dims..., 1, nsims)
+
+	return Z
+end
+```
+
+Now we can use the neural EM algorithm to get parameter point estimates from data containing missing values. The algorithm is implemented with the struct [`EM`](@ref). Again, here we use simulated data as a surrogate for real data: 
+
+```
+θ = Parameters(1, ξ)
+Z = simulate(θ, 1)[1][:, :]     # simulate a single gridded field
+Z = removedata(Z, 0.25)         # remove 25% of the data
+θ₀ = mean.([Π...])              # initial estimate, the prior mean
+
+neuralem = EM(simulateconditional, θ̂)
+neuralem(Z, θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
+```
+
+
+## Censored data
+
+Coming soon, based on the methodology presented in [Richards et al. (2023+)](https://arxiv.org/abs/2306.15642).

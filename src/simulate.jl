@@ -305,8 +305,8 @@ end
 Chequerboard Gibbs sampling from 2D Potts model with parameter `β`>0.
 
 # Keyword arguments
-- num_iterations::Int = 2000
-- mask::Union{Matrix{Bool}, Nothing} = nothing
+- `num_iterations::Int = 2000`
+- `mask::Union{Matrix{Bool}, Nothing} = nothing`
 
 # Examples
 ```

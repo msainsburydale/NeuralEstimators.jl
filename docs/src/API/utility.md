@@ -18,6 +18,12 @@ subsetdata
 subsetparameters
 ```
 
+## Downstream-inference algorithms
+
+```@docs 
+EM
+```
+
 ## Utility functions
 
 ```@docs

@@ -80,7 +80,6 @@ end
 #---- TODO
 # - Documentation: sometimes use 'd' to denote the dimension of the response variable, and sometimes 'q'... try to be consistent
 # - assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots)
-# - Advanced usage: missing-data methodology in docs/src/devel, and also re-add documentation for struct "EM"
 # - Examples: Bivariate data in multivariate section
 # - Helper functions for censored data, and provide an example in the documentation (maybe tied in with the bivariate data example).
  
