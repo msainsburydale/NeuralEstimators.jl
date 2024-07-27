@@ -43,6 +43,8 @@ initialise_estimator
 
 loadbestweights
 
+maternchols
+
 removedata
 
 rowwisenorm

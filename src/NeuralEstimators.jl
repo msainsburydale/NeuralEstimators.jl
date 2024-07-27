@@ -51,7 +51,7 @@ export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GN
 include("Graphs.jl")
 
 export simulate, simulategaussian, simulatepotts, simulateschlather
-export matern, maternchols, scaledlogistic, scaledlogit
+export matern, maternchols, paciorek, scaledlogistic, scaledlogit
 include("simulate.jl")
 
 export gaussiandensity, schlatherbivariatedensity

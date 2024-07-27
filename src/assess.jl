@@ -202,6 +202,7 @@ function coverage(assessment::Assessment;
 	return df
 end
 
+#TODO bootstrap sampling for bounds on this diagnostic 
 function empiricalprob(assessment::Assessment;
 					   average_over_parameters::Bool = false,
 					   average_over_sample_sizes::Bool = true)

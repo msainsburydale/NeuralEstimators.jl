@@ -165,12 +165,14 @@ end
 # allows automatic differentiation: see https://github.com/cgeoga/BesselK.jl.
 @doc raw"""
     matern(h, ρ, ν, σ² = 1)
-For two points separated by `h` units, compute the Matérn covariance function,
-with range parameter `ρ`, smoothness parameter `ν`, and marginal variance parameter `σ²`.
+Given distance ``\|\boldsymbol{h}\|`` (`h`), computes the Matérn covariance function,
 
-We use the parametrisation
-``C(\|\boldsymbol{h}\|) = \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \left(\frac{\|\boldsymbol{h}\|}{\rho}\right)^\nu K_\nu \left(\frac{\|\boldsymbol{h}\|}{\rho}\right)``,
-where ``\Gamma(\cdot)`` is the gamma function, and ``K_\nu(\cdot)`` is the modified Bessel
+```math
+C(\|\boldsymbol{h}\|) = \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \left(\frac{\|\boldsymbol{h}\|}{\rho}\right)^\nu K_\nu \left(\frac{\|\boldsymbol{h}\|}{\rho}\right),
+```
+
+where `ρ` is a range parameter, `ν` is a smoothness parameter, `σ²` is the marginal variance, 
+``\Gamma(\cdot)`` is the gamma function, and ``K_\nu(\cdot)`` is the modified Bessel
 function of the second kind of order ``\nu``.
 """
 function matern(h, ρ, ν, σ² = one(typeof(h)))
@@ -191,10 +193,70 @@ function matern(h, ρ, ν, σ² = one(typeof(h)))
     return C
 end
 
+@doc raw"""
+    paciorek(s, r, ω₁, ω₂, ρ, β)
+Given spatial locations `s` and `r`, computes the nonstationary covariance function, 
+
+```math
+C(\boldsymbol{s}, \boldsymbol{r}) = 
+|\boldsymbol{\Sigma}(\boldsymbol{s})|^{1/4}
+|\boldsymbol{\Sigma}(\boldsymbol{r})|^{1/4}
+\left|\frac{\boldsymbol{\Sigma}(\boldsymbol{s}) + \boldsymbol{\Sigma}(\boldsymbol{r})}{2}\right|^{-1/2}
+C^0\big(\sqrt{Q(\boldsymbol{s}, \boldsymbol{r})}\big), 
+```
+
+where $C^0(h) = \exp\{-(h/\rho)^{3/2}\}$ for range parameter $\rho > 0$, 
+the matrix 
+$\boldsymbol{\Sigma}(\boldsymbol{s}) = \exp(\beta\|\boldsymbol{s} - \boldsymbol{\omega}\|)\boldsymbol{I}$ 
+is a kernel matrix ([Paciorek and Schervish, 2006](https://onlinelibrary.wiley.com/doi/abs/10.1002/env.785)) 
+with scale parameter $\beta > 0$ and $\boldsymbol{\omega} \equiv (\omega_1, \omega_2)' \in \mathcal{D}$,
+and 
+
+```math
+Q(\boldsymbol{s}, \boldsymbol{r}) = 
+(\boldsymbol{s} - \boldsymbol{r})'
+\left(\frac{\boldsymbol{\Sigma}(\boldsymbol{s}) + \boldsymbol{\Sigma}(\boldsymbol{r})}{2}\right)^{-1}
+(\boldsymbol{s} - \boldsymbol{r})
+``` 
+
+is the squared Mahalanobis distance between $\boldsymbol{s}$ and $\boldsymbol{r}$. 
+"""
+function paciorek(s, r, ω₁, ω₂, ρ, β)
+
+    # Displacement vector
+    h = s - r
+
+    # Distance from each point to ω ≡ (ω₁, ω₂)'
+    dₛ = sqrt((s[1] - ω₁)^2 + (s[2] - ω₂)^2)
+    dᵣ = sqrt((r[1] - ω₁)^2 + (r[2] - ω₂)^2)
+
+    # Scaling factors of kernel matrices, such that Σ(s) = a(s)I
+    aₛ = exp(β * dₛ) 
+    aᵣ = exp(β * dᵣ) 
+
+    # Several computational efficiencies afforded by use of a diagonal kernel matrix:
+    # - the inverse of a diagonal matrix is given by replacing the diagonal elements with their reciprocals
+    # - the determinant of a diagonal matrix is equal to the product of its diagonal elements
+
+    # Mahalanobis distance
+    Q = 2 * h'h / (aₛ + aᵣ)
+
+    # Explicit version of code 
+    # Σₛ_det = aₛ^2   
+    # Σᵣ_det = aᵣ^2   
+    # C⁰ = exp(-sqrt(Q/ρ)^1.5)
+    # logC = 1/4*log(Σₛ_det) + 1/4*log(Σᵣ_det) - log((aₛ + aᵣ)/2) + log(C⁰)
+    
+    # Numerically stable version of code
+    logC = β*dₛ/2 + β*dᵣ/2 - log((aₛ + aᵣ)/2) - (sqrt(Q)/ρ)^1.5
+
+    exp(logC)
+end 
+
 
 """
     maternchols(D, ρ, ν, σ² = 1; stack = true)
-Given a distance matrix `D`, constructs the Cholesky factor of the covariance matrix
+Given a matrix `D` of distances, constructs the Cholesky factor of the covariance matrix
 under the Matérn covariance function with range parameter `ρ`, smoothness
 parameter `ν`, and marginal variance `σ²`.
 
@@ -304,9 +366,16 @@ end
 
 Chequerboard Gibbs sampling from 2D Potts model with parameter `β`>0.
 
+Approximately independent simulations can be obtained by setting 
+`nsims` > 1 or `num_iterations > burn`. The degree to which the 
+resulting simulations can be considered independent depends on the 
+thinning factor (`thin`) and the burn-in (`burn`).
+
 # Keyword arguments
-- `num_iterations::Int = 2000`
-- `mask::Union{Matrix{Bool}, Nothing} = nothing`
+- `nsims = 1`: number of approximately independent replicates. 
+- `num_iterations = 2000`: number of MCMC iterations.
+- `burn = num_iterations`: burn-in.
+- `thin = 10`: thinning factor.
 
 # Examples
 ```
@@ -316,11 +385,17 @@ using NeuralEstimators
 β = 0.8
 simulatepotts(10, 10, 5, β)
 
+## Marginal simulation: approximately independent samples 
+simulatepotts(10, 10, 5, β; nsims = 100, thin = 10)
+
 ## Conditional simulation 
 β = 0.8
 complete_grid   = simulatepotts(50, 50, 2, β)        # simulate marginally from the Ising model 
 incomplete_grid = removedata(complete_grid, 0.1)     # remove 10% of the pixels at random  
 imputed_grid    = simulatepotts(incomplete_grid, β)  # conditionally simulate over missing pixels
+
+## Multiple conditional simulations 
+imputed_grids   = simulatepotts(incomplete_grid, β; num_iterations = 2000, burn = 1000, thin = 10)
 
 ## Recreate Fig. 8.8 of Marin & Robert (2007) “Bayesian Core”
 using Plots 
@@ -329,16 +404,33 @@ heatmaps = heatmap.(grids, legend = false, aspect_ratio=1)
 Plots.plot(heatmaps...)
 ```
 """
-function simulatepotts(grid::AbstractMatrix{Int}, β; nsims::Integer = 1, burn::Int = 1000, thin::Int = 10, num_iterations::Int = 2000, mask = nothing)
+function simulatepotts(grid::AbstractMatrix{Int}, β; nsims::Int = 1, num_iterations::Int = 2000, burn::Int = num_iterations, thin::Int = 10, mask = nothing)
+	
+	#TODO Int or Integer?
 
-  	# TODO burn
-  	# TODO thin 
-  	# TODO return MCMC chain rather than just the end value 
+	@assert burn <= num_iterations
+	if burn < num_iterations || nsims > 1
+		Z₀ = simulatepotts(grid, β; num_iterations = burn, mask = mask) 
+		Z_chain = [Z₀]
+
+		# If the user has left nsims unspecified, determine it based on the other arguments
+		# NB num_iterations is ignored in the case that nsims > 1. 
+		if nsims == 1  
+			nsims = (num_iterations - burn) ÷ thin
+		end 
+		
+		for i in 1:nsims-1 
+			z = copy(Z_chain[i])
+			z = simulatepotts(z, β; num_iterations = thin, mask = mask)
+			push!(Z_chain, z)
+		end
+
+		return Z_chain
+	end 
 	
   	β = β[1] # remove the container if β was passed as a vector or a matrix 
   
   	nrows, ncols = size(grid)
-    #num_states = maximum(grid) 
     states = unique(skipmissing(grid))
   	num_states = length(states)
 
@@ -346,15 +438,13 @@ function simulatepotts(grid::AbstractMatrix{Int}, β; nsims::Integer = 1, burn::
     chequerboard1 = [(i+j) % 2 == 0 for i in 1:nrows, j in 1:ncols]
     chequerboard2 = .!chequerboard1
   	if !isnothing(mask)
+		#TODO check sum(mask) != 0 (return unaltered grid in this case, with a warning)
   		@assert size(grid) == size(mask)
   		chequerboard1 = chequerboard1 .&& mask 
   		chequerboard2 = chequerboard2 .&& mask 
   	end
-	
-  	#TODO check sum(mask) != 0 (return unaltered grid in this case, with a warning)
-  	#TODO sum(chequerboard1) != 0 (easy workaround in this case, just do cboard2)
-  	#TODO sum(chequerboard2) != 0 (easy workaround in this case, just do cboard1)
-  	#TODO sum(chequerboard1) == 0 sum(chequerboard2) == 0 (return unaltered grid in this case, with a warning)
+  	#TODO sum(chequerboard1) == 0 (easy workaround in this case, just iterate over chequerboard2)
+  	#TODO sum(chequerboard2) == 0 (easy workaround in this case, just iterate over chequerboard1)
 	
     # Define neighbours offsets (assuming 4-neighbour connectivity)
     neighbour_offsets = [(0, 1), (1, 0), (0, -1), (-1, 0)]

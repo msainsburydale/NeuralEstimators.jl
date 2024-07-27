@@ -28,7 +28,7 @@ These covariance functions may be of use for various models.
 ```@docs
 matern
 
-maternchols
+paciorek
 ```
 
 

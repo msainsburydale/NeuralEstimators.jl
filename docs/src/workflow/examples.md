@@ -176,22 +176,14 @@ end
 Next, we define the model simulator: 
 
 ```
-function simulate(L::AbstractMatrix, m = 1)
-
-	# Spatial field
-	n = size(L, 1)
-	Z = L * randn(n, m)
-
-	# Reshape to 16x16 images
-	Z = reshape(Z, 16, 16, 1, m)
-
-	return Z
-end
 function simulate(parameters::Parameters, m = 1) 
 	Z = Folds.map(parameters.L) do L
-		simulate(L, m)
+		n = size(L, 1)
+		z = L * randn(n, m)
+		z = reshape(z, 16, 16, 1, m) # reshape to 16x16 images
+		z
 	end
-	return Z
+	Z
 end
 ```
 

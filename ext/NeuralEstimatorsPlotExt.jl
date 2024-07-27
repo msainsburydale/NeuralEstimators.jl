@@ -13,6 +13,13 @@ using ColorSchemes
 Method for visualising the performance of a neural estimator (or multiple neural estimators). 
 
 One may set `grid=true` to facet the figure based on the estimator. 
+
+When assessing a `QuantileEstimator`, the diagnostic is constructed as follows: 
+ 
+	1.	For k = 1,…, K, sample pairs (θᵏ, Zᵏ) with θᵏ ∼ p(θ), Zᵏ ~ p(Z ∣ θᵏ). This gives us K “posterior draws”, namely, θᵏ ∼ p(θ ∣ Zᵏ), k = 1, …, K. 
+	2.	For each k and for each τ ∈ {τⱼ : j = 1 , …, J}, estimate the posterior quantile Q(Zᵏ, τ). 
+	3.	For each τ ∈ {τⱼ : j = 1 , …, J}, determine the proportion of quantiles Q(Zᵏ, τ) that are greater than the corresponding θᵏ, and plot this proportion against τ. 
+
 """
 function plot(assessment::Assessment; grid::Bool = false) 
 
@@ -29,7 +36,7 @@ function plot(assessment::Assessment; grid::Bool = false)
 		df = empiricalprob(assessment)
 		figure = mapping([0], [1]) * visual(ABLines, color=:red, linestyle=:dash) 
 		figure += data(df) * mapping(:prob, :empirical_prob, layout = :parameter) * visual(Lines, color = :black)
-		figure = draw(figure, facet=(; linkxaxes=:none, linkyaxes=:none), axis = (; xlabel="Probability level, τ", ylabel="Pr(Q(Z, τ) ≤ θ)"))
+		figure = draw(figure, facet=(; linkxaxes=:none, linkyaxes=:none), axis = (; xlabel="Probability level, τ", ylabel="Pr(Q(Z, τ) ≥ θ)"))
 		return figure 
 	end
   

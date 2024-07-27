@@ -163,7 +163,6 @@ using Distributions
 using Flux
 using LinearAlgebra
 using NeuralEstimators
-#import NeuralEstimators: simulate
 using Statistics: mean
 
 # Set the prior and define the number of parameters in the statistical model
