@@ -16,7 +16,7 @@ _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
 #TODO use @doc raw and improve documentation 
 
 """
-    tanhloss(θ̂, y, k; agg = mean, joint = true)
+    tanhloss(θ̂, θ, k; agg = mean, joint = true)
 
 For `k` > 0, computes the loss function,
 
@@ -52,7 +52,7 @@ end
 
 
 """
-    kpowerloss(θ̂, y, k; agg = mean, joint = true, safeorigin = true, ϵ = 0.1)
+    kpowerloss(θ̂, θ, k; agg = mean, joint = true, safeorigin = true, ϵ = 0.1)
 
 For `k` > 0, the `k`-th power absolute-distance loss function,
 

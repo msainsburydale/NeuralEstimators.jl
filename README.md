@@ -50,14 +50,14 @@ This software was developed as part of academic research. If you would like to s
 - **Neural Methods for Amortised Inference** [[paper]](https://arxiv.org/abs/2404.12484)[[code]](https://github.com/andrewzm/Amortised_Neural_Inference_Review)
 
 
-### Related packages 
+### Related packages
 
 Several other software packages have been developed to facilitate neural likelihood-free inference. These include:
 
-1. [BayesFlow](https://github.com/stefanradev93/BayesFlow) (TensorFlow)
-1. [LAMPE](https://github.com/probabilists/lampe) (PyTorch)
-1. [sbi](https://github.com/sbi-dev/sbi) (PyTorch)
-1. [swyft](https://github.com/undark-lab/swyft) (PyTorch)
+- [BayesFlow](https://github.com/stefanradev93/BayesFlow) (TensorFlow)
+- [LAMPE](https://github.com/probabilists/lampe) (PyTorch)
+- [sbi](https://github.com/sbi-dev/sbi) (PyTorch)
+- [swyft](https://github.com/undark-lab/swyft) (PyTorch)
 
 
-A summary of the functionality in these packages is given in [Zammit-Mangion et al. (2024, Section 6.1)](https://arxiv.org/abs/2404.12484). Note that this list of related packages was created in July 2024; if you have software to add to this list, please contact the package maintainer. 
+A summary of the functionality in these packages is given in [Zammit-Mangion et al. (2024, Section 6.1)](https://arxiv.org/abs/2404.12484). Note that this list of related packages was created in July 2024; if you have software to add to this list, please contact the package maintainer.

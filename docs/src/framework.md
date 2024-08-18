@@ -1,6 +1,6 @@
 # Framework
 
-In this section, we provide an overview of point estimation using neural Bayes estimators. For a more detailed discussion on the framework and its implementation, see the paper [Likelihood-Free Parameter Estimation with Neural Bayes Estimators](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522). For an accessible introduction to amortised neural inferential methods more broadly, see the review paper [Neural Methods for Amortised Inference](https://arxiv.org/abs/2404.12484). 
+In this section, we provide an overview of point estimation using neural Bayes estimators. For a more detailed discussion on the framework and its implementation, see the paper [Likelihood-Free Parameter Estimation with Neural Bayes Estimators](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522). For an accessible introduction to amortised neural inferential methods more broadly, see the review paper [Neural Methods for Amortised Inference](https://arxiv.org/abs/2404.12484).
 
 ### Neural Bayes estimators
 
@@ -25,7 +25,7 @@ Let $\hat{\boldsymbol{\theta}}(\boldsymbol{Z}; \boldsymbol{\gamma})$ denote a ne
 ```math
 \boldsymbol{\gamma}^*
 \equiv
-\underset{\boldsymbol{\gamma}}{\mathrm{arg\,min}} \; 
+\underset{\boldsymbol{\gamma}}{\mathrm{arg\,min}} \;
 \frac{1}{K} \sum_{k = 1}^K L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{z}; \boldsymbol{\gamma})),
 ```
 whose objective function is a Monte Carlo approximation of the Bayes risk made using a set $\{\boldsymbol{\theta}^{(k)} : k = 1, \dots, K\}$ of parameter vectors sampled from the prior $\Pi(\cdot)$ and, for each $k$, data $\boldsymbol{Z}^{(k)}$ simulated from $f(\boldsymbol{z} \mid  \boldsymbol{\theta})$. Note that this Monte Carlo approximation does not involve evaluation, or knowledge, of the likelihood function.
@@ -34,7 +34,7 @@ whose objective function is a Monte Carlo approximation of the Bayes risk made u
 
 ### Construction of neural Bayes estimators
 
-The neural Bayes estimators is conceptually simple and can be used in a wide range of problems where other approaches, such as maximum-likelihood estimation, are computationally infeasible. The estimator also has marked practical appeal, as the general workflow for its construction is only loosely connected to the statistical or physical model being considered. The workflow is as follows:
+The neural Bayes estimator is conceptually simple and can be used in a wide range of problems where other approaches, such as maximum-likelihood estimation, are computationally infeasible. The estimator also has marked practical appeal, as the general workflow for its construction is only loosely connected to the statistical or physical model being considered. The workflow is as follows:
 
   1. Define the prior, $\Pi(\cdot)$.
   1. Choose a loss function, $L(\cdot, \cdot)$, typically the mean-absolute-error or mean-squared-error loss.
