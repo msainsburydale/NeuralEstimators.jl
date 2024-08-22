@@ -316,12 +316,12 @@ end
 
 """
 	encodedata(Z::A; c::T = zero(T)) where {A <: AbstractArray{Union{Missing, T}, N}} where T, N
-For data `Z` with missing entries, returns an augmented data set (U, W) where
+For data `Z` with missing entries, returns an encoded data set (U, W) where
 W encodes the missingness pattern as an indicator vector and U is the original data Z
 with missing entries replaced by a fixed constant `c`.
 
 The indicator vector W is stored in the second-to-last dimension of `Z`, which
-should be a singleton. If the second-to-last dimension is not singleton, then
+should be singleton. If the second-to-last dimension is not singleton, then
 two singleton dimensions will be added to the array, and W will be stored in
 the new second-to-last dimension.
 
@@ -350,7 +350,7 @@ function encodedata(Z::A; c::T = zero(T)) where {A <: AbstractArray{Union{Missin
 		Ñ = N
 	end
 
-	# Compute the indicator variable and the augmented data
+	# Compute the indicator variable and the encoded data
 	W = isnotmissing.(Z)
 	U = copy(Z) # copy to avoid mutating the original data
 	U[ismissing.(U)] .= c
@@ -359,7 +359,7 @@ function encodedata(Z::A; c::T = zero(T)) where {A <: AbstractArray{Union{Missin
 	# U = convert(Array{T, N}, U) # NB this doesn't work if Z was modified in the if statement
 	U = convert(ArrayType{T, Ñ}, U)
 
-	# Combine the augmented data and the indicator variable
+	# Combine the encoded data and the indicator variable
 	UW = cat(U, W; dims = Ñ - 1)
 
 	return UW

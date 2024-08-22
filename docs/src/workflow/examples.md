@@ -130,7 +130,7 @@ Note that, when estimating a full covariance matrix, one may wish to constrain t
 
 For data collected over a regular grid, neural estimators are typically based on a convolutional neural network (CNN; see, e.g., [Dumoulin and Visin, 2016](https://arxiv.org/abs/1603.07285)). 
 
-In these settings, each data set must be stored as an ($N + 2$)-dimensional array, where $N$ is the dimension of the grid (e.g., $N = 1$ for time series, $N = 2$ for images, etc.). The penultimate dimension of the array stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes, etc.), while the final dimension stores independent replicates. For example, to store $50$ independent replicates of a bivariate spatial process measured over a $10\times15$ grid, one would construct an array of dimension $10\times15\times2\times50$.
+When using CNNs with `NeuralEstimators`, each data set must be stored as a multi-dimensional array. The penultimate dimension stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes, etc.), while the final dimension stores independent replicates. For example, to store $50$ independent replicates of a bivariate spatial process measured over a $10\times15$ grid, one would construct an array of dimension $10\times15\times2\times50$.
 
  For illustration, here we develop a neural Bayes estimator for the spatial Gaussian process model with exponential covariance function and unknown range parameter $\theta$. The spatial domain is taken to be the unit square, and we adopt the prior $\theta \sim U(0.05, 0.5)$. 
  
