@@ -751,7 +751,6 @@ Base.show(io::IO, pe::PiecewiseEstimator) = print(io, "\nPiecewise estimator wit
 
 """
     initialise_estimator(p::Integer; ...)
-	initialise_estimator(p::Integer, data_type::String; ...)
 Initialise a neural estimator for a statistical model with `p` unknown parameters.
 
 The estimator is couched in the DeepSets framework (see [`DeepSet`](@ref)) so
@@ -777,6 +776,7 @@ one to specify the type of their data (either "unstructured", "gridded", or
 - `variance_stabiliser::Union{Nothing, Function} = nothing`: a function that will be applied directly to the input, usually to stabilise the variance.
 - `kernel_size = nothing`: (applicable only to CNNs) a vector of length `depth[1]` containing integer tuples of length `D`, where `D` is the dimension of the convolution (e.g., `D = 2` for two-dimensional convolution).
 - `weight_by_distance::Bool = true`: (applicable only to GNNs) flag indicating whether the estimator will weight by spatial distance; if true, a `SpatialGraphConv` layer is used in the propagation module; otherwise, a regular `GraphConv` layer is used.
+- `probs = [0.025, 0.975]`: (applicable only if `estimator_type = "interval"`) probability levels defining the lower and upper endpoints of the posterior credible interval.
 
 # Examples
 ```
@@ -799,7 +799,8 @@ function initialise_estimator(
     activation::Function = relu,
     activation_output::Function = identity,
     kernel_size = nothing,
-	weight_by_distance::Bool = true
+	weight_by_distance::Bool = true,
+	probs = [0.025, 0.975]
     )
 
 	# "`kernel_size` should be a vector of integer tuples: see the documentation for details"
@@ -847,10 +848,10 @@ function initialise_estimator(
 			Flux.flatten
 			)
 	elseif architecture == "GNN"
-		propagation = SpatialGraphConv : GraphConv
+		propagation = weight_by_distance ? SpatialGraphConv : GraphConv
 		ψ = GNNChain(
-			propagation(d => width[1], activation, aggr = mean),
-			[propagation(width[l-1] => width[l], relu, aggr = mean) for l ∈ 2:depth[1]]...,
+			propagation(d => width[1], activation),
+			[propagation(width[l-1] => width[l], activation) for l ∈ 2:depth[1]]...,
 			GlobalPool(mean) # readout module
 			)
 	end
@@ -865,24 +866,13 @@ function initialise_estimator(
 
 	θ̂ = DeepSet(ψ, ϕ)
 
-	if estimator_type == "interval"
-		θ̂ = IntervalEstimator(θ̂, θ̂)
+	#TODO RatioEstimator, QuantileEstimatorDiscrete, QuantileEstimatorContinuous
+	if estimator_type == "point"
+		θ̂ = PointEstimator(θ̂)
+	elseif estimator_type == "interval"
+		θ̂ = IntervalEstimator(θ̂, θ̂; probs = probs)
 	end
 
 	return θ̂
 end
-
-function initialise_estimator(p::Integer, data_type::String; args...)
-	data_type = lowercase(data_type)
-	@assert data_type ∈ ["unstructured", "gridded", "irregular_spatial"]
-	architecture = if data_type == "unstructured"
-		"MLP"
-	elseif data_type == "gridded"
-		"CNN"
-	elseif data_type == "irregular_spatial"
-		"GNN"
-	end
-	initialise_estimator(p; architecture = architecture, args...)
-end
-
 coercetotuple(x) = (x...,)

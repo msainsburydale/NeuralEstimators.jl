@@ -21,7 +21,7 @@ arrayn(size...; T = Float32) = array(size..., T = T) .- mean(array(size..., T = 
 verbose = false # verbose used in code (not @testset)
 
 #TODO figure out how to get CUDA installed as a test dependency only
-#using CUDA 
+#using CUDA
 # if CUDA.functional()
 # 	@info "Testing on both the CPU and the GPU... "
 # 	CUDA.allowscalar(false)
@@ -121,15 +121,15 @@ using NeuralEstimators: triangularnumber
 	@test_throws Exception samplecovariance(z)
 	@test_throws Exception samplecorrelation(z)
 
-	# neighbourhood variogram 
-	θ = 0.1                                 # true range parameter 
-	n = 100                                 # number of spatial locations 
-	S = rand(n, 2)                          # spatial locations 
-	D = pairwise(Euclidean(), S, dims = 1)  # distance matrix 
-	Σ = exp.(-D ./ θ)                       # covariance matrix 
-	L = cholesky(Symmetric(Σ)).L            # Cholesky factor 
-	m = 5                                   # number of independent replicates 
-	Z = L * randn(n, m)                     # simulated data 
+	# neighbourhood variogram
+	θ = 0.1                                 # true range parameter
+	n = 100                                 # number of spatial locations
+	S = rand(n, 2)                          # spatial locations
+	D = pairwise(Euclidean(), S, dims = 1)  # distance matrix
+	Σ = exp.(-D ./ θ)                       # covariance matrix
+	L = cholesky(Symmetric(Σ)).L            # Cholesky factor
+	m = 5                                   # number of independent replicates
+	Z = L * randn(n, m)                     # simulated data
 	r = 0.15                                # radius of neighbourhood set
 	g = spatialgraph(S, Z, r = r)      |> dvc
 	nv = NeighbourhoodVariogram(r, 10) |> dvc
@@ -169,26 +169,26 @@ end
 	seed!(1); Ã₃ = adjacencymatrix(D, k, r)
 	@test Ã₃ ≈ A₃
 
-	# Test that the number of neighbours is correct 
+	# Test that the number of neighbours is correct
 	f(A) = collect(mapslices(nnz, A; dims = 1))
-	@test all(f(adjacencymatrix(S, k)) .== k) 
-	@test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k) 
-	@test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k) 
-	@test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k) 
+	@test all(f(adjacencymatrix(S, k)) .== k)
+	@test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k)
+	@test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k)
+	@test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k)
 	@test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1)
-	@test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k) 
-	@test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+1) 
+	@test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k)
+	@test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+1)
 
 	# Gridded locations (useful for checking functionality in the event of ties)
-	pts = range(0, 1, length = 10) 
+	pts = range(0, 1, length = 10)
 	S = expandgrid(pts, pts)
-	@test all(f(adjacencymatrix(S, k)) .== k) 
+	@test all(f(adjacencymatrix(S, k)) .== k)
 	@test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k)
-	@test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k) 
-	@test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k) 
-	@test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1) 
-	@test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k) 
-	@test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+1) 
+	@test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k)
+	@test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k)
+	@test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1)
+	@test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k)
+	@test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+1)
 
 	# Check that k > n doesn't cause an error
 	n = 3
@@ -201,7 +201,7 @@ end
 	adjacencymatrix(D, r, k)
 end
 
-@testset "spatialgraph" begin 
+@testset "spatialgraph" begin
 	# Number of replicates, and spatial dimension
 	m = 5  # number of replicates
 	d = 2  # spatial dimension
@@ -226,7 +226,7 @@ end
 	q = 2 # bivariate spatial process
 	n = 100
 	S = rand(n, d)
-	Z = rand(q, n, m)  
+	Z = rand(q, n, m)
 	g = spatialgraph(S)
 	g = spatialgraph(g, Z)
 	g = spatialgraph(S, Z)
@@ -236,8 +236,8 @@ end
 	S = rand.(n, d)
 	Z = rand.(q, n)
 	g = spatialgraph(S)
-	g = spatialgraph(g, Z) 
-	g = spatialgraph(S, Z) 
+	g = spatialgraph(g, Z)
+	g = spatialgraph(S, Z)
 end
 
 
@@ -311,7 +311,7 @@ end
 	l = SpatialGraphConv(1 => 10)
 	l(g)
 
-	# Construct and apply spatial graph convolution layer with global features 
+	# Construct and apply spatial graph convolution layer with global features
 	l = SpatialGraphConv(1 => 10, glob = true)
 	l(g)
 end
@@ -320,7 +320,7 @@ end
 	h_max = 1
 	n_bins = 10
 	w = IndicatorWeights(h_max, n_bins)
-	h = rand(1, 30) # distances between 30 pairs of spatial locations 
+	h = rand(1, 30) # distances between 30 pairs of spatial locations
 	w(h)
 end
 
@@ -377,15 +377,15 @@ end
 	@test eltype(simulategaussian(L₁, m)) == Float32
 	# @code_warntype simulategaussian(L₁, σ, m)
 
-	## Potts model 
+	## Potts model
 	β = 0.7
-	complete_grid   = simulatepotts(n, n, 2, β)         # simulate marginally from the Ising model 
+	complete_grid   = simulatepotts(n, n, 2, β)         # simulate marginally from the Ising model
 	@test size(complete_grid) == (n, n)
 	@test length(unique(complete_grid)) == 2
-	incomplete_grid = removedata(complete_grid, 0.1)     # remove 10% of the pixels at random  
+	incomplete_grid = removedata(complete_grid, 0.1)     # remove 10% of the pixels at random
 	imputed_grid    = simulatepotts(incomplete_grid, β)  # conditionally simulate over missing pixels
 	observed_idx = findall(!ismissing, incomplete_grid)
-	@test incomplete_grid[observed_idx] == imputed_grid[observed_idx] 
+	@test incomplete_grid[observed_idx] == imputed_grid[observed_idx]
 end
 
 # Testing the function simulate(): Univariate Gaussian model with unknown mean and standard deviation
@@ -704,7 +704,7 @@ m  = 10 # default sample size
 					coverage(assessment; average_over_parameters = true)
 					coverage(assessment; average_over_sample_sizes = false)
 					coverage(assessment; average_over_parameters = true, average_over_sample_sizes = false)
-				
+
 					intervalscore(assessment)
 					intervalscore(assessment; average_over_parameters = true)
 					intervalscore(assessment; average_over_sample_sizes = false)
@@ -714,7 +714,7 @@ m  = 10 # default sample size
 				@test typeof(assessment.df)      == DataFrame
 				@test typeof(assessment.runtime) == DataFrame
 				@test typeof(merge(assessment, assessment)) == Assessment
-				
+
 				risk(assessment)
 				risk(assessment, loss = (x, y) -> (x - y)^2)
 				risk(assessment; average_over_parameters = false)
@@ -827,18 +827,16 @@ end
 @testset "initialise_estimator" begin
 	p = 2
 	initialise_estimator(p, architecture = "DNN")
+	initialise_estimator(p, architecture = "MLP")
 	initialise_estimator(p, architecture = "GNN")
 	initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)])
-	initialise_estimator(p, "unstructured")
-	initialise_estimator(p, "irregular_spatial")
-	initialise_estimator(p, "gridded", kernel_size = [(10, 10), (5, 5), (3, 3)])
 
-	@test typeof(initialise_estimator(p, architecture = "DNN", estimator_type = "interval")) <: IntervalEstimator
+	@test typeof(initialise_estimator(p, architecture = "MLP", estimator_type = "interval")) <: IntervalEstimator
 	@test typeof(initialise_estimator(p, architecture = "GNN", estimator_type = "interval")) <: IntervalEstimator
 	@test typeof(initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)], estimator_type = "interval")) <: IntervalEstimator
 
-	@test_throws Exception initialise_estimator(0, architecture = "DNN")
-	@test_throws Exception initialise_estimator(p, d = 0, architecture = "DNN")
+	@test_throws Exception initialise_estimator(0, architecture = "MLP")
+	@test_throws Exception initialise_estimator(p, d = 0, architecture = "MLP")
 	@test_throws Exception initialise_estimator(p, architecture = "CNN")
 	@test_throws Exception initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5)])
 end
@@ -854,7 +852,6 @@ end
 	@test θ̂₁ ≈ θ̂₂
 end
 
-
 @testset "IntervalEstimator" begin
 	# Generate some toy data and a basic architecture
 	d = 2  # bivariate data
@@ -863,7 +860,7 @@ end
 	parameter_names = ["ρ", "σ", "τ"]
 	p = length(parameter_names)
 	w = 8  # width of each layer
-	arch = initialise_estimator(p, architecture = "DNN", d = d, width = 8)
+	arch = initialise_estimator(p, architecture = "MLP", d = d, width = 8)
 
 	# IntervalEstimator
 	estimator = IntervalEstimator(arch)
@@ -1081,7 +1078,7 @@ end
 	# Train the estimator
 	q̂ = train(q̂, prior, simulate, m = m, epochs = 2, verbose = false)
 
-	# Assess the estimator 
+	# Assess the estimator
 	θ = prior(1000)
 	Z = simulate(θ, m)
 	assessment = assess(q̂, θ, Z)
@@ -1089,11 +1086,11 @@ end
 	# Estimate posterior quantiles
 	q̂(Z)
 
-end 
+end
 
 @testset "QuantileEstimatorDiscrete: full conditionals" begin
 	using NeuralEstimators, Flux, Distributions
-	
+
 	# Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
 	d = 1         # dimension of each independent replicate
 	p = 2         # number of unknown parameters in the statistical model
@@ -1111,7 +1108,7 @@ end
 	ϕ = Chain(Dense(32 + 1, 32, relu), Dense(32, 1))
 	v = DeepSet(ψ, ϕ)
 
-	# Initialise estimators respectively targetting quantiles of μ∣Z,σ and σ∣Z,μ 
+	# Initialise estimators respectively targetting quantiles of μ∣Z,σ and σ∣Z,μ
 	τ = [0.05, 0.25, 0.5, 0.75, 0.95]
 	q₁ = QuantileEstimatorDiscrete(v; probs = τ, i = 1)
 	q₂ = QuantileEstimatorDiscrete(v; probs = τ, i = 2)
@@ -1120,16 +1117,16 @@ end
 	q₁ = train(q₁, prior, simulate, m = m, epochs = 2, verbose = false)
 	q₂ = train(q₂, prior, simulate, m = m, epochs = 2, verbose = false)
 
-	# Assess the estimators 
+	# Assess the estimators
 	θ = prior(1000)
-	Z = simulate(θ, m)   
+	Z = simulate(θ, m)
 	assessment = assess([q₁, q₂], θ, Z, verbose = false)
 
 	# Estimate quantiles of μ∣Z,σ with σ = 0.5 and for many data sets
-	θ₋ᵢ = 0.5f0 
+	θ₋ᵢ = 0.5f0
 	q₁(Z, θ₋ᵢ)
 
-	# Estimate quantiles of μ∣Z,σ with σ = 0.5 for only a single data set 
+	# Estimate quantiles of μ∣Z,σ with σ = 0.5 for only a single data set
 	q₁(Z[1], θ₋ᵢ)
 end
 
@@ -1165,12 +1162,12 @@ end
 
 	# Train the estimator
 	q̂ = train(q̂, prior, simulate, m = m, epochs = 2, verbose = false)
-	
-	# Assess the estimator 
+
+	# Assess the estimator
 	θ = prior(1000)
 	Z = simulateZ(θ, m)
 	assessment = assess(q̂, θ, Z)
-	empiricalprob(assessment) 
+	empiricalprob(assessment)
 
 	# Estimate the posterior 0.1-quantile for 1000 test data sets
 	τ = 0.1f0
@@ -1184,10 +1181,10 @@ end
 	# Check monotonicty
 	@test all(q̂(z, 0.1f0) .<= q̂(z, 0.11f0) .<= q̂(z, 0.9f0) .<= q̂(z, 0.91f0))
 
-end 
+end
 
 @testset "QuantileEstimatorContinuous: full conditionals" begin
-	
+
 	using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
 
 	# Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
