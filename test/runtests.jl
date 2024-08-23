@@ -852,6 +852,42 @@ end
 	@test θ̂₁ ≈ θ̂₂
 end
 
+@testset "Ensemble" begin
+	# Define the model, Z|θ ~ N(θ, 1), θ ~ N(0, 1)
+	d = 1   # dimension of each replicate
+	p = 1   # number of unknown parameters in the statistical model
+	m = 30  # number of independent replicates in each data set
+	sampler(K) = randn32(p, K)
+	simulator(θ, m) = [μ .+ randn32(d, m) for μ ∈ eachcol(θ)]
+
+	# Architecture of each ensemble component
+	function estimator()
+		ψ = Chain(Dense(d, 64, relu), Dense(64, 64, relu))
+		ϕ = Chain(Dense(64, 64, relu), Dense(64, p))
+		deepset = DeepSet(ψ, ϕ)
+		PointEstimator(deepset)
+	end
+
+	# Initialise ensemble
+	J = 2 # ensemble size
+	estimators = [estimator() for j in 1:J]
+	ensemble = Ensemble(estimators)
+
+	# Training
+	ensemble = train(ensemble, sampler, simulator, m = m, epochs = 2, verbose = false)
+
+	# Assessment
+	θ = sampler(1000)
+	Z = simulator(θ, m)
+	assessment = assess(ensemble, θ, Z)
+	rmse(assessment)
+
+	# Apply to data
+	Z = Z[1]
+	ensemble(Z)
+end
+
+
 @testset "IntervalEstimator" begin
 	# Generate some toy data and a basic architecture
 	d = 2  # bivariate data

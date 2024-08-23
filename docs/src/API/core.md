@@ -48,6 +48,8 @@ QuantileEstimatorContinuous
 RatioEstimator
 
 PiecewiseEstimator
+
+Ensemble
 ```
 
 ## Training

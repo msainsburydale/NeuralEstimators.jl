@@ -876,3 +876,88 @@ function initialise_estimator(
 	return θ̂
 end
 coercetotuple(x) = (x...,)
+
+
+# ---- Ensemble of estimators ----
+
+"""
+	Ensemble(estimators)
+	(ensemble::Ensemble)(Z; aggr = median)
+
+Defines an ensemble based on a collection of `estimators` which,
+when applied to data `Z`, returns the median
+(or another summary defined by `aggr`) of the estimates.
+
+The ensemble can be initialised with a collection of trained `estimators` and then
+applied immediately to observed data. Alternatively, the ensemble can be
+initialised with a collection of untrained `estimators`,
+trained with `train()`, and then applied to observed data.
+
+Note that the training of ensemble components can be done in parallel; however,
+currently this needs to be done manually by the user, since `train()` currently
+trains the ensemble components sequentially.
+
+# Examples
+```
+using NeuralEstimators, Flux
+
+# Define the model, Z|θ ~ N(θ, 1), θ ~ N(0, 1)
+d = 1   # dimension of each replicate
+p = 1   # number of unknown parameters in the statistical model
+m = 30  # number of independent replicates in each data set
+sampler(K) = randn32(p, K)
+simulator(θ, m) = [μ .+ randn32(d, m) for μ ∈ eachcol(θ)]
+
+# Architecture of each ensemble component
+function estimator()
+	ψ = Chain(Dense(d, 64, relu), Dense(64, 64, relu))
+	ϕ = Chain(Dense(64, 64, relu), Dense(64, p))
+	deepset = DeepSet(ψ, ϕ)
+	PointEstimator(deepset)
+end
+
+# Initialise ensemble
+J = 5 # ensemble size
+estimators = [estimator() for j in 1:J]
+ensemble = Ensemble(estimators)
+
+# Training
+ensemble = train(ensemble, sampler, simulator, m = m, epochs = 5)
+
+# Assessment
+θ = sampler(1000)
+Z = simulator(θ, m)
+assessment = assess(ensemble, θ, Z)
+rmse(assessment)
+
+# Apply to data
+Z = Z[1]
+ensemble(Z)
+```
+"""
+struct Ensemble <: NeuralEstimator
+	estimators
+end
+@layer Ensemble
+Base.show(io::IO, ensemble::Ensemble) = print(io, "\nEnsemble with $(length(ensemble.estimators)) component estimators")
+
+# TODO parallel version of this as a package extension
+function train(ensemble::Ensemble, args...; kwargs...)
+	estimators = map(enumerate(ensemble.estimators)) do (i, estimator)
+		@info "Training estimator $i"
+		train(estimator, args...; kwargs...)
+	end
+	Ensemble(estimators)
+end
+
+function (ensemble::Ensemble)(Z; aggr = median)
+	# Compute estimate from each estimator, yielding a vector of matrices
+	# NB can be done in parallel, but I think the overhead will outweigh the benefit
+	θ̂ = [estimator(Z) for estimator in ensemble.estimators]
+	# Stack matrices along a new third dimension
+	θ̂ = stackarrays(θ̂, merge = false) # equivalent to: θ̂ = cat(θ̂...; dims = 3)
+	# aggregate elementwise along the third dimension
+	θ̂ = mapslices(aggr, θ̂; dims = 3)
+	θ̂ = dropdims(θ̂; dims = 3)
+	return θ̂
+end
