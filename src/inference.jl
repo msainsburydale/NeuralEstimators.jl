@@ -12,9 +12,13 @@ $p(\boldsymbol{\theta} \mid \boldsymbol{Z})$ implied by `estimator`.
 
 The positional argument `N` controls the size of the posterior sample.
 
-The keyword agument `θ_grid` requires a (fine) gridding of the parameter
-space, given as a matrix with ``p`` rows, with ``p`` the number of parameters
-in the statistical model.
+Currently, the sampling algorithm is based on a fine-gridding of the
+parameter space, specified through the keyword argument `θ_grid` (or `theta_grid`). 
+The approximate posterior density is evaluated over this grid, which is then
+used to draw samples. This is very effective when making inference with a
+small number of parameters. For models with a large number of parameters,
+other sampling algorithms may be needed (please feel free to contact the
+package maintainer for discussion).
 
 The prior distribution $p(\boldsymbol{\theta})$ is controlled through the keyword
 argument `prior` (by default, a uniform prior is used).
@@ -299,7 +303,7 @@ end
 
 function bootstrap(θ̂, Z; B::Integer = 400, use_gpu::Bool = true, blocks = nothing)
 
-	@assert !(typeof(Z) <: Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer" 
+	@assert !(typeof(Z) <: Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer"
 
 	# Generate B bootstrap samples of Z
 	if !isnothing(blocks)

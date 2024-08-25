@@ -60,8 +60,8 @@ function. Expert summary statistics can be incorporated as,
 
 where `S` is a function that returns a vector of user-defined summary statistics.
 These user-defined summary statistics are provided either as a
-`Function` that returns a `Vector`, or as a vector of functions. In the case that 
-`ψ` is set to `nothing`, only expert summary statistics will be used. 
+`Function` that returns a `Vector`, or as a vector of functions. In the case that
+`ψ` is set to `nothing`, only expert summary statistics will be used.
 
 The aggregation function `a` can be any function that acts on an array and has
 a keyword argument `dims` that allows aggregation over a specific dimension of
@@ -137,7 +137,7 @@ struct DeepSet{T, G, K}
 	S::K
 end
 @layer DeepSet
-function DeepSet(ψ, ϕ, a::Function = mean; S = nothing) 
+function DeepSet(ψ, ϕ, a::Function = mean; S = nothing)
 	@assert !isnothing(ψ) | !isnothing(S) "At least one of `ψ` or `S` must be given"
 	DeepSet(ψ, ϕ, ElementwiseAggregator(a), S)
 end
@@ -171,14 +171,14 @@ end
 # Multiple data sets
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where A
 	# Stack into a single array before applying the outer network
-	d.ϕ(stackarrays(summarystatistics(d, Z))) 
+	d.ϕ(stackarrays(summarystatistics(d, Z)))
 end
 # Multiple data sets with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
 	Z, x = tup
 	t = summarystatistics(d, Z)
 	tx = vcat.(t, x)
-	d.ϕ(stackarrays(tx))  
+	d.ϕ(stackarrays(tx))
 end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V, M}} where {V <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
 	Z, x = tup
@@ -194,7 +194,7 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V, M}} where {V <: AbstractV
 	end
 end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{M}} where {M <: AbstractMatrix{T}} where {A, T}
-	# Multiple data sets Z, each applied over multiple set-level covariates 
+	# Multiple data sets Z, each applied over multiple set-level covariates
 	# (NB similar to above method, but the set-level covariates are allowed to be different for each data set)
 	# (This is used during training by QuantileEstimatorContinuous, where each data set is allowed multiple and different probability levels)
 	Z, X = tup
@@ -209,16 +209,16 @@ end
 summarystatistics(est, Z) = summarystatistics(est.deepset, Z)
 # Single data set
 function summarystatistics(d::DeepSet, Z::A) where A
-	if !isnothing(d.ψ) 
+	if !isnothing(d.ψ)
 		t = d.a(d.ψ(Z))
-	end	
+	end
 	if !isnothing(d.S)
 		s = @ignore_derivatives d.S(Z)
 		if !isnothing(d.ψ)
 			t = vcat(t, s)
-		else 
+		else
 			t = s
-		end 
+		end
 	end
 	return t
 end
@@ -230,9 +230,9 @@ end
 function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
 
-	if !isnothing(d.ψ) 
+	if !isnothing(d.ψ)
 		# Convert to a single large array and then apply the inner network
-		ψa = d.ψ(stackarrays(Z)) 
+		ψa = d.ψ(stackarrays(Z))
 
 		# Compute the indices needed for aggregation and construct a tuple of colons
 		# used to subset all but the last dimension of ψa.
@@ -247,17 +247,17 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
 		# be thrown by gradient(), since "t" already appears
 		t = map(indices) do idx
 			d.a(ψa[colons..., idx])
-		end 
+		end
 	end
 
 	if !isnothing(d.S)
 		s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
 		if !isnothing(d.ψ)
 			t = vcat.(t, s)
-		else 
+		else
 			t = s
-		end 
-	end 
+		end
+	end
 
 	return t
 end
@@ -267,7 +267,7 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 
 	@assert isnothing(d.ψ) || typeof(d.ψ) <: GNNSummary "For graph input data, the summary network ψ should be a `GNNSummary` object"
 
-	if !isnothing(d.ψ) 
+	if !isnothing(d.ψ)
 		# For efficiency, convert Z from a vector of (super)graphs into a single
 		# supergraph before applying the neural network. Since each element of Z
 		# may itself be a supergraph (where each subgraph corresponds to an
@@ -277,12 +277,12 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 		g = @ignore_derivatives Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
 
 		# Propagation and readout
-		R = d.ψ(g) 
+		R = d.ψ(g)
 
-		# Split R based on the original vector of data sets Z 
+		# Split R based on the original vector of data sets Z
 		if ndims(R) == 2
-			# R is a matrix, with column dimension M = sum(m), and we split R 
-			# based on the original grouping specified by m 
+			# R is a matrix, with column dimension M = sum(m), and we split R
+			# based on the original grouping specified by m
 			ng = length(m)
 			cs = cumsum(m)
 			indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
@@ -301,19 +301,19 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 		s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
 		if !isnothing(d.ψ)
 			t = vcat.(t, s)
-		else 
+		else
 			t = s
-		end 
-	end 
+		end
+	end
 
 	return t
 end
 
-# TODO For graph data, currently not allowed to have data sets with variable number of independent replicates, since in this case we can't stack the three-dimensional arrays: 
+# TODO For graph data, currently not allowed to have data sets with variable number of independent replicates, since in this case we can't stack the three-dimensional arrays:
 # θ = sample(2)
-# g = simulate(θ, 5) 
+# g = simulate(θ, 5)
 # g = Flux.batch(g)
-# g = simulate(θ, 1:30) 
+# g = simulate(θ, 1:30)
 # g = Flux.batch(g)
 
 
@@ -654,6 +654,15 @@ end
 
 # ---- Layers ----
 
+#NB this is a Flux, but I copied it here because I got error that it wasn't defined when submitting to CRAN (think it's a recent addition to Flux)
+function _size_check(layer, x::AbstractArray, (d, n)::Pair)
+  0 < d <= ndims(x) || throw(DimensionMismatch(string("layer ", layer,
+    " expects ndims(input) >= ", d, ", but got ", summary(x))))
+  size(x, d) == n || throw(DimensionMismatch(string("layer ", layer,
+    lazy" expects size(input, $d) == $n, but got ", summary(x))))
+end
+@non_differentiable _size_check(::Any...)
+
 """
 	DensePositive(layer::Dense, g::Function)
 	DensePositive(layer::Dense; g::Function = Flux.relu)
@@ -701,16 +710,16 @@ function (a::DensePositive)(x::AbstractArray)
 end
 
 
-#TODO constrain a ∈ [0, 1] and b > 0 
+#TODO constrain a ∈ [0, 1] and b > 0
 """
 	PowerDifference(a, b)
 Function ``f(x, y) = |ax - (1-a)y|^b`` for trainable parameters a ∈ [0, 1] and b > 0.
 
-# Examples 
+# Examples
 ```
-using NeuralEstimators, Flux 
+using NeuralEstimators, Flux
 
-# Generate some data 
+# Generate some data
 d = 5
 K = 10000
 X = randn32(d, K)
@@ -723,9 +732,9 @@ Z = (abs.(a .* X - (1 .- a) .* Y)).^b
 # Initialise layer
 f = PowerDifference([0.5f0], [2.0f0])
 
-# Optimise the layer 
+# Optimise the layer
 loader = Flux.DataLoader((XY, Z), batchsize=32, shuffle=false)
-optim = Flux.setup(Flux.Adam(0.01), f)  
+optim = Flux.setup(Flux.Adam(0.01), f)
 for epoch in 1:100
     for (xy, z) in loader
         loss, grads = Flux.withgradient(f) do m
@@ -735,15 +744,15 @@ for epoch in 1:100
     end
 end
 
-# Estimates of a and b 
-f.a 
-f.b 
+# Estimates of a and b
+f.a
+f.b
 ```
 """
 struct PowerDifference{A,B}
 	a::A
 	b::B
-end 
+end
 @layer PowerDifference
 export PowerDifference
 PowerDifference() = PowerDifference([0.5f0], [2.0f0])
