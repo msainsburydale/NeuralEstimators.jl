@@ -891,11 +891,15 @@ when applied to data `Z`, returns the median
 The ensemble can be initialised with a collection of trained `estimators` and then
 applied immediately to observed data. Alternatively, the ensemble can be
 initialised with a collection of untrained `estimators`,
-trained with `train()`, and then applied to observed data.
+trained with `train()`, and then applied to observed data. In the latter case, 
+if `savepath` is specified, both the ensemble and component estimators will be saved. 
 
 Note that the training of ensemble components can be done in parallel; however,
 currently this needs to be done manually by the user, since `train()` currently
 trains the ensemble components sequentially.
+
+The ensemble components can be accessed by indexing the ensemble directly; the number 
+of component estimators can be obtained using `length()`. 
 
 # Examples
 ```
@@ -920,6 +924,8 @@ end
 J = 5 # ensemble size
 estimators = [estimator() for j in 1:J]
 ensemble = Ensemble(estimators)
+ensemble[1] # can access component estimators by indexing 
+length(ensemble) # number of component estimators 
 
 # Training
 ensemble = train(ensemble, sampler, simulator, m = m, epochs = 5)
@@ -941,13 +947,26 @@ end
 @layer Ensemble
 Base.show(io::IO, ensemble::Ensemble) = print(io, "\nEnsemble with $(length(ensemble.estimators)) component estimators")
 
-# TODO parallel version of this as a package extension
+# NB would be great to have parallel version of this as a package extension
 function train(ensemble::Ensemble, args...; kwargs...)
+	kwargs = (;kwargs...)
+	savepath = haskey(kwargs, :savepath) ? kwargs.savepath : ""
 	estimators = map(enumerate(ensemble.estimators)) do (i, estimator)
-		@info "Training estimator $i"
+		@info "Training estimator $i of $(length(ensemble))"
+		if savepath != "" # modify the savepath before passing it onto train
+			kwargs = merge(kwargs, (savepath = joinpath(savepath, "estimator$i"),))
+		end
 		train(estimator, args...; kwargs...)
 	end
-	Ensemble(estimators)
+	ensemble = Ensemble(estimators)
+	
+	if savepath != "" # save ensemble 
+		if !ispath(savepath) mkpath(savepath) end
+		weights = Flux.params(cpu(ensemble)) # ensure we are on the cpu before serialization
+		@save joinpath(savepath, "ensemble.bson") weights
+	end
+
+	return ensemble 
 end
 
 function (ensemble::Ensemble)(Z; aggr = median)
@@ -961,3 +980,8 @@ function (ensemble::Ensemble)(Z; aggr = median)
 	θ̂ = dropdims(θ̂; dims = 3)
 	return θ̂
 end
+
+# Overload getindex to enable indexing
+getindex(e::Ensemble, i::Integer) = e.estimators[i]
+# Overload length to obtain number of component estimators 
+length(e::Ensemble) = length(e.estimators)  

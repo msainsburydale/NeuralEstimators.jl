@@ -2,7 +2,7 @@ module NeuralEstimators
 
 using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
-import Base: join, merge, show, size, summary
+import Base: join, merge, show, size, summary, getindex, length
 using BSON: @save, load
 using ChainRulesCore: @non_differentiable, @ignore_derivatives
 using CSV

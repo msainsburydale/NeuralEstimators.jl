@@ -46,7 +46,7 @@ function sampler(K)
 	return θ
 end
 
-function simulator(θ_matrix, m) 
+function simulator(θ_matrix, m)
 	[θ[1] .+ θ[2] * randn(1, m) for θ ∈ eachcol(θ_matrix)]
 end
 
@@ -215,7 +215,7 @@ function _train(θ̂, sampler, simulator;
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	savebool && _savebestweights(savepath)
 
-	# TODO if the user has relied on using train() as a mutating function, the optimal estimator will not be returned. Can I set θ̂ = θ̂_best to fix this? This also ties in with the other TODO down below above trainx(), regarding which device the estimator is on at the end of training. 
+	# TODO if the user has relied on using train() as a mutating function, the optimal estimator will not be returned. Can I set θ̂ = θ̂_best to fix this? This also ties in with the other TODO down below above trainx(), regarding which device the estimator is on at the end of training.
 
     return θ̂_best
 end
@@ -291,7 +291,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 			# Update θ̂ and compute the training risk
 			epoch_time = 0.0
 			train_risk = []
-			
+
 			for θ ∈ _ParameterLoader(θ_train, batchsize = batchsize)
 				sim_time   += @elapsed set = _constructset(θ̂, simulator, θ, m, batchsize)
 				epoch_time += @elapsed rsk = _risk(θ̂, loss, set, device, optimiser)
@@ -487,7 +487,7 @@ function _constructset(θ̂, simulator::Function, θ::P, m, batchsize) where {P 
 	_constructset(θ̂, Z, θ, batchsize)
 end
 function _constructset(θ̂, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-	Z = ZtoFloat32(Z) 
+	Z = ZtoFloat32(Z)
 	θ = θtoFloat32(_extractθ(θ))
 	_DataLoader((Z, θ), batchsize)
 end
@@ -543,7 +543,7 @@ function _constructset(θ̂::QuantileEstimatorContinuous, Zτ, θ::P, batchsize)
 	θ = θtoFloat32(_extractθ(θ))
 	Z, τ = Zτ
 	Z = ZtoFloat32(Z)
-	τ = ZtoFloat32.(τ) 
+	τ = ZtoFloat32.(τ)
 
 	i = θ̂.i
 	if isnothing(i)
@@ -553,13 +553,13 @@ function _constructset(θ̂::QuantileEstimatorContinuous, Zτ, θ::P, batchsize)
 		@assert size(θ, 1) >= i "The number of parameters in the model (size(θ, 1) = $(size(θ, 1))) must be at least as large as the value of i stored in the estimator (θ̂.i = $(θ̂.i))"
 		θᵢ  = θ[i:i, :]
 		θ₋ᵢ = θ[Not(i), :]
-		# Combine each θ₋ᵢ with the corresponding vector of 
+		# Combine each θ₋ᵢ with the corresponding vector of
 		# probability levels, which requires repeating θ₋ᵢ appropriately
-		θ₋ᵢτ = map(eachindex(τ)) do k 
+		θ₋ᵢτ = map(eachindex(τ)) do k
 			τₖ = τ[k]
 			θ₋ᵢₖ = repeat(θ₋ᵢ[:, k:k], inner = (1, length(τₖ)))
 			vcat(θ₋ᵢₖ, τₖ')
-		end 
+		end
 		input  = (Z, θ₋ᵢτ)   # "Tupleise" the input
 		output = θᵢ
 	end
@@ -620,11 +620,11 @@ function _risk(θ̂::QuantileEstimatorContinuous, loss, set::DataLoader, device,
 			input1 = Z
 			input2 = permutedims.(τ)
 			input = (input1, input2)
-			τ = reduce(hcat, τ)                # reduce from vector of vectors to matrix 
+			τ = reduce(hcat, τ)                # reduce from vector of vectors to matrix
 		else
 			Z, θ₋ᵢτ = input
 			τ = [x[end, :] for x ∈ θ₋ᵢτ] # extract probability levels
-			τ = reduce(hcat, τ)          # reduce from vector of vectors to matrix 
+			τ = reduce(hcat, τ)          # reduce from vector of vectors to matrix
 		end
 
 		# repeat τ and θ to facilitate broadcasting and indexing
@@ -632,7 +632,7 @@ function _risk(θ̂::QuantileEstimatorContinuous, loss, set::DataLoader, device,
 		p = size(output, 1)
 		@ignore_derivatives τ = repeat(τ, inner = (p, 1))
 		@ignore_derivatives output = repeat(output, inner = (size(τ, 1) ÷ p, 1))
-		
+
 		if !isnothing(optimiser)
 
 			# "Implicit" style used by Flux <= 0.14.
@@ -655,7 +655,7 @@ end
 
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 
-#TODO (not sure what we want do about the following behaviour, need to think about it): If called as est = trainx(est) then est will be on the GPU; if called as trainx(est) then est will not be on the GPU. Note that the same thing occurs for train(). That is, when the function is treated as mutating, then the estimator will be on the same device that was used during training; otherwise, it will be on whichever device it was when input to the function. Need consistency to improve user experience. 
+#TODO (not sure what we want do about the following behaviour, need to think about it): If called as est = trainx(est) then est will be on the GPU; if called as trainx(est) then est will not be on the GPU. Note that the same thing occurs for train(). That is, when the function is treated as mutating, then the estimator will be on the same device that was used during training; otherwise, it will be on whichever device it was when input to the function. Need consistency to improve user experience.
 """
 	trainx(θ̂, sampler::Function, simulator::Function, m::Vector{Integer}; ...)
 	trainx(θ̂, θ_train, θ_val, simulator::Function, m::Vector{Integer}; ...)

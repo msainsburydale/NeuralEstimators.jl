@@ -872,6 +872,8 @@ end
 	J = 2 # ensemble size
 	estimators = [estimator() for j in 1:J]
 	ensemble = Ensemble(estimators)
+	ensemble[1] # can be indexed
+	@test length(ensemble) == J # number of component estimators 
 
 	# Training
 	ensemble = train(ensemble, sampler, simulator, m = m, epochs = 2, verbose = false)

@@ -15,7 +15,7 @@ with columns:
 
 If `estimator` is an `IntervalEstimator`, the column `estimate` will be replaced by the columns `lower` and `upper`, containing the lower and upper bounds of the interval, respectively.
 
-If `estimator` is a `QuantileEstimator`, the `df` will also contain a column `prob` indicating the probability level of the corresponding quantile estimate. 
+If `estimator` is a `QuantileEstimator`, the `df` will also contain a column `prob` indicating the probability level of the corresponding quantile estimate.
 
 Multiple `Assessment` objects can be combined with `merge()`
 (used for combining assessments from multiple point estimators) or `join()`
@@ -169,9 +169,9 @@ end
 """
 	coverage(assessment::Assessment; ...)
 
-Computes a Monte Carlo approximation of an interval estimator's expected coverage, 
-as defined in [Hermans et al. (2022, Definition 2.1)](https://arxiv.org/abs/2110.06581), 
-and the proportion of parameters below and above the lower and upper bounds, respectively. 
+Computes a Monte Carlo approximation of an interval estimator's expected coverage,
+as defined in [Hermans et al. (2022, Definition 2.1)](https://arxiv.org/abs/2110.06581),
+and the proportion of parameters below and above the lower and upper bounds, respectively.
 
 # Keyword arguments
 - `average_over_parameters::Bool = false`: if true, the coverage is averaged over all parameters; otherwise (default), it is computed over each parameter separately.
@@ -202,21 +202,21 @@ function coverage(assessment::Assessment;
 	return df
 end
 
-#TODO bootstrap sampling for bounds on this diagnostic 
+#TODO bootstrap sampling for bounds on this diagnostic
 function empiricalprob(assessment::Assessment;
 					   average_over_parameters::Bool = false,
 					   average_over_sample_sizes::Bool = true)
 
 	df = assessment.df
 
-	@assert all(["prob", "estimate", "truth"] .∈ Ref(names(df))) 
+	@assert all(["prob", "estimate", "truth"] .∈ Ref(names(df)))
 
 	grouping_variables = [:prob]
-	if "estimator" ∈ names(df) push!(grouping_variables, :estimator) end 
+	if "estimator" ∈ names(df) push!(grouping_variables, :estimator) end
 	if !average_over_parameters push!(grouping_variables, :parameter) end
 	if !average_over_sample_sizes push!(grouping_variables, :m) end
 	df = groupby(df, grouping_variables)
-	df = combine(df, 
+	df = combine(df,
 				[:estimate, :truth] => ((x, y) -> x .> y) => :below,
 				ungroup = false)
 	df = combine(df, :below => mean => :empirical_prob)
@@ -405,7 +405,7 @@ function assess(
 		if boot == true
 			verbose && println("	Computing $((probs[2] - probs[1]) * 100)% non-parametric bootstrap intervals...")
 			# bootstrap estimates
-			@assert !(typeof(Z) <: Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer" 
+			@assert !(typeof(Z) <: Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer"
 			bs = bootstrap.(Ref(estimator), Z, use_gpu = use_gpu, B = B)
 		else # if boot is not a Bool, we will assume it is a bootstrap data set. # TODO probably should add some checks on boot in this case (length should be equal to K, for example)
 			verbose && println("	Computing $((probs[2] - probs[1]) * 100)% parametric bootstrap intervals...")
@@ -437,11 +437,11 @@ end
 
 function assess(
 	estimator::Union{QuantileEstimatorContinuous, QuantileEstimatorDiscrete}, θ::P, Z;
-	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)], 
+	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
 	estimator_name::Union{Nothing, String} = nothing,
 	estimator_names::Union{Nothing, String} = nothing, # for backwards compatibility
 	use_gpu::Bool = true,
-	probs = Float32.(range(0.01, stop=0.99, length=100)) 
+	probs = Float32.(range(0.01, stop=0.99, length=100))
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
 	# Extract the matrix of parameters
@@ -467,46 +467,46 @@ function assess(
 	# If the estimator is a QuantileEstimatorDiscrete, then we use its probability levels
 	if typeof(estimator) <: QuantileEstimatorDiscrete
 		probs = estimator.probs
-	else 
-		τ = [permutedims(probs) for _ in eachindex(Z)] # convert from vector to vector of matrices 
-	end 
+	else
+		τ = [permutedims(probs) for _ in eachindex(Z)] # convert from vector to vector of matrices
+	end
 	n_probs = length(probs)
 
 	# Construct input set
 	i = estimator.i
 	if isnothing(i)
 		if typeof(estimator) <: QuantileEstimatorDiscrete
-			set_info = nothing 
-		else 
+			set_info = nothing
+		else
 			set_info = τ
-		end 
-	else 
+		end
+	else
 		θ₋ᵢ = θ[Not(i), :]
 		if typeof(estimator) <: QuantileEstimatorDiscrete
 			set_info = eachcol(θ₋ᵢ)
-		else 
-			# Combine each θ₋ᵢ with the corresponding vector of 
+		else
+			# Combine each θ₋ᵢ with the corresponding vector of
 			# probability levels, which requires repeating θ₋ᵢ appropriately
-			set_info = map(1:K) do k 
+			set_info = map(1:K) do k
 				θ₋ᵢₖ = repeat(θ₋ᵢ[:, k:k], inner = (1, n_probs))
 				vcat(θ₋ᵢₖ, probs')
-			end 
-		end 
+			end
+		end
 		θ = θ[i:i, :]
 		parameter_names = parameter_names[i:i]
 	end
 
 	# Compute estimates using memory-safe version of estimator((Z, set_info))
-	runtime = @elapsed θ̂ = estimateinbatches(estimator, Z, set_info, use_gpu = use_gpu) 
-	
+	runtime = @elapsed θ̂ = estimateinbatches(estimator, Z, set_info, use_gpu = use_gpu)
+
 	# Convert to DataFrame and add information
 	p = size(θ, 1)
 	runtime = DataFrame(runtime = runtime)
 	df = DataFrame(
 		parameter = repeat(repeat(parameter_names, inner = n_probs), K),
-		truth = repeat(vec(θ), inner = n_probs), 
-		prob = repeat(repeat(probs, outer = p), K), 
-		estimate = vec(θ̂), 
+		truth = repeat(vec(θ), inner = n_probs),
+		prob = repeat(repeat(probs, outer = p), K),
+		estimate = vec(θ̂),
 		m = repeat(m, inner = n_probs*p),
 		k = repeat(1:K, inner = n_probs*p),
 		j = 1 # just for consistency with other methods
@@ -549,7 +549,7 @@ function assess(
 
 	# run the estimators
 	assessments = map(1:E) do i
-		verbose && println("	Running estimator $(estimator_names[i])...")
+		verbose && println("	Running $(estimator_names[i])...")
 		if use_ξ[i]
 			assess(estimators[i], θ, Z, ξ = ξ; use_gpu = use_gpu[i], estimator_name = estimator_names[i], kwargs...)
 		else
