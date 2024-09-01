@@ -2,7 +2,7 @@
 
 ## Saving and loading neural estimators
 
-As training is by far the most computationally demanding part of the workflow, one often trains an estimator and then saves it for later use. As discussed in the [Flux documentation](https://fluxml.ai/Flux.jl/stable/saving/), there are a number of ways to do this. Perhaps the simplest approach is to save the parameters (i.e., weights and biases) of the neural network in a BSON file:
+In regards to saving and loading, neural estimators behave in the same manner as regular Flux models. Therefore, the examples and recommendations outlined in the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/saving/) also apply directly to neural estimators. For example, to save the model state of the neural estimator `θ̂`:
 
 ```
 using Flux
@@ -11,24 +11,16 @@ model_state = Flux.state(θ̂)
 @save "estimator.bson" model_state
 ```
 
-Then, in a later session, one may initialise a neural network with the same architecture used previously, and load the saved parameters:
+Then, to load it in a new session, one may initialise a neural estimator with the same architecture used previously, and load the saved model state:
 
 ```
 @load "estimator.bson" model_state
 Flux.loadmodel!(θ̂, model_state)
 ```
 
-Note that the estimator `θ̂` must be already defined (i.e., only the network parameters are saved, not the architecture). 
+It is also straightforward to save the entire neural estimator, including its architecture (see [here](https://fluxml.ai/Flux.jl/stable/guide/saving/#Saving-Models-as-Julia-Structs)). However, the first approach outlined above is recommended for long-term storage.
 
-For convenience, the function [`train()`](@ref) allows for the automatic saving of the neural-network parameters during the training stage, via the argument `savepath`. Specifically, if `savepath` is specified, neural estimator's parameters will be saved in the folder `savepath` and, to load the optimal parameters post training, one may use the following code, or similar:
-
-```
-using NeuralEstimators
-Flux.loadparams!(θ̂, loadbestweights(savepath))
-```
-
-Above, the function `loadparams!()` loads the parameters of the best (as determined by [`loadbestweights()`](@ref)) neural estimator saved in `savepath`.
-
+For convenience, the function [`train()`](@ref) allows for the automatic saving of the model state during the training stage, via the argument `savepath`.
 
 ## Storing expensive intermediate objects for data simulation
 
@@ -36,9 +28,9 @@ Parameters sampled from the prior distribution may be stored in two ways. Most s
 
 ## On-the-fly and just-in-time simulation
 
-When data simulation is (relatively) computationally inexpensive, the training data set, $\mathcal{Z}_{\text{train}}$, can be simulated continuously during training, a technique coined "simulation-on-the-fly". Regularly refreshing $\mathcal{Z}_{\text{train}}$ leads to lower out-of-sample error and to a reduction in overfitting. This strategy therefore facilitates the use of larger, more representationally-powerful networks that are prone to overfitting when $\mathcal{Z}_{\text{train}}$ is fixed. Further, this technique allows for data be simulated "just-in-time", in the sense that they can be simulated in small batches, used to train the neural estimator, and then removed from memory. This can substantially reduce pressure on memory resources, particularly when working with large data sets. 
+When data simulation is (relatively) computationally inexpensive, the training data set, $\mathcal{Z}_{\text{train}}$, can be simulated continuously during training, a technique coined "simulation-on-the-fly". Regularly refreshing $\mathcal{Z}_{\text{train}}$ leads to lower out-of-sample error and to a reduction in overfitting. This strategy therefore facilitates the use of larger, more representationally-powerful networks that are prone to overfitting when $\mathcal{Z}_{\text{train}}$ is fixed. Further, this technique allows for data be simulated "just-in-time", in the sense that they can be simulated in small batches, used to train the neural estimator, and then removed from memory. This can substantially reduce pressure on memory resources, particularly when working with large data sets.
 
-One may also regularly refresh the set $\vartheta_{\text{train}}$ of parameter vectors used during training, and doing so leads to similar benefits. However, fixing $\vartheta_{\text{train}}$ allows computationally expensive terms, such as Cholesky factors when working with Gaussian process models, to be reused throughout training, which can substantially reduce the training time for some models. Hybrid approaches are also possible, whereby the parameters (and possibly the data) are held fixed for several epochs (i.e., several passes through the training set when performing stochastic gradient descent) before being refreshed. 
+One may also regularly refresh the set $\vartheta_{\text{train}}$ of parameter vectors used during training, and doing so leads to similar benefits. However, fixing $\vartheta_{\text{train}}$ allows computationally expensive terms, such as Cholesky factors when working with Gaussian process models, to be reused throughout training, which can substantially reduce the training time for some models. Hybrid approaches are also possible, whereby the parameters (and possibly the data) are held fixed for several epochs (i.e., several passes through the training set when performing stochastic gradient descent) before being refreshed.
 
 The above strategies are facilitated with various methods of [`train()`](@ref).
 
@@ -91,9 +83,9 @@ Note that when the training data and/or parameters are held fixed during trainin
 
 ## Expert summary statistics
 
-Implicitly, neural estimators involve the learning of summary statistics. However, some summary statistics are available in closed form, simple to compute, and highly informative (e.g., sample quantiles, the empirical variogram, etc.). Often, explicitly incorporating these expert summary statistics in a neural estimator can simplify the optimisation problem, and lead to a better estimator. 
+Implicitly, neural estimators involve the learning of summary statistics. However, some summary statistics are available in closed form, simple to compute, and highly informative (e.g., sample quantiles, the empirical variogram, etc.). Often, explicitly incorporating these expert summary statistics in a neural estimator can simplify the optimisation problem, and lead to a better estimator.
 
-The fusion of learned and expert summary statistics is facilitated by our implementation of the [`DeepSet`](@ref) framework. Note that this implementation also allows the user to construct a neural estimator using only expert summary statistics, following, for example, [Gerber and Nychka (2021)](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382) and [Rai et al. (2024)](https://onlinelibrary.wiley.com/doi/abs/10.1002/env.2845). Note also that the user may specify arbitrary expert summary statistics, however, for convenience several standard [User-defined summary statistics](@ref) are provided with the package, including a fast approximate version of the empirical variogram. 
+The fusion of learned and expert summary statistics is facilitated by our implementation of the [`DeepSet`](@ref) framework. Note that this implementation also allows the user to construct a neural estimator using only expert summary statistics, following, for example, [Gerber and Nychka (2021)](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382) and [Rai et al. (2024)](https://onlinelibrary.wiley.com/doi/abs/10.1002/env.2845). Note also that the user may specify arbitrary expert summary statistics, however, for convenience several standard [User-defined summary statistics](@ref) are provided with the package, including a fast approximate version of the empirical variogram.
 
 ## Variable sample sizes
 
@@ -127,12 +119,12 @@ P(M=m)\left(
 \int_\Theta \int_{\mathcal{Z}^m}  L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{z}^{(m)}))f(\boldsymbol{z}^{(m)} \mid \boldsymbol{\theta}) \rm{d} \boldsymbol{z}^{(m)} \rm{d} \Pi(\boldsymbol{\theta})
 \right).
 ```
-This approach does not materially alter the workflow, except that one must also sample the number of replicates before simulating the data during the training phase. 
+This approach does not materially alter the workflow, except that one must also sample the number of replicates before simulating the data during the training phase.
 
 The following pseudocode illustrates how one may modify a general data simulator to train under a range of sample sizes, with the distribution of $M$ defined by passing any object that can be sampled using `rand(m, K)` (e.g., an integer range like `1:30`, an integer-valued distribution from [Distributions.jl](https://juliastats.org/Distributions.jl/stable/univariate/), etc.):
 
 ```
-function simulate(parameters, m) 
+function simulate(parameters, m)
 
 	## Number of parameter vectors stored in parameters
 	K = size(parameters, 2)
@@ -155,11 +147,11 @@ simulate(parameters, m::Integer) = simulate(parameters, range(m, m))
 
 Neural networks do not naturally handle missing data, and this property can preclude their use in a broad range of applications. Here, we describe two techniques that alleviate this challenge in the context of parameter point estimation: [The masking approach](@ref) and [The neural EM algorithm](@ref).
 
-As a running example, we consider a Gaussian process model where the data are collected over a regular grid, but where some elements of the grid are unobserved. This situation often arises in, for example, remote-sensing applications, where the presence of cloud cover prevents measurement in some places. Below, we load the packages needed in this example, and define some aspects of the model that will remain constant throughout (e.g., the prior, the spatial domain, etc.). We also define structs and functions for sampling from the prior distribution and for simulating marginally from the data model. 
+As a running example, we consider a Gaussian process model where the data are collected over a regular grid, but where some elements of the grid are unobserved. This situation often arises in, for example, remote-sensing applications, where the presence of cloud cover prevents measurement in some places. Below, we load the packages needed in this example, and define some aspects of the model that will remain constant throughout (e.g., the prior, the spatial domain, etc.). We also define structs and functions for sampling from the prior distribution and for simulating marginally from the data model.
 
 ```
-using Distances 
-using Distributions 
+using Distances
+using Distributions
 using Flux
 using LinearAlgebra
 using NeuralEstimators
@@ -167,12 +159,12 @@ using Statistics: mean
 
 # Set the prior and define the number of parameters in the statistical model
 Π = (
-	τ = Uniform(0, 1.0), 
+	τ = Uniform(0, 1.0),
 	ρ = Uniform(0, 0.4)
 )
-p = length(Π) 
+p = length(Π)
 
-# Define the (gridded) spatial domain and compute the distance matrix 
+# Define the (gridded) spatial domain and compute the distance matrix
 points = range(0, 1, 16)
 S = expandgrid(points, points)
 D = pairwise(Euclidean(), S, dims = 1)
@@ -184,7 +176,7 @@ D = pairwise(Euclidean(), S, dims = 1)
 	D = D
 )
 
-# Struct for storing parameters+Cholesky factors 
+# Struct for storing parameters+Cholesky factors
 struct Parameters <: ParameterConfigurations
 	θ
 	L
@@ -240,7 +232,7 @@ Let $\boldsymbol{Z}$ denote the complete-data vector. Then, the masking approach
 
 where $\odot$ denotes elementwise multiplication and the product of a missing element and zero is defined to be zero. Irrespective of the missingness pattern, $\boldsymbol{U}$ and $\boldsymbol{W}$ have the same fixed dimensions and hence may be processed easily using a single neural network. A neural point estimator is then trained on realisations of $\{\boldsymbol{U}, \boldsymbol{W}\}$ which, by construction, do not contain any missing elements.
 
-Since the missingness pattern $\boldsymbol{W}$ is now an input to the neural network, it must be incorporated during the training phase. When interest lies only in making inference from a single already-observed data set, $\boldsymbol{W}$ is fixed and known, and the Bayes risk remains unchanged. However, amortised inference, whereby one trains a single neural network that will be used to make inference with many data sets, requires a joint model for the data $\boldsymbol{Z}$ and the missingness pattern $\boldsymbol{W}$: 
+Since the missingness pattern $\boldsymbol{W}$ is now an input to the neural network, it must be incorporated during the training phase. When interest lies only in making inference from a single already-observed data set, $\boldsymbol{W}$ is fixed and known, and the Bayes risk remains unchanged. However, amortised inference, whereby one trains a single neural network that will be used to make inference with many data sets, requires a joint model for the data $\boldsymbol{Z}$ and the missingness pattern $\boldsymbol{W}$:
 
 ```
 # Marginal simulation from the data model and a MCAR missingness model
@@ -249,7 +241,7 @@ function simulatemissing(parameters::Parameters, m::Integer)
 	Z = simulate(parameters, m)   # simulate completely-observed data
 
 	UW = map(Z) do z
-		prop = rand()             # sample a missingness proportion 
+		prop = rand()             # sample a missingness proportion
 		z = removedata(z, prop)   # randomly remove a proportion of the data
 		uw = encodedata(z)        # replace missing entries with zero and encode missingness pattern
 		uw
@@ -259,12 +251,12 @@ function simulatemissing(parameters::Parameters, m::Integer)
 end
 ```
 
-Note that the helper functions [`removedata()`](@ref) and [`encodedata()`](@ref) facilitate the construction of augmented data sets $\{\boldsymbol{U}, \boldsymbol{W}\}$. 
+Note that the helper functions [`removedata()`](@ref) and [`encodedata()`](@ref) facilitate the construction of augmented data sets $\{\boldsymbol{U}, \boldsymbol{W}\}$.
 
-Next, we construct and train a masked neural Bayes estimator. Here, the first convolutional layer takes two input channels, since we store the augmented data $\boldsymbol{U}$ in the first channel and the missingness pattern $\boldsymbol{W}$ in the second. We construct a point estimator, but the masking approach is applicable with any other kind of estimator (see [Estimators](@ref)): 
+Next, we construct and train a masked neural Bayes estimator. Here, the first convolutional layer takes two input channels, since we store the augmented data $\boldsymbol{U}$ in the first channel and the missingness pattern $\boldsymbol{W}$ in the second. We construct a point estimator, but the masking approach is applicable with any other kind of estimator (see [Estimators](@ref)):
 
 ```
-# Construct DeepSet object 
+# Construct DeepSet object
 ψ = Chain(
 	Conv((10, 10), 2 => 16,  relu),
 	Conv((5, 5),  16 => 32,  relu),
@@ -274,19 +266,19 @@ Next, we construct and train a masked neural Bayes estimator. Here, the first co
 ϕ = Chain(Dense(64, 256, relu), Dense(256, p, exp))
 deepset = DeepSet(ψ, ϕ)
 
-# Initialise point estimator 
+# Initialise point estimator
 θ̂ = PointEstimator(deepset)
 
 # Train the masked neural Bayes estimator
 θ̂ = train(θ̂, Parameters, simulatemissing, m = 1, ξ = ξ, K = 1000, epochs = 10)
 ```
 
-Once trained, we can apply our masked neural Bayes estimator to (incomplete) observed data. The data must be encoded in the same manner that was done during training. Below, we use simulated data as a surrogate for real data, with a missingness proportion of 0.25: 
+Once trained, we can apply our masked neural Bayes estimator to (incomplete) observed data. The data must be encoded in the same manner that was done during training. Below, we use simulated data as a surrogate for real data, with a missingness proportion of 0.25:
 
 ```
 θ = Parameters(1, ξ)
 Z = simulate(θ, 1)[1]
-Z = removedata(Z, 0.25) 
+Z = removedata(Z, 0.25)
 UW = encodedata(Z)
 θ̂(UW)
 ```
@@ -300,12 +292,12 @@ Let $\boldsymbol{Z}_1$ and $\boldsymbol{Z}_2$ denote the observed and unobserved
 \boldsymbol{\theta}^{(l)} = \argmax_{\boldsymbol{\theta}} \sum_{h = 1}^H \ell(\boldsymbol{\theta};  \boldsymbol{Z}_1,  \boldsymbol{Z}_2^{(lh)}) + \log \pi_H(\boldsymbol{\theta}),
 ```
 
-where realisations of the missing-data component, $\{\boldsymbol{Z}_2^{(lh)} : h = 1, \dots, H\}$, are sampled from the probability distribution of $\boldsymbol{Z}_2$ given $\boldsymbol{Z}_1$ and $\boldsymbol{\theta}^{(l-1)}$, and where $\pi_H(\boldsymbol{\theta}) \propto \{\pi(\boldsymbol{\theta})\}^H$ is a concentrated version of the original prior density. Given the conditionally simulated data, the neural EM algorithm performs the above EM update using a neural network that returns the MAP estimate (i.e., the posterior mode) conditionally simulated data. Such a neural network can be obtained by training a neural Bayes estimator under a continuous relaxation of the 0--1 loss function, such as 
+where realisations of the missing-data component, $\{\boldsymbol{Z}_2^{(lh)} : h = 1, \dots, H\}$, are sampled from the probability distribution of $\boldsymbol{Z}_2$ given $\boldsymbol{Z}_1$ and $\boldsymbol{\theta}^{(l-1)}$, and where $\pi_H(\boldsymbol{\theta}) \propto \{\pi(\boldsymbol{\theta})\}^H$ is a concentrated version of the original prior density. Given the conditionally simulated data, the neural EM algorithm performs the above EM update using a neural network that returns the MAP estimate (i.e., the posterior mode) conditionally simulated data. Such a neural network can be obtained by training a neural Bayes estimator under a continuous relaxation of the 0--1 loss function, such as
 
 First, we construct a neural approximation of the MAP estimator. In this example, we will take $H=50$. When $H$ is taken to be reasonably large, one may lean on the [Bernstein-von Mises](https://en.wikipedia.org/wiki/Bernstein%E2%80%93von_Mises_theorem) theorem to train the neural Bayes estimator under linear or quadratic loss; otherwise, one should train the estimator under a continuous relaxation of the 0--1 loss (e.g., the [`tanhloss`](@ref) or [`kpowerloss`](@ref) in the limit $\kappa \to 0$):
 
 ```
-# Construct DeepSet object 
+# Construct DeepSet object
 ψ = Chain(
 	Conv((10, 10), 1 => 16,  relu),
 	Conv((5, 5),  16 => 32,  relu),
@@ -318,7 +310,7 @@ First, we construct a neural approximation of the MAP estimator. In this example
 	)
 deepset = DeepSet(ψ, ϕ)
 
-# Initialise point estimator 
+# Initialise point estimator
 θ̂ = PointEstimator(deepset)
 
 # Train neural Bayes estimator
@@ -326,7 +318,7 @@ H = 50
 θ̂ = train(θ̂, Parameters, simulate, m = H, ξ = ξ, K = 1000, epochs = 10)
 ```
 
-Next, we define a function for conditional simulation (see [`EM`](@ref) for details on the required format of this function): 
+Next, we define a function for conditional simulation (see [`EM`](@ref) for details on the required format of this function):
 
 ```
 function simulateconditional(Z::M, θ, ξ; nsims::Integer = 1) where {M <: AbstractMatrix{Union{Missing, T}}} where T
@@ -395,7 +387,7 @@ function simulateconditional(Z::M, θ, ξ; nsims::Integer = 1) where {M <: Abstr
 end
 ```
 
-Now we can use the neural EM algorithm to get parameter point estimates from data containing missing values. The algorithm is implemented with the struct [`EM`](@ref). Again, here we use simulated data as a surrogate for real data: 
+Now we can use the neural EM algorithm to get parameter point estimates from data containing missing values. The algorithm is implemented with the struct [`EM`](@ref). Again, here we use simulated data as a surrogate for real data:
 
 ```
 θ = Parameters(1, ξ)

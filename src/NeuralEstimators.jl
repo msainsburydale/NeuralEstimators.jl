@@ -10,7 +10,7 @@ using DataFrames
 using Distances
 using Distributions: Poisson, Bernoulli, product_distribution
 using Flux
-using Flux: ofeltype, params, DataLoader, update!, glorot_uniform, onehotbatch, _match_eltype # @layer
+using Flux: ofeltype, DataLoader, update!, glorot_uniform, onehotbatch, _match_eltype # @layer
 using Flux: @functor; var"@layer" = var"@functor" # NB did this because even semi-recent versions of Flux do not include @layer
 using Folds
 using Graphs
@@ -21,7 +21,7 @@ using InvertedIndices
 using LinearAlgebra
 using NamedArrays
 using NearestNeighbors: KDTree, knn
-using Optim # needed to obtain the MAP with neural ratio
+using Optim # needed to obtain the ML/MAP with neural ratio (at least via gradient descent... NB could make it a package extension)
 using Random: randexp, shuffle
 using RecursiveArrayTools: VectorOfArray, convert
 using SparseArrays
@@ -37,7 +37,7 @@ include("loss.jl")
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
-export DeepSet, summarystatistics, Compress, CovarianceMatrix, CorrelationMatrix
+export DeepSet, summarystatistics, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock
 export vectotril, vectotriu
 include("Architectures.jl")
 
@@ -63,7 +63,7 @@ include("train.jl")
 export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
 include("assess.jl")
 
-export stackarrays, expandgrid, loadbestweights, loadweights, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches, rowwisenorm
+export stackarrays, expandgrid, numberreplicates, nparams, samplesize, drop, containertype, estimateinbatches, rowwisenorm
 include("utility.jl")
 
 export samplesize, samplecorrelation, samplecovariance, NeighbourhoodVariogram
@@ -72,8 +72,10 @@ include("summarystatistics.jl")
 export EM, removedata, encodedata
 include("missingdata.jl")
 
-# Backwards compatability:
+# Backwards compatability and deprecations:
 simulategaussianprocess = simulategaussian; export simulategaussianprocess
+export loadbestweights, loadweights
+include("deprecated.jl")
 
 end
 

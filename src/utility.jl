@@ -127,7 +127,7 @@ containertype(a::A) where A = containertype(A)
 containertype(::Type{A}) where A <: SubArray = containertype(A.types[1])
 
 """
-	numberofreplicates(Z)
+	numberreplicates(Z)
 
 Generic function that returns the number of replicates in a given object.
 Default implementations are provided for commonly used data formats, namely,
@@ -140,14 +140,11 @@ function numberreplicates(Z::V) where {V <: AbstractVector{A}} where A
 	numberreplicates.(Z)
 end
 
-
-#TODO this falls over with missing data because T is Union{Number, Missing}. Why did I impose T <: Number? If no real reason, remove. 
-
 # specific methods
-function numberreplicates(Z::A) where {A <: AbstractArray{T, N}} where {T <: Number, N}
+function numberreplicates(Z::A) where {A <: AbstractArray{T, N}} where {T <: Union{Number, Missing}, N}
 	size(Z, N)
 end
-function numberreplicates(Z::V) where {V <: AbstractVector{T}} where {T <: Number}
+function numberreplicates(Z::V) where {V <: AbstractVector{T}} where {T <: Union{Number, Missing}, N}
 	numberreplicates(reshape(Z, :, 1))
 end
 function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
@@ -162,7 +159,6 @@ function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, M}} where {V₁ <:
 	@assert length(Z) == size(X, 2)
 	numberreplicates(Z)
 end
-
 function numberreplicates(Z::G) where {G <: GNNGraph}
 	x = :Z ∈ keys(Z.ndata) ? Z.ndata.Z : first(values(Z.ndata))
 	if ndims(x) == 3
@@ -288,74 +284,14 @@ function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
 end
 
 # Here, we define _checkgpu() for the case that CUDA has not been loaded (so, we will be using the CPU)
-# For the case that CUDA is loaded, _checkgpu() is overloaded in ext/NeuralEstimatorsCUDAExt.jl 
-# NB Julia complains if we overload functions in package extensions... to get around this, here we 
+# For the case that CUDA is loaded, _checkgpu() is overloaded in ext/NeuralEstimatorsCUDAExt.jl
+# NB Julia complains if we overload functions in package extensions... to get around this, here we
 # use a slightly different function signature (omitting ::Bool)
 function _checkgpu(use_gpu; verbose::Bool = true)
 	if verbose @info "Running on CPU" end
 	device = cpu
 	return(device)
 end
-
-
-
-# ---- Functions for finding, saving, and loading the best neural network ----
-
-common_docstring = """
-Given a `path` to a training run containing neural networks saved with names
-`"network_epochx.bson"` and an object saved as `"loss_per_epoch.bson"`,
-"""
-
-"""
-	_findbestweights(path::String)
-
-$common_docstring finds the epoch of the best network (measured by validation loss).
-"""
-function _findbestweights(path::String)
-	loss_per_epoch = load(joinpath(path, "loss_per_epoch.bson"), @__MODULE__)[:loss_per_epoch]
-
-	# The first row is the risk evaluated for the initial neural network, that
-	# is, the network at epoch 0. Since Julia starts indexing from 1, we hence
-	# subtract 1 from argmin().
-	best_epoch = argmin(loss_per_epoch[:, 2]) -1
-
-	return best_epoch
-end
-
-
-"""
-	_savebestweights(path::String)
-
-$common_docstring saves the weights of the best network (measured by validation loss) as 'best_network.bson'.
-"""
-function _savebestweights(path::String)
-	best_epoch = _findbestweights(path)
-	load_path   = joinpath(path, "network_epoch$(best_epoch).bson")
-	save_path   = joinpath(path, "best_network.bson")
-	cp(load_path, save_path, force = true)
-	return nothing
-end
-
-"""
-	loadbestweights(path::String)
-
-Returns the weights of the neural network saved as 'best_network.bson' in the given `path`.
-"""
-function loadbestweights(path::String)
-	load_path     = joinpath(path, "best_network.bson")
-	best_weights = load(load_path, @__MODULE__)[:weights]
-	return best_weights
-end
-
-"""
-	loadweights(path::String)
-
-Returns the weights of the neural network in the given `path`.
-"""
-function loadweights(path::String)
-	load(path, @__MODULE__)[:weights]
-end
-
 
 """
 	estimateinbatches(θ̂, z, t = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)

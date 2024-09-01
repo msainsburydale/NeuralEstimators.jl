@@ -891,17 +891,15 @@ when applied to data `Z`, returns the median
 
 The ensemble can be initialised with a collection of trained `estimators` and then
 applied immediately to observed data. Alternatively, the ensemble can be
-initialised with a collection of untrained `estimators` 
-(or a function defining the architecture of each estimator, and the number of estimators in the ensemble), 
-trained with `train()`, and then applied to observed data. In the latter case, where the ensemble is trained directly, 
-if `savepath` is specified both the ensemble and component estimators will be saved. 
+initialised with a collection of untrained `estimators`
+(or a function defining the architecture of each estimator, and the number of estimators in the ensemble),
+trained with `train()`, and then applied to observed data. In the latter case, where the ensemble is trained directly,
+if `savepath` is specified both the ensemble and component estimators will be saved.
 
-Note that the training of ensemble components can be done in parallel; however,
-currently this needs to be done manually by the user, since `train()` currently
-trains the ensemble components sequentially.
+Note that `train()` currently acts sequentially on the component estimators.
 
-The ensemble components can be accessed by indexing the ensemble directly; the number 
-of component estimators can be obtained using `length()`. 
+The ensemble components can be accessed by indexing the ensemble directly; the number
+of component estimators can be obtained using `length()`.
 
 # Examples
 ```
@@ -923,12 +921,12 @@ function architecture()
 end
 
 # Ensemble size
-J = 5 
+J = 3
 
 # Initialise ensemble
 ensemble = Ensemble(architecture, J)
-ensemble[1]      # access component estimators by indexing 
-length(ensemble) # number of component estimators 
+ensemble[1]      # access component estimators by indexing
+length(ensemble) # number of component estimators
 
 # Training
 ensemble = train(ensemble, sampler, simulator, m = m, epochs = 5)
@@ -941,26 +939,6 @@ rmse(assessment)
 
 # Apply to data
 ensemble(Z)
-
-# Testing
-J = 5 # ensemble size
-ensemble = Ensemble(architecture, J)
-train(ensemble, sampler, simulator, m = m, epochs = 5, savepath="testing-path")
-ensemble = Ensemble(architecture, J)
-ensemble(Z)
-loadpath = joinpath(pwd(), "testing-path", "ensemble.bson")
-Flux.loadparams!(ensemble, load(loadpath, @__MODULE__)[:weights])
-ensemble(Z)
-
-# Testing
-J = 5 # ensemble size
-ensemble = Ensemble(architecture, J)
-trainx(ensemble, sampler, simulator, [30, 50], epochs = 5, savepath="testing-path")
-ensemble = Ensemble(architecture, J)
-ensemble(Z)
-loadpath = joinpath(pwd(), "testing-path_m50", "ensemble.bson")
-Flux.loadparams!(ensemble, load(loadpath, @__MODULE__)[:weights])
-ensemble(Z)
 ```
 """
 struct Ensemble <: NeuralEstimator
@@ -969,7 +947,6 @@ end
 Ensemble(architecture::Function, J::Integer) = Ensemble([architecture() for j in 1:J])
 @layer Ensemble
 
-# NB would be great to have parallel version of this as a package extension
 function train(ensemble::Ensemble, args...; kwargs...)
 	kwargs = (;kwargs...)
 	savepath = haskey(kwargs, :savepath) ? kwargs.savepath : ""
@@ -981,14 +958,14 @@ function train(ensemble::Ensemble, args...; kwargs...)
 		train(estimator, args...; kwargs...)
 	end
 	ensemble = Ensemble(estimators)
-	
-	if savepath != "" # save ensemble 
+
+	if savepath != "" # save ensemble
 		if !ispath(savepath) mkpath(savepath) end
 		weights = Flux.params(cpu(ensemble)) # ensure we are on the cpu before serialization
 		@save joinpath(savepath, "ensemble.bson") weights
 	end
 
-	return ensemble 
+	return ensemble
 end
 
 function (ensemble::Ensemble)(Z; aggr = median)
@@ -1003,8 +980,8 @@ function (ensemble::Ensemble)(Z; aggr = median)
 	return θ̂
 end
 
-# Overload Base functions 
+# Overload Base functions
 Base.getindex(e::Ensemble, i::Integer) = e.estimators[i]
-Base.length(e::Ensemble) = length(e.estimators)  
+Base.length(e::Ensemble) = length(e.estimators)
 Base.eachindex(e::Ensemble) = eachindex(e.estimators)
 Base.show(io::IO, ensemble::Ensemble) = print(io, "\nEnsemble with $(length(ensemble.estimators)) component estimators")

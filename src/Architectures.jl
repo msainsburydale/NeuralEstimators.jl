@@ -760,3 +760,57 @@ PowerDifference(a::Number, b::AbstractArray) = PowerDifference([a], b)
 PowerDifference(a::AbstractArray, b::Number) = PowerDifference(a, [b])
 (f::PowerDifference)(x, y) = (abs.(f.a .* x - (1 .- f.a) .* y)).^f.b
 (f::PowerDifference)(tup::Tuple) = f(tup[1], tup[2])
+
+
+#TODO add further details
+"""
+	ResidualBlock(filter, in => out; stride = 1)
+
+Basic residual block (see [here](https://en.wikipedia.org/wiki/Residual_neural_network#Basic_block)),
+consisting of two sequential convolutional layers and a skip (shortcut) connection
+that connects the input of the block directly to the output,
+facilitating the training of deep networks.
+
+# Examples
+```
+using NeuralEstimators
+z = rand(16, 16, 1, 1)
+b = ResidualBlock((3, 3), 1 => 32)
+b(z)
+```
+"""
+struct ResidualBlock{B}
+    block::B
+end
+Flux.@functor ResidualBlock
+(b::ResidualBlock)(x) = relu.(b.block(x))
+function ResidualBlock(filter, channels; stride = 1)
+
+    layer = Chain(
+        Conv(filter, channels; stride = stride, pad=1, bias=false),
+        BatchNorm(channels[2], relu),
+        Conv(filter, channels[2]=>channels[2]; pad=1, bias=false),
+        BatchNorm(channels[2])
+        )
+
+    if stride == 1 && channels[1] == channels[2]
+        # dimensions match, can add input directly to output
+        connection = +
+    else
+        #TODO options for different dimension matching (padding vs. projection)
+        # Projection connection using 1x1 convolution
+        connection = Shortcut(
+                Chain(
+                    Conv((1, 1), channels; stride = stride, bias=false),
+                    BatchNorm(channels[2])
+                )
+            )
+    end
+
+    ResidualBlock(SkipConnection(layer, connection))
+end
+struct Shortcut{S}
+    s::S
+end
+Flux.@functor Shortcut
+(s::Shortcut)(mx, x) = mx + s.s(x)

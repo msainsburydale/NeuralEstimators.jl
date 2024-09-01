@@ -1,4 +1,5 @@
 # - `optimiser`: An Optimisers.jl optimisation rule, using `Adam()` by default. When the training data and/or parameters are held fixed, the default is to use L₂ regularisation with penalty coefficient λ=1e-4, so that `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂)`. Otherwise, when the training data and parameters are simulated "on the fly", by default no regularisation is used, so that `optimiser = Flux.setup(Adam(), θ̂)`.
+# TODO savepath::String = "" -> savepath::Union{String,Nothing} = nothing
 """
 	train(θ̂, sampler::Function, simulator::Function; ...)
 	train(θ̂, θ_train::P, θ_val::P, simulator::Function; ...) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
@@ -17,23 +18,23 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 
 # Keyword arguments common to all methods:
 - `loss = mae`
-- `epochs::Integer = 100`
-- `batchsize::Integer = 32`
+- `epochs = 100`
+- `batchsize = 32`
 - `optimiser = ADAM()`
-- `savepath::String = ""`: path to save the neural-network weights during training (as `bson` files) and other information, such as the risk vs epoch (the risk function evaluated over the training and validation sets are saved in the first and second columns of `loss_per_epoch.csv`). If `savepath` is an empty string (default), nothing is saved.
-- `stopping_epochs::Integer = 5`: cease training if the risk doesn't improve in this number of epochs.
-- `use_gpu::Bool = true`
-- `verbose::Bool = true`
+- `savepath::String = ""`: path to save the trained estimator and other information; if an empty string (default), nothing is saved. Otherwise, the neural-network parameters (i.e., the weights and biases) will be saved during training as `bson` files; the risk function evaluated over the training and validation sets will also be saved, in the first and second columns of `loss_per_epoch.csv`, respectively; the best parameters (as measured by validation risk) will be saved as `best_network.bson`. 
+- `stopping_epochs = 5`: cease training if the risk doesn't improve in this number of epochs.
+- `use_gpu = true`
+- `verbose = true`
 
 # Keyword arguments common to `train(θ̂, sampler, simulator)` and `train(θ̂, θ_train, θ_val, simulator)`:
 - `m`: sample sizes (either an `Integer` or a collection of `Integers`). The `simulator` is called as `simulator(θ, m)`.
-- `epochs_per_Z_refresh::Integer = 1`: how often to refresh the training data.
-- `simulate_just_in_time::Bool = false`: flag indicating whether we should simulate just-in-time, in the sense that only a `batchsize` number of parameter vectors and corresponding data are in memory at a given time.
+- `epochs_per_Z_refresh = 1`: the number of passes to make through the training set before the training data are refreshed.
+- `simulate_just_in_time = false`: flag indicating whether we should simulate just-in-time, in the sense that only a `batchsize` number of parameter vectors and corresponding data are in memory at a given time.
 
 # Keyword arguments unique to `train(θ̂, sampler, simulator)`:
-- `K::Integer = 10000`: number of parameter vectors in the training set; the size of the validation set is `K ÷ 5`.
-- `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices). If provided, the parameter sampler is called as `sampler(K, ξ)`; otherwise, the parameter sampler will be called as `sampler(K)`. Can also be provided as `xi`.
-- `epochs_per_θ_refresh::Integer = 1`: how often to refresh the training parameters. Must be a multiple of `epochs_per_Z_refresh`. Can also be provided as `epochs_per_theta_refresh`.
+- `K = 10000`: number of parameter vectors in the training set; the size of the validation set is `K ÷ 5`.
+- `ξ = nothing`: an arbitrary collection of objects that, if provided, will be passed to the parameter sampler as `sampler(K, ξ)`; otherwise, the parameter sampler will be called as `sampler(K)`. Can also be provided as `xi`.
+- `epochs_per_θ_refresh = 1`: the number of passes to make through the training set before the training parameters are refreshed. Must be a multiple of `epochs_per_Z_refresh`. Can also be provided as `epochs_per_theta_refresh`.
 
 # Examples
 ```
@@ -213,7 +214,7 @@ function _train(θ̂, sampler, simulator;
 
 	# save key information and save the best θ̂ as best_network.bson.
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
-	savebool && _savebestweights(savepath)
+	savebool && _savebestmodel(savepath)
 
 	# TODO if the user has relied on using train() as a mutating function, the optimal estimator will not be returned. Can I set θ̂ = θ̂_best to fix this? This also ties in with the other TODO down below above trainx(), regarding which device the estimator is on at the end of training.
 
@@ -325,7 +326,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 
 	# save key information and save the best θ̂ as best_network.bson.
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
-	savebool && _savebestweights(savepath)
+	savebool && _savebestmodel(savepath)
 
     return θ̂_best
 end
@@ -424,7 +425,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
 	# save key information
 	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
-	savebool && _savebestweights(savepath)
+	savebool && _savebestmodel(savepath)
 
     return θ̂_best
 end
@@ -635,12 +636,12 @@ function _risk(θ̂::QuantileEstimatorContinuous, loss, set::DataLoader, device,
 
 		if !isnothing(optimiser)
 
-			# "Implicit" style used by Flux <= 0.14.
+			# "Implicit" style used by Flux <= 0.14
 			γ = Flux.params(θ̂)
 			ls, ∇ = Flux.withgradient(() -> quantileloss(θ̂(input), output, τ), γ)
 			update!(optimiser, γ, ∇)
 
-			# "Explicit" style required by Flux >= 0.15.
+			# "Explicit" style required by Flux >= 0.15
 			# ls, ∇ = Flux.withgradient(θ̂ -> quantileloss(θ̂(input), output, τ), θ̂)
 			# update!(optimiser, θ̂, ∇[1])
 		else
@@ -702,7 +703,9 @@ function _trainx(θ̂; sampler = nothing, simulator = nothing, M = nothing, θ_t
 		verbose && @info "training with m=$(mᵢ)"
 
 		# Pre-train if this is not the first estimator
-		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
+		if i > 1
+			Flux.loadmodel!(estimators[i], Flux.state(estimators[i-1]))
+		end
 
 		# Modify/check the keyword arguments before passing them onto train
 		kwargs = (;args...)
@@ -766,7 +769,9 @@ function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) whe
 		end
 
 		# Pre-train if this is not the first estimator
-		if i > 1 Flux.loadparams!(estimators[i], Flux.params(estimators[i-1])) end
+		if i > 1
+			Flux.loadmodel!(estimators[i], Flux.state(estimators[i-1]))
+		end
 
 		# Modify/check the keyword arguments before passing them onto train
 		kwargs = (;args...)
@@ -826,10 +831,10 @@ end
 
 function _saveweights(θ̂, savepath, epoch = "")
 	if !ispath(savepath) mkpath(savepath) end
-	weights = Flux.params(cpu(θ̂)) # return to cpu before serialization
-	filename = epoch == "" ? "network.bson" : "network_epoch$epoch.bson"
-	networkpath = joinpath(savepath, filename)
-	@save networkpath weights
+	model_state = Flux.state(cpu(θ̂)) # return to cpu before serialization
+	file_name = epoch == "" ? "network.bson" : "network_epoch$epoch.bson"
+	network_path = joinpath(savepath, file_name)
+	@save network_path model_state
 end
 
 function _saveinfo(loss_per_epoch, train_time, savepath::String; verbose::Bool = true)
@@ -845,6 +850,28 @@ function _saveinfo(loss_per_epoch, train_time, savepath::String; verbose::Bool =
 	CSV.write(joinpath(savepath, "loss_per_epoch.csv"), Tables.table(loss_per_epoch), header = false)
 	CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
 end
+
+"""
+	_savebestmodel(path::String)
+
+Given a `path` to a containing neural networks saved with names
+`"network_epochx.bson"` and an object saved as `"loss_per_epoch.bson"`,
+saves the weights of the best network (measured by validation loss) as
+'best_network.bson'.
+"""
+function _savebestmodel(path::String)
+	loss_per_epoch = load(joinpath(path, "loss_per_epoch.bson"), @__MODULE__)[:loss_per_epoch]
+
+	# The first row is the risk evaluated for the initial neural network, that
+	# is, the network at epoch 0. Since Julia starts indexing from 1, we
+	# subtract 1 from argmin().
+	best_epoch = argmin(loss_per_epoch[:, 2]) -1
+	load_path   = joinpath(path, "network_epoch$(best_epoch).bson")
+	save_path   = joinpath(path, "best_network.bson")
+	cp(load_path, save_path, force = true)
+	return nothing
+end
+
 
 ZtoFloat32(Z) = try broadcast.(Float32, Z) catch e Z end
 θtoFloat32(θ) = try broadcast(Float32, θ) catch e θ end

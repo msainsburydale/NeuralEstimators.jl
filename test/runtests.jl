@@ -98,6 +98,13 @@ verbose = false # verbose used in code (not @testset)
 	@test isnothing(_check_sizes(1, 1))
 end
 
+@testset "ResidualBlock" begin
+	z = rand32(16, 16, 1, 1)
+	b = ResidualBlock((3, 3), 1 => 32)
+	y = b(z)
+	@test size(y) == (16, 16, 32, 1)
+end
+
 @testset "maternclusterprocess" begin
 
 	S = maternclusterprocess()
@@ -797,8 +804,8 @@ end
 	ψ = GNNSummary(propagation, readout)
 
     # Mapping module
-    p = 3     # number of parameters in the statistical model
-    w = 64    # width of layers used for the outer network ϕ
+    p = 3
+    w = 64
     ϕ = Chain(Dense(nt, w, relu), Dense(w, w, relu), Dense(w, p))
 
     # Construct the estimator
@@ -873,7 +880,7 @@ end
 	estimators = [estimator() for j in 1:J]
 	ensemble = Ensemble(estimators)
 	ensemble[1] # can be indexed
-	@test length(ensemble) == J # number of component estimators 
+	@test length(ensemble) == J # number of component estimators
 
 	# Training
 	ensemble = train(ensemble, sampler, simulator, m = m, epochs = 2, verbose = false)
