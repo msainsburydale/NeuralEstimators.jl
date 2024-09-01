@@ -959,10 +959,10 @@ function train(ensemble::Ensemble, args...; kwargs...)
 	end
 	ensemble = Ensemble(estimators)
 
-	if savepath != "" # save ensemble
+	if savepath != ""
 		if !ispath(savepath) mkpath(savepath) end
-		weights = Flux.params(cpu(ensemble)) # ensure we are on the cpu before serialization
-		@save joinpath(savepath, "ensemble.bson") weights
+		model_state = Flux.state(cpu(ensemble)) 
+		@save joinpath(savepath, "ensemble.bson") model_state
 	end
 
 	return ensemble

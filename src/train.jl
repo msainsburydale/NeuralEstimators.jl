@@ -21,7 +21,7 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 - `epochs = 100`
 - `batchsize = 32`
 - `optimiser = ADAM()`
-- `savepath::String = ""`: path to save the trained estimator and other information; if an empty string (default), nothing is saved. Otherwise, the neural-network parameters (i.e., the weights and biases) will be saved during training as `bson` files; the risk function evaluated over the training and validation sets will also be saved, in the first and second columns of `loss_per_epoch.csv`, respectively; the best parameters (as measured by validation risk) will be saved as `best_network.bson`. 
+- `savepath::String = ""`: path to save the trained estimator and other information; if an empty string (default), nothing is saved. Otherwise, the neural-network parameters (i.e., the weights and biases) will be saved during training as `bson` files; the risk function evaluated over the training and validation sets will also be saved, in the first and second columns of `loss_per_epoch.csv`, respectively; the best parameters (as measured by validation risk) will be saved as `best_network.bson`.
 - `stopping_epochs = 5`: cease training if the risk doesn't improve in this number of epochs.
 - `use_gpu = true`
 - `verbose = true`
@@ -132,14 +132,14 @@ function _train(θ̂, sampler, simulator;
 	θ_val   = isnothing(ξ) ? sampler(K ÷ 5 + 1) : sampler(K ÷ 5 + 1, ξ)
 	val_set = _constructset(θ̂, simulator, θ_val, m, batchsize)
 
-	# Initialise the loss per epoch matrix.
+	# Initialise the loss per epoch matrix
 	verbose && print("Computing the initial validation risk...")
 	val_risk = _risk(θ̂, loss, val_set, device)
 	loss_per_epoch   = [val_risk val_risk;]
 	verbose && println(" Initial validation risk = $val_risk")
 
-	# Save initial θ̂ (prevents bugs in the case that the risk does not improve)
-	savebool && _saveweights(θ̂, savepath, 0)
+	# Save initial θ̂
+	savebool && _savestate(θ̂, savepath, 0)
 
 	# Number of batches of θ in each epoch
 	batches = ceil((K / batchsize))
@@ -197,11 +197,11 @@ function _train(θ̂, sampler, simulator;
 		verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
 		savebool && @save loss_path loss_per_epoch
 
-		# If the current loss is better than the previous best, save θ̂ and
+		# If the current risk is better than the previous best, save θ̂ and
 		# update the minimum validation risk; otherwise, add to the early
 		# stopping counter
 		if val_risk <= min_val_risk
-			savebool && _saveweights(θ̂, savepath, epoch)
+			savebool && _savestate(θ̂, savepath, epoch)
 			min_val_risk = val_risk
 			early_stopping_counter = 0
 			θ̂_best = deepcopy(θ̂)
@@ -260,9 +260,8 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 	# Initialise the loss per epoch matrix (NB just using validation for both for now)
 	loss_per_epoch = [val_risk val_risk;]
 
-	# Save the initial θ̂. This is to prevent bugs in the case that the initial
-	# risk does not improve
-	savebool && _saveweights(θ̂, savepath, 0)
+	# Save initial θ̂
+	savebool && _savestate(θ̂, savepath, 0)
 
 	# We may simulate Z_train in its entirety either because (i) we
 	# want to avoid the overhead of simulating continuously or (ii) we are
@@ -314,7 +313,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 		# If the current risk is better than the previous best, save θ̂ and
 		# update the minimum validation risk
 		if val_risk <= min_val_risk
-			savebool && _saveweights(θ̂, savepath, epoch)
+			savebool && _savestate(θ̂, savepath, epoch)
 			min_val_risk = val_risk
 			early_stopping_counter = 0
 			θ̂_best = deepcopy(θ̂)
@@ -390,7 +389,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
 	# Initialise the loss per epoch matrix and save the initial estimator
 	loss_per_epoch = [initial_train_risk val_risk;]
-	savebool && _saveweights(θ̂, savepath, 0)
+	savebool && _savestate(θ̂, savepath, 0)
 
 	local θ̂_best = deepcopy(θ̂)
 	local min_val_risk = val_risk
@@ -412,7 +411,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		# If the current loss is better than the previous best, save θ̂ and
 		# update the minimum validation risk
 		if val_risk <= min_val_risk
-			savebool && _saveweights(θ̂, savepath, epoch)
+			savebool && _savestate(θ̂, savepath, epoch)
 			min_val_risk = val_risk
 			early_stopping_counter = 0
 			θ̂_best = deepcopy(θ̂)
@@ -829,9 +828,9 @@ function _checkargs_trainx(kwargs)
 	return verbose
 end
 
-function _saveweights(θ̂, savepath, epoch = "")
+function _savestate(θ̂, savepath, epoch = "")
 	if !ispath(savepath) mkpath(savepath) end
-	model_state = Flux.state(cpu(θ̂)) # return to cpu before serialization
+	model_state = Flux.state(cpu(θ̂)) 
 	file_name = epoch == "" ? "network.bson" : "network_epoch$epoch.bson"
 	network_path = joinpath(savepath, file_name)
 	@save network_path model_state
