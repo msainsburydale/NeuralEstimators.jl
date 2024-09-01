@@ -144,7 +144,7 @@ end
 function numberreplicates(Z::A) where {A <: AbstractArray{T, N}} where {T <: Union{Number, Missing}, N}
 	size(Z, N)
 end
-function numberreplicates(Z::V) where {V <: AbstractVector{T}} where {T <: Union{Number, Missing}, N}
+function numberreplicates(Z::V) where {V <: AbstractVector{T}} where {T <: Union{Number, Missing}}
 	numberreplicates(reshape(Z, :, 1))
 end
 function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
