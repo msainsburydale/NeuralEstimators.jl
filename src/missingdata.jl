@@ -75,7 +75,7 @@ function (em::EM)(Z::A, θ₀ = nothing; args...)  where {A <: AbstractArray{T, 
 	em.MAP(Z)
 end
 
-# TODO change ϵ to tolerance
+# TODO change ϵ to tolerance (ϵ can be kept as a deprecated argument)
 function (em::EM)(
 	Z::A, θ₀ = nothing;
 	niterations::Integer = 50,

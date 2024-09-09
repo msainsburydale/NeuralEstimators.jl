@@ -79,18 +79,16 @@ include("deprecated.jl")
 
 end
 
-# ---- once software is polished:
-# - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
-# -	Add NeuralEstimators.jl to https://github.com/smsharma/awesome-neural-sbi#code-packages-and-benchmarks.
-# -	Once NeuralEstimators is on the Julia package manager, add the following to index.md:
+# ---- longer term/lower priority:
+# -	Once registered, add the following to index.md:
 #
 # Install `NeuralEstimators` from [Julia](https://julialang.org/)'s package manager using the following command inside Julia:
 #
 # ```
 # using Pkg; Pkg.add("NeuralEstimators")
 # ```
-
-# ---- longer term/lower priority:
+# - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
+# -	Add NeuralEstimators.jl to https://github.com/smsharma/awesome-neural-sbi#code-packages-and-benchmarks
 # - Ensemble: make it “play well” throughout the package. For example, assess() with other kinds of neural estimators (e.g., quantile estimators), and ml/mapestimate() with RatioEstimators. 
 # - assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots) or some other means
 # - Examples: Bivariate data in multivariate section

@@ -13,8 +13,6 @@ _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
 
 # ---- surrogates for 0-1 loss ----
 
-#TODO use @doc raw and improve documentation 
-
 """
     tanhloss(θ̂, θ, k; agg = mean, joint = true)
 
@@ -102,9 +100,7 @@ end
 
 # ---- quantile loss ----
 
-#TODO describe behaviour in multiparameter setting
 #TODO write the maths for when we have a vector τ
-#TODO have to clean this up...
 """
     quantileloss(θ̂, θ, τ; agg = mean)
     quantileloss(θ̂, θ, τ::Vector; agg = mean)
@@ -178,7 +174,7 @@ function quantileloss(θ̂, θ, τ::V; agg = mean) where {T, V <: AbstractVector
   end
 end
 
-#TODO document matrix version? Although only used internally 
+#NB matrix method is only used internally, and therefore not documented 
 function quantileloss(θ̂, θ, τ::M; agg = mean) where {T, M <: AbstractMatrix{T}}
   d = θ̂ .- θ
   b = d .> 0

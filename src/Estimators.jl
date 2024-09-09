@@ -5,8 +5,6 @@ An abstract supertype for neural estimators.
 """
 abstract type NeuralEstimator end
 
-#TODO I think all architectures below should be DeepSet objects.
-
 # ---- PointEstimator  ----
 
 """
