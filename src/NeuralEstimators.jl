@@ -4,13 +4,11 @@ using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
 import Base: join, merge, show, size, summary, getindex, length, eachindex
 using BSON: @save, load
-using ChainRulesCore: @non_differentiable, @ignore_derivatives
 using CSV
 using DataFrames
 using Distances
-using Distributions: Poisson, Bernoulli, product_distribution
 using Flux
-using Flux: ofeltype, DataLoader, update!, glorot_uniform, onehotbatch, _match_eltype # @layer
+using Flux: ofeltype, DataLoader, update!, glorot_uniform, onehotbatch, _match_eltype, @non_differentiable, @ignore_derivatives # @layer
 using Flux: @functor; var"@layer" = var"@functor" # NB did this because even semi-recent versions of Flux do not include @layer
 using Folds
 using Graphs
@@ -21,15 +19,13 @@ using InvertedIndices
 using LinearAlgebra
 using NamedArrays
 using NearestNeighbors: KDTree, knn
-using Optim # needed to obtain the ML/MAP with neural ratio (at least via gradient descent... could make it a package extension)
 using Random: randexp, shuffle
 using RecursiveArrayTools: VectorOfArray, convert
 using SparseArrays
 using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum, quantile
-using StatsBase
-using StatsBase: wsample
-using Zygote
+using StatsBase 
+using StatsBase: wsample, sample
 
 export tanhloss, kpowerloss, intervalscore, quantileloss
 include("loss.jl")

@@ -578,7 +578,7 @@ approximate maximum-likelihood and maximum-a-posteriori estimates, and
 
 # Examples
 ```
-using NeuralEstimators, Flux, Statistics
+using NeuralEstimators, Flux, Statistics, Optim
 
 # Generate data from Z|μ,σ ~ N(μ, σ²) with μ, σ ~ U(0, 1)
 p = 2     # number of unknown parameters in the statistical model
@@ -594,7 +594,7 @@ w = 64 # width of each hidden layer
 ψ = Chain(
 	Dense(d, w, relu),
 	Dense(w, w, relu),
-	Dense(w, q, relu)
+	Dense(w, w, relu)
 	)
 ϕ = Chain(
 	Dense(w + p, w, relu),
@@ -613,11 +613,13 @@ r̂ = train(r̂, prior, simulate, m = m)
 θ = prior(1)
 z = simulate(θ, m)[1]
 θ₀ = [0.5, 0.5]                           # initial estimate
-mlestimate(r̂, z;  θ₀ = θ₀)                # maximum-likelihood estimate
-mapestimate(r̂, z; θ₀ = θ₀)                # maximum-a-posteriori estimate
+mlestimate(r̂, z;  θ₀ = θ₀)                # maximum-likelihood estimate (requires Optim.jl to be loaded)
+mapestimate(r̂, z; θ₀ = θ₀)                # maximum-a-posteriori estimate (requires Optim.jl to be loaded)
 θ_grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
 θ_grid = Float32.(θ_grid)
 r̂(z, θ_grid)                              # likelihood-to-evidence ratios over grid
+mlestimate(r̂, z;  θ_grid = θ_grid)        # maximum-likelihood estimate
+mapestimate(r̂, z; θ_grid = θ_grid)        # maximum-a-posteriori estimate
 sampleposterior(r̂, z; θ_grid = θ_grid)    # posterior samples
 ```
 """

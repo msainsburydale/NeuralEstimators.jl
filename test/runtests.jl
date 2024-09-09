@@ -2,7 +2,6 @@ using NeuralEstimators
 import NeuralEstimators: simulate
 using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, rowwisenorm
 using DataFrames
-using Distributions
 using Distances
 using Flux
 using Flux: batch, DataLoader, mae, mse
@@ -15,7 +14,6 @@ using SpecialFunctions: gamma
 using Statistics
 using Statistics: mean, sum
 using Test
-using Zygote
 array(size...; T = Float32) = T.(reshape(1:prod(size), size...) ./ prod(size))
 arrayn(size...; T = Float32) = array(size..., T = T) .- mean(array(size..., T = T))
 verbose = false # verbose used in code (not @testset)
@@ -580,13 +578,12 @@ parameter_names = ["μ", "σ"]
 struct Parameters <: ParameterConfigurations
 	θ
 end
-Ω = product_distribution([Normal(0, 1), Uniform(0.1, 1.5)])
-ξ = (Ω = Ω, parameter_names = parameter_names)
+ξ = (parameter_names = parameter_names, )
 K = 100
-Parameters(K::Integer, ξ) = Parameters(Float32.(rand(ξ.Ω, K)))
+Parameters(K::Integer, ξ) = Parameters(rand32(length(ξ.parameter_names), K))
 parameters = Parameters(K, ξ)
 show(devnull, parameters)
-@test size(parameters) == (2, 100)
+@test size(parameters) == (length(parameter_names), 100)
 @test _extractθ(parameters.θ) == _extractθ(parameters)
 p = length(parameter_names)
 
@@ -946,10 +943,7 @@ end
 
 @testset "EM" begin
 
-	# Set the prior distribution
-	Ω = (τ = Uniform(0.01, 0.3), ρ = Uniform(0.01, 0.3))
-
-	p = length(Ω)    # number of parameters in the statistical model
+	p = 2    # number of parameters in the statistical model
 
 	# Set the (gridded) spatial domain
 	points = range(0.0, 1.0, 16)
@@ -957,7 +951,6 @@ end
 
 	# Model information that is constant (and which will be passed into later functions)
 	ξ = (
-		Ω = Ω,
 		ν = 1.0, 	# fixed smoothness
 		S = S,
 		D = pairwise(Euclidean(), S, S, dims = 1),
@@ -973,9 +966,8 @@ end
 	function GPParameters(K::Integer, ξ)
 
 		# Sample parameters from the prior
-		Ω = ξ.Ω
-		τ = rand(Ω.τ, K)
-		ρ = rand(Ω.ρ, K)
+		τ = 0.3 * rand(K)
+		ρ = 0.3 * rand(K)
 
 		# Compute Cholesky factors
 		cholesky_factors = maternchols(ξ.D, ρ, ξ.ν)
@@ -1075,7 +1067,7 @@ end
 
 	neuralMAPestimator = initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)], activation_output = exp)
 	neuralem = EM(simulateconditional, neuralMAPestimator)
-	θ₀ = mean.([Ω...]) 						# initial estimate, the prior mean
+	θ₀ = [0.15, 0.15]						# initial estimate, the prior mean
 	H = 5
 	θ̂   = neuralem(Z, θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
 	θ̂2  = neuralem([Z, Z], θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
@@ -1101,7 +1093,7 @@ end
 
 
 @testset "QuantileEstimator: marginal" begin
-	using NeuralEstimators, Flux, Distributions
+	using NeuralEstimators, Flux
 
 	# Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
 	d = 1   # dimension of each independent replicate
@@ -1133,7 +1125,7 @@ end
 end
 
 @testset "QuantileEstimatorDiscrete: full conditionals" begin
-	using NeuralEstimators, Flux, Distributions
+	using NeuralEstimators, Flux
 
 	# Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
 	d = 1         # dimension of each independent replicate
@@ -1141,7 +1133,7 @@ end
 	m = 30        # number of independent replicates in each data set
 	function prior(K)
 		μ = randn(1, K)
-		σ = rand(InverseGamma(3, 1), 1, K)
+		σ = rand(1, K)
 		θ = Float32.(vcat(μ, σ))
 	end
 	simulate(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
@@ -1175,7 +1167,7 @@ end
 end
 
 @testset "QuantileEstimatorContinuous: marginal" begin
-	using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
+	using NeuralEstimators, Flux, InvertedIndices, Statistics
 
 	# Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
 	d = 1         # dimension of each independent replicate
@@ -1229,7 +1221,7 @@ end
 
 @testset "QuantileEstimatorContinuous: full conditionals" begin
 
-	using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
+	using NeuralEstimators, Flux, InvertedIndices, Statistics
 
 	# Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
 	d = 1         # dimension of each independent replicate
@@ -1237,7 +1229,7 @@ end
 	m = 30        # number of independent replicates in each data set
 	function prior(K)
 		μ = randn32(K)
-		σ = rand(InverseGamma(3, 1), K)
+		σ = rand(K)
 		θ = hcat(μ, σ)'
 		θ = Float32.(θ)
 		return θ
@@ -1316,11 +1308,13 @@ end
 	θ = prior(1)
 	z = simulate(θ, m)[1]
 	θ₀ = [0.5, 0.5]                           # initial estimate
-	mlestimate(r̂, z;  θ₀ = θ₀)                # maximum-likelihood estimate
-	mapestimate(r̂, z; θ₀ = θ₀)                # maximum-a-posteriori estimate
+	# mlestimate(r̂, z;  θ₀ = θ₀)                # maximum-likelihood estimate (requires Optim.jl to be loaded)
+	# mapestimate(r̂, z; θ₀ = θ₀)                # maximum-a-posteriori estimate (requires Optim.jl to be loaded)
 	θ_grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
 	θ_grid = Float32.(θ_grid)
 	r̂(z, θ_grid)                              # likelihood-to-evidence ratios over grid
+	mlestimate(r̂, z;  θ_grid = θ_grid)        # maximum-likelihood estimate
+	mapestimate(r̂, z; θ_grid = θ_grid)        # maximum-a-posteriori estimate
 	sampleposterior(r̂, z; θ_grid = θ_grid)    # posterior samples
 
 	# Estimate ratio for many data sets and parameter vectors

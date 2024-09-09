@@ -1059,6 +1059,23 @@ end
 # Q = R' * R                        # moralise
 
 
+# To remove dependence on Distributions, here we define a sampler from 
+# the Poisson distribution, equivalent to rand(Poisson(λ))
+function rpoisson(λ)
+    k = 0                   # Start with k = 0
+    p = exp(-λ)              # Initial probability value
+    cumulative_prob = p      # Start the cumulative probability
+    u = rand()               # Generate a uniform random number between 0 and 1
+    
+    # Keep adding terms to the cumulative probability until it exceeds u
+    while u > cumulative_prob
+        k += 1
+        p *= λ / k           # Update the probability for the next value of k
+        cumulative_prob += p  # Update the cumulative probability
+    end
+    
+    return k
+end
 
 """
 	maternclusterprocess(; λ=10, μ=10, r=0.1, xmin=0, xmax=1, ymin=0, ymax=1, unit_bounding_box=false)
@@ -1111,14 +1128,16 @@ function maternclusterprocess(; λ = 10, μ = 10, r = 0.1, xmin = 0, xmax = 1, y
 	areaTotalExt=xDeltaExt*yDeltaExt #area of extended rectangle
 
 	#Simulate Poisson point process
-	numbPointsParent=rand(Poisson(areaTotalExt*λ)) #Poisson number of points
+	# numbPointsParent=rand(Poisson(areaTotalExt*λ)) #Poisson number of points
+	numbPointsParent=rpoisson(areaTotalExt*λ) #Poisson number of points
 
 	#x and y coordinates of Poisson points for the parent
 	xxParent=xminExt.+xDeltaExt*rand(numbPointsParent)
 	yyParent=yminExt.+yDeltaExt*rand(numbPointsParent)
 
 	#Simulate Poisson point process for the daughters (ie final poiint process)
-	numbPointsDaughter=rand(Poisson(μ),numbPointsParent)
+	# numbPointsDaughter=rand(Poisson(μ),numbPointsParent)
+	numbPointsDaughter=[rpoisson(μ) for _ in 1:numbPointsParent]
 	numbPoints=sum(numbPointsDaughter) #total number of points
 
 	#Generate the (relative) locations in polar coordinates by

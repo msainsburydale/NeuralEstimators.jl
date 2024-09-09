@@ -1,10 +1,9 @@
 #TODO parallel computations in outer broadcasting functions
-#TODO when we add them, these methods will be easily extended to NLE and NPE
-#     (whatever methods allows a density to be evaluated)
+#TODO if we add them, these methods will be easily extended to NLE and NPE (whatever methods allows a density to be evaluated)
 
 # ---- Posterior sampling ----
 
-#TODO Basic MCMC sampler (will proceed based on using θ₀)
+#TODO Basic MCMC sampler (initialised with θ₀)
 @doc raw"""
 	sampleposterior(estimator::RatioEstimator, Z, N::Integer = 1000; θ_grid, prior::Function = θ -> 1f0)
 Samples from the approximate posterior distribution
@@ -70,7 +69,7 @@ where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function
 derived from `estimator`.
 
 If a vector `θ₀` of initial parameter estimates is given, the approximate
-likelihood is maximised by gradient descent. Otherwise, if a matrix of parameters
+likelihood is maximised by gradient descent (requires `Optim.jl` to be loaded). Otherwise, if a matrix of parameters
 `θ_grid` is given, the approximate likelihood is maximised by grid search.
 
 A maximum penalised likelihood estimate,
@@ -98,7 +97,7 @@ function controlled through the keyword argument `prior`
 (by default, a uniform prior is used).
 
 If a vector `θ₀` of initial parameter estimates is given, the approximate
-posterior density is maximised by gradient descent. Otherwise, if a matrix of parameters
+posterior density is maximised by gradient descent (requires `Optim.jl` to be loaded). Otherwise, if a matrix of parameters
 `θ_grid` is given, the approximate posterior density is maximised by grid search.
 
 See also [`mlestimate()`](@ref) for computing (approximate) maximum likelihood estimates.
@@ -124,7 +123,7 @@ function _maximisedensity(
 	if !isnothing(penalty) prior = penalty end
 
 	# Check that we have either a grid to search over or initial estimates
-	@assert !isnothing(θ_grid) || !isnothing(θ₀) "Either `θ_grid` or `θ₀` should be given"
+	@assert !isnothing(θ_grid) || !isnothing(θ₀) "One of `θ_grid` or `θ₀` should be given"
 	@assert isnothing(θ_grid) || isnothing(θ₀) "Only one of `θ_grid` and `θ₀` should be given"
 
 	if !isnothing(θ_grid)
@@ -135,26 +134,21 @@ function _maximisedensity(
 		density = pθ .* rZθ
 		θ̂ = θ_grid[:, argmax(density), :]   # extra colon to preserve matrix output
 
-	elseif !isnothing(θ₀)
-
-		θ₀ = Float32.(θ₀)       # convert for efficiency and to avoid warnings
-
-		objective(θ) = -first(prior(θ) * est(Z, θ)) # closure that will be minimised
-
-		# Gradient using reverse-mode automatic differentiation with Zygote
-		# ∇objective(θ) = gradient(θ -> objective(θ), θ)[1]
-		# θ̂ = optimize(objective, ∇objective, θ₀, LBFGS(); inplace = false) |> Optim.minimizer
-
-		# Gradient using finite differences
-		# θ̂ = optimize(objective, θ₀, LBFGS()) |> Optim.minimizer
-
-		# Gradient-free NelderMead algorithm (find that this is most stable)
-		θ̂ = optimize(objective, θ₀, NelderMead()) |> Optim.minimizer
+	else
+		θ̂ = _optimdensity(θ₀, prior, est)
 	end
 
 	return θ̂
 end
 _maximisedensity(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, _maximisedensity.(Ref(est), Z; kwargs...))
+
+# Here, we define _optimdensity() for the case that Optim has not been loaded
+# For the case that Optim is loaded, _optimdensity() is overloaded in ext/NeuralEstimatorsOptimExt.jl
+# NB Julia complains if we overload functions in package extensions... to get around this, here we
+# use a slightly different function signature (omitting ::Function)
+function _optimdensity(θ₀, prior, est)
+	error("A vector of initial parameter estimates has been provided, indicating that the approximate likelihood or posterior density will be maximised by numerical optimisation; please load the Julia package `Optim` to facilitate this")
+end
 
 
 # ---- Interval constructions ----

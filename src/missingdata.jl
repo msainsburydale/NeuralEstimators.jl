@@ -287,7 +287,6 @@ function removedata(Z::A, p::Vector{F}; prevent_complete_missing::Bool = true) w
 	m = size(Z)[end]           # number of replicates
 	d = prod(size(Z)[1:end-1]) # dimension of each replicate  NB assumes singleton channel dimension
 	@assert length(p) == d "The length of `p` should equal the dimenison d of each replicate"
-	multivariatebernoulli = product_distribution([Bernoulli(p[i]) for i ∈ eachindex(p)])
 
 	if all(p .== 1) prevent_complete_missing = false end
 
@@ -295,13 +294,13 @@ function removedata(Z::A, p::Vector{F}; prevent_complete_missing::Bool = true) w
 		Iᵤ = map(1:m) do _
 			complete_missing = true
 			while complete_missing
-				Iᵤ = rand(multivariatebernoulli)
+				Iᵤ = collect(rand(length(p)) .< p) # sample from multivariate bernoulli
 				complete_missing = !(0 ∈ Iᵤ)
 			end
 			Iᵤ
 		end
 	else
-		Iᵤ = [rand(multivariatebernoulli) for _ ∈ 1:m]
+		Iᵤ = [collect(rand(length(p)) .< p) for _ ∈ 1:m]
 	end
 
 	Iᵤ = stackarrays(Iᵤ)
