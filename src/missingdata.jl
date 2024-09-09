@@ -1,3 +1,5 @@
+#TODO think it's better if this is kept simple, and designed only for neural EM...
+
 @doc raw"""
     EM(simulateconditional::Function, MAP::Union{Function, NeuralEstimator}, θ₀ = nothing)
 Implements the (Bayesian) Monte Carlo expectation-maximisation (EM) algorithm,
@@ -78,8 +80,9 @@ function (em::EM)(
 	Z::A, θ₀ = nothing;
 	niterations::Integer = 50,
 	nsims::Integer = 1,
-	ϵ = 0.01,
 	nconsecutive::Integer = 3,
+	#nensemble::Integer = 5, # TODO implement and document
+	ϵ = 0.01,
 	ξ = nothing,
 	use_ξ_in_simulateconditional::Bool = false,
 	use_ξ_in_MAP::Bool = false,
@@ -89,7 +92,7 @@ function (em::EM)(
 	)  where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 
 	if isnothing(θ₀)
-		@assert !isnothing(em.θ₀) "Please provide initial estimates θ₀ in the function call when applying the `EM` object, or in the `EM` object itself."
+		@assert !isnothing(em.θ₀) "Initial estimates θ₀ must be provided either in the `EM` object or in the function call when applying the `EM` object"
 		θ₀ = em.θ₀
 	end
 
@@ -136,16 +139,12 @@ function (em::EM)(
   		else
 			convergence_counter = 0
 		end
-
-
 		l == niterations && verbose && @warn "The EM algorithm has failed to converge"
-
 		θₗ = θₗ₊₁
-
 		verbose && @show θₗ
 	end
 
-    return_iterates ? θ_all : θₗ # note that θₗ is contained in θ_all
+    return_iterates ? θ_all : θₗ
 end
 
 function (em::EM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = nothing; args...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}

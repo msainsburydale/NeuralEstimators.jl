@@ -18,22 +18,22 @@ requirement is that number of output neurons in the final layer of the inference
 network (i.e., the outer network) is equal to the number of parameters in the
 statistical model.
 """
-struct PointEstimator{F} <: NeuralEstimator
-	arch::F # NB not sure why I can't replace F with DeepSet
-	c::Union{Function,Compress}
-	# PointEstimator(arch) = isa(arch, PointEstimator) ? error("Please do not construct PointEstimator objects with another PointEstimator") : new(arch)
+struct PointEstimator <: NeuralEstimator
+	arch::DeepSet 
+	c::Union{Function,Compress} # NB don't document `c` since Compress layer is usually just included in `deepset`
 end
 PointEstimator(arch) = PointEstimator(arch, identity)
 @layer PointEstimator
 (est::PointEstimator)(Z) = est.c(est.arch(Z))
-#NB don't bother documenting c since Compress layer can just be included in deepset
 
 # ---- IntervalEstimator  ----
 
+#TODO enforce probs ∈ (0, 1)
+
 @doc raw"""
-	IntervalEstimator(u, v = u; probs = [0.025, 0.975], g::Function = exp)
-	IntervalEstimator(u, c::Union{Function,Compress}; probs = [0.025, 0.975], g::Function = exp)
-	IntervalEstimator(u, v, c::Union{Function,Compress}; probs = [0.025, 0.975], g::Function = exp)
+	IntervalEstimator(u::DeepSet, v::DeepSet = u; probs = [0.025, 0.975], g::Function = exp)
+	IntervalEstimator(u::DeepSet, c::Union{Function,Compress}; probs = [0.025, 0.975], g::Function = exp)
+	IntervalEstimator(u::DeepSet, v::DeepSet, c::Union{Function,Compress}; probs = [0.025, 0.975], g::Function = exp)
 
 A neural interval estimator which, given data ``Z``, jointly estimates marginal
 posterior credible intervals based on the probability levels `probs`.
@@ -93,16 +93,16 @@ estimator(Z)
 interval(estimator, Z)
 ```
 """
-struct IntervalEstimator{F, G, H} <: NeuralEstimator
-	u::F
-	v::G
+struct IntervalEstimator{H} <: NeuralEstimator
+	u::DeepSet
+	v::DeepSet
 	c::Union{Function,Compress}
 	probs::H
 	g::Function
 end
-IntervalEstimator(u, v = u; probs = [0.025, 0.975], g = exp) = IntervalEstimator(deepcopy(u), deepcopy(v), identity, probs, g)
-IntervalEstimator(u, c::Compress; probs = [0.025, 0.975], g = exp) = IntervalEstimator(deepcopy(u), deepcopy(u), c, probs, g)
-IntervalEstimator(u, v, c::Compress; probs = [0.025, 0.975], g = exp) = IntervalEstimator(deepcopy(u), deepcopy(v), c, probs, g)
+IntervalEstimator(u::DeepSet, v::DeepSet = u; probs = [0.025, 0.975], g = exp) = IntervalEstimator(deepcopy(u), deepcopy(v), identity, probs, g)
+IntervalEstimator(u::DeepSet, c::Compress; probs = [0.025, 0.975], g = exp) = IntervalEstimator(deepcopy(u), deepcopy(u), c, probs, g)
+IntervalEstimator(u::DeepSet, v::DeepSet, c::Compress; probs = [0.025, 0.975], g = exp) = IntervalEstimator(deepcopy(u), deepcopy(v), c, probs, g)
 @layer IntervalEstimator
 Flux.trainable(est::IntervalEstimator) = (u = est.u, v = est.v)
 function (est::IntervalEstimator)(Z)
@@ -110,8 +110,6 @@ function (est::IntervalEstimator)(Z)
 	bᵤ = bₗ .+ est.g.(est.v(Z))  # upper bound
 	vcat(est.c(bₗ), est.c(bᵤ))
 end
-#NB could rewrite this under-the-hood code in terms of QuantileEstimatorDiscrete to reduce code repetition
-
 
 # ---- QuantileEstimatorDiscrete  ----
 
@@ -259,7 +257,7 @@ struct QuantileEstimatorDiscrete{V, P} <: NeuralEstimator
 	g::Union{Function, Nothing}
 	i::Union{Integer, Nothing}
 end
-function QuantileEstimatorDiscrete(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus, i::Union{Integer, Nothing} = nothing)
+function QuantileEstimatorDiscrete(v::DeepSet; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus, i::Union{Integer, Nothing} = nothing)
 	if !isnothing(i) @assert i > 0 end
 	QuantileEstimatorDiscrete(deepcopy.(repeat([v], length(probs))), probs, g, i)
 end
@@ -920,11 +918,8 @@ function architecture()
 	PointEstimator(deepset)
 end
 
-# Ensemble size
-J = 3
-
-# Initialise ensemble
-ensemble = Ensemble(architecture, J)
+# Initialise ensemble with three components
+ensemble = Ensemble(architecture, 3)
 ensemble[1]      # access component estimators by indexing
 length(ensemble) # number of component estimators
 
@@ -950,8 +945,9 @@ Ensemble(architecture::Function, J::Integer) = Ensemble([architecture() for j in
 function train(ensemble::Ensemble, args...; kwargs...)
 	kwargs = (;kwargs...)
 	savepath = haskey(kwargs, :savepath) ? kwargs.savepath : ""
+	verbose  = haskey(kwargs, :verbose)  ? kwargs.verbose : true
 	estimators = map(enumerate(ensemble.estimators)) do (i, estimator)
-		@info "Training estimator $i of $(length(ensemble))"
+		verbose && @info "Training estimator $i of $(length(ensemble))"
 		if savepath != "" # modify the savepath before passing it onto train
 			kwargs = merge(kwargs, (savepath = joinpath(savepath, "estimator$i"),))
 		end
@@ -972,11 +968,14 @@ function (ensemble::Ensemble)(Z; aggr = median)
 	# Compute estimate from each estimator, yielding a vector of matrices
 	# NB can be done in parallel, but I think the overhead will outweigh the benefit
 	θ̂ = [estimator(Z) for estimator in ensemble.estimators]
+
 	# Stack matrices along a new third dimension
 	θ̂ = stackarrays(θ̂, merge = false) # equivalent to: θ̂ = cat(θ̂...; dims = 3)
-	# aggregate elementwise along the third dimension
-	θ̂ = mapslices(aggr, θ̂; dims = 3)
+	
+	# aggregate elementwise 
+	θ̂ = mapslices(aggr, cpu(θ̂); dims = 3) # NB mapslices doesn't work on the GPU, so transfer to CPU 
 	θ̂ = dropdims(θ̂; dims = 3)
+
 	return θ̂
 end
 

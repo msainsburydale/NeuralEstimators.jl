@@ -904,8 +904,7 @@ end
 	Z = rand(Float32, d, m)
 	parameter_names = ["ρ", "σ", "τ"]
 	p = length(parameter_names)
-	w = 8  # width of each layer
-	arch = initialise_estimator(p, architecture = "MLP", d = d, width = 8)
+	arch = initialise_estimator(p, architecture = "MLP", d = d).arch
 
 	# IntervalEstimator
 	estimator = IntervalEstimator(arch)

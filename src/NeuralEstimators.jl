@@ -21,7 +21,7 @@ using InvertedIndices
 using LinearAlgebra
 using NamedArrays
 using NearestNeighbors: KDTree, knn
-using Optim # needed to obtain the ML/MAP with neural ratio (at least via gradient descent... NB could make it a package extension)
+using Optim # needed to obtain the ML/MAP with neural ratio (at least via gradient descent... could make it a package extension)
 using Random: randexp, shuffle
 using RecursiveArrayTools: VectorOfArray, convert
 using SparseArrays
@@ -79,13 +79,7 @@ include("deprecated.jl")
 
 end
 
-#---- TODO
-# - Documentation: sometimes use 'd' to denote the dimension of the response variable, and sometimes 'q'... try to be consistent
-# - assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots)
-# - Examples: Bivariate data in multivariate section
-# - Helper functions for censored data, and provide an example in the documentation (maybe tied in with the bivariate data example).
-
-# ---- once the software is reasonably polished:
+# ---- once software is polished:
 # - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
 # -	Add NeuralEstimators.jl to https://github.com/smsharma/awesome-neural-sbi#code-packages-and-benchmarks.
 # -	Once NeuralEstimators is on the Julia package manager, add the following to index.md:
@@ -96,7 +90,12 @@ end
 # using Pkg; Pkg.add("NeuralEstimators")
 # ```
 
-# ---- long term:
+# ---- longer term/lower priority:
+# - Ensemble: make it “play well” throughout the package. For example, assess() with other kinds of neural estimators (e.g., quantile estimators), and ml/mapestimate() with RatioEstimators. 
+# - assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots) or some other means
+# - Examples: Bivariate data in multivariate section
+# - Helper functions for censored data, and provide an example in the documentation (maybe tied in with the bivariate data example).
+# - Documentation: sometimes use 'd' to denote the dimension of the response variable, and sometimes 'q'... try to be consistent
 # -	Add option to check validation risk (and save the optimal estimator) more frequently than the end of each epoch.
 # - Should have initialise_estimator() as an internal function, and instead have the public API be based on constructors of the various estimator classes. This aligns more with the basic ideas of Julia, where functions returning a certain class should be made as a constructor rather than a separate function.
 # - Examples: discrete parameters (e.g., Chan et al., 2018). Might need extra functionality for this.

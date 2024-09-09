@@ -41,7 +41,7 @@ S(1)
 (S::Vector{Function})(z) = vcat([s(z) for s ∈ S]...)
 # (S::Vector)(z) = vcat([s(z) for s ∈ S]...) # can use a more general construction like this to allow for vectors of NeuralEstimators to be called in this way
 
-#TODO show example with only user-defined summary statistics
+#TODO also show example with only user-defined summary statistics
 """
     DeepSet(ψ, ϕ, a = mean; S = nothing)
 The DeepSets representation [(Zaheer et al., 2017)](https://arxiv.org/abs/1703.06114),
@@ -117,17 +117,17 @@ qₜ = 16  # dimension of neural summary statistic
 w = 32  # width of hidden layers
 ψ = Chain(Dense(n, w, relu), Dense(w, qₜ, relu))
 ϕ = Chain(Dense(qₜ + qₛ, w, relu), Dense(w, p))
-θ̂ = DeepSet(ψ, ϕ; S = S)
+ds = DeepSet(ψ, ϕ; S = S)
 
-# Apply the deepset object
-θ̂(Z)
+# Apply the deepset object to data
+ds(Z)
 
 # Data with set-level information
 qₓ = 2 # dimension of set-level vector
 ϕ = Chain(Dense(qₜ + qₛ + qₓ, w, relu), Dense(w, p))
-θ̂ = DeepSet(ψ, ϕ; S = S)
+ds = DeepSet(ψ, ϕ; S = S)
 x = [rand32(qₓ) for _ ∈ eachindex(Z)]
-θ̂((Z, x))
+ds((Z, x))
 ```
 """
 struct DeepSet{T, G, K}
