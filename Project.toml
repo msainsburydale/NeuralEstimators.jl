@@ -38,6 +38,7 @@ NeuralEstimatorsPlotExt = ["AlgebraOfGraphics", "CairoMakie", "ColorSchemes"]
 [compat]
 BSON = "0.3"
 CSV = "0.10"
+ColorSchemes = "3"
 DataFrames = "1"
 Distances = "0.10, 0.11"
 Flux = "0.14"
