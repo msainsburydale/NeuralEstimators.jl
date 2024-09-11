@@ -39,6 +39,7 @@ NeuralEstimatorsPlotExt = ["AlgebraOfGraphics", "CairoMakie", "ColorSchemes"]
 AlgebraOfGraphics = "0.8"
 BSON = "0.3"
 CSV = "0.10"
+ColorSchemes = "2, 3"
 CairoMakie = "0.12"
 CUDA = "4, 5"
 DataFrames = "1"
