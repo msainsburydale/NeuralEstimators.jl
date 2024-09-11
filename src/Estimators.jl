@@ -878,6 +878,8 @@ coercetotuple(x) = (x...,)
 
 # ---- Ensemble of estimators ----
 
+#TODO Think about whether Parallel() might also be useful for ensembles (this might allow for faster computations, and immediate out-of-the-box integration with other parts of the package).
+
 """
 	Ensemble(estimators)
 	Ensemble(architecture::Function, J::Integer)

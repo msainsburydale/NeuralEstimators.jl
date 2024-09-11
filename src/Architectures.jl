@@ -763,6 +763,7 @@ PowerDifference(a::AbstractArray, b::Number) = PowerDifference(a, [b])
 
 
 #TODO add further details
+#TODO Groups in ResidualBlock (i.e., allow additional arguments to Conv).
 """
 	ResidualBlock(filter, in => out; stride = 1)
 

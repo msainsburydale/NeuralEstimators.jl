@@ -177,7 +177,7 @@ Replaces elements of `Z` with `missing`.
 The simplest method accepts a vector of integers `Iᵤ` that give the specific indices
 of the data to be removed.
 
-Alterntivaly, there are two methods available to generate data that are
+Alternatively, there are two methods available to generate data that are
 missing completely at random (MCAR).
 
 First, a vector `p` may be given that specifies the proportion of missingness
