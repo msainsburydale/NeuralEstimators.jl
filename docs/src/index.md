@@ -2,11 +2,18 @@
 
 Neural Bayes estimators are neural networks that transform data into point summaries of the posterior distribution. They are likelihood free and, once constructed, substantially faster than classical methods. Uncertainty quantification with neural Bayes estimators is also straightforward through the bootstrap distribution, which is essentially available "for free" with a neural estimator, or by training a neural Bayes estimator to approximate a set of marginal posterior quantiles. A related class of methods uses neural networks to approximate the likelihood function, the likelihood-to-evidence ratio, and the full posterior distribution. 
 
-The package `NeuralEstimators` facilitates the development of neural Bayes estimators and related neural inferential methods in a user-friendly manner. It caters for arbitrary models by having the user implicitly define their model via simulated data. This makes development particularly straightforward for models with existing implementations (possibly in other programming languages, e.g., `R` or `python`). A convenient interface for `R` users is available [here](https://github.com/msainsburydale/NeuralEstimators).
+The package `NeuralEstimators` facilitates the development of neural Bayes estimators and related neural inferential methods in a user-friendly manner. It caters for arbitrary models by having the user implicitly define their model via simulated data. This makes development particularly straightforward for models with existing implementations (possibly in other programming languages, e.g., `R` or `python`). A convenient interface for `R` users is available [here](https://github.com/msainsburydale/NeuralEstimators) and on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
 
 
 ### Getting started
-Install `NeuralEstimators` using the following command inside `Julia`:
+
+One may install the current stable version of `NeuralEstimators` using the following command inside `Julia`:
+
+```
+using Pkg; Pkg.add("NeuralEstimators")
+```
+
+Alternatively, one may install the current development version using the command:
 
 ```
 using Pkg; Pkg.add(url = "https://github.com/msainsburydale/NeuralEstimators.jl")

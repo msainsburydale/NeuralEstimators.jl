@@ -75,14 +75,9 @@ include("deprecated.jl")
 
 end
 
+#TODO makes sense to have m=1 as default in train() (it is often the case that m=1, especially in spatial statistics)
+
 # ---- longer term/lower priority:
-# -	Once registered, add the following to index.md:
-#
-# Install `NeuralEstimators` from [Julia](https://julialang.org/)'s package manager using the following command inside Julia:
-#
-# ```
-# using Pkg; Pkg.add("NeuralEstimators")
-# ```
 # - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
 # -	Add NeuralEstimators.jl to https://github.com/smsharma/awesome-neural-sbi#code-packages-and-benchmarks
 # - Ensemble: make it “play well” throughout the package. For example, assess() with other kinds of neural estimators (e.g., quantile estimators), and ml/mapestimate() with RatioEstimators. 

@@ -25,11 +25,10 @@ using GraphNeuralNetworks  # GNN architecture
 using Statistics           # mean()
 ```
 
-Finally, various GPU backends can be used (see the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/gpu/#GPU-Support) for details). For instance, if one wishes to employ an NVIDIA GPU when running the following examples, simply the load the following packages:  
+Finally, various GPU backends can be used (see the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/gpu/#GPU-Support) for details). For instance, if one wishes to employ an NVIDIA GPU when running the following examples, simply the load the `CUDA.jl` package:  
 
 ```
 using CUDA
-using cuDNN
 ```
 
 

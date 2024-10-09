@@ -13,12 +13,22 @@
 [R-repo-img]: https://img.shields.io/badge/R-interface-blue.svg
 [R-repo-url]: https://github.com/msainsburydale/NeuralEstimators
 
-`NeuralEstimators` facilitates the user-friendly development of neural point estimators, which are neural networks that transform data into parameter point estimates. They are likelihood free, substantially faster than classical methods, and can be designed to be approximate Bayes estimators. The package caters for any model for which simulation is feasible. See the [documentation](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) to get started!
+`NeuralEstimators` facilitates the user-friendly development of neural point estimators, which are neural networks that map data to a point summary of the posterior distribution. These estimators are likelihood-free and amortised, in the sense that, after an initial setup cost, inference from observed data can be made in a fraction of the time required by conventional approaches. It also facilitates the construction of neural networks that approximate the likelihood-to-evidence ratio in an amortised fashion, which allows for making inference based on the likelihood function or the entire posterior distribution. The package caters for any model for which simulation is feasible by allowing the user to implicitly define their model via simulated data. See the [documentation](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) to get started!
+
+
+### Installation 
+
+To install the package, please:
+
+1. Install `Julia` (see [here](https://julialang.org/downloads/)).
+1. Install `NeuralEstimators.jl`: 
+	- To install the current stable version of the package, run the command `using Pkg; Pkg.add("NeuralEstimators")` inside `Julia`. 
+	- Alternatively, one may install the development version with the command `using Pkg; Pkg.add(url="https://github.com/msainsburydale/NeuralEstimators.jl")`.
+
 
 ### R interface
 
-A convenient interface for `R` users is available [here](https://github.com/msainsburydale/NeuralEstimators).
-
+A convenient interface for `R` users is available [here](https://github.com/msainsburydale/NeuralEstimators) and on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
 
 ### Supporting and citing
 
