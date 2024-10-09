@@ -226,40 +226,44 @@ end
 function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where A
   	summarystatistics.(Ref(d), Z)
 end
+
 # Multiple data sets: optimised version for array data
 function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-
-
 	if !isnothing(d.ψ)
-		# Convert to a single large array and then apply the inner network
-		ψa = d.ψ(stackarrays(Z))
+		if _first_N_minus_1_dims_identical(Z)
+			# Convert to a single large array and then apply the inner network
+			ψa = d.ψ(stackarrays(Z))
 
-		# Compute the indices needed for aggregation and construct a tuple of colons
-		# used to subset all but the last dimension of ψa.
-		indices = _getindices(Z)
-		colons  = ntuple(_ -> (:), ndims(ψa) - 1)
+			# Compute the indices needed for aggregation and construct a tuple of colons
+			# used to subset all but the last dimension of ψa.
+			indices = _getindices(Z)
+			colons  = ntuple(_ -> (:), ndims(ψa) - 1)
 
-		# Construct the summary statistics
-		# NB with the new "explicit" gradient() required by Flux/Zygote, an error is
-		# caused if one uses the same variable name outside and inside a broadcast
-		# like this. For instance, if I were to name the result of the following call
-		# "t" and include a variable inside the broadcast called "t", an error would
-		# be thrown by gradient(), since "t" already appears
-		t = map(indices) do idx
-			d.a(ψa[colons..., idx])
+			# Construct the summary statistics
+			# NB with the new "explicit" gradient() required by Flux/Zygote, an error is
+			# caused if one uses the same variable name outside and inside a broadcast
+			# like this. For instance, if I were to name the result of the following call
+			# "t" and include a variable inside the broadcast called "t", an error would
+			# be thrown by gradient(), since "t" already appears
+			t = map(indices) do idx
+				d.a(ψa[colons..., idx])
+			end
+
+			if !isnothing(d.S)
+				s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
+				if !isnothing(d.ψ)
+					t = vcat.(t, s)
+				else
+					t = s
+				end
+			end
+		
+			return t
+		else 
+			# Array sizes differ, so therefor cannot stack together; use simple (and slower) broadcasting method (identical to general fallback method defined above)
+			return summarystatistics.(Ref(d), Z)
 		end
 	end
-
-	if !isnothing(d.S)
-		s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
-		if !isnothing(d.ψ)
-			t = vcat.(t, s)
-		else
-			t = s
-		end
-	end
-
-	return t
 end
 
 # Multiple data sets: optimised version for graph data
@@ -315,6 +319,28 @@ end
 # g = Flux.batch(g)
 # g = simulate(θ, 1:30)
 # g = Flux.batch(g)
+
+"""
+```
+Z = [rand(rand(1:10), rand(1:10), 1, rand(1:10)) for _ in 1:5]
+_first_N_minus_1_dims_identical(Z) # false 
+Z = [rand(16, 16, 1, rand(1:10)) for _ in 1:5]
+_first_N_minus_1_dims_identical(Z) # true
+```
+"""
+function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})
+    # Get the size of the first array up to N-1 dimensions
+    first_size = size(arrays[1])[1:end-1]
+    
+    # Loop over the remaining arrays and compare their first N-1 dimensions
+    for i in 2:length(arrays)
+        if size(arrays[i])[1:end-1] != first_size
+            return false  # Dimensions do not match
+        end
+    end
+    
+    return true  # All arrays have the same first N-1 dimensions
+end
 
 
 # ---- Activation functions -----
