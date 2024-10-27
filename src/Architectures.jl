@@ -203,8 +203,6 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	reduce(hcat, vec.(permutedims.(result)))
 end
 
-#TODO document summarystatistics()
-
 # Fallback method to allow neural estimators to be called directly
 summarystatistics(est, Z) = summarystatistics(est.deepset, Z)
 # Single data set
@@ -260,7 +258,7 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
 		
 			return t
 		else 
-			# Array sizes differ, so therefor cannot stack together; use simple (and slower) broadcasting method (identical to general fallback method defined above)
+			# Array sizes differ, so therefore cannot stack together; use simple (and slower) broadcasting method (identical to general fallback method defined above)
 			return summarystatistics.(Ref(d), Z)
 		end
 	end
@@ -278,10 +276,11 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 		# independent replicate), record the grouping of independent replicates
 		# so that they can be combined again later in the function
 		m = numberreplicates.(Z)
-		g = @ignore_derivatives Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
 
 		# Propagation and readout
+		g = @ignore_derivatives Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
 		R = d.ψ(g)
+		#R = stackarrays(d.ψ.(Z)) # Version that doesn't require us to use ignore_derivatives, but much slower (and haven't tested with m>1 independent replicates)
 
 		# Split R based on the original vector of data sets Z
 		if ndims(R) == 2
@@ -313,7 +312,7 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 	return t
 end
 
-# TODO For graph data, currently not allowed to have data sets with variable number of independent replicates, since in this case we can't stack the three-dimensional arrays:
+# TODO For graph data, currently not allowed to have data sets with variable numbers of independent replicates, since in this case we can't stack the three-dimensional arrays:
 # θ = sample(2)
 # g = simulate(θ, 5)
 # g = Flux.batch(g)

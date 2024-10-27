@@ -1,7 +1,7 @@
 name = "NeuralEstimators"
 uuid = "38f6df31-6b4a-4144-b2af-7ace2da57606"
 authors = ["Matthew Sainsbury-Dale <msainsburydale@gmail.com> and contributors"]
-version = "0.1.1"
+version = "0.2.0"
 
 [deps]
 BSON = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
@@ -39,9 +39,9 @@ NeuralEstimatorsPlotExt = ["AlgebraOfGraphics", "CairoMakie", "ColorSchemes"]
 AlgebraOfGraphics = "0.8"
 BSON = "0.3"
 CSV = "0.10"
-ColorSchemes = "2, 3"
-CairoMakie = "0.12"
 CUDA = "4, 5"
+CairoMakie = "0.12"
+ColorSchemes = "2, 3"
 DataFrames = "1"
 Distances = "0.10, 0.11"
 Flux = "0.14"

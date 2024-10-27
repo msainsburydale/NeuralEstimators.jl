@@ -43,7 +43,7 @@ include("Estimators.jl")
 export sampleposterior, mlestimate, mapestimate, bootstrap, interval
 include("inference.jl")
 
-export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights, PowerDifference
+export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights, KernelWeights, PowerDifference
 include("Graphs.jl")
 
 export simulate, simulategaussian, simulatepotts, simulateschlather

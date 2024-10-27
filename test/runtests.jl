@@ -315,11 +315,53 @@ end
 	# Construct and apply spatial graph convolution layer
 	l = SpatialGraphConv(1 => 10)
 	l(g)
-
-	# Construct and apply spatial graph convolution layer with global features
-	l = SpatialGraphConv(1 => 10, glob = true)
-	l(g)
 end
+
+# # Testing that the SpatialGraphConv layer can be optimised with gradient descent 
+# # using NeuralEstimators, Flux, GraphNeuralNetworks
+
+# # Toy training data 
+# data = map(1:100) do _
+# 	m = 5                  # number of independent replicates
+# 	d = 2                  # spatial dimension
+# 	n = 250                # number of spatial locations
+# 	S = rand(n, d)         # spatial locations
+# 	Z = rand(n, m)         # data
+# 	g = spatialgraph(S, Z) # construct the graph
+# end 
+
+# # Initialise the layer
+# l = SpatialGraphConv(1 => 10, identity)
+
+# # Test that the layer can be applied to data 
+# l(data[1])
+
+# l.f.a
+# l.f.b
+# l.Γ1
+# l.Γ2
+# sum(abs.(l.Γ1)) # 4.5
+# sum(abs.(l.Γ2)) # 4
+
+# # Optimise the layer (just train it to minimise the norm of the features)
+# norm_loss(output) = sum(abs, output)  
+# optim = Flux.setup(Flux.Adam(0.01), l)
+# for epoch in 1:200
+#     for z in data
+#         loss, grads = Flux.withgradient(l) do l
+# 			y = l(z).ndata.x
+#             Flux.mae(y, 0)
+#         end
+#         Flux.update!(optim, l, grads[1])
+#     end
+# end
+
+# l.f.a
+# l.f.b
+# l.Γ1
+# l.Γ2
+# sum(abs.(l.Γ1)) # 0.9
+# sum(abs.(l.Γ2)) # 0.9
 
 @testset "IndicatorWeights" begin
 	h_max = 1

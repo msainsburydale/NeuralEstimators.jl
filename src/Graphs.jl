@@ -198,13 +198,59 @@ end
 Flux.trainable(l::IndicatorWeights) =  ()
 
 
+@doc raw"""
+	KernelWeights(h_max, n_bins::Integer)
+	(w::KernelWeights)(h::Matrix) 
+For spatial locations $\boldsymbol{s}$ and  $\boldsymbol{u}$, creates a spatial weight function defined as
+
+```math 
+\boldsymbol{w}(\boldsymbol{s}, \boldsymbol{u}) \equiv (\exp(-(h - \mu_k)^2 / (2\sigma_k^2)) : k = 1, \dots, K)',
+```
+
+where $h \equiv \|\boldsymbol{s} - \boldsymbol{u}\|$ is the spatial distance between $\boldsymbol{s}$ and $\boldsymbol{u}$, and ${\mu_k : k = 1, \dots, K}$ and ${\sigma_k : k = 1, \dots, K}$ are the means and standard deviations of the Gaussian kernels for each bin, covering the spatial distances between 0 and h_max.
+
+# Examples 
+```
+using NeuralEstimators 
+
+h_max = 1
+n_bins = 10
+w = KernelWeights(h_max, n_bins)
+h = rand(1, 30) # distances between 30 pairs of spatial locations 
+w(h)
+```
+""" 
+struct KernelWeights 
+	mu 
+	sigma 
+end 
+function KernelWeights(h_max, n_bins::Integer) 
+	h_cutoffs = range(0, stop=h_max, length=n_bins+1) 
+	h_cutoffs = collect(h_cutoffs)
+	mu = [(h_cutoffs[i] + h_cutoffs[i+1]) / 2 for i in 1:n_bins] # midpoints of the intervals 
+	sigma = [(h_cutoffs[i+1] - h_cutoffs[i]) / 4 for i in 1:n_bins] # std dev so that 95% of mass is within the bin 
+	mu = Float32.(mu)
+	sigma = Float32.(sigma)
+	KernelWeights(mu, sigma) 
+end 
+function (l::KernelWeights)(h::M) where M <: AbstractMatrix{T} where T 
+	mu = l.mu 
+	sigma = l.sigma 
+	N = [exp.(-(h .- mu[i:i]).^2 ./ (2 * sigma[i:i].^2)) for i in eachindex(mu)] # Gaussian kernel for each bin (NB avoid scalar indexing by i:i)
+	N = reduce(vcat, N) 
+	Float32.(N) 
+end 
+@layer KernelWeights 
+Flux.trainable(l::KernelWeights) = ()
+
+
 # ---- GraphConv ----
 
 # 3D array version of GraphConv to allow the option to forego spatial information
 """
 	(l::GraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
 
-Given a graph with node features a three dimensional array of size `in` × m × n, 
+Given a graph with node features consisting of a three dimensional array of size `in` × m × n, 
 where n is the number of nodes in the graph, this method yields an array with 
 dimensions `out` × m × n. 
 
@@ -283,14 +329,13 @@ although a custom choice for this function can be provided using the keyword arg
 - `w = nothing` 
 - `w_width = 128`: (Only applicable if `w = nothing`) The width of the hidden layer in the MLP used to model $\boldsymbol{w}(\cdot, \cdot)$. 
 - `w_out = in`: (Only applicable if `w = nothing`) The output dimension of $\boldsymbol{w}(\cdot, \cdot)$.  
-- `glob = false`: If `true`, global features will be computed directly from the entire spatial graph. These features are of the form: $\boldsymbol{T} = \sum_{j=1}^n\sum_{j' \in \mathcal{N}(j)}\boldsymbol{w}^{(l)}(\|\boldsymbol{s}_{j'} - \boldsymbol{s}_j\|) \odot f^{(l)}(\boldsymbol{h}^{(l-1)}_{j}, \boldsymbol{h}^{(l-1)}_{j'})$. Note that these global features are no longer associated with a graph structure, and should therefore only be used in the final layer of a summary-statistics module. 
 
 # Examples
 ```
 using NeuralEstimators, Flux, GraphNeuralNetworks
 
 # Toy spatial data
-m = 5                  # number of replicates
+m = 5                  # number of independent replicates
 d = 2                  # spatial dimension
 n = 250                # number of spatial locations
 S = rand(n, d)         # spatial locations
@@ -309,7 +354,6 @@ struct SpatialGraphConv{W<:AbstractMatrix, A, B,C, F} <: GNNLayer
     w::A
 	f::C
 	g::F
-    glob::Bool 
 end
 @layer SpatialGraphConv
 WeightedGraphConv = SpatialGraphConv; export WeightedGraphConv # alias for backwards compatability
@@ -321,8 +365,7 @@ function SpatialGraphConv(
 	w = nothing,
 	f = nothing,
 	w_out::Union{Integer, Nothing} = nothing, 
-	w_width::Integer = 128, 
-	glob::Bool = false 
+	w_width::Integer = 128
 	)
 
 	in, out = ch
@@ -359,16 +402,7 @@ function SpatialGraphConv(
 	# Bias vector
 	b = bias ? Flux.create_bias(Γ1, true, out) : false
 
-    SpatialGraphConv(Γ1, Γ2, b, w, f, g, glob)
-end
-function (l::SpatialGraphConv)(g::GNNGraph)
-	Z = :Z ∈ keys(g.ndata) ? g.ndata.Z : first(values(g.ndata)) 
-	h = l(g, Z)
-	if l.glob 
-		@ignore_derivatives GNNGraph(g, gdata = (g.gdata..., R = h))
-	else 
-		@ignore_derivatives GNNGraph(g, ndata = (g.ndata..., Z = h))
-	end
+    SpatialGraphConv(Γ1, Γ2, b, w, f, g)
 end
 function (l::SpatialGraphConv)(g::GNNGraph, x::M) where M <: AbstractMatrix{T} where {T}
 	l(g, reshape(x, size(x, 1), 1, size(x, 2)))
@@ -395,39 +429,17 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3}
 	# 3. Vector output with vector input features, in which case the dimensionalities must match 
 	w = l.w(s) 
 
-	if l.glob 
-		w̃ = normalise_edges(g, w) # Sanity check: sum(w̃; dims = 2) # all close to one 
-	else 
-		w̃ = normalise_edge_neighbors(g, w) # Sanity check: aggregate_neighbors(g, +, w̃) # zeros and ones 
-	end 
+	w̃ = normalise_edge_neighbors(g, w) # Sanity check: aggregate_neighbors(g, +, w̃) # zeros and ones 
 	
 	# Coerce to three-dimensional array, repeated to match the number of independent replicates
 	w̃ = coerce3Darray(w̃, m)
 
 	# Compute spatially-weighted sum of input features over each neighbourhood 
-	msg = apply_edges((l, xi, xj, w̃) -> w̃ .* l.f(xi, xj), g, l, x, x, w̃)
-	if l.glob 
-		h̄ = reduce_edges(+, g, msg) # sum over all neighbourhoods in the graph 
-	else 
-		#TODO Need this to be a summation that ignores missing
-		h̄ = aggregate_neighbors(g, +, msg) # sum over each neighbourhood 
-	end 
+	#msg = apply_edges((l, xi, xj, w̃) -> w̃ .* l.f(xi, xj), g, l, x, x, w̃)
+	msg = apply_edges((xi, xj, w̃) -> w̃ .* l.f(xi, xj), g, x, x, w̃)
+	h̄ = aggregate_neighbors(g, +, msg) # sum over each neighbourhood individually 
 
-	# Remove elements in which w summed to zero (i.e., deal with possible division by zero by omitting these terms from the convolution)
-	# (currently only do this for locally constructed summary statistics)
-	# if !l.glob 
-	# 	w_sums = aggregate_neighbors(g, +, w) 
-	# 	w_zero = w_sums .== 0
-	# 	w_zero = coerce3Darray(w_zero, m)
-	# 	h̄ = removedata(h̄, vec(w_zero))
-	# end
-
-	if l.glob 
-		return h̄ 
-	else 
-		return l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h̄ .+ l.b) # ⊠ is shorthand for batched_mul  #NB any missingness will cause the feature vector to be entirely missing 
-		#return [ismissing(a) ? missing : l.g(a) for a in x .+ h̄ .+ l.b]
-	end 
+	l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h̄ .+ l.b) # ⊠ is shorthand for batched_mul  #NB any missingness will cause the feature vector to be entirely missing
 end
 function Base.show(io::IO, l::SpatialGraphConv)
     in_channel  = size(l.Γ1, ndims(l.Γ1))
@@ -471,20 +483,14 @@ Normalise the edge features `e` to sum to one over each node's neighborhood,
 ```
 """
 function normalise_edge_neighbors(g::AbstractGNNGraph, e)
-    if g isa GNNHeteroGraph
-        for (key, value) in g.num_edges
-            @assert size(e)[end] == value
-        end
-    else
-        @assert size(e)[end] == g.num_edges
-    end
+	@assert size(e)[end] == g.num_edges
     s, t = edge_index(g)
     den = gather(scatter(+, e, t), t)
     return e ./ (den .+ eps(eltype(e)))
 end
 
 @doc raw"""
-	GNNSummary(propagation, readout; globalfeatures = nothing)
+	GNNSummary(propagation, readout)
 
 A graph neural network (GNN) module designed to serve as the summary network `ψ`
 in the [`DeepSet`](@ref) representation when the data are graphical (e.g.,
@@ -495,13 +501,6 @@ hidden-feature graphs. The `readout` module aggregates these feature graphs into
 a single hidden feature vector of fixed length (i.e., a vector of summary
 statistics). The summary network is then defined as the composition of the
 propagation and readout modules.
-
-Optionally, one may also include a module that extracts features directly 
-from the graph, through the keyword argument `globalfeatures`. This module, 
-when applied to a `GNNGraph`, should return a matrix of features, 
-where the columns of the matrix correspond to the independent replicates 
-(e.g., a 5x10 matrix is expected for 5 hidden features for each of 10 
-independent replicates stored in the graph).  
 
 The data should be stored as a `GNNGraph` or `Vector{GNNGraph}`, where
 each graph is associated with a single parameter vector. The graphs may contain
@@ -544,12 +543,10 @@ g₃ = batch([g₁, g₂])
 θ̂([g₁, g₂, g₃])
 ```
 """
-struct GNNSummary{F, G, H}
+struct GNNSummary{F, G}
 	propagation::F   # propagation module
 	readout::G       # readout module
-	globalfeatures::H
 end
-GNNSummary(propagation, readout; globalfeatures = nothing) = GNNSummary(propagation, readout, globalfeatures)
 @layer GNNSummary
 Base.show(io::IO, D::GNNSummary) = print(io, "\nThe propagation and readout modules of a graph neural network (GNN), with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)")
 
@@ -564,15 +561,6 @@ function (ψ::GNNSummary)(g::GNNGraph)
 	# nrows = number of summary statistics
 	# ncols = number of independent replicates
 	R = ψ.readout(h, Z)
-
-	if !isnothing(ψ.globalfeatures)
-		R₂ = ψ.globalfeatures(g)
-		if isa(R₂, GNNGraph)
-			@assert length(R₂.gdata) > 0 "The `globalfeatures` field of a `GNNSummary` object must return either an array or a graph with a non-empty field `gdata`"
-			R₂ = first(values(R₂.gdata)) 
-		end
-		R = vcat(R, R₂)
-	end
 
 	# Reshape from three-dimensional array to matrix 
 	R = reshape(R, size(R, 1), :) #NB not ideal to do this here, I think, makes the output of summarystatistics() quite confusing. (keep in mind the behaviour of summarystatistics on a vector of graphs and a single graph) 

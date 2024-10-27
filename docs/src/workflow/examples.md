@@ -96,7 +96,7 @@ plot(assessment)
 
 ![Univariate Gaussian example: Estimates vs. truth](../assets/figures/univariate.png)
 
-As an alternative form of uncertainty quantification, one may approximate a set of marginal posterior quantiles by training a second estimator under the quantile loss function, which allows one to generate approximate marginal posterior credible intervals. This is facilitated with [`IntervalEstimator`](@ref) which, by default, targets 95% central credible intervals:
+As an alternative form of uncertainty quantification, one may approximate a set of marginal posterior quantiles by training a neural Bayes estimator under the quantile loss function, which allows one to generate approximate marginal posterior credible intervals. This is facilitated with [`IntervalEstimator`](@ref) which, by default, targets 95% central credible intervals:
 
 ```
 q̂ = IntervalEstimator(architecture)
@@ -325,10 +325,10 @@ simulate(parameters::Parameters, m::Integer = 1) = simulate(parameters, range(m,
 Next we construct an appropriate GNN architecture, as illustrated below. Here, our goal is to construct a point estimator, however any other kind of estimator (see [Estimators](@ref)) can be constructed by simply substituting the appropriate estimator class in the final line below:
 
 ```
-# Spatial weight function constructed using 0-1 basis functions 
+# Spatial weight functions: continuous surrogates for 0-1 basis functions 
 h_max = 0.15 # maximum distance to consider 
 q = 10       # output dimension of the spatial weights
-w = IndicatorWeights(h_max, q)
+w = KernelWeights(h_max, q)
 
 # Propagation module
 propagation = GNNChain(
@@ -339,11 +339,11 @@ propagation = GNNChain(
 # Readout module
 readout = GlobalPool(mean)
 
-# Global features 
-globalfeatures = SpatialGraphConv(1 => q, relu, w = w, w_out = q, glob = true)
-
 # Summary network
-ψ = GNNSummary(propagation, readout, globalfeatures)
+ψ = GNNSummary(propagation, readout)
+
+# Expert summary statistics, the empirical variogram
+S = NeighbourhoodVariogram(h_max, q)
 
 # Mapping module
 ϕ = Chain(
@@ -353,7 +353,7 @@ globalfeatures = SpatialGraphConv(1 => q, relu, w = w, w_out = q, glob = true)
 )
 
 # DeepSet object
-deepset = DeepSet(ψ, ϕ)
+deepset = DeepSet(ψ, ϕ; S = S)
 
 # Point estimator
 θ̂ = PointEstimator(deepset)
@@ -363,10 +363,10 @@ Next, we train the estimator:
 
 ```
 m = 1
-K = 3000
+K = 5000
 θ_train = sample(K)
 θ_val   = sample(K÷5)
-θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 5)
+θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 20)
 ```
 
 Then, we assess our trained estimator as before: 
@@ -375,15 +375,15 @@ Then, we assess our trained estimator as before:
 θ_test = sample(1000)
 Z_test = simulate(θ_test, m)
 assessment = assess(θ̂, θ_test, Z_test)
-bias(assessment)    # 0.001
-rmse(assessment)    # 0.037
-risk(assessment)    # 0.029
+bias(assessment)   
+rmse(assessment)    
+risk(assessment)   
 plot(assessment)   
 ```
 
 ![Estimates from a graph neural network (GNN) based neural Bayes estimator](../assets/figures/spatial.png)
 
-Finally, once the estimator has been assessed and is deemed to be performant, it may be applied to observed data, with bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`interval`](@ref). Below, we use simulated data as a substitute for observed data:
+Finally, once the estimator has been assessed, it may be applied to observed data, with bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`interval`](@ref). Below, we use simulated data as a substitute for observed data:
 
 ```
 parameters = sample(1)             # sample a single parameter vector
