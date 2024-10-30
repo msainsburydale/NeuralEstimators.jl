@@ -17,14 +17,14 @@ provided with specific sets of parameters (`θ_train` and `θ_val`) and/or data
 In all methods, the validation parameters and data are held fixed to reduce noise when evaluating the validation risk.
 
 # Keyword arguments common to all methods:
-- `loss = mae`
-- `epochs = 100`
-- `batchsize = 32`
-- `optimiser = ADAM()`
+- `loss = mae`: loss function to evaluate performance. For some classes of estimators (e.g., `QuantileEstimator` and `RatioEstimator`), the loss function does not need to be specified.
+- `epochs = 100`: number of epochs to train the neural network. An epoch is one complete pass through the entire training data set when doing stochastic gradient descent.
+- `batchsize = 32`: the batchsize to use when performing stochastic gradient descent, that is, the number of training samples processed between each update of the neural-network parameters.
+- `optimiser = ADAM()`: optimisation algorithm used to update the neural-network parameters.
 - `savepath::String = ""`: path to save the trained estimator and other information; if an empty string (default), nothing is saved. Otherwise, the neural-network parameters (i.e., the weights and biases) will be saved during training as `bson` files; the risk function evaluated over the training and validation sets will also be saved, in the first and second columns of `loss_per_epoch.csv`, respectively; the best parameters (as measured by validation risk) will be saved as `best_network.bson`.
 - `stopping_epochs = 5`: cease training if the risk doesn't improve in this number of epochs.
-- `use_gpu = true`
-- `verbose = true`
+- `use_gpu = true`: flag indicating whether to use a GPU if one is available.
+- `verbose = true`: flag indicating whether information, including empirical risk values and timings, should be printed to the console during training.
 
 # Keyword arguments common to `train(θ̂, sampler, simulator)` and `train(θ̂, θ_train, θ_val, simulator)`:
 - `m`: sample sizes (either an `Integer` or a collection of `Integers`). The `simulator` is called as `simulator(θ, m)`.
@@ -830,7 +830,7 @@ end
 
 function _savestate(θ̂, savepath, epoch = "")
 	if !ispath(savepath) mkpath(savepath) end
-	model_state = Flux.state(cpu(θ̂)) 
+	model_state = Flux.state(cpu(θ̂))
 	file_name = epoch == "" ? "network.bson" : "network_epoch$epoch.bson"
 	network_path = joinpath(savepath, file_name)
 	@save network_path model_state

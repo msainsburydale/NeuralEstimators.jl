@@ -359,7 +359,7 @@ end
 WeightedGraphConv = SpatialGraphConv; export WeightedGraphConv # alias for backwards compatability
 function SpatialGraphConv(
 	ch::Pair{Int,Int},
-	g = sigmoid;
+	g = relu;
 	init = glorot_uniform,
 	bias::Bool = true,
 	w = nothing,
@@ -391,7 +391,6 @@ function SpatialGraphConv(
 
 	# Function of Z
 	if isnothing(f)
-		# TODO f = appropriately constructed MLP (actually this is difficult since we have two 3D arrays as inputs...)
 		f = PowerDifference([0.5f0], [2.0f0])
 	end
 

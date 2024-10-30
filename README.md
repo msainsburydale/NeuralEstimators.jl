@@ -20,7 +20,7 @@
 
 To install the package, please:
 
-1. Install `Julia` (see [here](https://julialang.org/downloads/)).
+1. Install [`Julia`](https://julialang.org/downloads/).
 1. Install `NeuralEstimators.jl`: 
 	- To install the current stable version of the package, run the command `using Pkg; Pkg.add("NeuralEstimators")` inside `Julia`. 
 	- Alternatively, one may install the development version with the command `using Pkg; Pkg.add(url="https://github.com/msainsburydale/NeuralEstimators.jl")`.
@@ -28,7 +28,7 @@ To install the package, please:
 
 ### R interface
 
-A convenient interface for `R` users is available [here](https://github.com/msainsburydale/NeuralEstimators) and on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
+A convenient interface for `R` users is available on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html) and on [GitHub](https://github.com/msainsburydale/NeuralEstimators).
 
 ### Supporting and citing
 
