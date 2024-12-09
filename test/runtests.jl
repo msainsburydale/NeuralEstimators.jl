@@ -426,6 +426,7 @@ end
 
 	## Potts model
 	β = 0.7
+	complete_grid   = simulatepotts(n, n, 2, 0.99)      # simulate marginally from the Ising model
 	complete_grid   = simulatepotts(n, n, 2, β)         # simulate marginally from the Ising model
 	@test size(complete_grid) == (n, n)
 	@test length(unique(complete_grid)) == 2

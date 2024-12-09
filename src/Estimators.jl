@@ -923,6 +923,7 @@ end
 # Initialise ensemble with three components
 ensemble = Ensemble(architecture, 3)
 ensemble[1]      # access component estimators by indexing
+ensemble[1:2]    # indexing with an iterable collection returns the corresponding ensemble 
 length(ensemble) # number of component estimators
 
 # Training
@@ -983,6 +984,8 @@ end
 
 # Overload Base functions
 Base.getindex(e::Ensemble, i::Integer) = e.estimators[i]
+Base.getindex(e::Ensemble, indices::AbstractVector{<:Integer}) = Ensemble(e.estimators[indices])
+Base.getindex(e::Ensemble, indices::UnitRange{<:Integer}) = Ensemble(e.estimators[indices])
 Base.length(e::Ensemble) = length(e.estimators)
 Base.eachindex(e::Ensemble) = eachindex(e.estimators)
 Base.show(io::IO, ensemble::Ensemble) = print(io, "\nEnsemble with $(length(ensemble.estimators)) component estimators")

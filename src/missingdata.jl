@@ -1,5 +1,3 @@
-#TODO think it's better if this is kept simple, and designed only for neural EM...
-
 @doc raw"""
     EM(simulateconditional::Function, MAP::Union{Function, NeuralEstimator}, θ₀ = nothing)
 Implements the (Bayesian) Monte Carlo expectation-maximisation (EM) algorithm,
@@ -69,8 +67,10 @@ struct EM{F,T,S}
 end
 EM(simulateconditional, MAP) = EM(simulateconditional, MAP, nothing)
 EM(em::EM, θ₀) = EM(em.simulateconditional, em.MAP, θ₀)
+EM(simulateconditional, MAP, θ₀::Number) = EM(simulateconditional, MAP, [θ₀])
+#TODO think it's better if this is kept simple, and designed only for neural EM...
 
-function (em::EM)(Z::A, θ₀ = nothing; args...)  where {A <: AbstractArray{T, N}} where {T, N}
+function (em::EM)(Z::A, θ₀ = nothing; kwargs...)  where {A <: AbstractArray{T, N}} where {T, N}
 	@warn "Data has been passed to the EM algorithm that contains no missing elements... the MAP estimator will be applied directly to the data"
 	em.MAP(Z)
 end
@@ -81,7 +81,6 @@ function (em::EM)(
 	niterations::Integer = 50,
 	nsims::Integer = 1,
 	nconsecutive::Integer = 3,
-	#nensemble::Integer = 5, # TODO implement and document
 	ϵ = 0.01,
 	ξ = nothing,
 	use_ξ_in_simulateconditional::Bool = false,
@@ -147,12 +146,16 @@ function (em::EM)(
     return_iterates ? θ_all : θₗ
 end
 
-function (em::EM)(Z::V, θ₀::Union{Vector, Matrix, Nothing} = nothing; args...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
+function (em::EM)(Z::V, θ₀::Union{Number, Vector, Matrix, Nothing} = nothing; args...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 
 	if isnothing(θ₀)
 		@assert !isnothing(em.θ₀) "Please provide initial estimates `θ₀` in the function call or in the `EM` object."
 		θ₀ = em.θ₀
 	end
+
+	if isa(θ₀, Number)
+        θ₀ = [θ₀]  
+    end
 
 	if isa(θ₀, Vector)
 		θ₀ = repeat(θ₀, 1, length(Z))

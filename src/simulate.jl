@@ -446,12 +446,47 @@ function simulatepotts(grid::AbstractMatrix{Int}, β; nsims::Int = 1, num_iterat
   	#TODO sum(chequerboard1) == 0 (easy workaround in this case, just iterate over chequerboard2)
   	#TODO sum(chequerboard2) == 0 (easy workaround in this case, just iterate over chequerboard1)
 	
-    # Define neighbours offsets (assuming 4-neighbour connectivity)
+    # Define neighbours offsets based on 4-neighbour connectivity
     neighbour_offsets = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 
-    # Gibbs sampling iterations
   	for _ in 1:num_iterations
   		for chequerboard in (chequerboard1, chequerboard2)
+
+			# ---- Vectorised version (this implementation doesn't seem to save any time) ----
+
+			# # Compute neighbour counts for each state
+			# # NB some wasted computations because we are comuting the neighbour counts for all grid cells, not just the current chequerboard
+			# padded_grid = padarray(grid, 1, minimum(states) - 1) # pad grid with label that is outside support 
+			# neighbor_counts = zeros(nrows, ncols, num_states)
+			# for (di, dj) in neighbour_offsets
+			# 	row_indices = 2+di:nrows+di+1
+			# 	col_indices = 2+dj:ncols+dj+1
+			# 	shifted_grid = padded_grid[row_indices, col_indices]
+			# 	for k in 1:num_states
+			# 	 	neighbor_counts[:, :, k] .+= (shifted_grid .== states[k])
+			# 	end			
+			# end
+
+			# # Calculate conditional probabilities
+			# probs = exp.(β .* neighbor_counts)
+			# probs ./= sum(probs, dims=3)
+
+
+			# # Sample new states for chequerboard cells
+			# cumulative_probs = cumsum(probs, dims=3)
+			# rand_matrix = rand(nrows, ncols) 
+
+			# # Indices of chequerboard cells
+			# chequerboard_indices = findall(chequerboard)
+
+			# # Sample new states and update grid  
+			# sampled_indices = map(i -> findfirst(cumulative_probs[Tuple(i)..., :] .> rand_matrix[Tuple(i)...]), chequerboard_indices)
+			# grid[chequerboard] .= states[sampled_indices]
+
+
+			# ---- Simple version ----
+
+
   			for ci in findall(chequerboard)
 
   				# Get cartesian coordinates of current pixel
@@ -482,10 +517,29 @@ function simulatepotts(grid::AbstractMatrix{Int}, β; nsims::Int = 1, num_iterat
     return grid
 end
 
+# function padarray(grid, pad_size, pad_value)
+#     padded_grid = fill(pad_value, size(grid)[1] + 2*pad_size, size(grid)[2] + 2*pad_size)
+#     padded_grid[pad_size+1:end-pad_size, pad_size+1:end-pad_size] .= grid
+#     return padded_grid
+# end
 
 function simulatepotts(nrows::Int, ncols::Int, num_states::Int, β; kwargs...)
-	grid = rand(1:num_states, nrows, ncols)
-	simulatepotts(grid, β; kwargs...)
+    @assert length(β) == 1
+    β = β[1]
+    β_crit = log(1 + sqrt(num_states))
+    if β < β_crit
+        # Random initialization for high temperature
+        grid = rand(1:num_states, nrows, ncols)
+    else
+        # Clustered initialization for low temperature
+        cluster_size = max(1, min(nrows, ncols) ÷ 4)  
+        clustered_rows = ceil(Int, nrows / cluster_size)
+        clustered_cols = ceil(Int, ncols / cluster_size)
+        base_grid = rand(1:num_states, clustered_rows, clustered_cols)
+        grid = repeat(base_grid, inner=(cluster_size, cluster_size))
+        grid = grid[1:nrows, 1:ncols]  # Trim to exact dimensions
+    end
+    simulatepotts(grid, β; kwargs...)
 end
 
 function simulatepotts(grid::AbstractMatrix{Union{Missing, I}}, β; kwargs...) where I <: Integer 
@@ -499,7 +553,8 @@ function simulatepotts(grid::AbstractMatrix{Union{Missing, I}}, β; kwargs...) w
 	# Compute the mask 
 	mask = ismissing.(grid)
 
-	# Replace missing entries with random states # TODO might converge faster with a better initialisation
+	# Replace missing entries with random states 
+	# TODO might converge faster with a better initialisation
 	grid[mask] .= rand(states, sum(mask))
 
 	# Convert eltype of grid to Int 

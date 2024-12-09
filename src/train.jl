@@ -408,8 +408,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		# save the loss every epoch in case training is prematurely halted
 		savebool && @save loss_path loss_per_epoch
 
-		# If the current loss is better than the previous best, save θ̂ and
-		# update the minimum validation risk
+		# If the current loss is better than the previous best, save θ̂ and update the minimum validation risk
 		if val_risk <= min_val_risk
 			savebool && _savestate(θ̂, savepath, epoch)
 			min_val_risk = val_risk

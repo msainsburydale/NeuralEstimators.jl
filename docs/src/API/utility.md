@@ -39,6 +39,8 @@ expandgrid
 
 IndicatorWeights
 
+KernelWeights
+
 initialise_estimator
 
 loadbestweights

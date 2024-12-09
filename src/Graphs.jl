@@ -283,7 +283,7 @@ end
 @doc raw"""
     SpatialGraphConv(in => out, g=relu; args...)
 
-Implements a spatial graph convolution for isotropic processes, 
+Implements a spatial graph convolution for isotropic spatial processes [(Sainsbury-Dale et al., 2025)](https://arxiv.org/abs/2310.02600), 
 
 ```math
  \boldsymbol{h}^{(l)}_{j} =
@@ -580,18 +580,13 @@ on either the `k`-nearest neighbours of each location; all nodes within a disc o
 or, if both `r` and `k` are provided, a subset of `k` neighbours within a disc
 of fixed radius `r`.
 
-Several subsampling strategies are possible when choosing a subset of `k` neighbours within 
-a disc of fixed radius `r`. If `random=true` (default), the neighbours are randomly selected from 
-within the disc (note that this also approximately preserves the distribution of 
-distances within the neighbourhood set). If `random=false`, a deterministic algorithm is used 
-that aims to preserve the distribution of distances within the neighbourhood set, by choosing 
-those nodes with distances to the central node corresponding to the 
-$\{0, \frac{1}{k}, \frac{2}{k}, \dots, \frac{k-1}{k}, 1\}$ quantiles of the empirical 
-distribution function of distances within the disc. 
-(This algorithm in fact yields $k+1$ neighbours, since both the closest and furthest nodes are always included.) 
-Otherwise, 
+If `S` is a square matrix, it is treated as a distance matrix; otherwise, it
+should be an $n$ x $d$ matrix, where $n$ is the number of spatial locations
+and $d$ is the spatial dimension (typically $d$ = 2). In the latter case,
+the distance metric is taken to be the Euclidean distance. Note that use of a 
+maxmin ordering currently requires a matrix of spatial locations (not a distance matrix).
 
-If `maxmin=false` (default) the `k`-nearest neighbours are chosen based on all points in
+When using the `k` nearest neighbours, if `maxmin=false` (default) the neighbours are chosen based on all points in
 the graph. If `maxmin=true`, a so-called maxmin ordering is applied,
 whereby an initial point is selected, and each subsequent point is selected to
 maximise the minimum distance to those points that have already been selected.
@@ -600,11 +595,14 @@ amongst the points that have already appeared in the ordering. If `combined=true
 neighbours are defined to be the union of the `k`-nearest neighbours and the 
 `k`-nearest neighbours subject to a maxmin ordering. 
 
-If `S` is a square matrix, it is treated as a distance matrix; otherwise, it
-should be an $n$ x $d$ matrix, where $n$ is the number of spatial locations
-and $d$ is the spatial dimension (typically $d$ = 2). In the latter case,
-the distance metric is taken to be the Euclidean distance. Note that use of a 
-maxmin ordering currently requires a matrix of spatial locations (not a distance matrix).
+Two subsampling strategies are implemented when choosing a subset of `k` neighbours within 
+a disc of fixed radius `r`. If `random=true` (default), the neighbours are randomly selected from 
+within the disc. If `random=false`, a deterministic algorithm is used 
+that aims to preserve the distribution of distances within the neighbourhood set, by choosing 
+those nodes with distances to the central node corresponding to the 
+$\{0, \frac{1}{k}, \frac{2}{k}, \dots, \frac{k-1}{k}, 1\}$ quantiles of the empirical 
+distribution function of distances within the disc (this in fact yields up to $k+1$ neighbours, 
+since both the closest and furthest nodes are always included). 
 
 By convention with the functionality in `GraphNeuralNetworks.jl` which is based on directed graphs, 
 the neighbours of location `i` are stored in the column `A[:, i]` where `A` is the 
@@ -658,7 +656,7 @@ function adjacencymatrix(M::Mat, r::F, k::Integer; random::Bool = true) where Ma
 	@assert k > 0
 	@assert r > 0
 
-	if random == false
+	if !random
 		A = adjacencymatrix(M, r) 
 		A = subsetneighbours(A, k)
 		A = dropzeros!(A) # remove self loops

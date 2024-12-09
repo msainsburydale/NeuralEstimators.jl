@@ -13,12 +13,13 @@ using Flux: @functor; var"@layer" = var"@functor" # NB did this because even sem
 using Folds
 using Graphs
 using GraphNeuralNetworks
-using GraphNeuralNetworks: check_num_nodes, scatter, gather
+using GraphNeuralNetworks: check_num_nodes
 import GraphNeuralNetworks: GraphConv
 using InvertedIndices
 using LinearAlgebra
 using NamedArrays
 using NearestNeighbors: KDTree, knn
+using NNlib: scatter, gather
 using Random: randexp, shuffle
 using RecursiveArrayTools: VectorOfArray, convert
 using SparseArrays
@@ -75,9 +76,10 @@ include("deprecated.jl")
 
 end
 
-#TODO makes sense to have m=1 as default in train() (it is often the case that m=1, especially in spatial statistics)
-
 # ---- longer term/lower priority:
+# - Amortised posterior approximation (https://github.com/slimgroup/InvertibleNetworks.jl). Also allow for conditioning.
+# - Amortised likelihood approximation (https://github.com/slimgroup/InvertibleNetworks.jl)
+# - Extension: Incorporate the following package to greatly expand bootstrap functionality: https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
 # - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
 # -	Add NeuralEstimators.jl to https://github.com/smsharma/awesome-neural-sbi#code-packages-and-benchmarks
 # - Ensemble: make it “play well” throughout the package. For example, assess() with other kinds of neural estimators (e.g., quantile estimators), and ml/mapestimate() with RatioEstimators. 
@@ -91,11 +93,8 @@ end
 # - Sequence (e.g., time-series) input: https://jldc.ch/post/seq2one-flux/
 # - Precompile NeuralEstimators.jl to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. Seems easy, just need to add precompile(f, (arg_types…)) to whichever methods we want to precompile
 # - Examples: data plots within each example. Can show a histogram for univariate data; a scatterplot for bivariate data; a heatmap for gridded data; and scatterplot for irregular spatial data.
-# - Extension: Incorporate the following package to greatly expand bootstrap functionality: https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
 # - GPU on MacOS with Metal.jl (already have extension written, need to wait until Metal.jl is further developed; in particular, need convolution layers to be implemented)
 # - Explicit learning of summary statistics
-# - Amortised posterior approximation (https://github.com/slimgroup/InvertibleNetworks.jl)
-# - Amortised likelihood approximation (https://github.com/slimgroup/InvertibleNetworks.jl)
 # - Functionality for storing and plotting the training-validation risk in the NeuralEstimator. This will involve changing _train() to return both the estimator and the risk, and then defining train(::NeuralEstimator) to update the slot containing the risk. We will also need _train() to take the argument "loss_vs_epoch", so that we can "continue training"
 # - Separate GNN functionality (tried this with package extensions but not possible currently because we need to define custom structs)
 # - SpatialPyramidPool for CNNs
