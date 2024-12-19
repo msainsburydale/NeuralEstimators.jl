@@ -28,46 +28,48 @@ To install the package, please:
 
 ### R interface
 
-A convenient interface for `R` users is available on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html) and on [GitHub](https://github.com/msainsburydale/NeuralEstimators).
+A convenient interface for `R` users is available on [CRAN](https://CRAN.R-project.org/package=NeuralEstimators). 
 
 ### Supporting and citing
 
-This software was developed as part of academic research. If you would like to support it, please star the repository. If you use it in your research or other activities, please also use the following citation.
+This software was developed as part of academic research. If you would like to support it, please star the repository. If you use it in your research or other activities, please also use the following citations.
 
 ```
-@article{,
-		author = {Sainsbury-Dale, Matthew and Zammit-Mangion, Andrew and Huser, Raphaël},
-		title = {Likelihood-Free Parameter Estimation with Neural {B}ayes Estimators},
-		journal = {The American Statistician},
-		year = {2024},
-		volume = {78},
-		pages = {1--14},
-		doi = {10.1080/00031305.2023.2249522},
-		url = {https://doi.org/10.1080/00031305.2023.2249522}
-}
+@Manual{,
+    title = {{NeuralEstimators}: Likelihood-Free Parameter Estimation
+      using Neural Networks},
+    author = {Matthew Sainsbury-Dale},
+    year = {2024},
+    note = {R package version 0.1-2},
+    url = {https://CRAN.R-project.org/package=NeuralEstimators},
+    doi = {10.32614/CRAN.package.NeuralEstimators},
+  }
+
+@Article{,
+    title = {Likelihood-Free Parameter Estimation with Neural {B}ayes
+      Estimators},
+    author = {Matthew Sainsbury-Dale and Andrew Zammit-Mangion and
+      Raphael Huser},
+    journal = {The American Statistician},
+    year = {2024},
+    volume = {78},
+    pages = {1--14},
+    doi = {10.1080/00031305.2023.2249522},
+  }
 ```
+
+### Contributing
+
+If you find a bug or have a suggestion, please [open an issue](https://github.com/msainsburydale/NeuralEstimators.jl/issues).
 
 ### Papers using NeuralEstimators
 
-- **Likelihood-free parameter estimation with neural Bayes estimators** [[paper]](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522) [[code]](https://github.com/msainsburydale/NeuralBayesEstimators)
+- **Likelihood-free parameter estimation with neural Bayes estimators** [[paper]](https://doi.org/10.1080/00031305.2023.2249522) [[code]](https://github.com/msainsburydale/NeuralBayesEstimators)
 
 - **Neural Bayes estimators for censored inference with peaks-over-threshold models** [[paper]](https://arxiv.org/abs/2306.15642)
 
-- **Neural Bayes estimators for irregular spatial data using graph neural networks** [[paper]](https://arxiv.org/abs/2310.02600)[[code]](https://github.com/msainsburydale/NeuralEstimatorsGNN)
+- **Neural Bayes estimators for irregular spatial data using graph neural networks** [[paper]](https://doi.org/10.1080/10618600.2024.2433671)[[code]](https://github.com/msainsburydale/NeuralEstimatorsGNN)
 
 - **Modern extreme value statistics for Utopian extremes** [[paper]](https://arxiv.org/abs/2311.11054)
 
-- **Neural Methods for Amortised Inference** [[paper]](https://arxiv.org/abs/2404.12484)[[code]](https://github.com/andrewzm/Amortised_Neural_Inference_Review)
-
-
-### Related packages
-
-Several other software packages have been developed to facilitate neural likelihood-free inference. These include:
-
-- [BayesFlow](https://github.com/stefanradev93/BayesFlow) (TensorFlow)
-- [LAMPE](https://github.com/probabilists/lampe) (PyTorch)
-- [sbi](https://github.com/sbi-dev/sbi) (PyTorch)
-- [swyft](https://github.com/undark-lab/swyft) (PyTorch)
-
-
-A summary of the functionality in these packages is given in [Zammit-Mangion et al. (2024, Section 6.1)](https://arxiv.org/abs/2404.12484). Note that this list of related packages was created in July 2024; if you have software to add to this list, please contact the package maintainer.
+- **Neural Methods for Amortized Inference** [[paper]](https://arxiv.org/abs/2404.12484)[[code]](https://github.com/andrewzm/Amortised_Neural_Inference_Review)
