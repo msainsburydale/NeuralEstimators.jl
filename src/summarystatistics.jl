@@ -187,5 +187,4 @@ function (l::NeighbourhoodVariogram)(g::GNNGraph)
 	Σ = sum(z .* N, dims = 1)        # ∑(Zⱼ - Zᵢ)² in each bin
 	vec(Σ ./ 2N_card)
 end
-@layer NeighbourhoodVariogram
 Flux.trainable(l::NeighbourhoodVariogram) =  ()

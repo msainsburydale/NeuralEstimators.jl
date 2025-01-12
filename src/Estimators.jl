@@ -21,7 +21,6 @@ struct PointEstimator <: NeuralEstimator
 	c::Union{Function,Compress} # NB don't document `c` since Compress layer is usually just included in `deepset`
 end
 PointEstimator(arch) = PointEstimator(arch, identity)
-@layer PointEstimator
 (est::PointEstimator)(Z) = est.c(est.arch(Z))
 
 # ---- IntervalEstimator  ----
@@ -101,7 +100,6 @@ end
 IntervalEstimator(u::DeepSet, v::DeepSet = u; probs = [0.025, 0.975], g = exp) = IntervalEstimator(deepcopy(u), deepcopy(v), identity, probs, g)
 IntervalEstimator(u::DeepSet, c::Compress; probs = [0.025, 0.975], g = exp) = IntervalEstimator(deepcopy(u), deepcopy(u), c, probs, g)
 IntervalEstimator(u::DeepSet, v::DeepSet, c::Compress; probs = [0.025, 0.975], g = exp) = IntervalEstimator(deepcopy(u), deepcopy(v), c, probs, g)
-@layer IntervalEstimator
 Flux.trainable(est::IntervalEstimator) = (u = est.u, v = est.v)
 function (est::IntervalEstimator)(Z)
 	bₗ = est.u(Z)                # lower bound
@@ -259,7 +257,6 @@ function QuantileEstimatorDiscrete(v::DeepSet; probs = [0.05, 0.25, 0.5, 0.75, 0
 	if !isnothing(i) @assert i > 0 end
 	QuantileEstimatorDiscrete(deepcopy.(repeat([v], length(probs))), probs, g, i)
 end
-@layer QuantileEstimatorDiscrete
 Flux.trainable(est::QuantileEstimatorDiscrete) = (v = est.v, )
 function (est::QuantileEstimatorDiscrete)(input) # input might be Z, or a tuple (Z, θ₋ᵢ)
 
@@ -354,7 +351,7 @@ See also [`QuantileEstimatorDiscrete`](@ref).
 
 # Examples
 ```
-using NeuralEstimators, Flux, Distributions , InvertedIndices, Statistics
+using NeuralEstimators, Flux, Distributions, InvertedIndices, Statistics
 using AlgebraOfGraphics, CairoMakie
 
 # Model: Z|θ ~ N(θ, 1) with θ ~ N(0, 1)
@@ -468,7 +465,6 @@ function QuantileEstimatorContinuous(deepset::DeepSet; i::Union{Integer, Nothing
 	if !isnothing(i) @assert i > 0 end
 	QuantileEstimatorContinuous(deepset, i)
 end
-@layer QuantileEstimatorContinuous
 # core method (used internally)
 (est::QuantileEstimatorContinuous)(tup::Tuple) = est.deepset(tup)
 # user-level convenience functions (not used internally)
@@ -545,7 +541,7 @@ of output neurons in the final layer of the summary network plus the number of
 parameters in the statistical model. Second, the number of output neurons in the
 final layer of the inference network must be equal to one.
 
-The ratio estimator is trained by solving a relatively straightforward binary
+The ratio estimator is trained by solving a binary
 classification problem. Specifically, consider the problem of distinguishing
 dependent parameter--data pairs
 ${(\boldsymbol{\theta}', \boldsymbol{Z}')' \sim p(\boldsymbol{Z}, \boldsymbol{\theta})}$ with
@@ -569,7 +565,7 @@ $r(\boldsymbol{Z}, \boldsymbol{\theta})$ is returned (setting the keyword argume
 can then be used in various downstream Bayesian
 (e.g., [Hermans et al., 2020](https://proceedings.mlr.press/v119/hermans20a.html))
 or Frequentist
-(e.g., [Walchessen et al., 2023](https://arxiv.org/abs/2305.04634))
+(e.g., [Walchessen et al., 2024](https://doi.org/10.1016/j.spasta.2024.100848))
 inferential algorithms.
 
 See also [`mlestimate`](@ref) and [`mapestimate`](@ref) for obtaining
@@ -578,7 +574,7 @@ approximate maximum-likelihood and maximum-a-posteriori estimates, and
 
 # Examples
 ```
-using NeuralEstimators, Flux, Statistics, Optim
+using NeuralEstimators, Flux, Statistics
 
 # Generate data from Z|μ,σ ~ N(μ, σ²) with μ, σ ~ U(0, 1)
 p = 2     # number of unknown parameters in the statistical model
@@ -609,24 +605,26 @@ r̂ = RatioEstimator(deepset)
 # Train the estimator
 r̂ = train(r̂, prior, simulate, m = m)
 
-# Inference with "observed" data set
+# Inference with "observed" data (grid-based optimisation)
 θ = prior(1)
 z = simulate(θ, m)[1]
-θ₀ = [0.5, 0.5]                           # initial estimate
-mlestimate(r̂, z;  θ₀ = θ₀)                # maximum-likelihood estimate (requires Optim.jl to be loaded)
-mapestimate(r̂, z; θ₀ = θ₀)                # maximum-a-posteriori estimate (requires Optim.jl to be loaded)
 θ_grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
 θ_grid = Float32.(θ_grid)
 r̂(z, θ_grid)                              # likelihood-to-evidence ratios over grid
 mlestimate(r̂, z;  θ_grid = θ_grid)        # maximum-likelihood estimate
 mapestimate(r̂, z; θ_grid = θ_grid)        # maximum-a-posteriori estimate
 sampleposterior(r̂, z; θ_grid = θ_grid)    # posterior samples
+
+# Inference with "observed" data (gradient-based optimisation using Optim.jl)
+using Optim
+θ₀ = [0.5, 0.5]                           # initial estimate
+mlestimate(r̂, z;  θ₀ = θ₀)                # maximum-likelihood estimate
+mapestimate(r̂, z; θ₀ = θ₀)                # maximum-a-posteriori estimate
 ```
 """
 struct RatioEstimator <: NeuralEstimator
 	deepset::DeepSet
 end
-@layer RatioEstimator
 function (est::RatioEstimator)(Z, θ; kwargs...)
 	est((Z, θ); kwargs...) # "Tupleise" the input and pass to Tuple method
 end
@@ -727,7 +725,6 @@ struct PiecewiseEstimator <: NeuralEstimator
 		end
 	end
 end
-@layer PiecewiseEstimator
 function (pe::PiecewiseEstimator)(Z)
 	# Note that this is an inefficient implementation, analogous to the inefficient
 	# DeepSet implementation. A more efficient approach would be to subset Z based
@@ -943,7 +940,6 @@ struct Ensemble <: NeuralEstimator
 	estimators
 end
 Ensemble(architecture::Function, J::Integer) = Ensemble([architecture() for j in 1:J])
-@layer Ensemble
 
 function train(ensemble::Ensemble, args...; kwargs...)
 	kwargs = (;kwargs...)

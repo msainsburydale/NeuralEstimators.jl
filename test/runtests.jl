@@ -317,52 +317,6 @@ end
 	l(g)
 end
 
-# # Testing that the SpatialGraphConv layer can be optimised with gradient descent 
-# # using NeuralEstimators, Flux, GraphNeuralNetworks
-
-# # Toy training data 
-# data = map(1:100) do _
-# 	m = 5                  # number of independent replicates
-# 	d = 2                  # spatial dimension
-# 	n = 250                # number of spatial locations
-# 	S = rand(n, d)         # spatial locations
-# 	Z = rand(n, m)         # data
-# 	g = spatialgraph(S, Z) # construct the graph
-# end 
-
-# # Initialise the layer
-# l = SpatialGraphConv(1 => 10, identity)
-
-# # Test that the layer can be applied to data 
-# l(data[1])
-
-# l.f.a
-# l.f.b
-# l.Γ1
-# l.Γ2
-# sum(abs.(l.Γ1)) # 4.5
-# sum(abs.(l.Γ2)) # 4
-
-# # Optimise the layer (just train it to minimise the norm of the features)
-# norm_loss(output) = sum(abs, output)  
-# optim = Flux.setup(Flux.Adam(0.01), l)
-# for epoch in 1:200
-#     for z in data
-#         loss, grads = Flux.withgradient(l) do l
-# 			y = l(z).ndata.x
-#             Flux.mae(y, 0)
-#         end
-#         Flux.update!(optim, l, grads[1])
-#     end
-# end
-
-# l.f.a
-# l.f.b
-# l.Γ1
-# l.Γ2
-# sum(abs.(l.Γ1)) # 0.9
-# sum(abs.(l.Γ2)) # 0.9
-
 @testset "IndicatorWeights" begin
 	h_max = 1
 	n_bins = 10
@@ -529,8 +483,8 @@ function testbackprop(l, dvc, p::Integer, K::Integer, d::Integer)
 	θ = arrayn(p, K) |> dvc
 	dense = Dense(d, p)
 	θ̂ = Chain(dense, l) |> dvc
-	Flux.gradient(() -> mae(θ̂(Z), θ), Flux.params(θ̂)) # "implicit" style of Flux <= 0.14
-	# Flux.gradient(θ̂ -> mae(θ̂(Z), θ), θ̂)                 # "explicit" style of Flux >= 0.15
+	# Flux.gradient(() -> mae(θ̂(Z), θ), Flux.params(θ̂)) # "implicit" style of Flux <= 0.14
+	Flux.gradient(θ̂ -> mae(θ̂(Z), θ), θ̂)                 # "explicit" style of Flux >= 0.15
 end
 
 @testset "Activation functions: $dvc" for dvc ∈ devices
@@ -697,19 +651,21 @@ m  = 10 # default sample size
 			θ̂(z)
 
 			# Test that we can update the neural-network parameters
+
 			# "Implicit" style used by Flux <= 0.14.
-			optimiser = Flux.Adam()
-			γ = Flux.params(θ̂)
-			∇ = Flux.gradient(() -> loss(θ̂(Z), θ), γ)
-			Flux.update!(optimiser, γ, ∇)
-			ls, ∇ = Flux.withgradient(() -> loss(θ̂(Z), θ), γ)
-			Flux.update!(optimiser, γ, ∇)
+			# optimiser = Flux.Adam()
+			# γ = Flux.params(θ̂)
+			# ∇ = Flux.gradient(() -> loss(θ̂(Z), θ), γ)
+			# Flux.update!(optimiser, γ, ∇)
+			# ls, ∇ = Flux.withgradient(() -> loss(θ̂(Z), θ), γ)
+			# Flux.update!(optimiser, γ, ∇)
+
 			# "Explicit" style required by Flux >= 0.15.
-			# optimiser = Flux.setup(Flux.Adam(), θ̂)
-			# ∇ = Flux.gradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
-			# Flux.update!(optimiser, θ̂, ∇[1])
-			# ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
-			# Flux.update!(optimiser, θ̂, ∇[1])
+			optimiser = Flux.setup(Flux.Adam(), θ̂)
+			∇ = Flux.gradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
+			Flux.update!(optimiser, θ̂, ∇[1])
+			ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(Z), θ), θ̂)
+			Flux.update!(optimiser, θ̂, ∇[1])
 
 		    use_gpu = dvc == gpu
 			@testset "train" begin

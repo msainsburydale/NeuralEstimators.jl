@@ -194,7 +194,6 @@ function (l::IndicatorWeights)(h::M) where M <: AbstractMatrix{T} where T
 	N = reduce(vcat, N)
 	Float32.(N)
 end
-@layer IndicatorWeights
 Flux.trainable(l::IndicatorWeights) =  ()
 
 
@@ -240,7 +239,6 @@ function (l::KernelWeights)(h::M) where M <: AbstractMatrix{T} where T
 	N = reduce(vcat, N) 
 	Float32.(N) 
 end 
-@layer KernelWeights 
 Flux.trainable(l::KernelWeights) = ()
 
 
@@ -355,8 +353,6 @@ struct SpatialGraphConv{W<:AbstractMatrix, A, B,C, F} <: GNNLayer
 	f::C
 	g::F
 end
-@layer SpatialGraphConv
-WeightedGraphConv = SpatialGraphConv; export WeightedGraphConv # alias for backwards compatability
 function SpatialGraphConv(
 	ch::Pair{Int,Int},
 	g = relu;
@@ -546,7 +542,6 @@ struct GNNSummary{F, G}
 	propagation::F   # propagation module
 	readout::G       # readout module
 end
-@layer GNNSummary
 Base.show(io::IO, D::GNNSummary) = print(io, "\nThe propagation and readout modules of a graph neural network (GNN), with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)")
 
 function (ψ::GNNSummary)(g::GNNGraph)

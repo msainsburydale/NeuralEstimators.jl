@@ -1,4 +1,4 @@
-nparams(model) = length(Flux.params(model)) > 0 ? sum(length, Flux.params(model)) : 0
+nparams(model) = length(Flux.trainables(model)) > 0 ? sum(length, Flux.trainables(model)) : 0
 
 # Drop fields from NamedTuple: https://discourse.julialang.org/t/filtering-keys-out-of-named-tuples/73564/8
 drop(nt::NamedTuple, key::Symbol) =  Base.structdiff(nt, NamedTuple{(key,)})

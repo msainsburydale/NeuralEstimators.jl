@@ -95,8 +95,8 @@ function _train(θ̂, sampler, simulator;
 	epochs_per_Z_refresh::Integer = 1,
 	simulate_just_in_time::Bool = false,
 	loss = Flux.Losses.mae,
-	# optimiser          = Flux.setup(Flux.Adam(), θ̂),
-	optimiser          = Flux.Adam(),
+	optimiser          = Flux.setup(Flux.Adam(), θ̂),
+	# optimiser          = Flux.Adam(),
     batchsize::Integer = 32,
     epochs::Integer    = 100,
 	savepath::String   = "",
@@ -227,8 +227,9 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 		epochs_per_Z_refresh::Integer = 1,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
+		optimiser          = Flux.setup(Flux.Adam(), θ̂),
 		# optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Flux.Adam()), θ̂),
-		optimiser        = Flux.Adam(),
+		# optimiser        = Flux.Adam(),
 		savepath::String = "",
 		simulate_just_in_time::Bool = false,
 		stopping_epochs::Integer = 5,
@@ -334,8 +335,9 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
+		optimiser          = Flux.setup(Flux.Adam(), θ̂),
 		# optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Flux.Adam()), θ̂),
-		optimiser        = Flux.Adam(),
+		# optimiser        = Flux.Adam(),
 		savepath::String = "",
 		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
@@ -474,7 +476,7 @@ function train(θ̂::RatioEstimator, args...; kwargs...)
 	if haskey(kwargs, :loss)
 		@info "The keyword argument `loss` is not required when training a $(typeof(θ̂)), since in this case the binary cross-entropy (log) loss is always used"
 	end
-	kwargs = merge(kwargs, (loss = Flux.logitbinarycrossentropy,))
+	# kwargs = merge(kwargs, (loss = Flux.logitbinarycrossentropy,))
 	_train(θ̂, args...; kwargs...)
 end
 
@@ -509,7 +511,7 @@ function _constructset(θ̂::RatioEstimator, Z, θ::P, batchsize) where {P <: Un
 	labels = [:dependent, :independent]
 	output = onehotbatch(repeat(labels, inner = K), labels)[1:1, :]
 
-	# Shuffle everything incase batching isn't shuffled properly downstrean
+	# Shuffle everything in case batching isn't shuffled properly downstrean
 	idx = shuffle(1:2K)
 	Z = Z[idx]
 	θ = θ[:, idx]
@@ -583,13 +585,13 @@ function _risk(θ̂, loss, set::DataLoader, device, optimiser = nothing)
 			# an option for this in the future, but will leave it for now.
 
 			# "Implicit" style used by Flux <= 0.14
-			γ = Flux.params(θ̂)
-			ls, ∇ = Flux.withgradient(() -> loss(θ̂(input), output), γ)
-			update!(optimiser, γ, ∇)
+			# γ = Flux.params(θ̂)
+			# ls, ∇ = Flux.withgradient(() -> loss(θ̂(input), output), γ)
+			# update!(optimiser, γ, ∇)
 
 			# "Explicit" style required by Flux >= 0.15
-			# ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(input), output), θ̂)
-			# update!(optimiser, θ̂, ∇[1])
+			ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(input), output), θ̂)
+			update!(optimiser, θ̂, ∇[1])
 		else
 			ls = loss(θ̂(input), output)
 		end
@@ -601,11 +603,25 @@ function _risk(θ̂, loss, set::DataLoader, device, optimiser = nothing)
     return cpu(sum_loss/K)
 end
 
-# Custom _risk function for RatioEstimator, for numerical stability we train on
-# the linear-scale by calling the underlying DeepSet object with the
-# logitbinarycrossentropy loss function
-_risk(θ̂::RatioEstimator, loss, set::DataLoader, device, optimiser = nothing) = _risk(θ̂.deepset, loss, set, device, optimiser)
+function _risk(θ̂::RatioEstimator, loss, set::DataLoader, device, optimiser = nothing)
+    sum_loss = 0.0f0
+    K = 0
+    for (input, output) in set
+        input, output = input |> device, output |> device
+		k = size(output)[end]
+		if !isnothing(optimiser)
+			ls, ∇ = Flux.withgradient(θ̂ -> Flux.logitbinarycrossentropy(θ̂.deepset(input), output), θ̂)
+			update!(optimiser, θ̂, ∇[1])
+		else
+			ls = Flux.logitbinarycrossentropy(θ̂.deepset(input), output)
+		end
+        # Assuming loss returns an average, convert to a sum and add to total
+		sum_loss += ls * k
+        K +=  k
+    end
 
+    return cpu(sum_loss/K)
+end
 
 function _risk(θ̂::QuantileEstimatorContinuous, loss, set::DataLoader, device, optimiser = nothing)
     sum_loss = 0.0f0
@@ -635,13 +651,13 @@ function _risk(θ̂::QuantileEstimatorContinuous, loss, set::DataLoader, device,
 		if !isnothing(optimiser)
 
 			# "Implicit" style used by Flux <= 0.14
-			γ = Flux.params(θ̂)
-			ls, ∇ = Flux.withgradient(() -> quantileloss(θ̂(input), output, τ), γ)
-			update!(optimiser, γ, ∇)
+			# γ = Flux.params(θ̂)
+			# ls, ∇ = Flux.withgradient(() -> quantileloss(θ̂(input), output, τ), γ)
+			# update!(optimiser, γ, ∇)
 
 			# "Explicit" style required by Flux >= 0.15
-			# ls, ∇ = Flux.withgradient(θ̂ -> quantileloss(θ̂(input), output, τ), θ̂)
-			# update!(optimiser, θ̂, ∇[1])
+			ls, ∇ = Flux.withgradient(θ̂ -> quantileloss(θ̂(input), output, τ), θ̂)
+			update!(optimiser, θ̂, ∇[1])
 		else
 			ls = quantileloss(θ̂(input), output, τ)
 		end

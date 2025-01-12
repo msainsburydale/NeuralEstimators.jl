@@ -136,7 +136,6 @@ struct DeepSet{T, G, K}
 	a::ElementwiseAggregator
 	S::K
 end
-@layer DeepSet
 function DeepSet(ψ, ϕ, a::Function = mean; S = nothing)
 	@assert !isnothing(ψ) | !isnothing(S) "At least one of `ψ` or `S` must be given"
 	DeepSet(ψ, ϕ, ElementwiseAggregator(a), S)
@@ -391,7 +390,6 @@ end
 Compress(a, b) = Compress(float.(a), float.(b), ones(eltype(float.(a)), length(a)))
 Compress(a::Number, b::Number) = Compress([float(a)], [float(b)])
 (l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-l.k .* θ))
-@layer Compress
 Flux.trainable(l::Compress) =  ()
 
 
@@ -413,7 +411,6 @@ function (l::TruncateSupport)(θ::AbstractMatrix)
 end
 TruncateSupport(a, b) = TruncateSupport(float.(a), float.(b), length(a))
 TruncateSupport(a::Number, b::Number) = TruncateSupport([float(a)], [float(b)], 1)
-Flux.@functor TruncateSupport
 Flux.trainable(l::TruncateSupport) = ()
 tuncatesupport(θ, a, b) = min(max(θ, a), b)
 
@@ -712,7 +709,6 @@ struct DensePositive
 	last_only::Bool
 end
 DensePositive(layer::Dense; g::Function = Flux.relu, last_only::Bool = false) = DensePositive(layer, g, last_only)
-@layer DensePositive
 # Simple version of forward pass:
 # (d::DensePositive)(x) = d.layer.σ.(Flux.softplus(d.layer.weight) * x .+ d.layer.bias)
 # Complex version of forward pass based on Flux's Dense code:
@@ -778,8 +774,6 @@ struct PowerDifference{A,B}
 	a::A
 	b::B
 end
-@layer PowerDifference
-export PowerDifference
 PowerDifference() = PowerDifference([0.5f0], [2.0f0])
 PowerDifference(a::Number, b::AbstractArray) = PowerDifference([a], b)
 PowerDifference(a::AbstractArray, b::Number) = PowerDifference(a, [b])
@@ -808,7 +802,6 @@ b(z)
 struct ResidualBlock{B}
     block::B
 end
-Flux.@functor ResidualBlock
 (b::ResidualBlock)(x) = relu.(b.block(x))
 function ResidualBlock(filter, channels; stride = 1)
 
@@ -838,5 +831,4 @@ end
 struct Shortcut{S}
     s::S
 end
-Flux.@functor Shortcut
 (s::Shortcut)(mx, x) = mx + s.s(x)
