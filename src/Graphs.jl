@@ -194,7 +194,7 @@ function (l::IndicatorWeights)(h::M) where M <: AbstractMatrix{T} where T
 	N = reduce(vcat, N)
 	Float32.(N)
 end
-Flux.trainable(l::IndicatorWeights) =  ()
+Flux.trainable(l::IndicatorWeights) =  NamedTuple()
 
 
 @doc raw"""
@@ -239,7 +239,7 @@ function (l::KernelWeights)(h::M) where M <: AbstractMatrix{T} where T
 	N = reduce(vcat, N) 
 	Float32.(N) 
 end 
-Flux.trainable(l::KernelWeights) = ()
+Flux.trainable(l::KernelWeights) = NamedTuple()
 
 
 # ---- GraphConv ----

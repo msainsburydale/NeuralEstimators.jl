@@ -390,7 +390,7 @@ end
 Compress(a, b) = Compress(float.(a), float.(b), ones(eltype(float.(a)), length(a)))
 Compress(a::Number, b::Number) = Compress([float(a)], [float(b)])
 (l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-l.k .* θ))
-Flux.trainable(l::Compress) =  ()
+Flux.trainable(l::Compress) =  NamedTuple()
 
 
 #TODO documentation and unit testing
@@ -411,7 +411,7 @@ function (l::TruncateSupport)(θ::AbstractMatrix)
 end
 TruncateSupport(a, b) = TruncateSupport(float.(a), float.(b), length(a))
 TruncateSupport(a::Number, b::Number) = TruncateSupport([float(a)], [float(b)], 1)
-Flux.trainable(l::TruncateSupport) = ()
+Flux.trainable(l::TruncateSupport) = NamedTuple()
 tuncatesupport(θ, a, b) = min(max(θ, a), b)
 
 # ---- Layers to construct Covariance and Correlation matrices ----

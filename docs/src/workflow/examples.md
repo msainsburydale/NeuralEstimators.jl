@@ -251,13 +251,12 @@ interval(bs)                           # 95% parametric bootstrap intervals
 
 ## Irregular spatial data
 
-To cater for spatial data collected over arbitrary spatial locations, one may construct a neural estimator with a graph neural network (GNN) architecture (see [Sainsbury-Dale, Zammit-Mangion, Richards, and Huser, 2023](https://arxiv.org/abs/2310.02600)). The overall workflow remains as given in previous examples, with some key additional steps:
+To cater for spatial data collected over arbitrary spatial locations, one may construct a neural estimator with a graph neural network (GNN) architecture (see [Sainsbury-Dale, Zammit-Mangion, Richards, and Huser, 2025](https://doi.org/10.1080/10618600.2024.2433671)). The overall workflow remains as given in previous examples, with two key additional steps:
 
-- Sampling spatial configurations during the training phase, typically using an appropriately chosen spatial point process: see, for example, [`maternclusterprocess`](@ref).
+- Sampling spatial configurations during the training phase, possibly using an appropriately chosen spatial point process: see, for example, [`maternclusterprocess`](@ref).
 - Storing the spatial data as a graph: see [`spatialgraph`](@ref).
-- Constructing an appropriate architecture: see [`GNNSummary`](@ref) and [`SpatialGraphConv`](@ref).
 
-For illustration, we again consider the spatial Gaussian process model with exponential covariance function, and we define a struct for storing expensive intermediate objects needed for data simulation. In this case, these objects include Cholesky factors and spatial graphs (which store the adjacency matrices needed to perform graph convolution): 
+For illustration, we again consider a spatial Gaussian process model with exponential covariance function, and we define a struct for storing expensive intermediate objects needed for data simulation. In this example, these objects include Cholesky factors, and spatial graphs which store the adjacency matrices needed to perform graph convolution: 
 
 
 ```
@@ -269,7 +268,7 @@ struct Parameters{T} <: ParameterConfigurations
 end
 ```
 
-Again, we define two constructors, which will be convenient for sampling parameters from the prior during training and assessment, and for performing parametric bootstrap sampling when making inferences from observed data:
+Again, we define two constructors, which will be convenient for sampling parameters from the prior during training and assessment, and for parametric bootstrap sampling when making inferences from observed data:
 
 ```
 function sample(K::Integer)
@@ -322,7 +321,7 @@ end
 simulate(parameters::Parameters, m::Integer = 1) = simulate(parameters, range(m, m))
 ```
 
-Next we construct an appropriate GNN architecture, as illustrated below. Here, our goal is to construct a point estimator, however any other kind of estimator (see [Estimators](@ref)) can be constructed by simply substituting the appropriate estimator class in the final line below:
+Next, we construct our GNN architectur. Here, our goal is to construct a point estimator, however any other kind of estimator (see [Estimators](@ref)) can be constructed by simply substituting the appropriate estimator class in the final line below:
 
 ```
 # Spatial weight functions: continuous surrogates for 0-1 basis functions 
@@ -345,7 +344,7 @@ readout = GlobalPool(mean)
 # Expert summary statistics, the empirical variogram
 S = NeighbourhoodVariogram(h_max, q)
 
-# Mapping module
+# Inference network
 ϕ = Chain(
 	Dense(2q => 128, relu), 
 	Dense(128 => 128, relu), 
@@ -359,7 +358,7 @@ deepset = DeepSet(ψ, ϕ; S = S)
 θ̂ = PointEstimator(deepset)
 ```
 
-Next, we train the estimator:
+Next, we train the estimator. 
 
 ```
 m = 1
@@ -367,9 +366,11 @@ K = 5000
 θ_train = sample(K)
 θ_val   = sample(K÷5)
 θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 20)
-```
+``` 
 
-Then, we assess our trained estimator as before: 
+Note that the fast construction of a GNN-based neural Bayes estimator typically requires a graphical processing unit (GPU).
+
+Then, we assess our trained estimator: 
 
 ```
 θ_test = sample(1000)
