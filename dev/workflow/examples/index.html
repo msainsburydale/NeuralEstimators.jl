@@ -91,12 +91,12 @@ Z = simulate(θ)                        # &quot;observed&quot; data
 θ̂(Z)                                   # point estimates
 interval(q̂, Z)                         # 95% marginal posterior credible intervals
 bs = bootstrap(θ̂, θ̂(Z), simulate, m)   # parametric bootstrap intervals
-interval(bs)                           # 95% parametric bootstrap intervals</code></pre><h2 id="Irregular-spatial-data"><a class="docs-heading-anchor" href="#Irregular-spatial-data">Irregular spatial data</a><a id="Irregular-spatial-data-1"></a><a class="docs-heading-anchor-permalink" href="#Irregular-spatial-data" title="Permalink"></a></h2><p>To cater for spatial data collected over arbitrary spatial locations, one may construct a neural estimator with a graph neural network (GNN) architecture (see <a href="https://arxiv.org/abs/2310.02600">Sainsbury-Dale, Zammit-Mangion, Richards, and Huser, 2023</a>). The overall workflow remains as given in previous examples, with some key additional steps:</p><ul><li>Sampling spatial configurations during the training phase, typically using an appropriately chosen spatial point process: see, for example, <a href="../../API/simulation/#NeuralEstimators.maternclusterprocess"><code>maternclusterprocess</code></a>.</li><li>Storing the spatial data as a graph: see <a href="../../API/utility/#NeuralEstimators.spatialgraph"><code>spatialgraph</code></a>.</li><li>Constructing an appropriate architecture: see <a href="../../API/architectures/#NeuralEstimators.GNNSummary"><code>GNNSummary</code></a> and <a href="../../API/architectures/#NeuralEstimators.SpatialGraphConv"><code>SpatialGraphConv</code></a>.</li></ul><p>For illustration, we again consider the spatial Gaussian process model with exponential covariance function, and we define a struct for storing expensive intermediate objects needed for data simulation. In this case, these objects include Cholesky factors and spatial graphs (which store the adjacency matrices needed to perform graph convolution): </p><pre><code class="nohighlight hljs">struct Parameters{T} &lt;: ParameterConfigurations
+interval(bs)                           # 95% parametric bootstrap intervals</code></pre><h2 id="Irregular-spatial-data"><a class="docs-heading-anchor" href="#Irregular-spatial-data">Irregular spatial data</a><a id="Irregular-spatial-data-1"></a><a class="docs-heading-anchor-permalink" href="#Irregular-spatial-data" title="Permalink"></a></h2><p>To cater for spatial data collected over arbitrary spatial locations, one may construct a neural estimator with a graph neural network (GNN) architecture (see <a href="https://doi.org/10.1080/10618600.2024.2433671">Sainsbury-Dale, Zammit-Mangion, Richards, and Huser, 2025</a>). The overall workflow remains as given in previous examples, with two key additional steps:</p><ul><li>Sampling spatial configurations during the training phase, possibly using an appropriately chosen spatial point process: see, for example, <a href="../../API/simulation/#NeuralEstimators.maternclusterprocess"><code>maternclusterprocess</code></a>.</li><li>Storing the spatial data as a graph: see <a href="../../API/utility/#NeuralEstimators.spatialgraph"><code>spatialgraph</code></a>.</li></ul><p>For illustration, we again consider a spatial Gaussian process model with exponential covariance function, and we define a struct for storing expensive intermediate objects needed for data simulation. In this example, these objects include Cholesky factors, and spatial graphs which store the adjacency matrices needed to perform graph convolution: </p><pre><code class="nohighlight hljs">struct Parameters{T} &lt;: ParameterConfigurations
 	θ::Matrix{T}   # true parameters  
 	L              # Cholesky factors
 	g              # spatial graphs
 	S              # spatial locations 
-end</code></pre><p>Again, we define two constructors, which will be convenient for sampling parameters from the prior during training and assessment, and for performing parametric bootstrap sampling when making inferences from observed data:</p><pre><code class="nohighlight hljs">function sample(K::Integer)
+end</code></pre><p>Again, we define two constructors, which will be convenient for sampling parameters from the prior during training and assessment, and for parametric bootstrap sampling when making inferences from observed data:</p><pre><code class="nohighlight hljs">function sample(K::Integer)
 
 	# Sample parameters from the prior 
 	θ = rand(Uniform(0.05, 0.5), 1, K)
@@ -137,7 +137,7 @@ end</code></pre><p>Next, we define a function for simulating from the model give
 		spatialgraph(g, Z)            
 	end
 end
-simulate(parameters::Parameters, m::Integer = 1) = simulate(parameters, range(m, m))</code></pre><p>Next we construct an appropriate GNN architecture, as illustrated below. Here, our goal is to construct a point estimator, however any other kind of estimator (see <a href="../../API/core/#Estimators">Estimators</a>) can be constructed by simply substituting the appropriate estimator class in the final line below:</p><pre><code class="nohighlight hljs"># Spatial weight functions: continuous surrogates for 0-1 basis functions 
+simulate(parameters::Parameters, m::Integer = 1) = simulate(parameters, range(m, m))</code></pre><p>Next, we construct our GNN architectur. Here, our goal is to construct a point estimator, however any other kind of estimator (see <a href="../../API/core/#Estimators">Estimators</a>) can be constructed by simply substituting the appropriate estimator class in the final line below:</p><pre><code class="nohighlight hljs"># Spatial weight functions: continuous surrogates for 0-1 basis functions 
 h_max = 0.15 # maximum distance to consider 
 q = 10       # output dimension of the spatial weights
 w = KernelWeights(h_max, q)
@@ -157,7 +157,7 @@ readout = GlobalPool(mean)
 # Expert summary statistics, the empirical variogram
 S = NeighbourhoodVariogram(h_max, q)
 
-# Mapping module
+# Inference network
 ϕ = Chain(
 	Dense(2q =&gt; 128, relu), 
 	Dense(128 =&gt; 128, relu), 
@@ -168,11 +168,11 @@ S = NeighbourhoodVariogram(h_max, q)
 deepset = DeepSet(ψ, ϕ; S = S)
 
 # Point estimator
-θ̂ = PointEstimator(deepset)</code></pre><p>Next, we train the estimator:</p><pre><code class="nohighlight hljs">m = 1
+θ̂ = PointEstimator(deepset)</code></pre><p>Next, we train the estimator. </p><pre><code class="nohighlight hljs">m = 1
 K = 5000
 θ_train = sample(K)
 θ_val   = sample(K÷5)
-θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 20)</code></pre><p>Then, we assess our trained estimator as before: </p><pre><code class="nohighlight hljs">θ_test = sample(1000)
+θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 20)</code></pre><p>Note that the fast construction of a GNN-based neural Bayes estimator typically requires a graphical processing unit (GPU).</p><p>Then, we assess our trained estimator: </p><pre><code class="nohighlight hljs">θ_test = sample(1000)
 Z_test = simulate(θ_test, m)
 assessment = assess(θ̂, θ_test, Z_test)
 bias(assessment)   
@@ -185,4 +185,4 @@ S = parameters.S                   # observed locations
 θ̂(Z)                               # point estimates
 θ̃ = Parameters(θ̂(Z), S)            # construct Parameters object from the point estimates
 bs = bootstrap(θ̂, θ̃, simulate, m)  # bootstrap estimates
-interval(bs)                       # parametric bootstrap confidence interval              </code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../overview/">« Overview</a><a class="docs-footer-nextpage" href="../advancedusage/">Advanced usage »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.0 on <span class="colophon-date" title="Monday 13 January 2025 07:08">Monday 13 January 2025</span>. Using Julia version 1.11.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+interval(bs)                       # parametric bootstrap confidence interval              </code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../overview/">« Overview</a><a class="docs-footer-nextpage" href="../advancedusage/">Advanced usage »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.0 on <span class="colophon-date" title="Monday 13 January 2025 15:19">Monday 13 January 2025</span>. Using Julia version 1.11.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
