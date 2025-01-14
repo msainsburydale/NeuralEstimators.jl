@@ -321,7 +321,7 @@ end
 simulate(parameters::Parameters, m::Integer = 1) = simulate(parameters, range(m, m))
 ```
 
-Next, we construct our GNN architectur. Here, our goal is to construct a point estimator, however any other kind of estimator (see [Estimators](@ref)) can be constructed by simply substituting the appropriate estimator class in the final line below:
+Next, we construct our GNN architectur. Here, we use an architecture tailored to isotropic spatial dependence models; for further details, see Section 2.2 of [Sainsbury-Dale et al. (2025)](https://doi.org/10.1080/10618600.2024.2433671). In this example our goal is to construct a point estimator, however any other kind of estimator (see [Estimators](@ref)) can be constructed by simply substituting the appropriate estimator class in the final line below:
 
 ```
 # Spatial weight functions: continuous surrogates for 0-1 basis functions 
@@ -368,9 +368,9 @@ K = 5000
 θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 20)
 ``` 
 
-Note that the fast construction of a GNN-based neural Bayes estimator typically requires a graphical processing unit (GPU).
+Note that the computations in GNNs are performed in parallel, making them particularly well-suited for GPUs, which typically contain thousands of cores. If you have access to an NVIDIA GPU, you can utilise it by simply loading the Julia package `CUDA`. 
 
-Then, we assess our trained estimator: 
+Next, we assess our trained estimator: 
 
 ```
 θ_test = sample(1000)
