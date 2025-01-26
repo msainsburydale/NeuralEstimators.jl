@@ -900,7 +900,7 @@ end
 	Z = rand(Float32, d, m)
 	parameter_names = ["ρ", "σ", "τ"]
 	p = length(parameter_names)
-	arch = initialise_estimator(p, architecture = "MLP", d = d).arch
+	arch = initialise_estimator(p, architecture = "MLP", d = d).network
 
 	# IntervalEstimator
 	estimator = IntervalEstimator(arch)
@@ -928,7 +928,7 @@ end
 	@test size(ci) == (p, 2)
 
 	# assess()
-	assessment = assess(estimator, rand(p, 2), [Z, Z]) # not sure why this isn't working
+	assessment = assess(estimator, rand(p, 2), [Z, Z]) 
 	coverage(assessment)
 	coverage(assessment; average_over_parameters = true)
 	coverage(assessment; average_over_sample_sizes = false)
@@ -1322,3 +1322,73 @@ end
 	@test all(r̂(Z, θ) .>= 0)                          # likelihood-to-evidence ratios
 	@test all(0 .<= r̂(Z, θ; classifier = true) .<= 1) # class probabilities
 end
+
+@testset "PosteriorEstimator" begin
+
+	using NeuralEstimators
+	using NeuralEstimators: forward, inverse
+	using Test
+	using Flux
+
+	# Basic tests for NormalisingFlow
+	for p in 1:5
+		dim_T = 2p
+		K = 11
+
+		θ  = rand32(p, K)
+		T  = rand32(dim_T, K)
+		flow = NormalisingFlow(p, dim_T)
+
+		# forward pass 
+		U, log_det_J = forward(flow, θ, T)
+		@test size(U) == (p, K)
+		@test size(log_det_J) == (1, K)
+
+		# backward (inverse) pass 
+		X = inverse(flow, U, T)
+		@test size(X) == (p, K)
+		@test maximum(abs.(θ - X)) < 1e-4 
+
+		# density evaluation (employs forward pass, used during training)
+		dens = logdensity(flow, θ, T)
+		@test size(dens) == (1, K)
+
+		# sampling (employs backward (inverse) pass, used during inference stage)
+		N = 100 # desired sample size 
+		θ̃ = sampleposterior(flow, T[:, 1], N)
+		@test size(θ̃) == (p, N)
+	end
+
+	# Documentation example 
+	for approxdist in ["Flow", "Gaussian"]
+		# Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
+		d = 2     # dimension of the parameter vector θ
+		n = 1     # dimension of each independent replicate of Z
+		m = 30    # number of independent replicates in each data set
+		sample(K) = rand32(d, K)
+		simulate(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(n, m) for ϑ in eachcol(θ)]
+
+		w = 128   
+		if approxdist == "Flow"
+			q = NormalisingFlow(d) 
+			ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
+			ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, d))
+			network = DeepSet(ψ, ϕ)
+		elseif approxdist == "Gaussian"
+			q = GaussianDistribution(d) 
+			ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
+			ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, numdistributionalparams(q)))
+			network = DeepSet(ψ, ϕ)
+		end
+		estimator = PosteriorEstimator(q, network)
+		estimator = train(estimator, sample, simulate, m = m, epochs = 1, verbose = false)
+
+		@test numdistributionalparams(estimator) == numdistributionalparams(q)
+
+		# Inference with observed data 
+		θ = [0.8f0; 0.1f0]
+		Z = simulate(θ, m)
+		sampleposterior(estimator, Z) # posterior draws 
+		posteriormean(estimator, Z)   # point estimate
+	end 
+end 

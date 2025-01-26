@@ -4,12 +4,12 @@
 An abstract supertype for user-defined types that store parameters and any
 intermediate objects needed for data simulation.
 
-The user-defined type must have a field `θ` that stores the ``p`` × ``K`` matrix
-of parameters, where ``p`` is the number of parameters in the model and ``K`` is the
-number of parameter vectors sampled from the prior distribution. There are no
-other restrictions.
+The user-defined type must have a field `θ` that stores the ``d`` × ``K`` matrix
+of parameters, where ``d`` is the dimension of the parameter vector to make 
+inference on and ``K`` is the number of sampled parameter vectors. There are no
+other requirements.
 
-See [`subsetparameters`](@ref) for the generic function for subsetting these objects.
+See [`subsetparameters()`](@ref) for the generic function for subsetting these objects. 
 
 # Examples
 

@@ -44,6 +44,8 @@ S(1)
 #TODO also show example with only user-defined summary statistics
 """
     DeepSet(ψ, ϕ, a = mean; S = nothing)
+	(ds::DeepSet)(Z::Vector{A}) where A <: Any
+	(ds::DeepSet)(tuple::Tuple{Vector{A}, Vector{Vector}}) where A <: Any
 The DeepSets representation [(Zaheer et al., 2017)](https://arxiv.org/abs/1703.06114),
 
 ```math
@@ -79,7 +81,7 @@ dimension, but batching with `DeepSet` objects is done at the data set level
 (i.e., sets of replicates are batched together).
 
 Data stored as `Vector{Arrays}` are first concatenated along the replicates
-dimension before being passed into the summary network `ψ`. This means that
+dimension before being passed into the inner network `ψ`. This means that
 `ψ` is applied to a single large array rather than many small arrays, which can
 substantially improve computational efficiency.
 
@@ -105,12 +107,12 @@ set-level information (i.e., one vector for each data set).
 ```
 using NeuralEstimators, Flux
 
-# Two dummy data sets containing 3 and 4 replicates
+# Two data sets containing 3 and 4 replicates
 p = 5  # number of parameters in the statistical model
 n = 10 # dimension of each replicate
 Z = [rand32(n, m) for m ∈ (3, 4)]
 
-# Construct the deepset object
+# Construct DeepSet object
 S = samplesize
 qₛ = 1   # dimension of expert summary statistic
 qₜ = 16  # dimension of neural summary statistic
@@ -119,7 +121,7 @@ w = 32  # width of hidden layers
 ϕ = Chain(Dense(qₜ + qₛ, w, relu), Dense(w, p))
 ds = DeepSet(ψ, ϕ; S = S)
 
-# Apply the deepset object to data
+# Apply DeepSet object to data
 ds(Z)
 
 # Data with set-level information
@@ -505,7 +507,6 @@ function (l::CovarianceMatrix)(v, cholesky_only::Bool = false)
 	@assert p == l.p "the number of rows must be the triangular number T(d) = d(d+1)÷2 = $(l.p)"
 
 	# Ensure that diagonal elements are positive
-	#TODO the solution might be to replace the comprehension with map(): see https://github.com/FluxML/Flux.jl/issues/2187
 	L = vcat([i ∈ l.diag_idx ? softplus.(v[i:i, :]) : v[i:i, :] for i ∈ 1:p]...)
 	cholesky_only && return L
 
@@ -832,3 +833,6 @@ struct Shortcut{S}
     s::S
 end
 (s::Shortcut)(mx, x) = mx + s.s(x)
+
+
+

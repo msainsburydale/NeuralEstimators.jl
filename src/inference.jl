@@ -1,26 +1,99 @@
-#TODO parallel computations in outer broadcasting functions
-#TODO if we add them, these methods will be easily extended to NLE and NPE (whatever methods allows a density to be evaluated)
+"""
+	estimate(θ̂, Z, T = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+
+Apply the estimator `θ̂` on batches of `Z` (and optionally other set-level information `T`) of size `batchsize`.
+
+This can prevent memory issues that can occur with large data sets, particularly on the GPU.
+
+Batching will only be done if there are multiple data sets in `Z`, which will be inferred by `Z` being a vector, or a tuple whose first element is a vector.
+"""
+function estimate(θ̂, z, θ = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+
+	# Convert to Float32 for numerical efficiency
+	θ = f32(θ)
+	z = f32(z)
+
+	# Tupleise if necessary
+  	z = isnothing(θ) ? z : (z, θ)
+
+	# Only do batching if we have multiple data sets
+	if typeof(z) <: AbstractVector
+		minibatching = true
+		batchsize = min(length(z), batchsize)
+	elseif typeof(z) <: Tuple && typeof(z[1]) <: AbstractVector
+		# Can only batch if the number of data sets in z[1] aligns with the number of sets in z[2]:
+		K₁ = length(z[1])
+		K₂ = typeof(z[2]) <: AbstractVector ? length(z[2]) : size(z[2], 2)
+		minibatching = K₁ == K₂
+		batchsize = min(K₁, batchsize)
+	else # we dont have replicates: just apply the estimator without batching
+		minibatching = false
+	end
+
+	device  = _checkgpu(use_gpu, verbose = false)
+	θ̂ = θ̂ |> device
+
+	if !minibatching
+		z = z |> device
+		ŷ = θ̂(z; kwargs...)
+		ŷ = ŷ |> cpu
+	else
+		data_loader = _DataLoader(z, batchsize, shuffle=false, partial=true)
+		ŷ = map(data_loader) do zᵢ
+			zᵢ = zᵢ |> device
+			ŷ = θ̂(zᵢ; kwargs...)
+			ŷ = ŷ |> cpu
+			ŷ
+		end
+		ŷ = stackarrays(ŷ)
+	end
+
+	return ŷ
+end
+
+# ---- Point estimation from estimators that allow for posterior sampling ----
+
+"""
+	posteriormedian(θ::AbstractMatrix)	
+	posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...)	
+	
+Compute the vector of marginal posterior medians based either on a ``d`` × ``N`` matrix `θ` of posterior draws, 
+where ``d`` denotes the number of parameters to make inference on, 
+or directly from an estimator that allows for posterior sampling via [`sampleposterior()`](@ref) (i.e., `PosteriorEstimator` or `RatioEstimator`). 
+"""
+posteriormedian(θ::AbstractMatrix) = median(θ; dims = 2)
+posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormedian(sampleposterior(estimator, Z, N; kwargs...))
+
+"""
+	posteriormean(θ::AbstractMatrix)	
+	posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...)	
+	
+Compute the posterior mean based either on a ``d`` × ``N`` matrix `θ` of posterior draws, 
+where ``d`` denotes the number of parameters to make inference on, 
+or directly from an estimator that allows for posterior sampling via [`sampleposterior()`](@ref) (i.e., `PosteriorEstimator` or `RatioEstimator`). 
+"""
+posteriormean(θ::AbstractMatrix) = mean(θ; dims = 2)
+posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormean(sampleposterior(estimator, Z, N; kwargs...))
+
 
 # ---- Posterior sampling ----
 
+#TODO Parallel computations in outer broadcasting functions
 #TODO Basic MCMC sampler (initialised with θ₀)
 @doc raw"""
+	sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000)
 	sampleposterior(estimator::RatioEstimator, Z, N::Integer = 1000; θ_grid, prior::Function = θ -> 1f0)
-Samples from the approximate posterior distribution
-$p(\boldsymbol{\theta} \mid \boldsymbol{Z})$ implied by `estimator`.
+Samples from the approximate posterior distribution $p(\boldsymbol{\theta} \mid \boldsymbol{Z})$ implied by `estimator`.
 
 The positional argument `N` controls the size of the posterior sample.
 
-Currently, the sampling algorithm is based on a fine-gridding of the
+When sampling based on a `RatioEstimator`, the sampling algorithm is based on a fine-gridding of the
 parameter space, specified through the keyword argument `θ_grid` (or `theta_grid`). 
 The approximate posterior density is evaluated over this grid, which is then
 used to draw samples. This is very effective when making inference with a
 small number of parameters. For models with a large number of parameters,
 other sampling algorithms may be needed (please feel free to contact the
-package maintainer for discussion).
-
-The prior distribution $p(\boldsymbol{\theta})$ is controlled through the keyword
-argument `prior` (by default, a uniform prior is used).
+package maintainer for discussion). The prior distribution $p(\boldsymbol{\theta})$ is controlled through the keyword argument `prior` (by default, a uniform prior is used).
 """
 function sampleposterior(est::RatioEstimator,
 				Z,
@@ -41,8 +114,8 @@ function sampleposterior(est::RatioEstimator,
 	# @assert isnothing(θ_grid) || isnothing(θ₀) "Only one of `θ_grid` and `θ₀` should be given"
 
 	if !isnothing(θ_grid)
-		θ_grid = Float32.(θ_grid) # convert for efficiency and to avoid warnings
-		rZθ = vec(estimateinbatches(est, Z, θ_grid; kwargs...))
+		θ_grid = f32(θ_grid) 
+		rZθ = vec(estimate(est, Z, θ_grid; kwargs...))
 		pθ  = prior.(eachcol(θ_grid))
 		density = pθ .* rZθ
 		θ = StatsBase.wsample(eachcol(θ_grid), density, N; replace = true)
@@ -54,10 +127,6 @@ function sampleposterior(est::RatioEstimator, Z::AbstractVector, args...; kwargs
 end
 
 # ---- Optimisation-based point estimates ----
-
-#TODO might be better to do this on the log-scale... can do this efficiently
-#     through the relation logr(Z,θ) = logit(c(Z,θ)), that is, just apply logit
-#     to the deepset object.
 
 @doc raw"""
 	mlestimate(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, penalty::Function = θ -> 1, use_gpu = true)
@@ -128,8 +197,8 @@ function _maximisedensity(
 
 	if !isnothing(θ_grid)
 
-		θ_grid = Float32.(θ_grid)       # convert for efficiency and to avoid warnings
-		rZθ = vec(estimateinbatches(est, Z, θ_grid; kwargs...))
+		θ_grid = f32(θ_grid)      
+		rZθ = vec(estimate(est, Z, θ_grid; kwargs...))
 		pθ  = prior.(eachcol(θ_grid))
 		density = pθ .* rZθ
 		θ̂ = θ_grid[:, argmax(density), :]   # extra colon to preserve matrix output
@@ -157,26 +226,17 @@ end
 	interval(θ::Matrix; probs = [0.05, 0.95], parameter_names = nothing)
 	interval(estimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu = true)
 
-Compute a confidence interval based either on a ``p`` × ``B`` matrix `θ` of
-parameters (typically containing bootstrap estimates or posterior draws)
-with ``p`` the number of parameters in the model, or from an `IntervalEstimator`
+Compute a confidence/credible interval based either on a ``d`` × ``B`` matrix `θ` of
+parameters (typically containing bootstrap estimates or posterior draws),
+where ``d`` denotes the number of parameters to make inference on, or from an `IntervalEstimator`
 and data `Z`.
 
-When given `θ`, the intervals are constructed by compute quantiles with
+When given `θ`, the intervals are constructed by computing quantiles with
 probability levels controlled by the keyword argument `probs`.
 
-The return type is a ``p`` × 2 matrix, whose first and second columns respectively
+The return type is a ``d`` × 2 matrix, whose first and second columns respectively
 contain the lower and upper bounds of the interval. The rows of this matrix can
-be named by passing a vector of strings to the keyword argument `parameter_names`.
-
-# Examples
-```
-using NeuralEstimators
-p = 3
-B = 50
-θ = rand(p, B)
-interval(θ)
-```
+be named by passing a vector of strings to the keyword argument `parameter_names`. 
 """
 function interval(bs; probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 1:size(bs, 1)])
 
@@ -194,7 +254,7 @@ end
 
 function interval(estimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu::Bool = true)
 
-	ci = estimateinbatches(estimator, Z, use_gpu = use_gpu)
+	ci = estimate(estimator, Z, use_gpu = use_gpu)
 	ci = cpu(ci)
 
 	if typeof(estimator) <: IntervalEstimator
@@ -281,14 +341,14 @@ function bootstrap(θ̂, parameters::P, simulator, m::Integer; B::Integer = 400,
 		v = vcat(v...)
 	end
 
-	bs = estimateinbatches(θ̂, v, use_gpu = use_gpu)
+	bs = estimate(θ̂, v, use_gpu = use_gpu)
 	return bs
 end
 
 function bootstrap(θ̂, parameters::P, Z̃; use_gpu::Bool = true) where P <: Union{AbstractMatrix, ParameterConfigurations}
 	K = size(parameters, 2)
 	@assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
-	bs = estimateinbatches(θ̂, Z̃, use_gpu = use_gpu)
+	bs = estimate(θ̂, Z̃, use_gpu = use_gpu)
 	return bs
 end
 
@@ -307,7 +367,7 @@ function bootstrap(θ̂, Z; B::Integer = 400, use_gpu::Bool = true, blocks = not
 		Z̃ = [subsetdata(Z, rand(1:m, m)) for _ in 1:B]
 	end
 	# Estimate the parameters for each bootstrap sample
-	bs = estimateinbatches(θ̂, Z̃, use_gpu = use_gpu)
+	bs = estimate(θ̂, Z̃, use_gpu = use_gpu)
 
 	return bs
 end

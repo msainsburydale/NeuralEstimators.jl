@@ -68,7 +68,7 @@ function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, st
 		error("Nonstationarity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
 	end
 	ndata = DataStore()
-	S = Float32.(S)
+	S = f32(S)
 	A = adjacencymatrix(S; k = k, r = r, random = random) 
 	S = permutedims(S) # need final dimension to be n-dimensional
 	if store_S
@@ -91,7 +91,7 @@ function reshapeZ(Z::A) where A <: AbstractArray{T, 3} where {T}
 	# Dimension 2: n, number of spatial locations
 	# Dimension 3: m, number of replicates
 	# Permute dimensions 2 and 3 since GNNGraph requires final dimension to be n-dimensional
-	permutedims(Float32.(Z), (1, 3, 2))
+	permutedims(f32(Z), (1, 3, 2))
 end
 function reshapeZ(Z::V) where V <: AbstractVector{M} where M <: AbstractMatrix{T} where T 
 	# method for multidimensional processes with spatial locations varying between replicates
@@ -192,7 +192,7 @@ function (l::IndicatorWeights)(h::M) where M <: AbstractMatrix{T} where T
 	bins_lower = h_cutoffs[1:end-1] # lower bounds of the distance bins 
 	N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
 	N = reduce(vcat, N)
-	Float32.(N)
+	f32(N)
 end
 Flux.trainable(l::IndicatorWeights) =  NamedTuple()
 
@@ -228,8 +228,8 @@ function KernelWeights(h_max, n_bins::Integer)
 	h_cutoffs = collect(h_cutoffs)
 	mu = [(h_cutoffs[i] + h_cutoffs[i+1]) / 2 for i in 1:n_bins] # midpoints of the intervals 
 	sigma = [(h_cutoffs[i+1] - h_cutoffs[i]) / 4 for i in 1:n_bins] # std dev so that 95% of mass is within the bin 
-	mu = Float32.(mu)
-	sigma = Float32.(sigma)
+	mu = f32(mu)
+	sigma = f32(sigma)
 	KernelWeights(mu, sigma) 
 end 
 function (l::KernelWeights)(h::M) where M <: AbstractMatrix{T} where T 
@@ -237,7 +237,7 @@ function (l::KernelWeights)(h::M) where M <: AbstractMatrix{T} where T
 	sigma = l.sigma 
 	N = [exp.(-(h .- mu[i:i]).^2 ./ (2 * sigma[i:i].^2)) for i in eachindex(mu)] # Gaussian kernel for each bin (NB avoid scalar indexing by i:i)
 	N = reduce(vcat, N) 
-	Float32.(N) 
+	f32(N) 
 end 
 Flux.trainable(l::KernelWeights) = NamedTuple()
 

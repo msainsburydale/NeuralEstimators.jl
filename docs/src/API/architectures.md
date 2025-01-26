@@ -1,13 +1,17 @@
 # Architectures
 
+In principle, any [`Flux`](https://fluxml.ai/Flux.jl/stable/) model can be used to construct the neural network. To integrate it into the workflow, one need only define a method that transforms $K$-dimensional vectors of data sets into matrices with $K$ columns, where the number of rows corresponds to the dimensionality of the output spaces listed in the [Overview](@ref). The type [`DeepSet`](@ref) serves as a convenient wrapper for embedding standard neural networks (e.g., MLPs, CNNs, GNNs) in a framework for making inference with an arbitrary number of independent replicates, and it comes with pre-defined methods for handling the transformations from a $K$-dimensional vector of data to a matrix output. 
+
 ## Modules
 
-The following high-level modules are often used when constructing a neural-network architecture. In particular, the [`DeepSet`](@ref) is the building block for most classes of [Estimators](@ref) in the package.
+The following high-level modules are often used when constructing a neural-network architecture. In particular, the [`DeepSet`](@ref) is a frequently-used building block for most classes of [Estimators](@ref) in the package.
 
 ```@docs
 DeepSet
 
 GNNSummary
+
+MLP
 ```
 
 # User-defined summary statistics

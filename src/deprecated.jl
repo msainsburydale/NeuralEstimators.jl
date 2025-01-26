@@ -11,3 +11,5 @@ loadweights(path::String) = load(path, @__MODULE__)[:weights]
 # aliases for backwards compatability
 WeightedGraphConv = SpatialGraphConv; export WeightedGraphConv 
 simulategaussianprocess = simulategaussian; export simulategaussianprocess
+estimateinbatches = estimate; export estimateinbatches
+_runondevice(θ̂, z, use_gpu::Bool; batchsize::Integer = 32) = estimate(θ̂, z; batchsize = batchsize, use_gpu = use_gpu)

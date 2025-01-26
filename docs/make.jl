@@ -7,7 +7,7 @@ makedocs(
     # format = Documenter.LaTeX(platform = "none"), # extracting the .tex file can be useful for bug fixing
     pages = [
            "index.md",
-           "framework.md",
+           "methodology.md",
            "Workflow" => [
                 "workflow/overview.md",
                 "workflow/examples.md",
@@ -16,6 +16,7 @@ makedocs(
            "API" => [
                 "API/core.md",
                 "API/architectures.md",
+                "API/approximatedistributions.md",
                 "API/loss.md",
                 "API/simulation.md",
                 "API/utility.md",

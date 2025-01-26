@@ -2,12 +2,12 @@
 
 ## Saving and loading neural estimators
 
-In regards to saving and loading, neural estimators behave in the same manner as regular Flux models. Therefore, the examples and recommendations outlined in the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/saving/) also apply directly to neural estimators. For example, to save the model state of the neural estimator `θ̂`:
+In regards to saving and loading, neural estimators behave in the same manner as regular Flux models. Therefore, the examples and recommendations outlined in the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/saving/) also apply directly to neural estimators. For example, to save the model state of the neural estimator `estimator`:
 
 ```
 using Flux
 using BSON: @save, @load
-model_state = Flux.state(θ̂)
+model_state = Flux.state(estimator)
 @save "estimator.bson" model_state
 ```
 
@@ -15,7 +15,7 @@ Then, to load it in a new session, one may initialise a neural estimator with th
 
 ```
 @load "estimator.bson" model_state
-Flux.loadmodel!(θ̂, model_state)
+Flux.loadmodel!(estimator, model_state)
 ```
 
 It is also straightforward to save the entire neural estimator, including its architecture (see [here](https://fluxml.ai/Flux.jl/stable/guide/saving/#Saving-Models-as-Julia-Structs)). However, the first approach outlined above is recommended for long-term storage.
@@ -24,7 +24,7 @@ For convenience, the function [`train()`](@ref) allows for the automatic saving 
 
 ## Storing expensive intermediate objects for data simulation
 
-Parameters sampled from the prior distribution may be stored in two ways. Most simply, they can be stored as a $p \times K$ matrix, where $p$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution. Alternatively, they can be stored in a user-defined struct subtyping [`ParameterConfigurations`](@ref), whose only requirement is a field `θ` that stores the $p \times K$ matrix of parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below.
+Parameters sampled from the prior distribution may be stored in two ways. Most simply, they can be stored as a $d \times K$ matrix, where $d$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution. Alternatively, they can be stored in a user-defined struct subtyping [`ParameterConfigurations`](@ref), whose only requirement is a field `θ` that stores the $d \times K$ matrix of parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below.
 
 ## On-the-fly and just-in-time simulation
 
@@ -34,52 +34,47 @@ One may also regularly refresh the set $\vartheta_{\text{train}}$ of parameter v
 
 The above strategies are facilitated with various methods of [`train()`](@ref).
 
+
 ## Regularisation
 
 The term *regularisation* refers to a variety of techniques aimed to reduce overfitting when training a neural network, primarily by discouraging complex models.
 
-One common regularisation technique is known as dropout [(Srivastava et al., 2014)](https://jmlr.org/papers/v15/srivastava14a.html), implemented in Flux's [`Dropout`](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dropout) layer. Dropout involves temporarily dropping ("turning off") a randomly selected set of neurons (along with their connections) at each iteration of the training stage, and this results in a computationally-efficient form of model (neural-network) averaging.
+A popular regularisation technique is known as dropout, implemented in Flux's [`Dropout`](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dropout) layer. Dropout involves temporarily dropping ("turning off") a randomly selected set of neurons (along with their connections) at each iteration of the training stage, which results in a computationally-efficient form of model (neural-network) averaging [(Srivastava et al., 2014)](https://jmlr.org/papers/v15/srivastava14a.html).
 
-Another class of regularisation techniques involve modifying the loss function. For instance, L₁ regularisation (sometimes called lasso regression) adds to the loss a penalty based on the absolute value of the neural-network parameters. Similarly, L₂ regularisation (sometimes called ridge regression) adds to the loss a penalty based on the square of the neural-network parameters. Note that these penalty terms are not functions of the data or of the statistical-model parameters that we are trying to infer, and therefore do not modify the Bayes risk or the associated Bayes estimator. These regularisation techniques can be implemented straightforwardly by providing a custom `optimiser` to [`train`](@ref) that includes a [`SignDecay`](https://fluxml.ai/Flux.jl/stable/training/optimisers/#Flux.Optimise.SignDecay) object for L₁ regularisation, or a [`WeightDecay`](https://fluxml.ai/Flux.jl/stable/training/optimisers/#Flux.Optimise.WeightDecay) object for L₂ regularisation. See the [Flux documentation](https://fluxml.ai/Flux.jl/stable/training/training/#Regularisation) for further details.
+Another class of regularisation techniques involve modifying the loss function. For instance, L₁ regularisation (sometimes called lasso regression) adds to the loss a penalty based on the absolute value of the neural-network parameters. Similarly, L₂ regularisation (sometimes called ridge regression) adds to the loss a penalty based on the square of the neural-network parameters. Note that these penalty terms are not functions of the data or of the statistical-model parameters that we are trying to infer. These regularisation techniques can be implemented straightforwardly by providing a custom `optimiser` to [`train()`](@ref) that includes a [`SignDecay`](https://fluxml.ai/Flux.jl/stable/reference/training/optimisers/#Optimisers.SignDecay) object for L₁ regularisation, or a [`WeightDecay`](https://fluxml.ai/Flux.jl/stable/reference/training/optimisers/#Optimisers.WeightDecay) object for L₂ regularisation. See the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/training/training/#Regularisation) for further details. Note that, when the training data and parameters are simulated dynamically (i.e., "on the fly"), there is no possibility of overfitting and therefore no use for this form of regularisation.   
 
-For example, the following code constructs a neural Bayes estimator using dropout and L₁ regularisation with penalty coefficient $\lambda = 10^{-4}$:
+For illustration, the following code constructs a neural Bayes estimator using dropout and L₁ regularisation with penalty coefficient $\lambda = 10^{-4}$:
 
 ```
-using NeuralEstimators
-using Flux
+using NeuralEstimators, Flux
 
-# Generate data from the model Z ~ N(θ, 1) and θ ~ N(0, 1)
-p = 1       # number of unknown parameters in the statistical model
-m = 5       # number of independent replicates
-d = 1       # dimension of each independent replicate
-K = 3000    # number of training samples
-θ_train = randn(1, K)
-θ_val   = randn(1, K)
-Z_train = [μ .+ randn(1, m) for μ ∈ eachcol(θ_train)]
-Z_val   = [μ .+ randn(1, m) for μ ∈ eachcol(θ_val)]
+# Data Z|θ ~ N(θ, 1) with θ ~ N(0, 1)
+d = 1     # dimension of the parameter vector θ
+n = 1     # dimension of each independent replicate of Z
+m = 5     # number of independent replicates in each data set
+sampler(K) = randn32(d, K)
+simulator(θ, m) = [μ .+ randn32(n, m) for μ ∈ eachcol(θ)]
+K = 3000  # number of training samples
+θ_train = sampler(K)
+θ_val   = sampler(K)
+Z_train = simulator(θ_train, m)
+Z_val   = simulator(θ_val, m)
 
-# Architecture with dropout layers
-ψ = Chain(
-	Dense(1, 32, relu),
-	Dropout(0.1),
-	Dense(32, 32, relu),
-	Dropout(0.5)
-	)     
-ϕ = Chain(
-	Dense(32, 32, relu),
-	Dropout(0.5),
-	Dense(32, 1)
-	)           
-θ̂ = DeepSet(ψ, ϕ)
+# Neural network with dropout layers
+w = 128
+ψ = Chain(Dense(1, w, relu), Dropout(0.1), Dense(w, w, relu), Dropout(0.5))     
+ϕ = Chain(Dense(w, w, relu), Dropout(0.5), Dense(w, 1))           
+network = DeepSet(ψ, ϕ)
 
-# Optimiser with L₂ regularisation
-optimiser = Flux.setup(OptimiserChain(SignDecay(1e-4), Adam()), θ̂)
+# Initialise estimator
+estimator = PointEstimator(network)
+
+# Optimiser with L₁ regularisation
+optimiser = Flux.setup(OptimiserChain(SignDecay(1e-4), Adam()), estimator)
 
 # Train the estimator
-train(θ̂, θ_train, θ_val, Z_train, Z_val; optimiser = optimiser)
+train(estimator, θ_train, θ_val, Z_train, Z_val; optimiser = optimiser)
 ```
-
-Note that when the training data and/or parameters are held fixed during training, L₂ regularisation with penalty coefficient $\lambda = 10^{-4}$ is applied by default.
 
 ## Expert summary statistics
 
@@ -93,8 +88,7 @@ A neural estimator in the Deep Set representation can be applied to data sets of
 
 ### Piecewise estimators
 
-If data sets with varying $m$ are envisaged, one could train $l$ neural Bayes estimators for different sample sizes, or groups thereof (e.g., a small-sample estimator and a large-sample estimator).
- Specifically, for sample-size changepoints $m_1$, $m_2$, $\dots$, $m_{l-1}$, one could construct a piecewise neural Bayes estimator,
+If data sets with varying $m$ are envisaged, one could train $l$ estimators for different sample sizes, or groups thereof (e.g., a small-sample estimator and a large-sample estimator). For example, for sample-size changepoints $m_1$, $m_2$, $\dots$, $m_{l-1}$, one could construct a piecewise neural Bayes estimator,
 ```math
 \hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}; \boldsymbol{\gamma}^*)
 =
@@ -105,18 +99,18 @@ If data sets with varying $m$ are envisaged, one could train $l$ neural Bayes es
 \hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}; \boldsymbol{\gamma}^*_{\tilde{m}_l}) & m > m_{l-1},
 \end{cases}
 ```
-where, here, $\boldsymbol{\gamma}^* \equiv (\boldsymbol{\gamma}^*_{\tilde{m}_1}, \dots, \boldsymbol{\gamma}^*_{\tilde{m}_{l-1}})$, and where $\boldsymbol{\gamma}^*_{\tilde{m}}$ are the neural-network parameters optimised for sample size $\tilde{m}$ chosen so that $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}^*_{\tilde{m}})$ is near-optimal over the range of sample sizes in which it is applied.
-This approach works well in practice, and it is less computationally burdensome than it first appears when used in conjunction with pre-training.
+where $\boldsymbol{\gamma}^* \equiv (\boldsymbol{\gamma}^*_{\tilde{m}_1}, \dots, \boldsymbol{\gamma}^*_{\tilde{m}_{l-1}})$, and $\boldsymbol{\gamma}^*_{\tilde{m}}$ are the neural-network parameters optimised for sample size $\tilde{m}$ chosen so that $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}^*_{\tilde{m}})$ is near-optimal over the range of sample sizes in which it is applied.
+This approach works well in practice and is less computationally burdensome than it first appears when used in conjunction with pre-training.
 
-Piecewise neural estimators are implemented with the struct, [`PiecewiseEstimator`](@ref), and their construction is facilitated with [`trainx()`](@ref).  
+Piecewise estimators are implemented with the type [`PiecewiseEstimator`](@ref), and their construction is facilitated with [`trainx()`](@ref).  
 
 ### Training with variable sample sizes
 
-Alternatively, one could treat the sample size as a random variable, $M$, with support over a set of positive integers, $\mathcal{M}$, in which case, for the neural Bayes estimator, the risk function becomes
+Alternatively, one could treat the sample size as a random variable, $M$, with support over a set of positive integers, $\mathcal{M}$, in which case the Bayes risk becomes
 ```math
 \sum_{m \in \mathcal{M}}
-P(M=m)\left(
-\int_\Theta \int_{\mathcal{Z}^m}  L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{z}^{(m)}))f(\boldsymbol{z}^{(m)} \mid \boldsymbol{\theta}) \rm{d} \boldsymbol{z}^{(m)} \rm{d} \Pi(\boldsymbol{\theta})
+\textrm{Pr}(M=m)\left(
+\int_\Theta \int_{\mathcal{Z}^m}  L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}))p(\boldsymbol{Z}^{(m)} \mid \boldsymbol{\theta})\pi(\boldsymbol{\theta}) \rm{d}\boldsymbol{Z}^{(m)} \rm{d} \boldsymbol{\theta}
 \right).
 ```
 This approach does not materially alter the workflow, except that one must also sample the number of replicates before simulating the data during the training phase.
@@ -162,7 +156,7 @@ using Statistics: mean
 	τ = Uniform(0, 1.0),
 	ρ = Uniform(0, 0.4)
 )
-p = length(Π)
+d = length(Π)
 
 # Define the (gridded) spatial domain and compute the distance matrix
 points = range(0, 1, 16)
@@ -263,7 +257,7 @@ Next, we construct and train a masked neural Bayes estimator. Here, the first co
 	Conv((3, 3),  32 => 64, relu),
 	Flux.flatten
 	)
-ϕ = Chain(Dense(64, 256, relu), Dense(256, p, exp))
+ϕ = Chain(Dense(64, 256, relu), Dense(256, d, exp))
 deepset = DeepSet(ψ, ϕ)
 
 # Initialise point estimator
@@ -306,7 +300,7 @@ First, we construct a neural approximation of the MAP estimator. In this example
 	)
 ϕ = Chain(
 	Dense(64, 256, relu),
-	Dense(256, p, exp)
+	Dense(256, d, exp)
 	)
 deepset = DeepSet(ψ, ϕ)
 

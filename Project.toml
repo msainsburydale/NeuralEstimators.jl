@@ -1,7 +1,7 @@
 name = "NeuralEstimators"
 uuid = "38f6df31-6b4a-4144-b2af-7ace2da57606"
 authors = ["Matthew Sainsbury-Dale <msainsburydale@gmail.com> and contributors"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 BSON = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
@@ -47,7 +47,7 @@ DataFrames = "1"
 Distances = "0.10, 0.11"
 Flux = "0.16"
 Folds = "0.2"
-GraphNeuralNetworks = "0.6, 1"
+GraphNeuralNetworks = "1"
 Graphs = "1"
 InvertedIndices = "1"
 Metal = "1"

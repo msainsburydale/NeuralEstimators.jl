@@ -1,11 +1,9 @@
-# - `optimiser`: An Optimisers.jl optimisation rule, using `Adam()` by default. When the training data and/or parameters are held fixed, the default is to use L₂ regularisation with penalty coefficient λ=1e-4, so that `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), θ̂)`. Otherwise, when the training data and parameters are simulated "on the fly", by default no regularisation is used, so that `optimiser = Flux.setup(Adam(), θ̂)`.
-# TODO savepath::String = "" -> savepath::Union{String,Nothing} = nothing
 """
-	train(θ̂, sampler::Function, simulator::Function; ...)
-	train(θ̂, θ_train::P, θ_val::P, simulator::Function; ...) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-	train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
+	train(estimator, sampler::Function, simulator::Function; ...)
+	train(estimator, θ_train::P, θ_val::P, simulator::Function; ...) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+	train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
 
-Train a neural estimator `θ̂`.
+Trains a neural `estimator`.
 
 The methods cater for different variants of "on-the-fly" simulation.
 Specifically, a `sampler` can be provided to continuously sample new parameter
@@ -17,21 +15,21 @@ provided with specific sets of parameters (`θ_train` and `θ_val`) and/or data
 In all methods, the validation parameters and data are held fixed to reduce noise when evaluating the validation risk.
 
 # Keyword arguments common to all methods:
-- `loss = mae`: loss function to evaluate performance. For some classes of estimators (e.g., `QuantileEstimator` and `RatioEstimator`), the loss function does not need to be specified.
+- `loss = mae`: loss function to evaluate performance (only required for objects of type `PointEstimator`). 
 - `epochs = 100`: number of epochs to train the neural network. An epoch is one complete pass through the entire training data set when doing stochastic gradient descent.
 - `batchsize = 32`: the batchsize to use when performing stochastic gradient descent, that is, the number of training samples processed between each update of the neural-network parameters.
-- `optimiser = ADAM()`: optimisation algorithm used to update the neural-network parameters.
-- `savepath::String = ""`: path to save the trained estimator and other information; if an empty string (default), nothing is saved. Otherwise, the neural-network parameters (i.e., the weights and biases) will be saved during training as `bson` files; the risk function evaluated over the training and validation sets will also be saved, in the first and second columns of `loss_per_epoch.csv`, respectively; the best parameters (as measured by validation risk) will be saved as `best_network.bson`.
+- `optimiser = Flux.setup(Adam(), estimator)`: any Optimisers.jl optimisation rule for updating the neural-network parameters. When the training data and/or parameters are held fixed, one may wish to employ regularisation to prevent overfitting, for example, `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), estimator)`, which corresponds to L₂ regularisation with penalty coefficient λ=10⁻⁴. When the training data and parameters are simulated dynamically (i.e., "on the fly") there is no possibility of overfitting and therefore no use for regularisation.   
+- `savepath::Union{String, Nothing} = nothing`: path to save the trained estimator and other information; if `nothing` (default), nothing is saved. Otherwise, the neural-network parameters (i.e., the weights and biases) will be saved during training as `bson` files; the risk function evaluated over the training and validation sets will also be saved, in the first and second columns of `loss_per_epoch.csv`, respectively; the best parameters (as measured by validation risk) will be saved as `best_network.bson`.
 - `stopping_epochs = 5`: cease training if the risk doesn't improve in this number of epochs.
 - `use_gpu = true`: flag indicating whether to use a GPU if one is available.
 - `verbose = true`: flag indicating whether information, including empirical risk values and timings, should be printed to the console during training.
 
-# Keyword arguments common to `train(θ̂, sampler, simulator)` and `train(θ̂, θ_train, θ_val, simulator)`:
-- `m`: sample sizes (either an `Integer` or a collection of `Integers`). The `simulator` is called as `simulator(θ, m)`.
+# Keyword arguments common to `train(estimator, sampler, simulator)` and `train(estimator, θ_train, θ_val, simulator)`:
+- `m = nothing`: arguments to the simulator (typically the number of replicates in each data set as an `Integer` or an `Integer` collection). The `simulator` is called as `simulator(θ, m)` if `m` is given and as `simulator(θ)` otherwise. 
 - `epochs_per_Z_refresh = 1`: the number of passes to make through the training set before the training data are refreshed.
 - `simulate_just_in_time = false`: flag indicating whether we should simulate just-in-time, in the sense that only a `batchsize` number of parameter vectors and corresponding data are in memory at a given time.
 
-# Keyword arguments unique to `train(θ̂, sampler, simulator)`:
+# Keyword arguments unique to `train(estimator, sampler, simulator)`:
 - `K = 10000`: number of parameter vectors in the training set; the size of the validation set is `K ÷ 5`.
 - `ξ = nothing`: an arbitrary collection of objects that, if provided, will be passed to the parameter sampler as `sampler(K, ξ)`; otherwise, the parameter sampler will be called as `sampler(K)`. Can also be provided as `xi`.
 - `epochs_per_θ_refresh = 1`: the number of passes to make through the training set before the training parameters are refreshed. Must be a multiple of `epochs_per_Z_refresh`. Can also be provided as `epochs_per_theta_refresh`.
@@ -40,40 +38,44 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 ```
 using NeuralEstimators, Flux
 
+# Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ N(0, 1) and σ ~ U(0, 1)
 function sampler(K)
 	μ = randn(K) # Gaussian prior
 	σ = rand(K)  # Uniform prior
-	θ = hcat(μ, σ)'
+	θ = vcat(μ', σ')
 	return θ
 end
-
-function simulator(θ_matrix, m)
-	[θ[1] .+ θ[2] * randn(1, m) for θ ∈ eachcol(θ_matrix)]
+function simulator(θ, m)
+	[ϑ[1] .+ ϑ[2] * randn(1, m) for ϑ ∈ eachcol(θ)]
 end
 
-# architecture
-d = 1   # dimension of each replicate
-p = 2   # number of parameters in the statistical model
-ψ = Chain(Dense(1, 32, relu), Dense(32, 32, relu))
-ϕ = Chain(Dense(32, 32, relu), Dense(32, p))
-θ̂ = DeepSet(ψ, ϕ)
+# Neural network 
+d = 2     # dimension of the parameter vector θ
+n = 1     # dimension of each independent replicate of Z
+w = 128   # width of each hidden layer 
+ψ = Chain(Dense(n, w, relu), Dense(w, w, relu))
+ϕ = Chain(Dense(w, w, relu), Dense(w, d))
+network = DeepSet(ψ, ϕ)
 
-# number of independent replicates to use during training
+# Initialise the estimator
+estimator = PointEstimator(network)
+
+# Number of independent replicates to use during training
 m = 15
 
-# training: full simulation on-the-fly
-θ̂ = train(θ̂, sampler, simulator, m = m, epochs = 5)
+# Training: simulation on-the-fly
+estimator  = train(estimator, sampler, simulator, m = m, epochs = 5)
 
-# training: simulation on-the-fly with fixed parameters
+# Training: simulation on-the-fly with fixed parameters
 K = 10000
 θ_train = sampler(K)
-θ_val   = sampler(K ÷ 5)
-θ̂       = train(θ̂, θ_train, θ_val, simulator, m = m, epochs = 5)
+θ_val     = sampler(K ÷ 5)
+estimator = train(estimator, θ_train, θ_val, simulator, m = m, epochs = 5)
 
-# training: fixed parameters and fixed data
-Z_train = simulator(θ_train, m)
-Z_val   = simulator(θ_val, m)
-θ̂       = train(θ̂, θ_train, θ_val, Z_train, Z_val, epochs = 5)
+# Training: fixed parameters and fixed data
+Z_train   = simulator(θ_train, m)
+Z_val     = simulator(θ_val, m)
+estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, epochs = 5)
 ```
 """
 function train end
@@ -89,17 +91,16 @@ function train end
 # requires the data to be subsettable with the function `subsetdata`.
 
 function _train(θ̂, sampler, simulator;
-	m,
+	m = nothing,
 	ξ = nothing, xi = nothing,
 	epochs_per_θ_refresh::Integer = 1, epochs_per_theta_refresh::Integer = 1,
 	epochs_per_Z_refresh::Integer = 1,
 	simulate_just_in_time::Bool = false,
 	loss = Flux.Losses.mae,
-	optimiser          = Flux.setup(Flux.Adam(), θ̂),
-	# optimiser          = Flux.Adam(),
+	optimiser          = Flux.setup(Adam(), θ̂),
     batchsize::Integer = 32,
     epochs::Integer    = 100,
-	savepath::String   = "",
+	savepath::Union{String, Nothing} = nothing,
 	stopping_epochs::Integer = 5,
     use_gpu::Bool      = true,
 	verbose::Bool      = true,
@@ -118,8 +119,7 @@ function _train(θ̂, sampler, simulator;
 	@assert epochs_per_θ_refresh > 0
 	@assert epochs_per_θ_refresh % epochs_per_Z_refresh  == 0 "`epochs_per_θ_refresh` must be a multiple of `epochs_per_Z_refresh`"
 
-	savebool = savepath != "" # turn off saving if savepath is an empty string
-	if savebool
+	if !isnothing(savepath)
 		loss_path = joinpath(savepath, "loss_per_epoch.bson")
 		if isfile(loss_path) rm(loss_path) end
 		if !ispath(savepath) mkpath(savepath) end
@@ -139,7 +139,7 @@ function _train(θ̂, sampler, simulator;
 	verbose && println(" Initial validation risk = $val_risk")
 
 	# Save initial θ̂
-	savebool && _savestate(θ̂, savepath, 0)
+	!isnothing(savepath) && _savestate(θ̂, savepath, 0)
 
 	# Number of batches of θ in each epoch
 	batches = ceil((K / batchsize))
@@ -195,13 +195,13 @@ function _train(θ̂, sampler, simulator;
 		epoch_time += @elapsed val_risk = _risk(θ̂, loss, val_set, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
 		verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
-		savebool && @save loss_path loss_per_epoch
+		!isnothing(savepath) && @save loss_path loss_per_epoch
 
 		# If the current risk is better than the previous best, save θ̂ and
 		# update the minimum validation risk; otherwise, add to the early
 		# stopping counter
 		if val_risk <= min_val_risk
-			savebool && _savestate(θ̂, savepath, epoch)
+			!isnothing(savepath) && _savestate(θ̂, savepath, epoch)
 			min_val_risk = val_risk
 			early_stopping_counter = 0
 			θ̂_best = deepcopy(θ̂)
@@ -213,8 +213,8 @@ function _train(θ̂, sampler, simulator;
     end
 
 	# save key information and save the best θ̂ as best_network.bson.
-	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
-	savebool && _savebestmodel(savepath)
+	!isnothing(savepath) && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
+	!isnothing(savepath) && _savebestmodel(savepath)
 
 	# TODO if the user has relied on using train() as a mutating function, the optimal estimator will not be returned. Can I set θ̂ = θ̂_best to fix this? This also ties in with the other TODO down below above trainx(), regarding which device the estimator is on at the end of training.
 
@@ -222,15 +222,13 @@ function _train(θ̂, sampler, simulator;
 end
 
 function _train(θ̂, θ_train::P, θ_val::P, simulator;
-		m,
+		m = nothing,
 		batchsize::Integer = 32,
 		epochs_per_Z_refresh::Integer = 1,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		optimiser          = Flux.setup(Flux.Adam(), θ̂),
-		# optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Flux.Adam()), θ̂),
-		# optimiser        = Flux.Adam(),
-		savepath::String = "",
+		optimiser          = Flux.setup(Adam(), θ̂),
+		savepath::Union{String, Nothing} = nothing,
 		simulate_just_in_time::Bool = false,
 		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
@@ -242,8 +240,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 		@error "We cannot simulate the data just-in-time if we aren't refreshing the data every epoch; please either set `simulate_just_in_time = false` or `epochs_per_Z_refresh = 1`"
 	end
 
-	savebool = savepath != "" # turn off saving if savepath is an empty string
-	if savebool
+	if !isnothing(savepath)
 		loss_path = joinpath(savepath, "loss_per_epoch.bson")
 		if isfile(loss_path) rm(loss_path) end
 		if !ispath(savepath) mkpath(savepath) end
@@ -262,7 +259,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 	loss_per_epoch = [val_risk val_risk;]
 
 	# Save initial θ̂
-	savebool && _savestate(θ̂, savepath, 0)
+	!isnothing(savepath) && _savestate(θ̂, savepath, 0)
 
 	# We may simulate Z_train in its entirety either because (i) we
 	# want to avoid the overhead of simulating continuously or (ii) we are
@@ -309,12 +306,12 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 		verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
 
 		# save the loss every epoch in case training is prematurely halted
-		savebool && @save loss_path loss_per_epoch
+		!isnothing(savepath) && @save loss_path loss_per_epoch
 
 		# If the current risk is better than the previous best, save θ̂ and
 		# update the minimum validation risk
 		if val_risk <= min_val_risk
-			savebool && _savestate(θ̂, savepath, epoch)
+			!isnothing(savepath) && _savestate(θ̂, savepath, epoch)
 			min_val_risk = val_risk
 			early_stopping_counter = 0
 			θ̂_best = deepcopy(θ̂)
@@ -325,8 +322,8 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
     end
 
 	# save key information and save the best θ̂ as best_network.bson.
-	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
-	savebool && _savebestmodel(savepath)
+	!isnothing(savepath) && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
+	!isnothing(savepath) && _savebestmodel(savepath)
 
     return θ̂_best
 end
@@ -335,10 +332,8 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		optimiser          = Flux.setup(Flux.Adam(), θ̂),
-		# optimiser        = Flux.setup(OptimiserChain(WeightDecay(1e-4), Flux.Adam()), θ̂),
-		# optimiser        = Flux.Adam(),
-		savepath::String = "",
+		optimiser          = Flux.setup(Adam(), θ̂),
+		savepath::Union{String, Nothing} = nothing,
 		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
 		verbose::Bool    = true
@@ -368,8 +363,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		end
 	end
 
-	savebool = savepath != "" # turn off saving if savepath is an empty string
-	if savebool
+	if !isnothing(savepath)
 		loss_path = joinpath(savepath, "loss_per_epoch.bson")
 		if isfile(loss_path) rm(loss_path) end
 		if !ispath(savepath) mkpath(savepath) end
@@ -391,7 +385,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
 	# Initialise the loss per epoch matrix and save the initial estimator
 	loss_per_epoch = [initial_train_risk val_risk;]
-	savebool && _savestate(θ̂, savepath, 0)
+	!isnothing(savepath) && _savestate(θ̂, savepath, 0)
 
 	local θ̂_best = deepcopy(θ̂)
 	local min_val_risk = val_risk
@@ -408,11 +402,11 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
 
 		# save the loss every epoch in case training is prematurely halted
-		savebool && @save loss_path loss_per_epoch
+		!isnothing(savepath) && @save loss_path loss_per_epoch
 
 		# If the current loss is better than the previous best, save θ̂ and update the minimum validation risk
 		if val_risk <= min_val_risk
-			savebool && _savestate(θ̂, savepath, epoch)
+			!isnothing(savepath) && _savestate(θ̂, savepath, epoch)
 			min_val_risk = val_risk
 			early_stopping_counter = 0
 			θ̂_best = deepcopy(θ̂)
@@ -424,8 +418,8 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     end
 
 	# save key information
-	savebool && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
-	savebool && _savebestmodel(savepath)
+	!isnothing(savepath) && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
+	!isnothing(savepath) && _savebestmodel(savepath)
 
     return θ̂_best
 end
@@ -440,7 +434,7 @@ function train(θ̂::Union{IntervalEstimator, QuantileEstimatorDiscrete}, args..
 	kwargs = (;kwargs...)
 
 	# Define the loss function based on the given probabiltiy levels
-	τ = Float32.(θ̂.probs)
+	τ = f32(θ̂.probs)
 	# Determine if we need to move τ to the GPU
 	use_gpu = haskey(kwargs, :use_gpu) ? kwargs.use_gpu : true
 	device  = _checkgpu(use_gpu, verbose = false)
@@ -474,9 +468,19 @@ function train(θ̂::RatioEstimator, args...; kwargs...)
 	# Get the keyword arguments and assign the loss function
 	kwargs = (;kwargs...)
 	if haskey(kwargs, :loss)
-		@info "The keyword argument `loss` is not required when training a $(typeof(θ̂)), since in this case the binary cross-entropy (log) loss is always used"
+		@info "The keyword argument `loss` is not required when training a $(typeof(θ̂)), since in this case the binary cross-entropy loss is always used"
 	end
-	# kwargs = merge(kwargs, (loss = Flux.logitbinarycrossentropy,))
+	_train(θ̂, args...; kwargs...)
+end
+
+function train(θ̂::PosteriorEstimator, args...; kwargs...)
+
+	# Get the keyword arguments and assign the loss function
+	kwargs = (;kwargs...)
+	if haskey(kwargs, :loss)
+		@info "The keyword argument `loss` is not required when training a $(typeof(θ̂)), since in this case the KL divergence is always used"
+	end
+	kwargs = merge(kwargs, (loss = (q, θ) -> -mean(q),))
 	_train(θ̂, args...; kwargs...)
 end
 
@@ -484,20 +488,65 @@ end
 
 # Wrapper function that constructs a set of input and outputs (usually simulated data and corresponding true parameters)
 function _constructset(θ̂, simulator::Function, θ::P, m, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-	Z = simulator(θ, m)
+	Z = isnothing(m) ? simulator(θ) : simulator(θ, m)
 	_constructset(θ̂, Z, θ, batchsize)
 end
 function _constructset(θ̂, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-	Z = ZtoFloat32(Z)
-	θ = θtoFloat32(_extractθ(θ))
+	Z = f32(Z)
+	θ = f32(_extractθ(θ))
 	_DataLoader((Z, θ), batchsize)
 end
+function _constructset(θ̂::QuantileEstimatorDiscrete, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+	Z = f32(Z)
+	θ = f32(_extractθ(θ))
+
+	i = θ̂.i
+	if isnothing(i)
+		input  = Z
+		output = θ
+	else
+		@assert size(θ, 1) >= i "The number of parameters in the model (size(θ, 1) = $(size(θ, 1))) must be at least as large as the value of i stored in the estimator (θ̂.i = $(θ̂.i))"
+		θᵢ  = θ[i:i, :]
+		θ₋ᵢ = θ[Not(i), :]
+		input  = (Z, θ₋ᵢ) # "Tupleise" the input
+		output = θᵢ
+	end
+
+	_DataLoader((input, output), batchsize)
+end
+function _constructset(θ̂::QuantileEstimatorContinuous, Zτ, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+	θ = f32(_extractθ(θ))
+	Z, τ = Zτ
+	Z = f32(Z)
+	τ = f32(τ)
+
+	i = θ̂.i
+	if isnothing(i)
+		input = (Z, τ)
+		output = θ
+	else
+		@assert size(θ, 1) >= i "The number of parameters in the model (size(θ, 1) = $(size(θ, 1))) must be at least as large as the value of i stored in the estimator (θ̂.i = $(θ̂.i))"
+		θᵢ  = θ[i:i, :]
+		θ₋ᵢ = θ[Not(i), :]
+		# Combine each θ₋ᵢ with the corresponding vector of
+		# probability levels, which requires repeating θ₋ᵢ appropriately
+		θ₋ᵢτ = map(eachindex(τ)) do k
+			τₖ = τ[k]
+			θ₋ᵢₖ = repeat(θ₋ᵢ[:, k:k], inner = (1, length(τₖ)))
+			vcat(θ₋ᵢₖ, τₖ')
+		end
+		input  = (Z, θ₋ᵢτ)   # "Tupleise" the input
+		output = θᵢ
+	end
+
+	_DataLoader((input, output), batchsize)
+end
 function _constructset(θ̂::RatioEstimator, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-	Z = ZtoFloat32(Z)
-	θ = θtoFloat32(_extractθ(θ))
+	Z = f32(Z)
+	θ = f32(_extractθ(θ))
 
 	# Size of data set
-	K = length(Z) # should equal size(θ, 2)
+	K = length(Z) 
 
 	# Create independent pairs
 	θ̃ = subsetparameters(θ, shuffle(1:K))
@@ -522,48 +571,12 @@ function _constructset(θ̂::RatioEstimator, Z, θ::P, batchsize) where {P <: Un
 
 	_DataLoader((input, output), batchsize)
 end
-function _constructset(θ̂::QuantileEstimatorDiscrete, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-	Z = ZtoFloat32(Z)
-	θ = θtoFloat32(_extractθ(θ))
+function _constructset(θ̂::PosteriorEstimator, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+	Z = f32(Z)
+	θ = f32(_extractθ(θ))
 
-	i = θ̂.i
-	if isnothing(i)
-		input  = Z
-		output = θ
-	else
-		@assert size(θ, 1) >= i "The number of parameters in the model (size(θ, 1) = $(size(θ, 1))) must be at least as large as the value of i stored in the estimator (θ̂.i = $(θ̂.i))"
-		θᵢ  = θ[i:i, :]
-		θ₋ᵢ = θ[Not(i), :]
-		input  = (Z, θ₋ᵢ) # "Tupleise" the input
-		output = θᵢ
-	end
-
-	_DataLoader((input, output), batchsize)
-end
-function _constructset(θ̂::QuantileEstimatorContinuous, Zτ, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-	θ = θtoFloat32(_extractθ(θ))
-	Z, τ = Zτ
-	Z = ZtoFloat32(Z)
-	τ = ZtoFloat32.(τ)
-
-	i = θ̂.i
-	if isnothing(i)
-		input = (Z, τ)
-		output = θ
-	else
-		@assert size(θ, 1) >= i "The number of parameters in the model (size(θ, 1) = $(size(θ, 1))) must be at least as large as the value of i stored in the estimator (θ̂.i = $(θ̂.i))"
-		θᵢ  = θ[i:i, :]
-		θ₋ᵢ = θ[Not(i), :]
-		# Combine each θ₋ᵢ with the corresponding vector of
-		# probability levels, which requires repeating θ₋ᵢ appropriately
-		θ₋ᵢτ = map(eachindex(τ)) do k
-			τₖ = τ[k]
-			θ₋ᵢₖ = repeat(θ₋ᵢ[:, k:k], inner = (1, length(τₖ)))
-			vcat(θ₋ᵢₖ, τₖ')
-		end
-		input  = (Z, θ₋ᵢτ)   # "Tupleise" the input
-		output = θᵢ
-	end
+	input = (Z, θ) # combine data and parameters into a single tuple
+	output = θ # irrelevant what we use here, just a placeholder
 
 	_DataLoader((input, output), batchsize)
 end
@@ -579,23 +592,13 @@ function _risk(θ̂, loss, set::DataLoader, device, optimiser = nothing)
 		if !isnothing(optimiser)
 			# NB storing the loss in this way is efficient, but it means that
 			# the final training risk that we report for each epoch is slightly inaccurate
-			# (since the neural-network parameters are updated after each batch). It would be more
-			# accurate (but less efficient) if we computed the training risk once again
-			# at the end of each epoch, like we do for the validation risk... might add
-			# an option for this in the future, but will leave it for now.
-
-			# "Implicit" style used by Flux <= 0.14
-			# γ = Flux.params(θ̂)
-			# ls, ∇ = Flux.withgradient(() -> loss(θ̂(input), output), γ)
-			# update!(optimiser, γ, ∇)
-
-			# "Explicit" style required by Flux >= 0.15
+			# (since the neural-network parameters are updated after each batch)
 			ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(input), output), θ̂)
 			update!(optimiser, θ̂, ∇[1])
 		else
 			ls = loss(θ̂(input), output)
 		end
-        # Assuming loss returns an average, convert to a sum and add to total
+        # Convert average loss to a sum and add to total
 		sum_loss += ls * k
         K +=  k
     end
@@ -615,7 +618,7 @@ function _risk(θ̂::RatioEstimator, loss, set::DataLoader, device, optimiser = 
 		else
 			ls = Flux.logitbinarycrossentropy(θ̂.deepset(input), output)
 		end
-        # Assuming loss returns an average, convert to a sum and add to total
+        # Convert average loss to a sum and add to total
 		sum_loss += ls * k
         K +=  k
     end
@@ -642,26 +645,19 @@ function _risk(θ̂::QuantileEstimatorContinuous, loss, set::DataLoader, device,
 			τ = reduce(hcat, τ)          # reduce from vector of vectors to matrix
 		end
 
-		# repeat τ and θ to facilitate broadcasting and indexing
-		# note that repeat() cannot be differentiated by Zygote
+		# Repeat τ and θ to facilitate broadcasting and indexing
+		# Note that repeat() cannot be differentiated by Zygote
 		p = size(output, 1)
 		@ignore_derivatives τ = repeat(τ, inner = (p, 1))
 		@ignore_derivatives output = repeat(output, inner = (size(τ, 1) ÷ p, 1))
 
 		if !isnothing(optimiser)
-
-			# "Implicit" style used by Flux <= 0.14
-			# γ = Flux.params(θ̂)
-			# ls, ∇ = Flux.withgradient(() -> quantileloss(θ̂(input), output, τ), γ)
-			# update!(optimiser, γ, ∇)
-
-			# "Explicit" style required by Flux >= 0.15
 			ls, ∇ = Flux.withgradient(θ̂ -> quantileloss(θ̂(input), output, τ), θ̂)
 			update!(optimiser, θ̂, ∇[1])
 		else
 			ls = quantileloss(θ̂(input), output, τ)
 		end
-        # Assuming loss returns an average, convert to a sum and add to total
+        # Convert average loss to a sum and add to total
 		sum_loss += ls * k
         K +=  k
     end
@@ -723,7 +719,7 @@ function _trainx(θ̂; sampler = nothing, simulator = nothing, M = nothing, θ_t
 
 		# Modify/check the keyword arguments before passing them onto train
 		kwargs = (;args...)
-		if haskey(kwargs, :savepath) && kwargs.savepath != ""
+		if haskey(kwargs, :savepath) && !isnothing(kwargs.savepath)
 			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
 		end
 		kwargs = _modifyargs(kwargs, i, E)
@@ -789,7 +785,7 @@ function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) whe
 
 		# Modify/check the keyword arguments before passing them onto train
 		kwargs = (;args...)
-		if haskey(kwargs, :savepath) && kwargs.savepath != ""
+		if haskey(kwargs, :savepath) && !isnothing(kwargs.savepath)
 			kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
 		end
 		kwargs = _modifyargs(kwargs, i, E)
@@ -894,7 +890,3 @@ function _savebestmodel(path::String)
 	
 	return nothing
 end
-
-
-ZtoFloat32(Z) = try broadcast.(Float32, Z) catch e Z end
-θtoFloat32(θ) = try broadcast(Float32, θ) catch e θ end

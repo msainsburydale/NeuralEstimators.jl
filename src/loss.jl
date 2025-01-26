@@ -13,13 +13,13 @@ _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
 
 # ---- surrogates for 0-1 loss ----
 
-"""
+@doc raw"""
     tanhloss(θ̂, θ, k; agg = mean, joint = true)
 
 For `k` > 0, computes the loss function,
 
 ```math
-L(θ̂, θ) = tanh(|θ̂ - θ|/k),
+L(θ̂, θ) = \textrm{tanh}(|θ̂ - θ|/k),
 ```
 
 which approximates the 0-1 loss as `k` → 0. Compared with the [`kpowerloss`](@ref), 

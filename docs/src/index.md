@@ -1,26 +1,29 @@
 # NeuralEstimators
 
-Neural Bayes estimators are neural networks that transform data into point summaries of the posterior distribution. They are likelihood free and, once constructed, substantially faster than classical methods. Uncertainty quantification with neural Bayes estimators is also straightforward through the bootstrap distribution, which is essentially available "for free" with a neural estimator, or by training a neural Bayes estimator to approximate a set of marginal posterior quantiles. A related class of methods uses neural networks to approximate the likelihood function, the likelihood-to-evidence ratio, and the full posterior distribution. 
+`NeuralEstimators` facilitates a suite of neural methods for parameter inference in scenarios where simulation from the model is feasible. These methods are **likelihood-free** and **amortised**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches. 
 
-The package `NeuralEstimators` facilitates the development of neural Bayes estimators and related neural inferential methods in a user-friendly manner. It caters for arbitrary models by having the user implicitly define their model via simulated data. This makes development particularly straightforward for models with existing implementations (possibly in other programming languages, e.g., `R` or `python`). A convenient interface for `R` users is available [here](https://github.com/msainsburydale/NeuralEstimators) and on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
+The package supports neural Bayes estimators, which transform data into point summaries of the posterior distribution; neural posterior estimators, which perform approximate posterior inference via KL-divergence minimisation; and neural ratio estimators, which approximate the likelihood-to-evidence ratio and thereby enable frequentist or Bayesian inference through various downstream algorithms, such as MCMC sampling. 
+
+User-friendliness is a central focus of the package, which is designed to minimise "boilerplate" code while preserving complete flexibility in the neural-network architecture and other workflow components. The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. A convenient interface for R users is available on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
+
+### Getting started 
+
+Once familiar with the [Methodology](@ref), see the [Overview](@ref) of the package workflow and the illustrative [Examples](@ref).
 
 
-### Getting started
+### Installation
 
-One may install the current stable version of `NeuralEstimators` using the following command inside `Julia`:
+To install the package, please first install [`Julia`](https://julialang.org/downloads/). Then, one may install the current stable version of the package using the following command inside `Julia`:
 
-```
+```julia
 using Pkg; Pkg.add("NeuralEstimators")
 ```
 
 Alternatively, one may install the current development version using the command:
 
-```
+```julia
 using Pkg; Pkg.add(url = "https://github.com/msainsburydale/NeuralEstimators.jl")
 ```
-
-Once familiar with the details of the [Framework](@ref), see the [Examples](@ref).
-
 
 ### Supporting and citing
 
@@ -50,15 +53,18 @@ This software was developed as part of academic research. If you would like to s
   }
 ```
 
+### Contributing
+
+If you encounter a bug or have a suggestion, please consider [opening an issue](https://github.com/msainsburydale/NeuralEstimators.jl/issues) or submitting a pull request. Instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/README.md). If you plan to add functionality to the package, you can run the unit tests with the following bash command: `julia --project=. test/runtests.jl`.
+
 ### Papers using NeuralEstimators
 
-- **Likelihood-free parameter estimation with neural Bayes estimators** [[paper]](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522) [[code]](https://github.com/msainsburydale/NeuralBayesEstimators)
+- **Likelihood-free parameter estimation with neural Bayes estimators** [[paper]](https://doi.org/10.1080/00031305.2023.2249522) [[code]](https://github.com/msainsburydale/NeuralBayesEstimators)
 
-- **Neural Bayes estimators for censored inference with peaks-over-threshold models** [[paper]](https://arxiv.org/abs/2306.15642)
+- **Neural methods for amortized inference** [[paper]](https://arxiv.org/abs/2404.12484)[[code]](https://github.com/andrewzm/Amortised_Neural_Inference_Review)
 
-- **Neural Bayes estimators for irregular spatial data using graph neural networks** [[paper]](https://arxiv.org/abs/2310.02600)[[code]](https://github.com/msainsburydale/NeuralEstimatorsGNN)
+- **Neural Bayes estimators for irregular spatial data using graph neural networks** [[paper]](https://doi.org/10.1080/10618600.2024.2433671)[[code]](https://github.com/msainsburydale/NeuralEstimatorsGNN)
 
-- **Neural Methods for Amortized Inference** [[paper]](https://arxiv.org/abs/2404.12484)[[code]](https://github.com/andrewzm/Amortised_Neural_Inference_Review)
+- **Neural Bayes estimators for censored inference with peaks-over-threshold models** [[paper]](https://jmlr.org/papers/v25/23-1134.html) [[code]](https://github.com/Jbrich95/CensoredNeuralEstimators)
 
-- **Neural parameter estimation with incomplete data** [[paper]](https://arxiv.org/abs/2501.04330)[[code]](https://github.com/msainsburydale/NeuralEM)
-
+- **Neural parameter estimation with incomplete data** [[paper]](https://arxiv.org/abs/2501.04330)[[code]](https://github.com/msainsburydale/NeuralIncompleteData)

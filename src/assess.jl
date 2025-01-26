@@ -259,7 +259,7 @@ parameter matrix `θ` will be recycled by horizontal concatenation via the call
 `θ = repeat(θ, outer = (1, J))` where `J = length(Z) ÷ K` is the number of
 simulated data sets and `K = size(θ, 2)` is the number of parameter vectors.
 
-The output is of type `Assessment`; see `?Assessment` for details.
+The return value is of type [`Assessment`](@ref). 
 
 # Keyword arguments
 - `estimator_names::Vector{String}`: names of the estimators (sensible defaults provided).
@@ -267,45 +267,7 @@ The output is of type `Assessment`; see `?Assessment` for details.
 - `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices). Can also be provided as `xi`.
 - `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses `ξ`: if it does, the estimator will be applied as `estimator(Z, ξ)`. This argument is useful when multiple `estimators` are provided, only some of which need `ξ`; hence, if only one estimator is provided and `ξ` is not `nothing`, `use_ξ` is automatically set to `true`. Can also be provided as `use_xi`.
 - `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
-- `probs = range(0.01, stop=0.99, length=100)`: (relevant only for `estimator::QuantileEstimatorContinuous`) a collection of probability levels in (0, 1)
-
-# Examples
-```
-using NeuralEstimators, Flux
-
-n = 10 # number of observations in each realisation
-p = 4  # number of parameters in the statistical model
-
-# Construct the neural estimator
-w = 32 # width of each layer
-ψ = Chain(Dense(n, w, relu), Dense(w, w, relu));
-ϕ = Chain(Dense(w, w, relu), Dense(w, p));
-θ̂ = DeepSet(ψ, ϕ)
-
-# Generate testing parameters
-K = 100
-θ = rand32(p, K)
-
-# Data for a single sample size
-m = 30
-Z = [rand32(n, m) for _ ∈ 1:K];
-assessment = assess(θ̂, θ, Z);
-risk(assessment)
-
-# Multiple data sets for each parameter vector
-J = 5
-Z = repeat(Z, J);
-assessment = assess(θ̂, θ, Z);
-risk(assessment)
-
-# With set-level information
-qₓ = 2
-ϕ  = Chain(Dense(w + qₓ, w, relu), Dense(w, p));
-θ̂ = DeepSet(ψ, ϕ)
-x = [rand(qₓ) for _ ∈ eachindex(Z)]
-assessment = assess(θ̂, θ, (Z, x));
-risk(assessment)
-```
+- `probs = range(0.01, stop=0.99, length=100)`: (relevant only for `estimator::QuantileEstimatorContinuous`) a collection of probability levels in (0, 1).
 """
 function assess(
 	estimator, θ::P, Z;
@@ -367,7 +329,7 @@ function assess(
 	if !isnothing(ξ)
 		runtime = @elapsed θ̂ = estimator(Z, ξ) # note that the gpu is never used in this case
 	else
-		runtime = @elapsed θ̂ = estimateinbatches(estimator, Z, use_gpu = use_gpu)
+		runtime = @elapsed θ̂ = estimate(estimator, Z, use_gpu = use_gpu)
 	end
 	θ̂ = convert(Matrix, θ̂) # sometimes estimator returns vectors rather than matrices, which can mess things up
 
@@ -441,7 +403,7 @@ function assess(
 	estimator_name::Union{Nothing, String} = nothing,
 	estimator_names::Union{Nothing, String} = nothing, # for backwards compatibility
 	use_gpu::Bool = true,
-	probs = Float32.(range(0.01, stop=0.99, length=100))
+	probs = f32(range(0.01, stop=0.99, length=100))
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
 	# Extract the matrix of parameters
@@ -496,8 +458,8 @@ function assess(
 		parameter_names = parameter_names[i:i]
 	end
 
-	# Compute estimates using memory-safe version of estimator((Z, set_info))
-	runtime = @elapsed θ̂ = estimateinbatches(estimator, Z, set_info, use_gpu = use_gpu)
+	# Estimates 
+	runtime = @elapsed θ̂ = estimate(estimator, Z, set_info, use_gpu = use_gpu)
 
 	# Convert to DataFrame and add information
 	p = size(θ, 1)
