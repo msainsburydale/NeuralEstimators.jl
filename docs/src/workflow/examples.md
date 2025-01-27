@@ -58,7 +58,7 @@ end
 
 We now design our neural network. 
 
-As we are constructing a neural Bayes estimator, the neural network is a mapping $\mathcal{Z}\to\Theta$, and the dimensionality of the neural-network output is therefore $d \equiv \rm{dim}(\Theta) = 2$. 
+As we are constructing a neural Bayes estimator, the neural network is a mapping $\mathcal{Z}\to\Theta$, and the dimensionality of the neural-network output is therefore $d \equiv \textrm{dim}(\Theta) = 2$. 
 
 Since our data are replicated, we adopt the DeepSets framework, implemented via the type [`DeepSet`](@ref). DeepSets consist of two neural networks: an inner network and an outer network. The inner network extracts summary statistics from the data, and its architecture depends on the multivariate structure of the data. For unstructured data (i.e., no spatial or temporal correlation within each replicate), we use a multilayer perceptron (MLP) with an input dimension equal to the dimensionality of each data replicate. The outer network maps the learned summary statistics to the output space (here, the parameter space, $\Theta$). The outer network is always an MLP. 
 
@@ -276,8 +276,8 @@ For illustration, we again consider a spatial Gaussian process model with expone
 
 
 ```
-struct Parameters{T} <: ParameterConfigurations
-	θ::Matrix{T}   # true parameters  
+struct Parameters <: ParameterConfigurations
+	θ::Matrix      # true parameters  
 	L              # Cholesky factors
 	g              # spatial graphs
 	S              # spatial locations 

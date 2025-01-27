@@ -117,7 +117,7 @@ end
 Computes a Monte Carlo approximation of an estimator's bias,
 
 ```math
-{\rm{bias}}(\hat{\boldsymbol{\theta}}(\cdot))
+{\textrm{bias}}(\hat{\boldsymbol{\theta}}(\cdot))
 \approx
 \frac{1}{K} \sum_{k=1}^K \hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(k)}) - \boldsymbol{\theta}^{(k)},
 ```
@@ -144,7 +144,7 @@ end
 Computes a Monte Carlo approximation of an estimator's root-mean-squared error,
 
 ```math
-{\rm{rmse}}(\hat{\boldsymbol{\theta}}(\cdot))
+{\textrm{rmse}}(\hat{\boldsymbol{\theta}}(\cdot))
 \approx
 \sqrt{\frac{1}{K} \sum_{k=1}^K (\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(k)}) - \boldsymbol{\theta}^{(k)})^2},
 ```

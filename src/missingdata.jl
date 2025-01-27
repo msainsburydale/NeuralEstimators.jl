@@ -5,7 +5,7 @@ with ``l``th iteration
 
 ```math
 \boldsymbol{\theta}^{(l)} =
-\argmax_{\boldsymbol{\theta}}
+\underset{\boldsymbol{\theta}}{\mathrm{arg\,max}}
 \sum_{h = 1}^H \ell(\boldsymbol{\theta};  \boldsymbol{Z}_1,  \boldsymbol{Z}_2^{(lh)}) + H\log \pi(\boldsymbol{\theta})
 ```
 

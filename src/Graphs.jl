@@ -895,7 +895,7 @@ function findneighbours(d, k::Integer)
     return J, V 
 end
 
-# TODO this function is much, much slower than the R version... need to optimise. Might be slight penalty; try reduce(hcat, .)
+# TODO this function is much, much slower than the R version... need to optimise. Might be splat penalty; try reduce(hcat, .)
 function getknn(S, s, k; args...)
   tree = KDTree(S; args...)
   nn_index, nn_dist = knn(tree, s, k, true)

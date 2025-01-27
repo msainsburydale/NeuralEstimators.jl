@@ -132,7 +132,7 @@ end
 	mlestimate(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, penalty::Function = θ -> 1, use_gpu = true)
 Computes the (approximate) maximum likelihood estimate given data $\boldsymbol{Z}$,
 ```math
-\argmax_{\boldsymbol{\theta}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z})
+\underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z})
 ```
 where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function
 derived from `estimator`.
@@ -144,7 +144,7 @@ likelihood is maximised by gradient descent (requires `Optim.jl` to be loaded). 
 A maximum penalised likelihood estimate,
 
 ```math
-\argmax_{\boldsymbol{\theta}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta}),
+\underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta}),
 ```
 
 can be obtained by specifying the keyword argument `penalty` that defines the penalty term $p(\boldsymbol{\theta})$.
@@ -158,7 +158,7 @@ mlestimate(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, mle
 	mapestimate(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, prior::Function = θ -> 1, use_gpu = true)
 Computes the (approximate) maximum a posteriori estimate given data $\boldsymbol{Z}$,
 ```math
-\argmax_{\boldsymbol{\theta}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta})
+\underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta})
 ```
 where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function
 derived from `estimator`, and $p(\boldsymbol{\theta})$ denotes the prior density

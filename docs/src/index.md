@@ -13,7 +13,7 @@ Once familiar with the [Methodology](@ref), see the [Overview](@ref) of the pack
 
 ### Installation
 
-To install the package, please first install [`Julia`](https://julialang.org/downloads/). Then, one may install the current stable version of the package using the following command inside `Julia`:
+To install the package, please first install the current stable release of [`Julia`](https://julialang.org/downloads/). Then, one may install the current stable version of the package using the following command inside `Julia`:
 
 ```julia
 using Pkg; Pkg.add("NeuralEstimators")
