@@ -53,7 +53,7 @@ include("inference.jl")
 export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights, KernelWeights, PowerDifference
 include("Graphs.jl")
 
-export simulate, simulategaussian, simulatepotts, simulateschlather
+export simulategaussian, simulatepotts, simulateschlather
 export matern, maternchols, paciorek, scaledlogistic, scaledlogit
 include("simulate.jl")
 
@@ -76,7 +76,7 @@ export EM, removedata, encodedata
 include("missingdata.jl")
 
 # Backwards compatability and deprecations:
-export loadbestweights, loadweights
+export loadbestweights, loadweights, simulate
 include("deprecated.jl")
 
 end

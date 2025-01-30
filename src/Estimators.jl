@@ -658,26 +658,26 @@ See also [`trainx()`](@ref) for training estimators for a range of sample sizes.
 ```
 using NeuralEstimators, Flux
 
-d = 2  # bivariate data
-p = 3  # number of parameters in the statistical model
-w = 8  # width of each hidden layer
+n = 2    # bivariate data
+d = 3    # dimension of parameter vector 
+w = 128  # width of each hidden layer
 
 # Small-sample estimator
-ψ₁ = Chain(Dense(d, w, relu), Dense(w, w, relu));
-ϕ₁ = Chain(Dense(w, w, relu), Dense(w, p));
+ψ₁ = Chain(Dense(n, w, relu), Dense(w, w, relu));
+ϕ₁ = Chain(Dense(w, w, relu), Dense(w, d));
 θ̂₁ = PointEstimator(DeepSet(ψ₁, ϕ₁))
 
 # Large-sample estimator
-ψ₂ = Chain(Dense(d, w, relu), Dense(w, w, relu));
-ϕ₂ = Chain(Dense(w, w, relu), Dense(w, p));
+ψ₂ = Chain(Dense(n, w, relu), Dense(w, w, relu));
+ϕ₂ = Chain(Dense(w, w, relu), Dense(w, d));
 θ̂₂ = PointEstimator(DeepSet(ψ₂, ϕ₂))
 
 # Piecewise estimator with changepoint m=30
 θ̂ = PiecewiseEstimator([θ̂₁, θ̂₂], 30)
 
 # Apply the (untrained) piecewise estimator to data
-Z = [rand(d, 1, m) for m ∈ (10, 50)]
-θ̂(Z)
+Z = [rand(n, m) for m ∈ (10, 50)]
+estimate(θ̂, Z)
 ```
 """
 struct PiecewiseEstimator <: NeuralEstimator
@@ -917,6 +917,7 @@ struct Ensemble <: NeuralEstimator
 end
 Ensemble(architecture::Function, J::Integer) = Ensemble([architecture() for j in 1:J])
 
+#TODO update savepath behaviour based on new default (with nothing)
 function train(ensemble::Ensemble, args...; kwargs...)
 	kwargs = (;kwargs...)
 	savepath = haskey(kwargs, :savepath) ? kwargs.savepath : ""

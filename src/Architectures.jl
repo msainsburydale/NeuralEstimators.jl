@@ -1,5 +1,3 @@
-# ---- DeepSet ----
-
 """
 	ElementwiseAggregator(a::Function)
 
@@ -41,20 +39,37 @@ S(1)
 (S::Vector{Function})(z) = vcat([s(z) for s ∈ S]...)
 # (S::Vector)(z) = vcat([s(z) for s ∈ S]...) # can use a more general construction like this to allow for vectors of NeuralEstimators to be called in this way
 
-#TODO also show example with only user-defined summary statistics
 """
     DeepSet(ψ, ϕ, a = mean; S = nothing)
 	(ds::DeepSet)(Z::Vector{A}) where A <: Any
 	(ds::DeepSet)(tuple::Tuple{Vector{A}, Vector{Vector}}) where A <: Any
-The DeepSets representation [(Zaheer et al., 2017)](https://arxiv.org/abs/1703.06114),
-
+The DeepSets representation ([Zaheer et al., 2017](https://arxiv.org/abs/1703.06114); [Sainsbury-Dale et al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522)),
 ```math
 θ̂(𝐙) = ϕ(𝐓(𝐙)),	 	 𝐓(𝐙) = 𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\}),
 ```
-
-where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates from the statistical model,
+where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates of data, 
 `ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant aggregation
-function. Expert summary statistics can be incorporated as,
+function. 
+
+The function `a` must operate on arrays and have a keyword argument `dims` for 
+specifying the dimension of aggregation (e.g., `sum`, `mean`, `maximum`, `minimum`, `logsumexp`).
+
+`DeepSet` objects act on data of type `Vector{A}`, where each
+element of the vector is associated with one data set (i.e., one set of
+independent replicates), and where `A` depends on the chosen architecture for `ψ`.
+As a rule of thumb, when `A` is an array, replicates are stored in the final
+dimension. For example, with gridded spatial data and `ψ` a CNN, `A` should be
+a 4-dimensional array, with replicates stored in the 4ᵗʰ dimension. 
+Note that, when using `Flux`, the final dimension is usually the "batch"
+dimension, but batching with `DeepSet` objects is done at the data-set level 
+(i.e., sets of replicates are always kept together). 
+
+For computational efficiency, 
+array data are first concatenated along their final dimension 
+(i.e., the replicates dimension) before being passed into the inner network `ψ`, 
+thereby ensuring that `ψ` is applied to a single large array, rather than multiple small ones. 
+	
+Expert summary statistics can be incorporated as
 
 ```math
 θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)')'),
@@ -65,71 +80,47 @@ These user-defined summary statistics are provided either as a
 `Function` that returns a `Vector`, or as a vector of functions. In the case that
 `ψ` is set to `nothing`, only expert summary statistics will be used.
 
-The aggregation function `a` can be any function that acts on an array and has
-a keyword argument `dims` that allows aggregation over a specific dimension of
-the array (e.g., `sum`, `mean`, `maximum`, `minimum`, `logsumexp`).
-
-`DeepSet` objects act on data of type `Vector{A}`, where each
-element of the vector is associated with one data set (i.e., one set of
-independent replicates from the statistical model), and where the type `A`
-depends on the form of the data and the chosen architecture for `ψ`.
-As a rule of thumb, when `A` is an array, the replicates are stored in the final
-dimension. For example, with gridded spatial data and `ψ` a CNN, `A` should be
-a 4-dimensional array, with the replicates stored in the 4ᵗʰ dimension.
-Note that in Flux, the final dimension is usually the "batch"
-dimension, but batching with `DeepSet` objects is done at the data set level
-(i.e., sets of replicates are batched together).
-
-Data stored as `Vector{Arrays}` are first concatenated along the replicates
-dimension before being passed into the inner network `ψ`. This means that
-`ψ` is applied to a single large array rather than many small arrays, which can
-substantially improve computational efficiency.
-
-Set-level information, ``𝐱``, that is not a function of the data can be passed
-directly into the inference network `ϕ` in the following manner,
-
+Set-level inputs (e.g., covariates) ``𝐗`` can be passed
+directly into the outer network `ϕ` in the following manner: 
 ```math
-θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐱')'),	 	 
+θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐗')'),	 	 
 ```
-
 or, in the case that expert summary statistics are also used,
-
 ```math
-θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)', 𝐱')').	 
+θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)', 𝐗')').	 
 ```
-
 This is done by calling the `DeepSet` object on a
 `Tuple{Vector{A}, Vector{Vector}}`, where the first element of the tuple
 contains a vector of data sets and the second element contains a vector of
-set-level information (i.e., one vector for each data set).
+set-level inputs (i.e., one vector for each data set).
 
 # Examples
 ```
 using NeuralEstimators, Flux
 
 # Two data sets containing 3 and 4 replicates
-p = 5  # number of parameters in the statistical model
+d = 5  # number of parameters in the model
 n = 10 # dimension of each replicate
 Z = [rand32(n, m) for m ∈ (3, 4)]
 
 # Construct DeepSet object
 S = samplesize
-qₛ = 1   # dimension of expert summary statistic
-qₜ = 16  # dimension of neural summary statistic
-w = 32  # width of hidden layers
-ψ = Chain(Dense(n, w, relu), Dense(w, qₜ, relu))
-ϕ = Chain(Dense(qₜ + qₛ, w, relu), Dense(w, p))
+dₛ = 1   # dimension of expert summary statistic
+dₜ = 16  # dimension of neural summary statistic
+w  = 32  # width of hidden layers
+ψ  = Chain(Dense(n, w, relu), Dense(w, dₜ, relu))
+ϕ  = Chain(Dense(dₜ + dₛ, w, relu), Dense(w, d))
 ds = DeepSet(ψ, ϕ; S = S)
 
 # Apply DeepSet object to data
 ds(Z)
 
-# Data with set-level information
-qₓ = 2 # dimension of set-level vector
-ϕ = Chain(Dense(qₜ + qₛ + qₓ, w, relu), Dense(w, p))
+# With set-level inputs 
+dₓ = 2 # dimension of set-level inputs 
+ϕ  = Chain(Dense(dₜ + dₛ + dₓ, w, relu), Dense(w, d))
 ds = DeepSet(ψ, ϕ; S = S)
-x = [rand32(qₓ) for _ ∈ eachindex(Z)]
-ds((Z, x))
+X  = [rand32(dₓ) for _ ∈ eachindex(Z)]
+ds((Z, X))
 ```
 """
 struct DeepSet{T, G, K}
@@ -418,6 +409,7 @@ tuncatesupport(θ, a, b) = min(max(θ, a), b)
 
 # ---- Layers to construct Covariance and Correlation matrices ----
 
+#TODO update notation: d -> n, p -> d
 triangularnumber(d) = d*(d+1)÷2
 
 @doc raw"""
@@ -485,29 +477,32 @@ L = [LowerTriangular(cpu(vectotril(x))) for x ∈ eachcol(L)]
 L[1] * L[1]'
 ```
 """
-struct CovarianceMatrix{T <: Integer, G, H}
-  d::T          # dimension of the matrix
-  p::T          # number of free parameters in the covariance matrix, the triangular number T(d) = `d`(`d`+1)÷2
-  tril_idx::G   # cartesian indices of lower triangle
-  diag_idx::H   # which of the T(d) rows correspond to the diagonal elements of the `d`×`d` covariance matrix (linear indices)
+struct CovarianceMatrix{T <: Integer}
+  d::T       # dimension of the matrix
+  p::T       # number of free parameters in the covariance matrix, the triangular number d(d+1)÷2
+  tril_idx   # cartesian indices of lower triangle
+  diag_idx   # rows corresponding to the diagonal elements of the d×d covariance matrix   
 end
 function CovarianceMatrix(d::Integer)
-	p = triangularnumber(d)
 	tril_idx = tril(trues(d, d))
 	diag_idx = [1]
-	for i ∈ 1:(d-1)
-		push!(diag_idx, diag_idx[i] + d-i+1)
+	for i ∈ 2:d
+		push!(diag_idx, diag_idx[i-1] + d-(i-1)+1)
 	end
-	return CovarianceMatrix(d, p, tril_idx, diag_idx)
+	return CovarianceMatrix(d, triangularnumber(d), tril_idx, diag_idx)
 end
 function (l::CovarianceMatrix)(v, cholesky_only::Bool = false)
 
+	# Extract indices 
+	diag_idx = cpu(l.diag_idx)
+	tril_idx = l.tril_idx
+
 	d = l.d
 	p, K = size(v)
-	@assert p == l.p "the number of rows must be the triangular number T(d) = d(d+1)÷2 = $(l.p)"
+	@assert p == l.p "the number of rows must be the triangular number d(d+1)÷2 = $(l.p)"
 
 	# Ensure that diagonal elements are positive
-	L = vcat([i ∈ l.diag_idx ? softplus.(v[i:i, :]) : v[i:i, :] for i ∈ 1:p]...)
+	L = vcat([i ∈ diag_idx ? softplus(v[i:i, :]) : v[i:i, :] for i ∈ 1:p]...) 
 	cholesky_only && return L
 
 	# Insert zeros so that the input v can be transformed into Cholesky factors
@@ -515,18 +510,16 @@ function (l::CovarianceMatrix)(v, cholesky_only::Bool = false)
 	x = d:-1:1      # number of rows to extract from v
 	j = cumsum(x)   # end points of the row-groups of v
 	k = j .- x .+ 1 # start point of the row-groups of v
-	L = vcat(L[k[1]:j[1], :], [vcat(zero_mat[1:i.-1, :], L[k[i]:j[i], :]) for i ∈ 2:d]...)
+	L̃ = vcat(L[k[1]:j[1], :], [vcat(zero_mat[1:i.-1, :], L[k[i]:j[i], :]) for i ∈ 2:d]...)
 
 	# Reshape to a three-dimensional array of Cholesky factors
-	L = reshape(L, d, d, K)
+	L̃ = reshape(L̃, d, d, K)
 
 	# Batched multiplication and transpose to compute covariance matrices
-	Σ = L ⊠ batched_transpose(L) # alternatively: PermutedDimsArray(L, (2,1,3)) or permutedims(L, (2, 1, 3))
+	Σ = L̃ ⊠ batched_transpose(L̃) # alternatively: PermutedDimsArray(L, (2,1,3)) or permutedims(L, (2, 1, 3))
 
 	# Extract the lower triangle of each matrix
-	Σ = Σ[l.tril_idx, :]
-
-	return Σ
+	return Σ[tril_idx, :]
 end
 (l::CovarianceMatrix)(v::AbstractVector) = l(reshape(v, :, 1))
 
@@ -610,8 +603,7 @@ struct CorrelationMatrix{T <: Integer, G}
 end
 function CorrelationMatrix(d::Integer)
 	tril_idx_strict = tril(trues(d, d), -1)
-	p = triangularnumber(d-1)
-	return CorrelationMatrix(d, p, tril_idx_strict)
+	return CorrelationMatrix(d, triangularnumber(d-1), tril_idx_strict)
 end
 function (l::CorrelationMatrix)(v, cholesky_only::Bool = false)
 
@@ -686,9 +678,10 @@ function _size_check(layer, x::AbstractArray, (d, n)::Pair)
 end
 @non_differentiable _size_check(::Any...)
 
+#TODO document last_only 
+#TODO g should be a positional argument in line with standard flux layers 
 """
-	DensePositive(layer::Dense, g::Function)
-	DensePositive(layer::Dense; g::Function = Flux.relu)
+	DensePositive(layer::Dense; g::Function = relu, last_only::Bool = false)
 Wrapper around the standard
 [Dense](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dense) layer that
 ensures positive weights (biases are left unconstrained).
@@ -699,9 +692,9 @@ This layer can be useful for constucting (partially) monotonic neural networks (
 ```
 using NeuralEstimators, Flux
 
-layer = DensePositive(Dense(5 => 2))
+l = DensePositive(Dense(5 => 2))
 x = rand32(5, 64)
-layer(x)
+l(x)
 ```
 """
 struct DensePositive

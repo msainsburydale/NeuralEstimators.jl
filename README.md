@@ -66,7 +66,10 @@ This software was developed as part of academic research. If you would like to s
 
 ### Contributing
 
-If you encounter a bug or have a suggestion, please consider [opening an issue](https://github.com/msainsburydale/NeuralEstimators.jl/issues) or submitting a pull request. Instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/README.md). If you plan to add functionality to the package, you can run the unit tests with the following bash command: `julia --project=. test/runtests.jl`.
+If you encounter a bug or have a suggestion, please consider [opening an issue](https://github.com/msainsburydale/NeuralEstimators.jl/issues) or submitting a pull request. Instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/README.md). When adding functionality to the package, you may wish to add unit tests to the file [test/runtests.jl](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/test/runtests.jl). You can then run these tests locally by executing the following command from the root folder:
+```bash
+julia --project=. -e "using Pkg; Pkg.test()"
+```
 
 ### Papers using NeuralEstimators
 

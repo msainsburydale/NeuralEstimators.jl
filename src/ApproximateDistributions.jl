@@ -27,7 +27,7 @@ where ``\mathcal{K}`` denotes the space of approximate-distribution parameters `
 can be accessed using [`numdistributionalparams()`](@ref). 
 """
 struct GaussianDistribution <: ApproximateDistribution
-	d::Integer 
+	d::Integer
     covariancematrix::CovarianceMatrix
 end
 GaussianDistribution(d::Integer) = GaussianDistribution(d, CovarianceMatrix(d))
@@ -102,7 +102,7 @@ struct ActNorm
 end
 
 # TODO functionality to initialise based on first batch
-function ActNorm(d::Int)
+function ActNorm(d::Integer)
     scale = ones(Float32, d)
     bias  = zeros(Float32, d)
     return ActNorm(scale, bias)
@@ -122,11 +122,11 @@ end
     Permutation(in::Integer)
 A layer that permutes the inputs (of dimension `in`) entering a coupling block. 
 
-Note that the variables need to be permuted between coupling blocks in order for all input components to (eventually) be transformed. Note also that permutations are always invertible with absolute Jacobian determinant equal to 1. 
+Variables need to be permuted between coupling blocks in order for all input components to (eventually) be transformed. Note also that permutations are always invertible with absolute Jacobian determinant equal to 1. 
 """
-struct Permutation
-    permutation::Vector{Integer}
-    inv_permutation::Vector{Integer}
+struct Permutation{I <: Integer}
+    permutation::AbstractVector{I}
+    inv_permutation::AbstractVector{I}
 end
 function Permutation(d::Integer)
     permutation = randperm(d)                # random permutation of integers 1, …, d
@@ -167,13 +167,6 @@ function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128
 end 
 (mlp::MLP)(x, y) = mlp.network(cat(x, y; dims = 1))
 
-
-# An invertible transformation,
-# where the input is partitioned
-# into two blocks. One of the
-# blocks undergoes an affine
-# transformation that depends on
-# the other block
 @doc raw"""
     AffineCouplingBlock(κ₁::MLP, κ₂::MLP)
     AffineCouplingBlock(d₁::Integer, dstar::Integer, d₂; kwargs...)
@@ -190,9 +183,9 @@ where $\boldsymbol{\kappa}_{\boldsymbol{\gamma},1}(\cdot)$ and $\boldsymbol{\kap
 
 Additional keyword arguments `kwargs` are passed to the [`MLP`](@ref) constructor when creating `κ₁` and `κ₂`. 
 """
-struct AffineCouplingBlock
-    scale::MLP
-    translate::MLP
+struct AffineCouplingBlock{M <: MLP}
+    scale::M
+    translate::M
     d₁::Integer
     d₂::Integer
  end
@@ -220,10 +213,10 @@ function inverse(net::AffineCouplingBlock, U, V, TZ)
      return θ
 end 
 
-struct CouplingLayer 
+struct CouplingLayer
     d::Integer
     d₁::Integer 
-    d₂::Integer 
+    d₂::Integer
     block1 
     block2
     actnorm::Union{Nothing, ActNorm}
@@ -250,8 +243,8 @@ numdistributionalparams(layer::CouplingLayer) = numdistributionalparams(layer.bl
 function forward(layer::CouplingLayer, θ::AbstractMatrix, TZ::AbstractMatrix) 
     
     # Initialise accumulator for log determinant of Jacobian
-    log_det_J = zeros(1, size(θ, 2))
-
+    log_det_J = zero(similar(θ, 1, size(θ, 2)))
+    
     # Normalise activation
     if !isnothing(layer.actnorm)
         θ, log_det_J_act = forward(layer.actnorm, θ) 
@@ -312,8 +305,8 @@ Activation normalisation ([Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.
 - `kwargs`: additional keyword arguments passed to [`AffineCouplingBlock`](@ref). 
 """
 struct NormalisingFlow <: ApproximateDistribution
-	d::Integer 
-    layers::AbstractVector{CouplingLayer}
+	d::Integer  
+    layers::Vector{CouplingLayer}
 end
 
 function NormalisingFlow(d::Integer, dstar::Integer = d; num_coupling_layers::Integer = 6, use_act_norm::Bool = true, kwargs...)
@@ -325,7 +318,10 @@ numdistributionalparams(q::NormalisingFlow) = sum(numdistributionalparams.(q.lay
 
 function forward(flow::NormalisingFlow, θ::AbstractMatrix, TZ::AbstractMatrix)
     U = θ
-    log_det_J = zeros(eltype(θ), 1, size(θ, 2)) # initialise accumulator
+
+    # Initialise accumulator for log determinant of Jacobian
+    log_det_J = zero(similar(θ, 1, size(θ, 2)))
+    
     for layer in flow.layers
         U, log_det = forward(layer, U, TZ) 
         log_det_J += log_det 
@@ -377,4 +373,4 @@ function sampleposterior(flow::NormalisingFlow, TZ::AbstractMatrix, N::Integer; 
 
     return cpu(θ)
 end
-sampleposterior(flow::NormalisingFlow, TZ::AbstractVector, N::Integer) = sampleposterior(flow, reshape(TZ, :, 1), N) 
+sampleposterior(flow::NormalisingFlow, TZ::AbstractVector, N::Integer; kwargs...) = sampleposterior(flow, reshape(TZ, :, 1), N; kwargs...) 

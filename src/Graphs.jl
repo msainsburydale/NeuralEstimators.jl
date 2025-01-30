@@ -18,8 +18,7 @@ are collected over differing sets of spatial locations,
 ```math
 \{\boldsymbol{s}_{ij}, \dots, \boldsymbol{s}_{in_i}\} \subset \mathcal{D}, \quad i = 1, \dots, m,
 ```
-`Z` should be given as an $m$-vector of $n_i$-vectors,
-and `S` should be given as an $m$-vector of $n_i \times d$ matrices.
+`Z` should be given as an $m$-vector of $n_i$-vectors, and `S` should be given as an $m$-vector of $n_i \times d$ matrices.
 
 The spatial information between neighbours is stored as an edge feature, with the specific 
 information controlled by the keyword arguments `stationary` and `isotropic`. 
@@ -275,9 +274,6 @@ function (l::GraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where 
     l.σ.(l.weight1 ⊠ x .+ l.weight2 ⊠ m .+ l.bias) # ⊠ is shorthand for batched_mul
 end
 
-
-# ---- SpatialGraphConv ----
-
 @doc raw"""
     SpatialGraphConv(in => out, g=relu; args...)
 
@@ -333,10 +329,9 @@ although a custom choice for this function can be provided using the keyword arg
 using NeuralEstimators, Flux, GraphNeuralNetworks
 
 # Toy spatial data
-m = 5                  # number of independent replicates
-d = 2                  # spatial dimension
 n = 250                # number of spatial locations
-S = rand(n, d)         # spatial locations
+m = 5                  # number of independent replicates
+S = rand(n, 2)         # spatial locations
 Z = rand(n, m)         # data
 g = spatialgraph(S, Z) # construct the graph
 
@@ -484,17 +479,17 @@ function normalise_edge_neighbors(g::AbstractGNNGraph, e)
     return e ./ (den .+ eps(eltype(e)))
 end
 
+#TODO GNNSummary given a different name (maybe just GNN)? 
+#TODO Does it make sense to show GraphConv here? Maybe better to show SpatialGraphConv? 
 @doc raw"""
 	GNNSummary(propagation, readout)
-
-A graph neural network (GNN) module designed to serve as the summary network `ψ`
+A graph neural network (GNN) module designed to serve as the inner network `ψ`
 in the [`DeepSet`](@ref) representation when the data are graphical (e.g.,
 irregularly observed spatial data).
 
-The `propagation` module transforms graphical input data into a set of
+The `propagation` module transforms graph data into a set of
 hidden-feature graphs. The `readout` module aggregates these feature graphs into
-a single hidden feature vector of fixed length (i.e., a vector of summary
-statistics). The summary network is then defined as the composition of the
+a single hidden feature vector of fixed length. The network `ψ` is then defined as the composition of the
 propagation and readout modules.
 
 The data should be stored as a `GNNGraph` or `Vector{GNNGraph}`, where
@@ -508,34 +503,31 @@ using Flux: batch
 using Statistics: mean
 
 # Propagation module
-d = 1      # dimension of response variable
+r  = 1     # dimension of response variable
 nₕ = 32    # dimension of node feature vectors
-propagation = GNNChain(GraphConv(d => nₕ), GraphConv(nₕ => nₕ))
+propagation = GNNChain(GraphConv(r => nₕ), GraphConv(nₕ => nₕ))
 
 # Readout module
 readout = GlobalPool(mean)
-nᵣ = nₕ   # dimension of readout vector
 
-# Summary network
+# Inner network
 ψ = GNNSummary(propagation, readout)
 
-# Inference network
-p = 3     # number of parameters in the statistical model
+# Outer network
+d = 3     # output dimension 
 w = 64    # width of hidden layer
-ϕ = Chain(Dense(nᵣ, w, relu), Dense(w, p))
+ϕ = Chain(Dense(nₕ, w, relu), Dense(w, d))
 
-# Construct the estimator
-θ̂ = DeepSet(ψ, ϕ)
+# DeepSet object 
+ds = DeepSet(ψ, ϕ)
 
-# Apply the estimator to a single graph, a single graph with subgraphs
-# (corresponding to independent replicates), and a vector of graphs
-# (corresponding to multiple data sets each with independent replicates)
-g₁ = rand_graph(11, 30, ndata=rand(d, 11))
-g₂ = rand_graph(13, 40, ndata=rand(d, 13))
-g₃ = batch([g₁, g₂])
-θ̂(g₁)
-θ̂(g₃)
-θ̂([g₁, g₂, g₃])
+# Apply to data 
+g₁ = rand_graph(11, 30, ndata = rand32(r, 11)) 
+g₂ = rand_graph(13, 40, ndata = rand32(r, 13))
+g₃ = batch([g₁, g₂])  
+ds(g₁)                # single graph 
+ds(g₃)                # graph with subgraphs corresponding to independent replicates
+ds([g₁, g₂, g₃])      # vector of graphs, corresponding to multiple data sets 
 ```
 """
 struct GNNSummary{F, G}
@@ -768,7 +760,7 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 end
 
 ## helper functions
-deletecol!(A,cind) = SparseArrays.fkeep!(A,(i,j,v) -> j != cind)
+deletecol!(A,cind) = SparseArrays.fkeep!((i,j,v) -> j != cind, A)
 findnearest(A::AbstractArray, x) = argmin(abs.(A .- x))
 findnearest(V::SparseVector, q) = V.nzind[findnearest(V.nzval, q)] # efficient version for SparseVector that doesn't materialise a dense array
 function subsetneighbours(A, k) 

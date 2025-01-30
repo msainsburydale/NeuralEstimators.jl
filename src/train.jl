@@ -14,6 +14,8 @@ provided with specific sets of parameters (`θ_train` and `θ_val`) and/or data
 
 In all methods, the validation parameters and data are held fixed to reduce noise when evaluating the validation risk.
 
+The estimator is returned on the CPU so that it can be saved post training. 
+
 # Keyword arguments common to all methods:
 - `loss = mae`: loss function to evaluate performance (only required for objects of type `PointEstimator`). 
 - `epochs = 100`: number of epochs to train the neural network. An epoch is one complete pass through the entire training data set when doing stochastic gradient descent.
@@ -127,6 +129,7 @@ function _train(θ̂, sampler, simulator;
 
 	device = _checkgpu(use_gpu, verbose = verbose)
     θ̂ = θ̂ |> device
+	optimiser = optimiser |> device 
 
 	verbose && println("Sampling the validation set...")
 	θ_val   = isnothing(ξ) ? sampler(K ÷ 5 + 1) : sampler(K ÷ 5 + 1, ξ)
@@ -218,7 +221,7 @@ function _train(θ̂, sampler, simulator;
 
 	# TODO if the user has relied on using train() as a mutating function, the optimal estimator will not be returned. Can I set θ̂ = θ̂_best to fix this? This also ties in with the other TODO down below above trainx(), regarding which device the estimator is on at the end of training.
 
-    return θ̂_best
+    return cpu(θ̂_best)
 end
 
 function _train(θ̂, θ_train::P, θ_val::P, simulator;
@@ -248,6 +251,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 
 	device = _checkgpu(use_gpu, verbose = verbose)
     θ̂ = θ̂ |> device
+	optimiser = optimiser |> device 
 
 	verbose && println("Simulating validation data...")
 	val_set = _constructset(θ̂, simulator, θ_val, m, batchsize)
@@ -325,7 +329,7 @@ function _train(θ̂, θ_train::P, θ_val::P, simulator;
 	!isnothing(savepath) && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	!isnothing(savepath) && _savebestmodel(savepath)
 
-    return θ̂_best
+    return cpu(θ̂_best)
 end
 
 function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
@@ -371,6 +375,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
 	device = _checkgpu(use_gpu, verbose = verbose)
     θ̂ = θ̂ |> device
+	optimiser = optimiser |> device 
 
 	verbose && print("Computing the initial validation risk...")
 	val_set = _constructset(θ̂, Z_val, θ_val, batchsize)
@@ -421,7 +426,7 @@ function _train(θ̂, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	!isnothing(savepath) && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	!isnothing(savepath) && _savebestmodel(savepath)
 
-    return θ̂_best
+    return cpu(θ̂_best)
 end
 
 # General fallback
@@ -594,7 +599,7 @@ function _risk(θ̂, loss, set::DataLoader, device, optimiser = nothing)
 			# the final training risk that we report for each epoch is slightly inaccurate
 			# (since the neural-network parameters are updated after each batch)
 			ls, ∇ = Flux.withgradient(θ̂ -> loss(θ̂(input), output), θ̂)
-			update!(optimiser, θ̂, ∇[1])
+			Flux.update!(optimiser, θ̂, ∇[1])
 		else
 			ls = loss(θ̂(input), output)
 		end
@@ -614,7 +619,7 @@ function _risk(θ̂::RatioEstimator, loss, set::DataLoader, device, optimiser = 
 		k = size(output)[end]
 		if !isnothing(optimiser)
 			ls, ∇ = Flux.withgradient(θ̂ -> Flux.logitbinarycrossentropy(θ̂.deepset(input), output), θ̂)
-			update!(optimiser, θ̂, ∇[1])
+			Flux.update!(optimiser, θ̂, ∇[1])
 		else
 			ls = Flux.logitbinarycrossentropy(θ̂.deepset(input), output)
 		end
@@ -653,7 +658,7 @@ function _risk(θ̂::QuantileEstimatorContinuous, loss, set::DataLoader, device,
 
 		if !isnothing(optimiser)
 			ls, ∇ = Flux.withgradient(θ̂ -> quantileloss(θ̂(input), output, τ), θ̂)
-			update!(optimiser, θ̂, ∇[1])
+			Flux.update!(optimiser, θ̂, ∇[1])
 		else
 			ls = quantileloss(θ̂(input), output, τ)
 		end
