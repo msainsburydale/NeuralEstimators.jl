@@ -13,7 +13,7 @@ using CairoMakie           # visualisation
 The following packages will be used in the examples with [Gridded data](@ref) and [Irregular spatial data](@ref):  
 
 ```
-using Distances            # computing distance matrices 
+using Distances            # distance matrices 
 using Folds                # parallel simulation (start Julia with --threads=auto)
 using LinearAlgebra        # Cholesky factorisation
 ```
@@ -337,7 +337,9 @@ end
 simulate(parameters::Parameters, m::Integer = 1) = simulate(parameters, range(m, m))
 ```
 
-Next, we construct our GNN architecture. Here, we use an architecture tailored to isotropic spatial dependence models; for further details, see Section 2.2 of [Sainsbury-Dale et al. (2025)](https://doi.org/10.1080/10618600.2024.2433671). In this example our goal is to construct a point estimator, however any other kind of estimator (see [Estimators](@ref)) can be constructed by simply substituting the appropriate estimator class in the final line below:
+Next, we construct our GNN architecture. Here, we use an architecture tailored to isotropic spatial dependence models; for further details, see [Sainsbury-Dale et al. (2025, Sec. 2.2)](https://doi.org/10.1080/10618600.2024.2433671). We also employ a sparse approximation of the empirical variogram as an expert summary statistic ([Gerber and Nychka, 2021](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382)).
+
+In this example our goal is to construct a point estimator, however any other kind of estimator (see [Estimators](@ref)) can be constructed by simply substituting the appropriate estimator class in the final line below:
 
 ```
 # Spatial weight functions: continuous surrogates for 0-1 basis functions 
