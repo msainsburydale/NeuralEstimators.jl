@@ -39,13 +39,15 @@ S(1)
 (S::Vector{Function})(z) = vcat([s(z) for s ∈ S]...)
 # (S::Vector)(z) = vcat([s(z) for s ∈ S]...) # can use a more general construction like this to allow for vectors of NeuralEstimators to be called in this way
 
-"""
+@doc raw"""
     DeepSet(ψ, ϕ, a = mean; S = nothing)
 	(ds::DeepSet)(Z::Vector{A}) where A <: Any
 	(ds::DeepSet)(tuple::Tuple{Vector{A}, Vector{Vector}}) where A <: Any
 The DeepSets representation ([Zaheer et al., 2017](https://arxiv.org/abs/1703.06114); [Sainsbury-Dale et al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522)),
 ```math
-θ̂(𝐙) = ϕ(𝐓(𝐙)),	 	 𝐓(𝐙) = 𝐚(\\{ψ(𝐙ᵢ) : i = 1, …, m\\}),
+\hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}(\mathbf{T}(\mathbf{Z})), \quad
+\mathbf{T}(\mathbf{Z}) = \mathbf{a}(\{\boldsymbol{\psi}(\mathbf{Z}_i) : i = 1, \dots, m\}),
+
 ```
 where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates of data, 
 `ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant aggregation
@@ -72,22 +74,21 @@ thereby ensuring that `ψ` is applied to a single large array, rather than multi
 Expert summary statistics can be incorporated as
 
 ```math
-θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)')'),
+\hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}((\mathbf{T}(\mathbf{Z})', \mathbf{S}(\mathbf{Z})')'),
 ```
-
 where `S` is a function that returns a vector of user-defined summary statistics.
 These user-defined summary statistics are provided either as a
 `Function` that returns a `Vector`, or as a vector of functions. In the case that
-`ψ` is set to `nothing`, only expert summary statistics will be used.
+`ψ` is set to `nothing`, only expert summary statistics will be used. See [Expert summary statistics](@ref) for further discussion on their use. 
 
 Set-level inputs (e.g., covariates) ``𝐗`` can be passed
 directly into the outer network `ϕ` in the following manner: 
 ```math
-θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐗')'),	 	 
+\hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}((\mathbf{T}(\mathbf{Z})', \mathbf{X}')'),
 ```
-or, in the case that expert summary statistics are also used,
+or, when expert summary statistics are also used,
 ```math
-θ̂(𝐙) = ϕ((𝐓(𝐙)', 𝐒(𝐙)', 𝐗')').	 
+\hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}((\mathbf{T}(\mathbf{Z})', \mathbf{S}(\mathbf{Z})', \mathbf{X}')').
 ```
 This is done by calling the `DeepSet` object on a
 `Tuple{Vector{A}, Vector{Vector}}`, where the first element of the tuple
@@ -458,9 +459,7 @@ See also [`CorrelationMatrix`](@ref).
 
 # Examples
 ```
-using NeuralEstimators
-using Flux
-using LinearAlgebra
+using NeuralEstimators, Flux, LinearAlgebra
 
 d = 4
 l = CovarianceMatrix(d)
@@ -566,9 +565,7 @@ See also [`CovarianceMatrix`](@ref).
 
 # Examples
 ```
-using NeuralEstimators
-using LinearAlgebra
-using Flux
+using NeuralEstimators, LinearAlgebra, Flux
 
 d  = 4
 l  = CorrelationMatrix(d)
@@ -709,8 +706,8 @@ DensePositive(layer::Dense; g::Function = Flux.relu, last_only::Bool = false) = 
 function (d::DensePositive)(x::AbstractVecOrMat)
   a = d.layer # extract the underlying fully-connected layer
   _size_check(a, x, 1 => size(a.weight, 2))
-  σ = NNlib.fast_act(a.σ, x) # replaces tanh => tanh_fast, etc
-  xT = _match_eltype(a, x)   # fixes Float64 input, etc.
+  σ = NNlib.fast_act(a.σ, x) # replaces tanh => tanh_fast
+  xT = _match_eltype(a, x)   # fixes Float64 input
   if d.last_only
 	  weight = hcat(a.weight[:, 1:end-1], d.g.(a.weight[:, end:end]))
   else

@@ -1,6 +1,6 @@
 """
 	ApproximateDistribution
-An abstract supertype for approximate posteriors distributions used in conjunction with a [`PosteriorEstimator`](@ref).
+An abstract supertype for approximate posterior distributions used in conjunction with a [`PosteriorEstimator`](@ref).
 
 Subtypes `A <: ApproximateDistribution` should provide methods `logdensity(q::A, θ::AbstractMatrix, Z)` and `sampleposterior(q::A, Z, N::Integer)`. 
 """
@@ -21,10 +21,11 @@ function numdistributionalparams end
     GaussianDistribution(d::Integer)
 A Gaussian distribution for amortised posterior inference, where `d` is the dimension of the parameter vector. 
 
+The approximate-distribution parameters $\boldsymbol{\kappa} = (\boldsymbol{\mu}', \textrm{vech}(\boldsymbol{L})')'$ consist of a $d$-dimensional mean parameter $\boldsymbol{\mu}$ and the $d(d+1)/2$ non-zero elements of the lower Cholesky factor $\boldsymbol{L}$ of a covariance matrix, where the half-vectorisation operator $\textrm{vech}(\cdot)$ vectorises the lower triangle of its matrix argument.
+
 When using a `GaussianDistribution` as the approximate distribution of a [`PosteriorEstimator`](@ref), 
 the neural `network` of the [`PosteriorEstimator`](@ref) should be a mapping from the sample space to ``\mathbb{R}^{|\mathcal{K}|}``, 
-where ``\mathcal{K}`` denotes the space of approximate-distribution parameters ``\boldsymbol{\kappa}`` and its dimension ``|\mathcal{K}|`` 
-can be accessed using [`numdistributionalparams()`](@ref). 
+where ``\mathcal{K}`` denotes the space of ``\boldsymbol{\kappa}``. The dimension ``|\mathcal{K}|`` can be determined from an object of type `GaussianDistribution` using [`numdistributionalparams()`](@ref). Given the $|\mathcal{K}|$-dimensional real-valued outputs of the neural network, a valid covariance matrix is constructed internally using [`CovarianceMatrix`](@ref).
 """
 struct GaussianDistribution <: ApproximateDistribution
 	d::Integer
@@ -297,7 +298,7 @@ When using a `NormalisingFlow` as the approximate distribution of a [`PosteriorE
 the neural `network` of the [`PosteriorEstimator`](@ref) should be a mapping from the sample space to ``\mathbb{R}^{d^*}``, 
 where ``d^*`` is an appropriate number of summary statistics for the given parameter vector (e.g., ``d^* = d``).
 
-`NormalisingFlow` uses affine coupling blocks, with the base distribution taken to be a standard multivariate Gaussian distribution. 
+`NormalisingFlow` uses affine coupling blocks (see [`AffineCouplingBlock`](@ref)), with the base distribution taken to be a standard multivariate Gaussian distribution. 
 Activation normalisation ([Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685)) and permutations are used between each coupling block. 
 
 # Keyword arguments

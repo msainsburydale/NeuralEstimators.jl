@@ -17,7 +17,7 @@ In all methods, the validation parameters and data are held fixed to reduce nois
 The estimator is returned on the CPU so that it can be saved post training. 
 
 # Keyword arguments common to all methods:
-- `loss = mae`: loss function to evaluate performance (only required for objects of type `PointEstimator`). 
+- `loss = mae` (applicable only to [`PointEstimator`](@ref)): loss function used to train the neural network. In addition to the standard loss functions provided by `Flux` (e.g., `mae`, `mse`), see [Loss functions](@ref) for further options. 
 - `epochs = 100`: number of epochs to train the neural network. An epoch is one complete pass through the entire training data set when doing stochastic gradient descent.
 - `batchsize = 32`: the batchsize to use when performing stochastic gradient descent, that is, the number of training samples processed between each update of the neural-network parameters.
 - `optimiser = Flux.setup(Adam(), estimator)`: any Optimisers.jl optimisation rule for updating the neural-network parameters. When the training data and/or parameters are held fixed, one may wish to employ regularisation to prevent overfitting; for example, `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), estimator)`, which corresponds to L₂ regularisation with penalty coefficient λ=10⁻⁴. 

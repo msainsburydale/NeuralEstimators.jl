@@ -28,7 +28,7 @@ that is, a ``(d+1) × (d+1)`` triangular matrix with zero diagonal.
 Note that the triangular matrix is constructed on the CPU, but the returned
 matrix will be a GPU array if `v` is a GPU array. Note also that the
 return type is not of type `Triangular` matrix (i.e., the zeros are
-materialised) since `Traingular` matrices are not always compatible with other
+materialised) since `Triangular` matrices are not always compatible with other
 GPU operations.
 
 # Examples
@@ -295,6 +295,7 @@ end
 
 """
     expandgrid(xs, ys)
+Generates a grid of all possible combinations of the elements from two input vectors, `xs` and `ys`. 
 
 Same as `expand.grid()` in `R`, but currently caters for two dimensions only.
 """
@@ -343,8 +344,7 @@ end
 
 """
 	stackarrays(v::V; merge = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-
-Stack a vector of arrays `v` along the last dimension of each array, optionally merging the final dimension of the stacked array.
+Stacks a vector of arrays `v` along the last dimension of each array, optionally merging the final dimension of the stacked array.
 
 The arrays must be of the same size for the first `N-1` dimensions. However, if
 `merge = true`, the size of the final dimension can vary.

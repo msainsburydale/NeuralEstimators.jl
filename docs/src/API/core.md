@@ -33,11 +33,11 @@ While the formats above cover many applications, the package is flexible: the da
 
 The package provides several classes of neural estimators, organised within a type hierarchy. At the top-level of the hierarchy is [`NeuralEstimator`](@ref), an abstract supertype for all neural estimators in the package. 
 
-Neural Bayes estimators are implemented as subtypes of the abstract supertype [`BayesEstimator`](@ref). The simple type [`PointEstimator`](@ref) is used for constructing neural Bayes estimators under user-defined loss functions. 
+Neural Bayes estimators are implemented as subtypes of the abstract supertype [`BayesEstimator`](@ref). The simple type [`PointEstimator`](@ref) is used for constructing neural Bayes estimators under general, user-defined loss functions. Several specialised types cater for the estimation of posterior quantiles based on the quantile loss function: see [`IntervalEstimator`](@ref) and its generalisation [`QuantileEstimatorDiscrete`](@ref) for estimating posterior quantiles for a fixed set of probability levels; and see [`QuantileEstimatorContinuous`](@ref) for estimating posterior quantiles based on a continuous probability level provided as input to the neural network.
 
 The type [`PosteriorEstimator`](@ref) can be used to approximate the posterior distribution, and [`RatioEstimator`](@ref) can be used to approximate the likelihood-to-evidence ratio.
 
-Several specialised types of neural Bayes estimators cater for the estimation of posterior quantiles based on the quantile loss function: see [`IntervalEstimator`](@ref) and [`QuantileEstimatorDiscrete`](@ref) for estimating posterior quantiles for a fixed set of probability levels, and [`QuantileEstimatorContinuous`](@ref) for estimating posterior quantiles based on a continuous probability level taken as an input to the neural network.
+Several types serve as wrappers around the aforementioned estimators, enhancing their functionality. [`PiecewiseEstimator`](@ref) applies different estimators based on the sample size of the data (see the discussion on [Variable sample sizes](@ref)). [`Ensemble`](@ref) combines multiple estimators, aggregating their estimates to improve accuracy.
 
 
 ```@docs
@@ -61,6 +61,7 @@ PiecewiseEstimator
 
 Ensemble
 ```
+
 
 ## Training
 

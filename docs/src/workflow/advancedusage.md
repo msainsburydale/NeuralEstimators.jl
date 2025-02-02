@@ -103,7 +103,7 @@ If data sets with varying $m$ are envisaged, one could train $l$ estimators for 
 ```
 where $\boldsymbol{\gamma}^* \equiv (\boldsymbol{\gamma}^*_{\tilde{m}_1}, \dots, \boldsymbol{\gamma}^*_{\tilde{m}_{l-1}})$, and $\boldsymbol{\gamma}^*_{\tilde{m}}$ are the neural-network parameters optimised for sample size $\tilde{m}$ chosen so that $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}^*_{\tilde{m}})$ is near-optimal over the range of sample sizes in which it is applied. This approach works well in practice and is less computationally burdensome than it first appears when used in conjunction with pre-training.
 
-Piecewise estimators are implemented with the type [`PiecewiseEstimator`](@ref), and their construction is facilitated with [`trainx()`](@ref), which makes use of pre-training
+Piecewise estimators are implemented with the type [`PiecewiseEstimator`](@ref), and their construction is facilitated with [`trainx()`](@ref), which makes use of pre-training.
 
 ### Training with variable sample sizes
 

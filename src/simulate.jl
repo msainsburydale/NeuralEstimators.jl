@@ -1,11 +1,7 @@
-
-# ---- Gaussian process ----
-
 """
 	simulategaussian(L::AbstractMatrix, m = 1)
-
-Simulates `m` independent and identically distributed (i.i.d.) realisations from
-a mean-zero multivariate Gaussian random variable with associated lower Cholesky 
+Simulates `m` independent and identically distributed realisations from
+a mean-zero multivariate Gaussian random vector with associated lower Cholesky 
 factor `L`. 
 
 If `m` is not specified, the simulated data are returned as a vector with
@@ -36,25 +32,22 @@ function simulategaussian(L::M) where M <: AbstractMatrix{T} where T <: Number
 	L * randn(T, size(L, 1))
 end
 
-# ---- Schlather's max-stable model ----
-
+#TODO better keyword argument name than Gumbel?
 """
 	simulateschlather(L::Matrix, m = 1; C = 3.5, Gumbel::Bool = false)
+Simulates `m` independent and identically distributed realisations from
+[Schlather's (2002)](https://link.springer.com/article/10.1023/A:1020977924878) max-stable model given the lower Cholesky factor `L` of the covariance matrix of the underlying Gaussian process. 
 
-Simulates `m` independent and identically distributed (i.i.d.) realisations from
-Schlather's max-stable model using the algorithm for approximate simulation given
+The function uses the algorithm for approximate simulation given
 by [Schlather (2002)](https://link.springer.com/article/10.1023/A:1020977924878).
-
-Requires the lower Cholesky factor `L` associated with the covariance matrix of 
-the underlying Gaussian process. 
 
 If `m` is not specified, the simulated data are returned as a vector with
 length equal to the number of spatial locations, ``n``; otherwise, the data are 
 returned as an ``n``x`m` matrix.
 
 # Keyword arguments
-- `C = 3.5`: a tuning parameter that controls the accuracy of the algorithm: small `C` favours computational efficiency, while large `C` favours accuracy. Schlather (2002) recommends the use of `C = 3`.
-- `Gumbel = true`: flag indicating whether the data should be log-transformed from the unit Fréchet scale to the `Gumbel` scale.
+- `C = 3.5`: a tuning parameter that controls the accuracy of the algorithm. Small `C` favours computational efficiency, while large `C` favours accuracy. 
+- `Gumbel = true`: flag indicating whether the data should be log-transformed from the unit Fréchet scale to the Gumbel scale.
 
 # Examples
 ```
@@ -121,7 +114,7 @@ end
 # allows automatic differentiation: see https://github.com/cgeoga/BesselK.jl.
 @doc raw"""
     matern(h, ρ, ν, σ² = 1)
-Given distance ``\|\boldsymbol{h}\|`` (`h`), computes the Matérn covariance function,
+Given distance ``\|\boldsymbol{h}\|`` (`h`), computes the Matérn covariance function
 
 ```math
 C(\|\boldsymbol{h}\|) = \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \left(\frac{\|\boldsymbol{h}\|}{\rho}\right)^\nu K_\nu \left(\frac{\|\boldsymbol{h}\|}{\rho}\right),
@@ -149,10 +142,10 @@ function matern(h, ρ, ν, σ² = one(typeof(h)))
     return C
 end
 
+#TODO could make this more general by using Matern rather than an exponential covariance
 @doc raw"""
     paciorek(s, r, ω₁, ω₂, ρ, β)
-Given spatial locations `s` and `r`, computes the nonstationary covariance function, 
-
+Given spatial locations `s` and `r`, computes the nonstationary covariance function 
 ```math
 C(\boldsymbol{s}, \boldsymbol{r}) = 
 |\boldsymbol{\Sigma}(\boldsymbol{s})|^{1/4}
@@ -160,21 +153,17 @@ C(\boldsymbol{s}, \boldsymbol{r}) =
 \left|\frac{\boldsymbol{\Sigma}(\boldsymbol{s}) + \boldsymbol{\Sigma}(\boldsymbol{r})}{2}\right|^{-1/2}
 C^0\big(\sqrt{Q(\boldsymbol{s}, \boldsymbol{r})}\big), 
 ```
-
 where $C^0(h) = \exp\{-(h/\rho)^{3/2}\}$ for range parameter $\rho > 0$, 
-the matrix 
-$\boldsymbol{\Sigma}(\boldsymbol{s}) = \exp(\beta\|\boldsymbol{s} - \boldsymbol{\omega}\|)\boldsymbol{I}$ 
+the matrix $\boldsymbol{\Sigma}(\boldsymbol{s}) = \exp(\beta\|\boldsymbol{s} - \boldsymbol{\omega}\|)\boldsymbol{I}$ 
 is a kernel matrix ([Paciorek and Schervish, 2006](https://onlinelibrary.wiley.com/doi/abs/10.1002/env.785)) 
-with scale parameter $\beta > 0$ and $\boldsymbol{\omega} \equiv (\omega_1, \omega_2)' \in \mathcal{D}$,
+with scale parameter $\beta > 0$ and reference point $\boldsymbol{\omega} \equiv (\omega_1, \omega_2)' \in \mathbb{R}^2$,
 and 
-
 ```math
 Q(\boldsymbol{s}, \boldsymbol{r}) = 
 (\boldsymbol{s} - \boldsymbol{r})'
 \left(\frac{\boldsymbol{\Sigma}(\boldsymbol{s}) + \boldsymbol{\Sigma}(\boldsymbol{r})}{2}\right)^{-1}
 (\boldsymbol{s} - \boldsymbol{r})
 ``` 
-
 is the squared Mahalanobis distance between $\boldsymbol{s}$ and $\boldsymbol{r}$. 
 """
 function paciorek(s, r, ω₁, ω₂, ρ, β)
@@ -275,7 +264,6 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
 	return L
 end
 
-
 function maternchols(D::V, ρ, ν, σ² = one(nested_eltype(D)); stack::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 
 	if stack
@@ -313,14 +301,11 @@ function _coercetoKvector(x, K)
 end
 
 
-# ---- Potts model ----
-
 """
 	simulatepotts(grid::Matrix{Int}, β)
 	simulatepotts(grid::Matrix{Union{Int, Nothing}}, β)
 	simulatepotts(nrows::Int, ncols::Int, num_states::Int, β)
-
-Chequerboard Gibbs sampling from 2D Potts model with parameter `β`>0.
+Chequerboard Gibbs sampling from a spatial Potts model with parameter `β`>0 (see, e.g., [Sainsbury-Dale et al., 2025, Sec. 3.3](https://arxiv.org/abs/2501.04330), and the references therein).
 
 Approximately independent simulations can be obtained by setting 
 `nsims` > 1 or `num_iterations > burn`. The degree to which the 

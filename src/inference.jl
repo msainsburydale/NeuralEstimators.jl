@@ -53,13 +53,15 @@ end
 
 # ---- Point estimation from estimators that allow for posterior sampling ----
 
+
+
 """
 	posteriormedian(θ::AbstractMatrix)	
 	posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...)	
 	
-Compute the vector of marginal posterior medians based either on a ``d`` × ``N`` matrix `θ` of posterior draws, 
+Computes the vector of marginal posterior medians based either on a ``d`` × ``N`` matrix `θ` of posterior draws, 
 where ``d`` denotes the number of parameters to make inference on, 
-or directly from an estimator that allows for posterior sampling via [`sampleposterior()`](@ref) (i.e., `PosteriorEstimator` or `RatioEstimator`). 
+or directly from an estimator that allows for posterior sampling via [`sampleposterior()`](@ref).
 """
 posteriormedian(θ::AbstractMatrix) = median(θ; dims = 2)
 posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormedian(sampleposterior(estimator, Z, N; kwargs...))
@@ -68,9 +70,9 @@ posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Inte
 	posteriormean(θ::AbstractMatrix)	
 	posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...)	
 	
-Compute the posterior mean based either on a ``d`` × ``N`` matrix `θ` of posterior draws, 
+Computes the posterior mean based either on a ``d`` × ``N`` matrix `θ` of posterior draws, 
 where ``d`` denotes the number of parameters to make inference on, 
-or directly from an estimator that allows for posterior sampling via [`sampleposterior()`](@ref) (i.e., `PosteriorEstimator` or `RatioEstimator`). 
+or directly from an estimator that allows for posterior sampling via [`sampleposterior()`](@ref).
 """
 posteriormean(θ::AbstractMatrix) = mean(θ; dims = 2)
 posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormean(sampleposterior(estimator, Z, N; kwargs...))
@@ -83,7 +85,7 @@ posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Intege
 @doc raw"""
 	sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000)
 	sampleposterior(estimator::RatioEstimator, Z, N::Integer = 1000; θ_grid, prior::Function = θ -> 1f0)
-Samples from the approximate posterior distribution $p(\boldsymbol{\theta} \mid \boldsymbol{Z})$ implied by `estimator`.
+Samples from the approximate posterior distribution implied by `estimator`.
 
 The positional argument `N` controls the size of the posterior sample.
 
@@ -132,24 +134,21 @@ end
 	mlestimate(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, penalty::Function = θ -> 1, use_gpu = true)
 Computes the (approximate) maximum likelihood estimate given data $\boldsymbol{Z}$,
 ```math
-\underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z})
+\underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}),
 ```
-where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function
-derived from `estimator`.
+where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function implied by `estimator`.
 
 If a vector `θ₀` of initial parameter estimates is given, the approximate
 likelihood is maximised by gradient descent (requires `Optim.jl` to be loaded). Otherwise, if a matrix of parameters
 `θ_grid` is given, the approximate likelihood is maximised by grid search.
 
 A maximum penalised likelihood estimate,
-
 ```math
 \underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta}),
 ```
-
 can be obtained by specifying the keyword argument `penalty` that defines the penalty term $p(\boldsymbol{\theta})$.
 
-See also [`mapestimate()`](@ref) for computing (approximate) maximum a posteriori estimates.
+See also [`mapestimate()`](@ref), [`posteriormedian()`](@ref), and [`posteriormean()`](@ref).
 """
 mlestimate(est::RatioEstimator, Z; kwargs...) = _maximisedensity(est, Z; kwargs...)
 mlestimate(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, mlestimate.(Ref(est), Z; kwargs...))
@@ -158,18 +157,15 @@ mlestimate(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, mle
 	mapestimate(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, prior::Function = θ -> 1, use_gpu = true)
 Computes the (approximate) maximum a posteriori estimate given data $\boldsymbol{Z}$,
 ```math
-\underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta})
+\underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta}),
 ```
-where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function
-derived from `estimator`, and $p(\boldsymbol{\theta})$ denotes the prior density
-function controlled through the keyword argument `prior`
-(by default, a uniform prior is used).
+where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function implied by `estimator`, and $p(\boldsymbol{\theta})$ denotes the prior density function controlled through the keyword argument `prior`.
 
 If a vector `θ₀` of initial parameter estimates is given, the approximate
 posterior density is maximised by gradient descent (requires `Optim.jl` to be loaded). Otherwise, if a matrix of parameters
 `θ_grid` is given, the approximate posterior density is maximised by grid search.
 
-See also [`mlestimate()`](@ref) for computing (approximate) maximum likelihood estimates.
+See also [`mlestimate()`](@ref), [`posteriormedian()`](@ref), and [`posteriormean()`](@ref).
 """
 mapestimate(est::RatioEstimator, Z; kwargs...) = _maximisedensity(est, Z; kwargs...)
 mapestimate(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, mlestimate.(Ref(est), Z; kwargs...))

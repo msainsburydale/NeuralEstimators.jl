@@ -147,7 +147,7 @@ Z = L * randn(n, m)                     # simulated data
 r = 0.15                                # radius of neighbourhood set
 g = spatialgraph(S, Z, r = r)
 
-# Construct the variogram object wth 10 bins
+# Construct the variogram object with 10 bins
 nv = NeighbourhoodVariogram(r, 10) 
 
 # Compute the empirical variogram 

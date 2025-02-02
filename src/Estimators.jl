@@ -114,7 +114,7 @@ end
 
 A neural estimator that jointly estimates a fixed set of marginal posterior
 quantiles, with probability levels $\{\tau_1, \dots, \tau_T\}$ controlled by the
-keyword argument `probs`.
+keyword argument `probs`. This generalises [`IntervalEstimator`](@ref) to support an arbitrary number of probability levels. 
 
 Given data ``\boldsymbol{Z}``, by default the estimator approximates quantiles of the distributions of 
 ```math
@@ -194,7 +194,7 @@ estimate(estimator, Z)
 # Neural network
 w = 64  # width of each hidden layer
 ψ = Chain(Dense(n, w, relu), Dense(w, w, relu))
-ϕ = Chain(Dense(w + 1, w, relu), Dense(w, 1))
+ϕ = Chain(Dense(w + 1, w, relu), Dense(w, d - 1))
 v = DeepSet(ψ, ϕ)
 
 # Initialise estimators respectively targetting quantiles of μ∣Z,σ and σ∣Z,μ
@@ -372,7 +372,7 @@ w = 64  # width of each hidden layer
 ϕ = Chain(
 	DensePositive(Dense(w + 2, w, relu); last_only = true),
 	DensePositive(Dense(w, w, relu)),
-	DensePositive(Dense(w, 1))
+	DensePositive(Dense(w, d - 1))
 	)
 network = DeepSet(ψ, ϕ)
 
@@ -398,7 +398,7 @@ q̂ᵢ(Z[1], θ₋ᵢ, τ)
 ```
 """
 struct QuantileEstimatorContinuous <: NeuralEstimator
-	deepset::DeepSet
+	deepset::DeepSet #TODO remove ::DeepSet
 	i::Union{Integer, Nothing}
 end
 function QuantileEstimatorContinuous(deepset::DeepSet; i::Union{Integer, Nothing} = nothing)
@@ -538,7 +538,7 @@ is the marginal likelihood, also known as the model evidence.
 For numerical stability, training is done on the log-scale using the relation 
 $\log r(\boldsymbol{Z}, \boldsymbol{\theta}) = \text{logit}(c^*(\boldsymbol{Z}, \boldsymbol{\theta}))$, 
 where $c^*(\cdot, \cdot)$ denotes the Bayes classifier as described in the [Methodology](@ref) section. 
-Hence, the neural `network` should be a mapping $\mathcal{Z} \times \Theta \to \mathbb{R}$, where $\mathcal{Z}$ and $\Theta$ denote the sample and parameter spaces, respectively. 
+Hence, the neural `network` should be a mapping from $\mathcal{Z} \times \Theta$ to $\mathbb{R}$, where $\mathcal{Z}$ and $\Theta$ denote the sample and parameter spaces, respectively. 
 
 When the neural network is a [`DeepSet`](@ref), two requirements must be met. First, the number of input neurons in the first layer of
 the outer network must equal $d$ plus the number of output neurons in the final layer of the inner network. 
@@ -575,12 +575,12 @@ w = 128
 network = DeepSet(ψ, ϕ)
 
 # Initialise the estimator
-r̂ = RatioEstimator(deepset)
+r̂ = RatioEstimator(network)
 
 # Train the estimator
 r̂ = train(r̂, sample, simulate, m = m)
 
-# Inference with "observed" data (grid-based sampling and optimisation)
+# Inference with "observed" data (grid-based optimisation and sampling)
 θ = sample(1)
 z = simulate(θ, m)[1]
 θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'  # fine gridding of the parameter space
@@ -597,7 +597,7 @@ mapestimate(r̂, z; θ₀ = θ₀)                     # maximum-a-posteriori es
 ```
 """
 struct RatioEstimator <: NeuralEstimator
-	deepset::DeepSet
+	deepset::DeepSet #TODO remove ::DeepSet
 end
 function (estimator::RatioEstimator)(Z, θ; kwargs...)
 	estimator((Z, θ); kwargs...) # "Tupleise" the input and pass to Tuple method
@@ -646,11 +646,11 @@ $m_1 < m_2 < \dots < m_{l-1}$, the piecewise etimator takes the form,
 \end{cases}
 ```
 
-For example, given an estimator  ``\hat{\boldsymbol{\theta}}_1(\cdot)`` trained for small
-sample sizes (e.g., m ≤ 30) and an estimator ``\hat{\boldsymbol{\theta}}_2(\cdot)``
-trained for moderate-to-large sample sizes (e.g., m > 30), we may construct a
+For example, given an estimator ``\hat{\boldsymbol{\theta}}_1(\cdot)`` trained for small
+sample sizes (e.g., ``m \leq 30``) and an estimator ``\hat{\boldsymbol{\theta}}_2(\cdot)``
+trained for moderate-to-large sample sizes (e.g., ``m > 30``), one may construct a
 `PiecewiseEstimator` that dispatches ``\hat{\boldsymbol{\theta}}_1(\cdot)`` if
-m ≤ 30 and ``\hat{\boldsymbol{\theta}}_2(\cdot)`` otherwise.
+``m \leq 30`` and ``\hat{\boldsymbol{\theta}}_2(\cdot)`` otherwise.
 
 See also [`trainx()`](@ref) for training estimators for a range of sample sizes.
 
@@ -889,8 +889,8 @@ simulator(θ, m) = [μ .+ randn32(n, m) for μ ∈ eachcol(θ)]
 function architecture()
 	ψ = Chain(Dense(n, 64, relu), Dense(64, 64, relu))
 	ϕ = Chain(Dense(64, 64, relu), Dense(64, d))
-	deepset = DeepSet(ψ, ϕ)
-	PointEstimator(deepset)
+	network = DeepSet(ψ, ϕ)
+	PointEstimator(network)
 end
 
 # Initialise ensemble with three component estimators 

@@ -106,7 +106,7 @@ end
 
 # NB Not documenting for now, but spatialgraph is set up for multivariate data. Eventually, we will write:
 # "Let $q$ denote the dimension of the spatial process (e.g., $q = 1$ for 
-# univariate spatial processes, $q = 2$ for bivariate processes, etc.)". For fixed locations, we will then write: 
+# univariate spatial processes, $q = 2$ for bivariate processes)". For fixed locations, we will then write: 
 # "`Z` should be given as a $q \times n \times m$ array (alternatively as an $n \times m$ matrix when $q = 1$) and `S` should be given as a $n \times d$ matrix."
 # And for varying locations, we will write: 
 # "`Z` should be given as an $m$-vector of $q \times n_i$ matrices (alternatively as an $m$-vector of $n_i$-vectors when $q = 1$), and `S` should be given as an $m$-vector of $n_i \times d$ matrices."
@@ -306,23 +306,23 @@ One may alternatively employ a nonlearnable function, for example, `f = (hᵢ, h
 specified through the keyword argument `f`.  
 
 The spatial distances between locations must be stored as an edge feature, as facilitated by [`spatialgraph()`](@ref). 
-The input to $\boldsymbol{w}(\cdot)$ is a $1 \times n$ matrix (i.e., a row vector) of spatial distances. 
-The output of $\boldsymbol{w}(\cdot)$ must be either a scalar; a vector of the same dimension as the feature vectors of the previous layer; 
+The input to $\boldsymbol{w}^{(l)}(\cdot)$ is a $1 \times n$ matrix (i.e., a row vector) of spatial distances. 
+The output of $\boldsymbol{w}^{(l)}(\cdot)$ must be either a scalar; a vector of the same dimension as the feature vectors of the previous layer; 
 or, if the features vectors of the previous layer are scalars, a vector of arbitrary dimension. 
 To promote identifiability, the weights are normalised to sum to one (row-wise) within each neighbourhood set. 
-By default, $\boldsymbol{w}(\cdot)$ is taken to be a multilayer perceptron with a single hidden layer, 
+By default, $\boldsymbol{w}^{(l)}(\cdot)$ is taken to be a multilayer perceptron with a single hidden layer, 
 although a custom choice for this function can be provided using the keyword argument `w`. 
 
 # Arguments
-- `in`: The dimension of input features.
-- `out`: The dimension of output features.
-- `g = relu`: Activation function.
-- `bias = true`: Add learnable bias?
-- `init = glorot_uniform`: Initialiser for $\boldsymbol{\Gamma}_{\!1}^{(l)}$, $\boldsymbol{\Gamma}_{\!2}^{(l)}$, and $\boldsymbol{\gamma}^{(l)}$. 
+- `in`: dimension of input features.
+- `out`: dimension of output features.
+- `g = relu`: activation function.
+- `bias = true`: add learnable bias?
+- `init = glorot_uniform`: initialiser for $\boldsymbol{\Gamma}_{\!1}^{(l)}$, $\boldsymbol{\Gamma}_{\!2}^{(l)}$, and $\boldsymbol{\gamma}^{(l)}$. 
 - `f = nothing`
 - `w = nothing` 
-- `w_width = 128`: (Only applicable if `w = nothing`) The width of the hidden layer in the MLP used to model $\boldsymbol{w}(\cdot, \cdot)$. 
-- `w_out = in`: (Only applicable if `w = nothing`) The output dimension of $\boldsymbol{w}(\cdot, \cdot)$.  
+- `w_width = 128` (applicable only if `w = nothing`): the width of the hidden layer in the MLP used to model $\boldsymbol{w}^{(l)}(\cdot, \cdot)$. 
+- `w_out = in` (applicable only if `w = nothing`): the output dimension of $\boldsymbol{w}^{(l)}(\cdot, \cdot)$.  
 
 # Examples
 ```
@@ -1051,12 +1051,11 @@ end
 
 """
 	maternclusterprocess(; λ=10, μ=10, r=0.1, xmin=0, xmax=1, ymin=0, ymax=1, unit_bounding_box=false)
+Generates a realisation from a Matérn cluster process (e.g., [Baddeley et al., 2015](https://www.taylorfrancis.com/books/mono/10.1201/b19708/spatial-point-patterns-adrian-baddeley-rolf-turner-ege-rubak), Ch. 12). 
 
-Simulates a Matérn cluster process with density of parent Poisson point process
-`λ`, mean number of daughter points `μ`, and radius of cluster disk `r`, over the
-simulation window defined by `xmin` and `xmax`, `ymin` and `ymax`.
+The process is defined by a parent homogenous Poisson point process with intensity `λ` > 0, a mean number of daughter points `μ` > 0, and a cluster radius `r` > 0. The simulation is performed over a rectangular window defined by [`xmin, xmax`] × [`ymin`, `ymax`].
 
-If `unit_bounding_box` is `true`, then the simulated points will be scaled so that
+If `unit_bounding_box = true`, the simulated points will be scaled so that
 the longest side of their bounding box is equal to one (this may change the simulation window). 
 
 See also the R package

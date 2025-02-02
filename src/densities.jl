@@ -1,5 +1,3 @@
-# ---- Helper functions for computing the MAP ----
-
 # Scaled logistic function for constraining parameters
 scaledlogistic(θ, Ω)    = scaledlogistic(θ, minimum(Ω), maximum(Ω))
 scaledlogistic(θ, a, b) = a + (b - a) / (1 + exp(-θ))
@@ -8,30 +6,20 @@ scaledlogistic(θ, a, b) = a + (b - a) / (1 + exp(-θ))
 scaledlogit(f, Ω)    = scaledlogit(f, minimum(Ω), maximum(Ω))
 scaledlogit(f, a, b) = log((f - a) / (b - f))
 
-
-# ---- Gaussian density ----
-
-# The density function is
-# ```math
-# |2\pi\boldsymbol{\Sigma}|^{-1/2} \exp{-\frac{1}{2}\boldsymbol{y}^\top \boldsymbol{\Sigma}^{-1}\boldsymbol{y}},
-# ```
-# and the log-density is
-# ```math
-# -\frac{n}{2}\ln{2\pi}  -\frac{1}{2}\ln{|\boldsymbol{\Sigma}|} -\frac{1}{2}\boldsymbol{y}^\top \boldsymbol{\Sigma}^{-1}\boldsymbol{y}.
-# ```
-
 @doc raw"""
-    gaussiandensity(y::V, L::LT) where {V <: AbstractVector, LT <: LowerTriangular}
-	gaussiandensity(y::A, L::LT) where {A <: AbstractArray, LT <: LowerTriangular}
-	gaussiandensity(y::A, Σ::M) where {A <: AbstractArray, M <: AbstractMatrix}
+    gaussiandensity(Z::V, L::LT) where {V <: AbstractVector, LT <: LowerTriangular}
+	gaussiandensity(Z::A, L::LT) where {A <: AbstractArray, LT <: LowerTriangular}
+	gaussiandensity(Z::A, Σ::M) where {A <: AbstractArray, M <: AbstractMatrix}
+Efficiently computes the density function for `Z` ~ 𝑁(0, `Σ`), namely,  
+```math
+|2\pi\boldsymbol{\Sigma}|^{-1/2} \exp\{-\frac{1}{2}\boldsymbol{Z}^\top \boldsymbol{\Sigma}^{-1}\boldsymbol{Z}\},
+```
+for covariance matrix `Σ`, and where `L` is lower Cholesky factor of `Σ`.
 
-Efficiently computes the density function for `y` ~ 𝑁(0, `Σ`) for covariance
-matrix `Σ`, and where `L` is lower Cholesky factor of `Σ`.
+The method `gaussiandensity(Z::A, L::LT)` assumes that the last dimension of `Z`
+contains independent and identically distributed replicates.
 
-The method `gaussiandensity(y::A, L::LT)` assumes that the last dimension of `y`
-contains independent and identically distributed (iid) replicates.
-
-The log-density is returned if the keyword argument `logdensity` is true (default).
+If `logdensity = true` (default), the log-density is returned.
 """
 function gaussiandensity(y::V, L::LT; logdensity::Bool = true) where {V <: AbstractVector, LT <: LowerTriangular}
 	n = length(y)
@@ -50,22 +38,17 @@ function gaussiandensity(y::A, Σ::M; args...) where {A <: AbstractArray, M <: A
 	gaussiandensity(y, L; args...)
 end
 
-#TODO Add generalised-hyperbolic density once neural EM paper is finished.
-
-# ---- Bivariate density function for Schlather's model ----
-
+"""
+	schlatherbivariatedensity(z₁, z₂, ψ₁₂; logdensity = true)
+The bivariate density function (see, e.g., [Sainsbury-Dale et al., 2024](https://www.tandfonline.com/doi/suppl/10.1080/00031305.2023.2249522?scroll=top), Sec. S6.2) for [Schlather's (2002)](https://link.springer.com/article/10.1023/A:1020977924878) max-stable model, where `ψ₁₂` denotes the spatial correlation function evaluated at the locations of observations `z₁` and `z₂`.
+"""
+schlatherbivariatedensity(z₁, z₂, ψ; logdensity::Bool = true) = logdensity ? logG₁₂(z₁, z₂, ψ) : G₁₂(z₁, z₂, ψ)
+_schlatherbivariatecdf(z₁, z₂, ψ) = G(z₁, z₂, ψ)
 G(z₁, z₂, ψ)   = exp(-V(z₁, z₂, ψ))
 G₁₂(z₁, z₂, ψ) = (V₁(z₁, z₂, ψ) * V₂(z₁, z₂, ψ) - V₁₂(z₁, z₂, ψ)) * exp(-V(z₁, z₂, ψ))
 logG₁₂(z₁, z₂, ψ) = log(V₁(z₁, z₂, ψ) * V₂(z₁, z₂, ψ) - V₁₂(z₁, z₂, ψ)) - V(z₁, z₂, ψ)
-f(z₁, z₂, ψ)   = z₁^2 - 2*z₁*z₂*ψ + z₂^2 # function to reduce code repetition
+f(z₁, z₂, ψ)   = z₁^2 - 2*z₁*z₂*ψ + z₂^2 
 V(z₁, z₂, ψ)   = (1/z₁ + 1/z₂) * (1 - 0.5(1 - (z₁+z₂)^-1 * f(z₁, z₂, ψ)^0.5))
 V₁(z₁, z₂, ψ)  = -0.5 * z₁^-2 + 0.5(ψ / z₁ - z₂/(z₁^2)) * f(z₁, z₂, ψ)^-0.5
 V₂(z₁, z₂, ψ)  = V₁(z₂, z₁, ψ)
 V₁₂(z₁, z₂, ψ) = -0.5(1 - ψ^2) * f(z₁, z₂, ψ)^-1.5
-
-"""
-	schlatherbivariatedensity(z₁, z₂, ψ; logdensity = true)
-The bivariate density function for Schlather's max-stable model.
-"""
-schlatherbivariatedensity(z₁, z₂, ψ; logdensity::Bool = true) = logdensity ? logG₁₂(z₁, z₂, ψ) : G₁₂(z₁, z₂, ψ)
-_schlatherbivariatecdf(z₁, z₂, ψ) = G(z₁, z₂, ψ)
