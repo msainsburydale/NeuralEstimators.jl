@@ -249,32 +249,32 @@ using CairoMakie
 m = 200     # number of independent replicates in each data set
 
 function sample(K)
-# Sample parameters from the prior 
-ρ = rand(Uniform(0.0, 0.99),1, K)
-δ = rand(Uniform(0.0, 1.0),1, K)
-return vcat(ρ,δ)
+	# Sample parameters from the prior 
+	ρ = rand(Uniform(0.0, 0.99),1, K)
+	δ = rand(Uniform(0.0, 1.0),1, K)
+	return vcat(ρ,δ)
 end
 
 function simulate(θ, m) 
 
-K = size(θ, 2)
-Z = Folds.map(1:K) do k
-ρ = θ[1,k]
-δ = θ[2,k]
-Σ = [1 ρ; ρ 1]
-L = cholesky(Symmetric(Σ)).L
+	K = size(θ, 2)
+	Z = Folds.map(1:K) do k
+		ρ = θ[1,k]
+		δ = θ[2,k]
+		Σ = [1 ρ; ρ 1]
+		L = cholesky(Symmetric(Σ)).L
 
-X = L * randn(2,m) #Standard Gaussian margins
-X = cdf.(Normal(),X)  #Uniform margins
-X = - log.(1 .- X) #Unit exponential margins
+		X = L * randn(2,m) #Standard Gaussian margins
+		X = cdf.(Normal(),X)  #Uniform margins
+		X = - log.(1 .- X) #Unit exponential margins
 
-R = -log.(1 .- rand(Uniform(0.0, 1.0),1, m)) #Unit exponential margins
+		R = -log.(1 .- rand(Uniform(0.0, 1.0),1, m)) #Unit exponential margins
 
-z = δ .* R .+ (1 - δ) .* X
+		z = δ .* R .+ (1 - δ) .* X
 
-z
-end
-Z
+		z
+	end
+	Z
 end
 
 
@@ -298,10 +298,7 @@ deepset = DeepSet(ψ, ϕ)
 
 θ_test = sample(1000)
 Z_test = simulate(θ_test, m)
-assessment = assess(θ̂, θ_test, Z_test, boot = false)
-bias(assessment)     
-rmse(assessment)     
-risk(assessment)      
+assessment = assess(θ̂, θ_test, Z_test, boot = false)     
 plot(assessment)</code></pre><h3 id="General-setting"><a class="docs-heading-anchor" href="#General-setting">General setting</a><a id="General-setting-1"></a><a class="docs-heading-anchor-permalink" href="#General-setting" title="Permalink"></a></h3><p>Let <span>$\boldsymbol{Z} \equiv (\boldsymbol{Z}_1&#39;, \dots, \boldsymbol{Z}_m&#39;)&#39;$</span> denote the complete-data vector. In the general censoring setting, a user must provide a function <code>censor_augment</code> that constructs, from <span>$\boldsymbol{Z}$</span>, augmented data <span>$\boldsymbol{A}=(\tilde{\boldsymbol{Z}}, \boldsymbol{W}&#39;)&#39;$</span>. Similarly to <a href="#The-masking-approach">The masking approach</a>, we here consider inference using a vector of indicator variables that encode the censoring pattern, denoted by <span>$\boldsymbol{W}$</span>; here <span>$\boldsymbol{W}$</span> has elements equal to one or zero if the corresponding element of <span>$\boldsymbol{Z}$</span> is left censored or observed, respectively. However, unlike typical masking, we do not set censored values to <code>missing</code>; we instead construct <span>$\tilde{\boldsymbol{Z}}$</span>, which comprises the vector <span>$\boldsymbol{Z}$</span> with censored values set to some pre-specified constant, contained within the vector <span>$\boldsymbol{\zeta}$</span>, such that</p><p class="math-container">\[\tilde{\boldsymbol{Z}} \equiv \boldsymbol{Z} \odot \boldsymbol{W} + \boldsymbol{\zeta} \odot ( \boldsymbol{1} - \boldsymbol{W}),\]</p><p>where <span>$\boldsymbol{1}$</span> is a vector of ones (of equivalent dimension to <span>$\boldsymbol{W}$</span>) and where <span>$\odot$</span> denotes elementwise multiplication. Note that <span>$\boldsymbol{\zeta}$</span> and the censoring pattern can differ across replicates <span>$t=1,\dots,m$</span>, as well as the underlying model parameter values.</p><p>The augmented data <span>$\boldsymbol{A}$</span> is an input to the neural network, and the inner network <span>$\boldsymbol{\psi}$</span> should be designed as to account for its dimension. The way in which concatenation of <span>$\tilde{\boldsymbol{Z}}$</span> and <span>$\boldsymbol{W}$</span> is performed may differ depending on the type of the first layer use in <span>$\boldsymbol{\psi}$</span>: if using a <code>Dense</code> layer, one can concatenate <span>$\tilde{\boldsymbol{Z}}$</span> and <span>$\boldsymbol{W}$</span> along the first dimension (as they are both matrices; i nthis case, with dimension (<span>$2,m$</span>)); if using graph layers or <code>Conv</code> layers, <span>$\tilde{\boldsymbol{Z}}$</span> and <span>$\boldsymbol{W}$</span> should be concatenated as if they were two separate channels in a graph/image (see <a href="../../API/utility/#NeuralEstimators.encodedata"><code>encodedata()</code></a>).</p><p>Note that the function <code>censor_augment</code> should be applied to data during both training and at evaluation time; any manipulation of data that is performed at train time should also be performed to data at test time!</p><p>Below, the function <code>censor_augment</code> takes in a vector of censoring levels <span>$\boldsymbol{c}$</span> of the same length as <span>$\boldsymbol{Z}_i$</span>, and sets censored values to <span>$\zeta_1=\dots=\zeta_m=\zeta$</span>; in this way, the censoring mechanism and augmentation values, <span>$\boldsymbol{\zeta}$</span>, do not vary with the model parameter values or with the replicate index.</p><pre><code class="nohighlight hljs">function censor_augment(z; c,  ζ=0)
     I = 1*(z .&lt;= c)
     z=ifelse.(z .&lt;= c,  ζ, z)
@@ -446,4 +443,4 @@ plot(assessment_tau)
                         
                         assessment_tau = assess(θ̂_cNBE_τ, θ_test, (Z_test,repeat([0.4],1000)&#39;), boot = false)    
 plot(assessment_tau)
-</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/">« Examples</a><a class="docs-footer-nextpage" href="../../API/core/">Core »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.0 on <span class="colophon-date" title="Monday 3 February 2025 17:46">Monday 3 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/">« Examples</a><a class="docs-footer-nextpage" href="../../API/core/">Core »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.0 on <span class="colophon-date" title="Monday 3 February 2025 17:49">Monday 3 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
