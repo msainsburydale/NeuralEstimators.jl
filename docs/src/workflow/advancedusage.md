@@ -416,32 +416,32 @@ using CairoMakie
 m = 200     # number of independent replicates in each data set
 
 function sample(K)
-# Sample parameters from the prior 
-ρ = rand(Uniform(0.0, 0.99),1, K)
-δ = rand(Uniform(0.0, 1.0),1, K)
-return vcat(ρ,δ)
+	# Sample parameters from the prior 
+	ρ = rand(Uniform(0.0, 0.99),1, K)
+	δ = rand(Uniform(0.0, 1.0),1, K)
+	return vcat(ρ,δ)
 end
 
 function simulate(θ, m) 
 
-K = size(θ, 2)
-Z = Folds.map(1:K) do k
-ρ = θ[1,k]
-δ = θ[2,k]
-Σ = [1 ρ; ρ 1]
-L = cholesky(Symmetric(Σ)).L
+	K = size(θ, 2)
+	Z = Folds.map(1:K) do k
+		ρ = θ[1,k]
+		δ = θ[2,k]
+		Σ = [1 ρ; ρ 1]
+		L = cholesky(Symmetric(Σ)).L
 
-X = L * randn(2,m) #Standard Gaussian margins
-X = cdf.(Normal(),X)  #Uniform margins
-X = - log.(1 .- X) #Unit exponential margins
+		X = L * randn(2,m) #Standard Gaussian margins
+		X = cdf.(Normal(),X)  #Uniform margins
+		X = - log.(1 .- X) #Unit exponential margins
 
-R = -log.(1 .- rand(Uniform(0.0, 1.0),1, m)) #Unit exponential margins
+		R = -log.(1 .- rand(Uniform(0.0, 1.0),1, m)) #Unit exponential margins
 
-z = δ .* R .+ (1 - δ) .* X
+		z = δ .* R .+ (1 - δ) .* X
 
-z
-end
-Z
+		z
+	end
+	Z
 end
 
 
@@ -465,10 +465,7 @@ deepset = DeepSet(ψ, ϕ)
 
 θ_test = sample(1000)
 Z_test = simulate(θ_test, m)
-assessment = assess(θ̂, θ_test, Z_test, boot = false)
-bias(assessment)     
-rmse(assessment)     
-risk(assessment)      
+assessment = assess(θ̂, θ_test, Z_test, boot = false)     
 plot(assessment)
 ```
 
