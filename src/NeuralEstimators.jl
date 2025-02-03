@@ -89,6 +89,7 @@ end
 # - Functionality: Sequence (e.g., time-series) input https://jldc.ch/post/seq2one-flux/, and see also the new recurrent layers added to Flux. 
 # - Functionality: Helper functions for censored data. 
 # - Functionality: Explicit learning of summary statistics.
+# - Polishing: Might be better to use Plots rather than {AlgebraOfGraphics, CairoMakie}.
 # - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
 # -	Add NeuralEstimators.jl to https://github.com/smsharma/awesome-neural-sbi#code-packages-and-benchmarks
 # - Examples: Bivariate data in multivariate section.

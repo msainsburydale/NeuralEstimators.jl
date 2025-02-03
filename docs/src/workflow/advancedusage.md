@@ -146,7 +146,8 @@ As a running example, we consider a Gaussian process model where the data are co
 
 ```
 using NeuralEstimators, Flux
-using Distances, Distributions, LinearAlgebra
+using Distributions: Uniform
+using Distances, LinearAlgebra
 using Statistics: mean
 
 # Set the prior and define the number of parameters in the statistical model

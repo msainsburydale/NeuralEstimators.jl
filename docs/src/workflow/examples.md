@@ -4,25 +4,25 @@ We first load the required packages, the following of which are used throughout 
 
 ```
 using NeuralEstimators
-using Flux                 # Julia's deep-learning library
-using Distributions        # sampling from probability distributions
-using AlgebraOfGraphics    # visualisation
-using CairoMakie           # visualisation
+using Flux                                  # Julia's deep-learning library
+using Distributions: InverseGamma, Uniform  # sampling from probability distributions
+using AlgebraOfGraphics                     # visualisation
+using CairoMakie                            # visualisation
 ```
 
 The following packages will be used in the examples with [Gridded data](@ref) and [Irregular spatial data](@ref):  
 
 ```
-using Distances            # distance matrices 
-using Folds                # parallel simulation (start Julia with --threads=auto)
-using LinearAlgebra        # Cholesky factorisation
+using Distances                             # distance matrices 
+using Folds                                 # parallel simulation (start Julia with --threads=auto)
+using LinearAlgebra                         # Cholesky factorisation
 ```
 
 The following packages are used only in the example with [Irregular spatial data](@ref): 
 
 ```
-using GraphNeuralNetworks  # GNN architecture
-using Statistics           # mean()
+using GraphNeuralNetworks                   # GNN architecture
+using Statistics: mean                            
 ```
 
 Finally, various GPU backends can be used (see the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/gpu/#GPU-Support) for details). For instance, to use an NVIDIA GPU in the following examples, simply the load the `CUDA.jl` package:  
@@ -41,7 +41,7 @@ We begin by defining a function to sample parameters from the prior distribution
 
 ```
 function sample(K)
-	μ = rand(Normal(0, 1), K)
+	μ = randn(K)
 	σ = rand(InverseGamma(3, 1), K)
 	θ = vcat(μ', σ')
 	return θ
@@ -143,7 +143,7 @@ For data collected over a regular grid, neural estimators are typically based on
 
 When using CNNs with `NeuralEstimators`, each data set must be stored as a multi-dimensional array. The penultimate dimension stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes), while the final dimension stores independent replicates. For example, to store $50$ independent replicates of a bivariate spatial process measured over a $10\times15$ grid, one would construct an array of dimension $10\times15\times2\times50$.
 
- For illustration, here we develop a neural Bayes estimator for the (univariate) spatial Gaussian process model with exponential covariance function and unknown range parameter $\theta > 0$. The spatial domain is taken to be the unit square, and we adopt the prior $\theta \sim U(0.05, 0.5)$. 
+ For illustration, here we develop a neural Bayes estimator for the (univariate) spatial Gaussian process model with exponential covariance function and unknown range parameter $\theta > 0$. The spatial domain is taken to be the unit square, and we adopt the prior $\theta \sim U(0, 0.5)$. 
  
  Simulation from Gaussian processes typically involves the computation of an expensive intermediate object, namely, the Cholesky factor of a covariance matrix. Storing intermediate objects can enable the fast simulation of new data sets when the parameters are held fixed. Hence, in this example, we define a custom type `Parameters` subtyping [`ParameterConfigurations`](@ref) for storing the matrix of parameters and the corresponding Cholesky factors: 
 
@@ -158,16 +158,14 @@ Further, we define two constructors for our custom type: one that accepts an int
 
 ```
 function sample(K::Integer)
-
 	# Sample parameters from the prior 
-	θ = rand(Uniform(0.05, 0.5), 1, K)
+	θ = 0.5 * rand(1, K)
 
 	# Pass to matrix constructor
 	Parameters(θ)
 end
 
 function Parameters(θ::Matrix)
-
 	# Spatial locations, a 16x16 grid over the unit square
 	pts = range(0, 1, length = 16)
 	S = expandgrid(pts, pts)
@@ -284,7 +282,7 @@ Again, we define two constructors, which will be convenient for sampling paramet
 ```
 function sample(K::Integer)
 	# Sample parameters from the prior 
-	θ = rand(Uniform(0.05, 0.5), 1, K)
+	θ = 0.5 * rand(1, K)
 
 	# Sample spatial configurations from Matern cluster process on [0, 1]²
 	n = rand(200:300, K)

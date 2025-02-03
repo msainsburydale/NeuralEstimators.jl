@@ -666,7 +666,7 @@ end
 
 # ---- Layers ----
 
-#NB this is a Flux, but I copied it here because I got error that it wasn't defined when submitting to CRAN (think it's a recent addition to Flux)
+#NB this is from Flux, but I copied it here because I got an error that it wasn't defined when submitting to CRAN (think it's a recent addition to Flux)
 function _size_check(layer, x::AbstractArray, (d, n)::Pair)
   0 < d <= ndims(x) || throw(DimensionMismatch(string("layer ", layer,
     " expects ndims(input) >= ", d, ", but got ", summary(x))))
