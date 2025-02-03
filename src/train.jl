@@ -1,8 +1,8 @@
+#TODO savepath to save_path 
 """
 	train(estimator, sampler::Function, simulator::Function; ...)
 	train(estimator, θ_train::P, θ_val::P, simulator::Function; ...) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 	train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
-
 Trains a neural `estimator`.
 
 The methods cater for different variants of "on-the-fly" simulation.
@@ -32,7 +32,8 @@ The estimator is returned on the CPU so that it can be saved post training.
 - `simulate_just_in_time = false`: flag indicating whether we should simulate just-in-time, in the sense that only a `batchsize` number of parameter vectors and corresponding data are in memory at a given time.
 
 # Keyword arguments unique to `train(estimator, sampler, simulator)`:
-- `K = 10000`: number of parameter vectors in the training set; the size of the validation set is `K ÷ 5`.
+- `K = 10000`: number of parameter vectors in the training set.
+- `K_val = K ÷ 5` number of parameter vectors in the validation set.
 - `ξ = nothing`: an arbitrary collection of objects that, if provided, will be passed to the parameter sampler as `sampler(K, ξ)`; otherwise, the parameter sampler will be called as `sampler(K)`. Can also be provided as `xi`.
 - `epochs_per_θ_refresh = 1`: the number of passes to make through the training set before the training parameters are refreshed. Must be a multiple of `epochs_per_Z_refresh`. Can also be provided as `epochs_per_theta_refresh`.
 
@@ -71,7 +72,7 @@ estimator  = train(estimator, sampler, simulator, m = m, epochs = 5)
 # Training: simulation on-the-fly with fixed parameters
 K = 10000
 θ_train = sampler(K)
-θ_val     = sampler(K ÷ 5)
+θ_val   = sampler(K)
 estimator = train(estimator, θ_train, θ_val, simulator, m = m, epochs = 5)
 
 # Training: fixed parameters and fixed data
@@ -106,7 +107,8 @@ function _train(θ̂, sampler, simulator;
 	stopping_epochs::Integer = 5,
     use_gpu::Bool      = true,
 	verbose::Bool      = true,
-	K::Integer         = 10_000
+	K::Integer         = 10_000, 
+	K_val::Integer     = K ÷ 5 + 1
 	)
 
 	# Check duplicated arguments that are needed so that the R interface uses ASCII characters only
@@ -132,7 +134,7 @@ function _train(θ̂, sampler, simulator;
 	optimiser = optimiser |> device 
 
 	verbose && println("Sampling the validation set...")
-	θ_val   = isnothing(ξ) ? sampler(K ÷ 5 + 1) : sampler(K ÷ 5 + 1, ξ)
+	θ_val   = isnothing(ξ) ? sampler(K_val) : sampler(K_val, ξ)
 	val_set = _constructset(θ̂, simulator, θ_val, m, batchsize)
 
 	# Initialise the loss per epoch matrix
@@ -218,8 +220,6 @@ function _train(θ̂, sampler, simulator;
 	# save key information and save the best θ̂ as best_network.bson.
 	!isnothing(savepath) && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	!isnothing(savepath) && _savebestmodel(savepath)
-
-	# TODO if the user has relied on using train() as a mutating function, the optimal estimator will not be returned. Can I set θ̂ = θ̂_best to fix this? This also ties in with the other TODO down below above trainx(), regarding which device the estimator is on at the end of training.
 
     return cpu(θ̂_best)
 end
@@ -671,18 +671,15 @@ end
 
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 
-#TODO (not sure what we want do about the following behaviour, need to think about it): If called as est = trainx(est) then est will be on the GPU; if called as trainx(est) then est will not be on the GPU. Note that the same thing occurs for train(). That is, when the function is treated as mutating, then the estimator will be on the same device that was used during training; otherwise, it will be on whichever device it was when input to the function. Need consistency to improve user experience.
 """
 	trainx(θ̂, sampler::Function, simulator::Function, m::Vector{Integer}; ...)
 	trainx(θ̂, θ_train, θ_val, simulator::Function, m::Vector{Integer}; ...)
 	trainx(θ̂, θ_train, θ_val, Z_train, Z_val, m::Vector{Integer}; ...)
 	trainx(θ̂, θ_train, θ_val, Z_train::V, Z_val::V; ...) where {V <: AbstractVector{AbstractVector{Any}}}
-
 A wrapper around `train()` to construct neural estimators for different sample sizes.
 
 The positional argument `m` specifies the desired sample sizes.
-Each estimator is pre-trained with the estimator for the previous sample size.
-For example, if `m = [m₁, m₂]`, the estimator for sample size `m₂` is
+Each estimator is pre-trained with the estimator for the previous sample size (see [Sainsbury-Dale at al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522), Sec 2.3.3). For example, if `m = [m₁, m₂]`, the estimator for sample size `m₂` is
 pre-trained with the estimator for sample size `m₁`.
 
 The method for `Z_train` and `Z_val` subsets the data using
@@ -696,10 +693,14 @@ The keyword arguments inherit from `train()`. The keyword arguments `epochs`,
 `batchsize`, `stopping_epochs`, and `optimiser` can each be given as vectors.
 For example, if training two estimators, one may use a different number of
 epochs for each estimator by providing `epochs = [epoch₁, epoch₂]`.
+
+See also [PiecewiseEstimator](@ref).
 """
 function trainx end
 
 function _trainx(θ̂; sampler = nothing, simulator = nothing, M = nothing, θ_train = nothing, θ_val = nothing, Z_train = nothing, Z_val = nothing, args...)
+
+	# Base.depwarn("`trainx` is deprecated and will be removed soon. Use `PiecewiseEstimator` instead.", :trainx)
 
 	@assert !(typeof(θ̂) <: Vector) # check that θ̂ is not a vector of estimators, which is common error if one calls trainx() on the output of a previous call to trainx()
 
@@ -802,6 +803,12 @@ function trainx(θ̂, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) whe
 	return estimators
 end
 
+function _checkargs_trainx(kwargs)
+	@assert !haskey(kwargs, :m) "Please provide the number of independent replicates, `m`, as a positional argument (i.e., provide the argument simply as `trainx(..., m)` rather than `trainx(..., m = m)`)."
+	verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
+	return verbose
+end
+
 # ---- Miscellaneous helper functions ----
 
 function _deepcopyestimator(θ̂, kwargs, E)
@@ -836,12 +843,6 @@ function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
 	@assert epochs > 0
 	@assert stopping_epochs > 0
 	@assert epochs_per_Z_refresh > 0
-end
-
-function _checkargs_trainx(kwargs)
-	@assert !haskey(kwargs, :m) "Please provide the number of independent replicates, `m`, as a positional argument (i.e., provide the argument simply as `trainx(..., m)` rather than `trainx(..., m = m)`)."
-	verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
-	return verbose
 end
 
 function _savestate(θ̂, savepath, epoch = "")

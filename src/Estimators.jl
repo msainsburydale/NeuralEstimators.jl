@@ -466,7 +466,7 @@ end
 	PosteriorEstimator <: NeuralEstimator
 	PosteriorEstimator(q::ApproximateDistribution, network)
 	sampleposterior(estimator::PosteriorEstimator, Z, N::Integer)
-	posteriormean(estimator::PosteriorEstimator)
+	posteriormean(estimator::PosteriorEstimator, Z, N::Integer)
 A neural estimator that approximates the posterior distribution $p(\boldsymbol{\theta} \mid \boldsymbol{Z})$. 
 
 The neural `network` is a mapping from the sample space to a space that depends on the chosen approximate distribution `q` (see the available in-built [Approximate distributions](@ref)). 
@@ -528,6 +528,7 @@ sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000) = samplepos
 	RatioEstimator(network)
 	(estimator::RatioEstimator)(Z, θ)
 	sampleposterior(estimator::RatioEstimator, Z, N::Integer)
+	posteriormean(estimator::RatioEstimator, Z, N::Integer)
 A neural estimator that estimates the likelihood-to-evidence ratio,
 ```math
 r(\boldsymbol{Z}, \boldsymbol{\theta}) \equiv p(\boldsymbol{Z} \mid \boldsymbol{\theta})/p(\boldsymbol{Z}),
@@ -552,10 +553,6 @@ can then be used in various Bayesian
 or frequentist
 (e.g., [Walchessen et al., 2024](https://doi.org/10.1016/j.spasta.2024.100848))
 inferential algorithms.
-
-See also [`mlestimate`](@ref) and [`mapestimate`](@ref) for obtaining
-approximate maximum-likelihood and maximum-a-posteriori estimates, and
-[`sampleposterior`](@ref) for obtaining approximate posterior samples.
 
 # Examples
 ```
@@ -586,14 +583,14 @@ z = simulate(θ, m)[1]
 θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'  # fine gridding of the parameter space
 r̂(z, θ_grid)                                   # likelihood-to-evidence ratios over grid
 mlestimate(r̂, z; θ_grid = θ_grid)              # maximum-likelihood estimate
-mapestimate(r̂, z; θ_grid = θ_grid)             # maximum-a-posteriori estimate
+posteriormode(r̂, z; θ_grid = θ_grid)           # posterior mode 
 sampleposterior(r̂, z; θ_grid = θ_grid)         # posterior samples
 
 # Inference with "observed" data (gradient-based optimisation using Optim.jl)
 using Optim
 θ₀ = [0.5, 0.5]                                # initial estimate
 mlestimate(r̂, z; θ₀ = θ₀)                      # maximum-likelihood estimate
-mapestimate(r̂, z; θ₀ = θ₀)                     # maximum-a-posteriori estimate
+posteriormode(r̂, z; θ₀ = θ₀)                   # posterior mode 
 ```
 """
 struct RatioEstimator <: NeuralEstimator
@@ -627,14 +624,14 @@ end
 # interval.(samples; probs = [0.05, 0.95])           # posterior credible intervals
 
 @doc raw"""
+	PiecewiseEstimator <: NeuralEstimator
 	PiecewiseEstimator(estimators, changepoints)
 Creates a piecewise estimator
-([Sainsbury-Dale et al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522), sec. 2.2.2)
+([Sainsbury-Dale et al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522), Sec. 2.2.2)
 from a collection of `estimators` and sample-size `changepoints`.
 
 Specifically, with $l$ estimators and sample-size changepoints
 $m_1 < m_2 < \dots < m_{l-1}$, the piecewise etimator takes the form,
-
 ```math
 \hat{\boldsymbol{\theta}}(\boldsymbol{Z})
 =
@@ -645,14 +642,13 @@ $m_1 < m_2 < \dots < m_{l-1}$, the piecewise etimator takes the form,
 \hat{\boldsymbol{\theta}}_l(\boldsymbol{Z}) & m > m_{l-1}.
 \end{cases}
 ```
-
 For example, given an estimator ``\hat{\boldsymbol{\theta}}_1(\cdot)`` trained for small
 sample sizes (e.g., ``m \leq 30``) and an estimator ``\hat{\boldsymbol{\theta}}_2(\cdot)``
 trained for moderate-to-large sample sizes (e.g., ``m > 30``), one may construct a
 `PiecewiseEstimator` that dispatches ``\hat{\boldsymbol{\theta}}_1(\cdot)`` if
 ``m \leq 30`` and ``\hat{\boldsymbol{\theta}}_2(\cdot)`` otherwise.
 
-See also [`trainx()`](@ref) for training estimators for a range of sample sizes.
+See also [`trainx()`](@ref).
 
 # Examples
 ```
@@ -698,13 +694,10 @@ struct PiecewiseEstimator <: NeuralEstimator
 	end
 end
 function (estimator::PiecewiseEstimator)(Z)
-	# Note that this is an inefficient implementation, analogous to the inefficient
-	# DeepSet implementation. A more efficient approach would be to subset Z based
-	# on changepoints, apply the estimators to each block of Z, then combine the estimates.
 	changepoints = [estimator.changepoints..., Inf]
 	m = numberreplicates(Z)
 	θ̂ = map(eachindex(Z)) do i
-		# find which estimator to use, and then apply it
+		# find which estimator to use and then apply it
 		mᵢ = m[i]
 		j = findfirst(mᵢ .<= changepoints)
 		estimator.estimators[j](Z[[i]])
@@ -713,151 +706,12 @@ function (estimator::PiecewiseEstimator)(Z)
 end
 Base.show(io::IO, estimator::PiecewiseEstimator) = print(io, "\nPiecewise estimator with $(length(estimator.estimators)) estimators and sample size change-points: $(estimator.changepoints)")
 
-
-# ---- Helper function for initialising an estimator ----
-
-#TODO this is not very Julian, it would be better to have constructors for each estimator type. 
-#     Can do this by splitting initialise_estimator() into a DeepSet constructor that takes `d` .
-#     Should have initialise_estimator() as an internal function, and instead have the public API be based on constructors of the various estimator classes. This aligns more with the basic ideas of Julia, where functions returning a certain class should be made as a constructor rather than a separate function.
-
-"""
-    initialise_estimator(p::Integer; ...)
-Initialise a neural estimator for a statistical model with `p` unknown parameters.
-
-The estimator is couched in the DeepSets framework (see [`DeepSet`](@ref)) so
-that it can be applied to data sets containing an arbitrary number of
-independent replicates (including the special case of a single replicate).
-
-Note also that the user is free to initialise their neural estimator however
-they see fit using arbitrary `Flux` code; see
-[here](https://fluxml.ai/Flux.jl/stable/models/layers/) for `Flux`'s API reference.
-
-Finally, the method with positional argument `data_type`is a wrapper that allows
-one to specify the type of their data (either "unstructured", "gridded", or
-"irregular_spatial").
-
-# Keyword arguments
-- `architecture::String`: for unstructured multivariate data, one may use a fully-connected multilayer perceptron (`"MLP"`); for data collected over a grid, a convolutional neural network (`"CNN"`); and for graphical or irregular spatial data, a graphical neural network (`"GNN"`).
-- `d::Integer = 1`: for unstructured multivariate data (i.e., when `architecture = "MLP"`), the dimension of the data (e.g., `d = 3` for trivariate data); otherwise, if `architecture ∈ ["CNN", "GNN"]`, the argument `d` controls the number of input channels (e.g., `d = 1` for univariate spatial processes).
-- `estimator_type::String = "point"`: the type of estimator; either `"point"` or `"interval"`.
-- `depth = 3`: the number of hidden layers; either a single integer or an integer vector of length two specifying the depth of the inner (summary) and outer (inference) network of the DeepSets framework.
-- `width = 32`: a single integer or an integer vector of length `sum(depth)` specifying the width (or number of convolutional filters/channels) in each hidden layer.
-- `activation::Function = relu`: the (non-linear) activation function of each hidden layer.
-- `activation_output::Function = identity`: the activation function of the output layer.
-- `variance_stabiliser::Union{Nothing, Function} = nothing`: a function that will be applied directly to the input, usually to stabilise the variance.
-- `kernel_size = nothing`: (applicable only to CNNs) a vector of length `depth[1]` containing integer tuples of length `D`, where `D` is the dimension of the convolution (e.g., `D = 2` for two-dimensional convolution).
-- `weight_by_distance::Bool = true`: (applicable only to GNNs) flag indicating whether the estimator will weight by spatial distance; if true, a `SpatialGraphConv` layer is used in the propagation module; otherwise, a regular `GraphConv` layer is used.
-- `probs = [0.025, 0.975]`: (applicable only if `estimator_type = "interval"`) probability levels defining the lower and upper endpoints of the posterior credible interval.
-
-# Examples
-```
-## MLP, GNN, 1D CNN, and 2D CNN for a statistical model with two parameters:
-p = 2
-initialise_estimator(p, architecture = "MLP")
-initialise_estimator(p, architecture = "GNN")
-initialise_estimator(p, architecture = "CNN", kernel_size = [10, 5, 3])
-initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)])
-```
-"""
-function initialise_estimator(
-    p::Integer;
-	architecture::String,
-    d::Integer = 1,
-    estimator_type::String = "point",
-    depth::Union{Integer, Vector{<:Integer}} = 3,
-    width::Union{Integer, Vector{<:Integer}} = 32,
-	variance_stabiliser::Union{Nothing, Function} = nothing,
-    activation::Function = relu,
-    activation_output::Function = identity,
-    kernel_size = nothing,
-	weight_by_distance::Bool = true,
-	probs = [0.025, 0.975]
-    )
-
-	# "`kernel_size` should be a vector of integer tuples: see the documentation for details"
-    @assert p > 0
-    @assert d > 0
-	@assert architecture ∈ ["MLP", "DNN", "CNN", "GNN"]
-	if architecture == "DNN" architecture = "MLP" end # deprecation coercion
-    @assert estimator_type ∈ ["point", "interval"]
-    @assert all(depth .>= 0)
-    @assert length(depth) == 1 || length(depth) == 2
-	if isa(depth, Integer) depth = [depth] end
-	if length(depth) == 1 depth = repeat(depth, 2) end
-    @assert all(width .> 0)
-    @assert length(width) == 1 || length(width) == sum(depth)
-	if isa(width, Integer) width = [width] end
-	if length(width) == 1 width = repeat(width, sum(depth)) end
-	# henceforth, depth and width are integer vectors of length 2 and sum(depth), respectively
-
-	if architecture == "CNN"
-		@assert !isnothing(kernel_size) "The argument `kernel_size` must be provided when `architecture = 'CNN'`"
-		@assert length(kernel_size) == depth[1]
-		kernel_size = coercetotuple.(kernel_size)
-	end
-
-	L = sum(depth) # total number of hidden layers
-
-	# inference network
-	ϕ = []
-	if depth[2] >= 1
-		push!(ϕ, [Dense(width[l-1] => width[l], activation) for l ∈ (depth[1]+1):L]...)
-	end
-	push!(ϕ, Dense(width[L] => p, activation_output))
-	ϕ = Chain(ϕ...)
-
-	# summary network
-	if architecture == "MLP"
-		ψ = Chain(
-			Dense(d => width[1], activation),
-			[Dense(width[l-1] => width[l], activation) for l ∈ 2:depth[1]]...
-			)
-	elseif architecture == "CNN"
-		ψ = Chain(
-			Conv(kernel_size[1], d => width[1], activation),
-			[Conv(kernel_size[l], width[l-1] => width[l], activation) for l ∈ 2:depth[1]]...,
-			Flux.flatten
-			)
-	elseif architecture == "GNN"
-		propagation = weight_by_distance ? SpatialGraphConv : GraphConv
-		ψ = GNNChain(
-			propagation(d => width[1], activation),
-			[propagation(width[l-1] => width[l], activation) for l ∈ 2:depth[1]]...,
-			GlobalPool(mean) # readout module
-			)
-	end
-
-	if !isnothing(variance_stabiliser)
-		if architecture ∈ ["MLP", "CNN"]
-			ψ = Chain(variance_stabiliser, ψ...)
-		elseif architecture == "GNN"
-			ψ = GNNChain(variance_stabiliser, ψ...)
-		end
-	end
-
-	θ̂ = DeepSet(ψ, ϕ)
-
-	#TODO RatioEstimator, QuantileEstimatorDiscrete, QuantileEstimatorContinuous, PosteriorEstimator
-	if estimator_type == "point"
-		θ̂ = PointEstimator(θ̂)
-	elseif estimator_type == "interval"
-		θ̂ = IntervalEstimator(θ̂, θ̂; probs = probs)
-	end
-
-	return θ̂
-end
-coercetotuple(x) = (x...,)
-
-
-# ---- Ensemble of estimators ----
-
 #TODO Think about whether Parallel() might also be useful for ensembles (this might allow for faster computations, and immediate out-of-the-box integration with other parts of the package).
-
 """
+	Ensemble <: NeuralEstimator
 	Ensemble(estimators)
 	Ensemble(architecture::Function, J::Integer)
 	(ensemble::Ensemble)(Z; aggr = median)
-
 Defines an ensemble based on a collection of `estimators` which,
 when applied to data `Z`, returns the median
 (or another summary defined by `aggr`) of the estimates.
@@ -917,21 +771,20 @@ struct Ensemble <: NeuralEstimator
 end
 Ensemble(architecture::Function, J::Integer) = Ensemble([architecture() for j in 1:J])
 
-#TODO update savepath behaviour based on new default (with nothing)
 function train(ensemble::Ensemble, args...; kwargs...)
 	kwargs = (;kwargs...)
-	savepath = haskey(kwargs, :savepath) ? kwargs.savepath : ""
+	savepath = haskey(kwargs, :savepath) ? kwargs.savepath : nothing
 	verbose  = haskey(kwargs, :verbose)  ? kwargs.verbose : true
 	estimators = map(enumerate(ensemble.estimators)) do (i, estimator)
 		verbose && @info "Training estimator $i of $(length(ensemble))"
-		if savepath != "" # modify the savepath before passing it onto train
+		if !isnothing(savepath) 
 			kwargs = merge(kwargs, (savepath = joinpath(savepath, "estimator$i"),))
 		end
 		train(estimator, args...; kwargs...)
 	end
 	ensemble = Ensemble(estimators)
 
-	if savepath != ""
+	if !isnothing(savepath)
 		if !ispath(savepath) mkpath(savepath) end
 		model_state = Flux.state(cpu(ensemble)) 
 		@save joinpath(savepath, "ensemble.bson") model_state

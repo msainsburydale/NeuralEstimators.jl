@@ -1457,7 +1457,7 @@ end
 		simulate(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(n, m) for ϑ in eachcol(θ)]
 		w = 128   
 		if approxdist == "Flow"
-			q = NormalisingFlow(d) 
+			q = NormalisingFlow(d, d) 
 			ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
 			ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, d))
 			network = DeepSet(ψ, ϕ)

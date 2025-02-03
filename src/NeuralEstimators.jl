@@ -43,11 +43,11 @@ include("ApproximateDistributions.jl")
 
 export NeuralEstimator 
 export BayesEstimator, PosteriorEstimator, RatioEstimator
-export PointEstimator, IntervalEstimator, QuantileEstimatorContinuous, QuantileEstimatorDiscrete, PiecewiseEstimator 
-export Ensemble, initialise_estimator # TODO initialise_estimator
+export PointEstimator, IntervalEstimator, QuantileEstimatorContinuous, QuantileEstimatorDiscrete
+export Ensemble, PiecewiseEstimator 
 include("Estimators.jl")
 
-export sampleposterior, posteriormean, posteriormedian, mlestimate, mapestimate, bootstrap, interval, estimate
+export sampleposterior, posteriormean, posteriormedian, posteriormode, mlestimate, bootstrap, interval, estimate
 include("inference.jl")
 
 export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights, KernelWeights, PowerDifference
@@ -60,7 +60,7 @@ include("simulate.jl")
 export gaussiandensity, schlatherbivariatedensity
 include("densities.jl")
 
-export train, trainx, subsetdata
+export train, subsetdata
 include("train.jl")
 
 export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
@@ -76,14 +76,14 @@ export EM, removedata, encodedata
 include("missingdata.jl")
 
 # Backwards compatability and deprecations:
-export loadbestweights, loadweights, simulate
+export loadbestweights, loadweights, simulate, trainx, mapestimate, initialise_estimator 
 include("deprecated.jl")
 
 end
 
 # ---- longer term/lower priority:
 # - Functionality: Make Ensemble “play well” throughout the package. 
-# - Functionality: assess(est::PosteriorEstimator) and assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots) or some other means
+# - Functionality: assess(est::PosteriorEstimator) and assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots). Also a CRPS diagnostic for PosteriorEstimators. 
 # - Functionality: Incorporate the following package (possibly as an extension) to greatly expand bootstrap functionality; https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
 # -	Functionality: Training, option to check validation risk (and save the optimal estimator) more frequently than the end of each epoch, which would avoid wasted computation when we have very large training sets. 
 # - Functionality: Sequence (e.g., time-series) input https://jldc.ch/post/seq2one-flux/, and see also the new recurrent layers added to Flux. 

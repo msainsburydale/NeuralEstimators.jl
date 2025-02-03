@@ -165,6 +165,8 @@ Q(\boldsymbol{s}, \boldsymbol{r}) =
 (\boldsymbol{s} - \boldsymbol{r})
 ``` 
 is the squared Mahalanobis distance between $\boldsymbol{s}$ and $\boldsymbol{r}$. 
+
+Note that, in practical applications, the reference point $\boldsymbol{\omega}$ is often taken to be an estimable parameter rather than fixed and known. 
 """
 function paciorek(s, r, ω₁, ω₂, ρ, β)
 

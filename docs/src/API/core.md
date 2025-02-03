@@ -94,7 +94,7 @@ coverage
 
 The following functions are intended to facilitate the use of a trained neural estimator with observed data. 
 
-Note that most [`NeuralEstimators`](@ref) are callable and can be applied to data `Z` (possibly containing multiple data sets) in a call of the form `estimator(Z)` or similar. In these cases, one may leverage a GPU by simply moving the estimator and the data to the GPU using [`gpu()`](https://fluxml.ai/Flux.jl/stable/models/functors/#Flux.gpu-Tuple{Any}). See also [`estimate()`](@ref) to apply the estimator over batches of data, which can alleviate memory issues when working with large data sets (the methods below typically use this memory-safe approach where relevant). 
+Note that most [`NeuralEstimators`](@ref) are callable and can be applied to data `Z` (possibly containing multiple data sets) in a call of the form `estimator(Z)` or similar. In these cases, one may leverage a GPU by simply moving the estimator and the data to the GPU using [`gpu()`](https://fluxml.ai/Flux.jl/stable/models/functors/#Flux.gpu-Tuple{Any}). See also [`estimate()`](@ref) to apply the estimator over batches of data, which can alleviate memory issues when working with large data sets (the methods below typically use this memory-safe approach where possible). 
 
 ```@docs
 estimate
@@ -109,7 +109,7 @@ posteriormean
 
 posteriormedian
 
-mlestimate
+posteriormode
 
-mapestimate
+mlestimate
 ```

@@ -45,7 +45,6 @@ function tanhloss(θ̂, θ, κ; agg = mean, joint::Bool = true)
   return agg(L)
 end
 
-
 @doc raw"""
     kpowerloss(θ̂, θ, κ; agg = mean, safeorigin = true, ϵ = 0.1)
 For `κ` > 0, the `κ`-th power absolute-distance loss function,
@@ -56,9 +55,7 @@ contains the squared-error (`κ` = 2), absolute-error (`κ` = 2), and 0--1 (`κ`
 cases. It is Lipschitz continuous if `κ` = 1, convex if `κ` ≥ 1, and strictly convex if `κ` > 1. It is
 quasiconvex for all `κ` > 0.
 
-If `safeorigin = true`, the loss function is modified to avoid pathologies
-around the origin, so that the resulting loss function behaves similarly to the
-absolute-error loss in the `ϵ`-interval surrounding the origin.
+If `safeorigin = true`, the loss function is modified to be piecewise, continuous, and linear in the `ϵ`-interval surrounding the origin, to avoid pathologies around the origin. 
 
 See also [`tanhloss()`](@ref).
 """
@@ -90,7 +87,6 @@ function _safefunction(d, κ, ϵ)
   @assert d >= 0
   ϵ^(κ - 1) * d
 end
-
 
 
 # ---- quantile loss ----

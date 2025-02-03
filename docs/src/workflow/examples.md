@@ -62,10 +62,10 @@ As we are constructing a neural Bayes estimator, the neural network is a mapping
 
 Since our data are replicated, we adopt the DeepSets framework, implemented via the type [`DeepSet`](@ref). DeepSets consist of two neural networks: an inner network and an outer network. The inner network extracts summary statistics from the data, and its architecture depends on the multivariate structure of the data. For unstructured data (i.e., data without spatial or temporal correlation within each replicate), we use a multilayer perceptron (MLP). The input dimension matches the dimensionality of each data replicate, while the output dimension corresponds to the number of summary statistics appropriate for the model (a common choice is $d$). The outer network maps the learned summary statistics to the output space (here, the parameter space, $\Theta$). The outer network is always an MLP. 
 
-Below is an example of a DeepSets architecture for neural Bayes estimation in this example. Note that many models have parameter constraints (e.g., variance and range parameters that must be strictly positive). These constraints can be incorporated in the final layer of the neural network by choosing appropriate activation functions for each parameter. Here, we enforce the constraint $\sigma > 0$ by applying the softplus activation function in the final layer of the outer network, ensuring that all parameter estimates are valid:
+Below is an example of a DeepSets architecture for neural Bayes estimation in this example. Note that many models have parameter constraints (e.g., variance and range parameters that must be strictly positive). These constraints can be incorporated in the final layer of the neural network by choosing appropriate activation functions for each parameter. Here, we enforce the constraint $\sigma > 0$ by applying the softplus activation function in the final layer of the outer network, ensuring that all parameter estimates are valid. For some additional ways to constrain parameter estimates, see [Output layers](@ref). 
 
 ```
-n = 1    # dimension of each data replicate
+n = 1    # dimension of each data replicate (univariate)
 d = 2    # dimension of the parameter vector θ
 w = 128  # width of each hidden layer 
 
@@ -84,8 +84,6 @@ final_layer = Parallel(
 network = DeepSet(ψ, ϕ)
 ```
 
-
-
 We then initialise the neural Bayes estimator by wrapping the neural network in a [`PointEstimator`](@ref): 
 
 ```
@@ -101,7 +99,7 @@ estimator = train(estimator, sample, simulate, m = m)
 
 One may wish to save a trained estimator and load it in a later session: see [Saving and loading neural estimators](@ref) for details on how this can be done. 
 
-The function [`assess()`](@ref) can be used to assess the trained estimator. Parametric and non-parametric bootstrap-based uncertainty quantification are facilitated by [`bootstrap()`](@ref) and [`interval()`](@ref), and this can also be included in the assessment stage through the keyword argument `boot`:
+The function [`assess()`](@ref) can be used to assess the trained estimator. Parametric and non-parametric bootstrap estimates can be obtained via [`bootstrap()`](@ref), with corresponding confidence intervals computed using [`interval()`](@ref). Additionally, bootstrap-based uncertainty quantification can be included in the assessment stage through the keyword argument `boot`:
 
 ```
 θ_test = sample(1000)
@@ -127,7 +125,6 @@ q̂ = IntervalEstimator(network)
 q̂ = train(q̂, sample, simulate, m = m)
 ```
 
-
 The resulting posterior credible-interval estimator can also be assessed using [`assess()`](@ref). Often, these intervals have better coverage than bootstrap-based intervals.
 
 Once an estimator is deemed to be well calibrated, it may be applied to observed data (below, we use simulated data as a substitute for observed data):
@@ -140,18 +137,11 @@ interval(bootstrap(estimator, Z))   # 95% non-parametric bootstrap intervals
 interval(q̂, Z)                      # 95% marginal posterior credible intervals
 ```
 
-## Unstructured multivariate data
-
-Suppose now that each data set consists of $m$ replicates $\boldsymbol{Z}_1, \dots, \boldsymbol{Z}_m$ of an $n$-dimensional multivariate distribution. Everything remains as given in the univariate example above, except that we now store each data set as a $n \times m$ matrix (previously they were stored as $1\times m$ matrices), and the inner network of the DeepSets representation takes a $n$-dimensional input (previously it took a 1-dimensional input).
-
-Note that, when estimating a full covariance matrix, one may wish to constrain the neural estimator to only produce parameters that imply a valid (i.e., positive definite) covariance matrix. This can be achieved by appending a  [`CovarianceMatrix`](@ref) layer to the end of the outer network of the DeepSets representation. However, the estimator will often learn to provide valid estimates, even if not constrained to do so.
-
-
 ## Gridded data
 
 For data collected over a regular grid, neural estimators are typically based on a convolutional neural network (CNN; see, e.g., [Dumoulin and Visin, 2016](https://arxiv.org/abs/1603.07285)). 
 
-When using CNNs with `NeuralEstimators`, each data set must be stored as a multi-dimensional array. The penultimate dimension stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes, etc.), while the final dimension stores independent replicates. For example, to store $50$ independent replicates of a bivariate spatial process measured over a $10\times15$ grid, one would construct an array of dimension $10\times15\times2\times50$.
+When using CNNs with `NeuralEstimators`, each data set must be stored as a multi-dimensional array. The penultimate dimension stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes), while the final dimension stores independent replicates. For example, to store $50$ independent replicates of a bivariate spatial process measured over a $10\times15$ grid, one would construct an array of dimension $10\times15\times2\times50$.
 
  For illustration, here we develop a neural Bayes estimator for the (univariate) spatial Gaussian process model with exponential covariance function and unknown range parameter $\theta > 0$. The spatial domain is taken to be the unit square, and we adopt the prior $\theta \sim U(0.05, 0.5)$. 
  
@@ -164,7 +154,7 @@ struct Parameters{T} <: ParameterConfigurations
 end
 ```
  
- Further, we define two constructors for our custom type: one that accepts an integer $K$, and another that accepts a $d\times K$ matrix of parameters. The former constructor will be useful during the training stage for sampling from the prior distribution, while the latter constructor will be useful for parametric bootstrap (since this involves repeated simulation from the fitted model):
+Further, we define two constructors for our custom type: one that accepts an integer $K$, and another that accepts a $d\times K$ matrix of parameters. The former constructor will be useful during the training stage for sampling from the prior distribution, while the latter constructor will be useful for parametric bootstrap (since this involves repeated simulation from the fitted model):
 
 ```
 function sample(K::Integer)
@@ -269,6 +259,8 @@ estimate(θ̂, Z)                         # point estimate
 interval(q̂, Z)                         # 95% marginal posterior credible intervals
 ```
 
+Note that missing data (e.g., due to cloud cover) can be accommodated using the [missing-data methods](@ref "Missing data") implemented in the package.
+
 ## Irregular spatial data
 
 To cater for spatial data collected over arbitrary spatial locations, one may construct a neural estimator with a graph neural network (GNN; see [Sainsbury-Dale, Zammit-Mangion, Richards, and Huser, 2025](https://doi.org/10.1080/10618600.2024.2433671)). The overall workflow remains as given in previous examples, with two key additional steps:
@@ -277,7 +269,6 @@ To cater for spatial data collected over arbitrary spatial locations, one may co
 - Storing the spatial data as a graph; see [`spatialgraph()`](@ref).
 
 For illustration, we again consider a spatial Gaussian process model with exponential covariance function, and we define a type for storing expensive intermediate objects needed for data simulation. In this example, these objects include Cholesky factors, and spatial graphs which store the adjacency matrices needed to perform graph convolution: 
-
 
 ```
 struct Parameters <: ParameterConfigurations
