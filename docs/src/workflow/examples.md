@@ -6,8 +6,7 @@ We first load the required packages, the following of which are used throughout 
 using NeuralEstimators
 using Flux                                  # Julia's deep-learning library
 using Distributions: InverseGamma, Uniform  # sampling from probability distributions
-using AlgebraOfGraphics                     # visualisation
-using CairoMakie                            # visualisation
+using AlgebraOfGraphics, CairoMakie         # visualisation
 ```
 
 The following packages will be used in the examples with [Gridded data](@ref) and [Irregular spatial data](@ref):  
