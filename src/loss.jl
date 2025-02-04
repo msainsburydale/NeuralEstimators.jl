@@ -13,28 +13,25 @@ _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
 
 # ---- surrogates for 0-1 loss ----
 
-"""
-    tanhloss(θ̂, θ, k; agg = mean, joint = true)
-
-For `k` > 0, computes the loss function,
-
+@doc raw"""
+    tanhloss(θ̂, θ, κ; agg = mean)
+For `κ` > 0, computes the loss function given in [Sainsbury-Dale et al. (2025; Eqn. 14)](https://arxiv.org/abs/2501.04330), namely,
 ```math
-L(θ̂, θ) = tanh(|θ̂ - θ|/k),
+L(\hat{\boldsymbol{\theta}}, \boldsymbol{\theta}) = \tanh\big\|\hat{\boldsymbol{\theta}} - \boldsymbol{\theta}\|_1/\kappa\big),
 ```
+which yields the 0-1 loss function in the limit `κ` → 0. 
 
-which approximates the 0-1 loss as `k` → 0. Compared with the [`kpowerloss`](@ref), 
-which may also be used as a continuous surrogate for the 0-1 loss, the gradient of
-the tanh loss is bounded as |θ̂ - θ| → 0, which can improve numerical stability during 
-training. 
+Compared with the [`kpowerloss()`](@ref), which may also be used as a continuous approximation of the 0--1 loss function, the gradient of
+this loss is bounded as ``\|\hat{\boldsymbol{\theta}} - \boldsymbol{\theta}\|_1 \to 0``, which can improve numerical stability during training. 
 
-If `joint = true`, the L₁ norm is computed over each parameter vector, so that, with 
-`k` close to zero, the resulting Bayes estimator is the mode of the joint posterior distribution;
-otherwise, if `joint = false`, the Bayes estimator is the vector containing the modes of the
-marginal posterior distributions.
-
-See also [`kpowerloss`](@ref).
+See also [`kpowerloss()`](@ref).
 """
-function tanhloss(θ̂, θ, k; agg = mean, joint::Bool = true)
+function tanhloss(θ̂, θ, κ; agg = mean, joint::Bool = true)
+
+#  If `joint = true`, the L₁ norm is computed over each parameter vector, so that, with 
+# `κ` close to zero, the resulting Bayes estimator is the mode of the joint posterior distribution;
+#  otherwise, if `joint = false`, the Bayes estimator is the vector containing the modes of the
+#  marginal posterior distributions.
 
   _check_sizes(θ̂, θ)
 
@@ -43,38 +40,31 @@ function tanhloss(θ̂, θ, k; agg = mean, joint::Bool = true)
      d = sum(d, dims = 1)
   end
 
-  L = tanh_fast(d ./ k)
+  L = tanh_fast(d ./ κ)
 
   return agg(L)
 end
 
-
-"""
-    kpowerloss(θ̂, θ, k; agg = mean, joint = true, safeorigin = true, ϵ = 0.1)
-
-For `k` > 0, the `k`-th power absolute-distance loss function,
-
+@doc raw"""
+    kpowerloss(θ̂, θ, κ; agg = mean, safeorigin = true, ϵ = 0.1)
+For `κ` > 0, the `κ`-th power absolute-distance loss function,
 ```math
-L(θ̂, θ) = |θ̂ - θ|ᵏ,
+L(\hat{\boldsymbol{\theta}}, \boldsymbol{\theta}) = \|\hat{\boldsymbol{\theta}} - \boldsymbol{\theta}\|_1^\kappa,
 ```
+contains the squared-error (`κ` = 2), absolute-error (`κ` = 2), and 0--1 (`κ` → 0) loss functions as special
+cases. It is Lipschitz continuous if `κ` = 1, convex if `κ` ≥ 1, and strictly convex if `κ` > 1. It is
+quasiconvex for all `κ` > 0.
 
-contains the squared-error, absolute-error, and 0-1 loss functions as special
-cases (the latter obtained in the limit as `k` → 0). It is Lipschitz continuous
-iff `k` = 1, convex iff `k` ≥ 1, and strictly convex iff `k` > 1: it is
-quasiconvex for all `k` > 0.
+If `safeorigin = true`, the loss function is modified to be piecewise, continuous, and linear in the `ϵ`-interval surrounding the origin, to avoid pathologies around the origin. 
 
-If `joint = true`, the L₁ norm is computed over each parameter vector, so that, with 
-`k` close to zero, the resulting Bayes estimator is the mode of the joint posterior distribution;
-otherwise, if `joint = false`, the Bayes estimator is the vector containing the modes of the
-marginal posterior distributions.
-
-If `safeorigin = true`, the loss function is modified to avoid pathologies
-around the origin, so that the resulting loss function behaves similarly to the
-absolute-error loss in the `ϵ`-interval surrounding the origin.
-
-See also [`tanhloss`](@ref).
+See also [`tanhloss()`](@ref).
 """
-function kpowerloss(θ̂, θ, k; safeorigin::Bool = true, agg = mean, ϵ = ofeltype(θ̂, 0.1), joint::Bool = true)
+function kpowerloss(θ̂, θ, κ; safeorigin::Bool = true, agg = mean, ϵ = ofeltype(θ̂, 0.1), joint::Bool = true)
+
+#  If `joint = true`, the L₁ norm is computed over each parameter vector, so that, with 
+# `κ` close to zero, the resulting Bayes estimator is the mode of the joint posterior distribution;
+#  otherwise, if `joint = false`, the Bayes estimator is the vector containing the modes of the
+#  marginal posterior distributions.
 
    _check_sizes(θ̂, θ)
 
@@ -85,18 +75,19 @@ function kpowerloss(θ̂, θ, k; safeorigin::Bool = true, agg = mean, ϵ = ofelt
 
    if safeorigin
      b = d .>  ϵ
-     L = vcat(d[b] .^ k, _safefunction.(d[.!b], k, ϵ))
+     L = vcat(d[b] .^ κ, _safefunction.(d[.!b], κ, ϵ))
    else
-     L = d.^k
+     L = d.^κ
    end
 
    return agg(L)
 end
 
-function _safefunction(d, k, ϵ)
+function _safefunction(d, κ, ϵ)
   @assert d >= 0
-  ϵ^(k - 1) * d
+  ϵ^(κ - 1) * d
 end
+
 
 # ---- quantile loss ----
 
@@ -113,28 +104,8 @@ where `τ` ∈ (0, 1) is a probability level and 𝕀(⋅) is the indicator func
 
 The method that takes `τ` as a vector is useful for jointly approximating
 several quantiles of the posterior distribution. In this case, the number of
-rows in `θ̂` is assumed to be ``pr``, where ``p`` is the number of parameters and
+rows in `θ̂` is assumed to be ``dr``, where ``d`` is the number of parameters and
 ``r`` is the number probability levels in `τ` (i.e., the length of `τ`).
-
-# Examples
-```
-p = 1
-K = 10
-θ = rand(p, K)
-θ̂ = rand(p, K)
-quantileloss(θ̂, θ, 0.1)
-
-θ̂ = rand(3p, K)
-quantileloss(θ̂, θ, [0.1, 0.5, 0.9])
-
-p = 2
-θ = rand(p, K)
-θ̂ = rand(p, K)
-quantileloss(θ̂, θ, 0.1)
-
-θ̂ = rand(3p, K)
-quantileloss(θ̂, θ, [0.1, 0.5, 0.9])
-```
 """
 function quantileloss(θ̂, θ, τ; agg = mean)
   _check_sizes(θ̂, θ)
@@ -153,21 +124,21 @@ function quantileloss(θ̂, θ, τ::V; agg = mean) where {T, V <: AbstractVector
 
   # Check that the sizes match
   @assert size(θ̂, 2) == size(θ, 2)
-  p, K = size(θ)
+  d, K = size(θ)
 
   if length(τ) == K # different τ for each training sample => must be training continuous quantile estimator with τ as input
-    @ignore_derivatives τ = repeat(τ', p) # just repeat τ to match the number of parameters in the statistical model
+    @ignore_derivatives τ = repeat(τ', d) # just repeat τ to match the number of parameters in the statistical model
     quantileloss(θ̂, θ, τ; agg = agg)
   else # otherwise, we must training a discrete quantile estimator for some fixed set of probability levels
 
-    rp = size(θ̂, 1)
-    @assert rp % p == 0
-    r = rp ÷ p
+    rd = size(θ̂, 1)
+    @assert rd % d == 0
+    r = rd ÷ d
     @assert length(τ) == r
 
     # repeat the arrays to facilitate broadcasting and indexing
     # note that repeat() cannot be differentiated by Zygote
-    @ignore_derivatives τ = repeat(τ, inner = (p, 1), outer = (1, K))
+    @ignore_derivatives τ = repeat(τ, inner = (d, 1), outer = (1, K))
     @ignore_derivatives θ = repeat(θ, r)
 
     quantileloss(θ̂, θ, τ; agg = agg)
@@ -194,21 +165,15 @@ end
     intervalscore(assessment::Assessment; average_over_parameters::Bool = false, average_over_sample_sizes::Bool = true)
 
 Given an interval [`l`, `u`] with nominal coverage 100×(1-`α`)%  and true value `θ`, the
-interval score is defined by
-
+interval score ([Gneiting and Raftery, 2007](https://www.tandfonline.com/doi/abs/10.1198/016214506000001437)) is defined as
 ```math
 S(l, u, θ; α) = (u - l) + 2α⁻¹(l - θ)𝕀(θ < l) + 2α⁻¹(θ - u)𝕀(θ > u),
 ```
-
 where `α` ∈ (0, 1) and 𝕀(⋅) is the indicator function.
 
-The method that takes a single value `θ̂` assumes that `θ̂` is a matrix with ``2p`` rows,
-where ``p`` is the number of parameters in the statistical model. Then, the first
-and second set of ``p`` rows will be used as `l` and `u`, respectively.
-
-For further discussion, see Section 6 of Gneiting, T. and Raftery, A. E. (2007),
-"Strictly proper scoring rules, prediction, and estimation",
-Journal of the American statistical Association, 102, 359–378.
+The method that takes a single value `θ̂` assumes that `θ̂` is a matrix with ``2d`` rows,
+where ``d`` is the dimension of the parameter vector to make inference on. The first
+and second sets of ``d`` rows will be used as `l` and `u`, respectively.
 """
 function intervalscore(l, u, θ, α; agg = mean)
 
@@ -225,9 +190,9 @@ end
 function intervalscore(θ̂, θ, α; agg = mean)
 
   @assert size(θ̂, 1) % 2 == 0
-  p = size(θ̂, 1) ÷ 2
-  l = θ̂[1:p, :]
-  u = θ̂[(p+1):end, :]
+  d = size(θ̂, 1) ÷ 2
+  l = θ̂[1:d, :]
+  u = θ̂[(d+1):end, :]
 
   intervalscore(l, u, θ, α, agg = agg)
 end

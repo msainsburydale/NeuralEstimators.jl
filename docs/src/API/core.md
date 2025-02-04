@@ -1,12 +1,12 @@
 # Core
 
-This page documents the classes and functions that are central to the workflow of `NeuralEstimators`. Its organisation reflects the order in which these classes and functions appear in a standard implementation; that is, from sampling parameters from the prior distribution, to using a neural Bayes estimator to make inference with observed data sets.
+This page documents the classes and functions that are central to the workflow of `NeuralEstimators`. Its organisation reflects the order in which these classes and functions appear in a standard implementation: from sampling parameters from the prior distribution, to making inference with observed data.
 
 ## Sampling parameters
 
-Parameters sampled from the prior distribution are stored as a $p \times K$ matrix, where $p$ is the number of parameters in the statistical model and $K$ is the number of parameter vectors sampled from the prior distribution.
+Parameters sampled from the prior distribution are stored as a $d \times K$ matrix, where $d$ is the dimension of the parameter vector to make inference on and $K$ is the number of sampled parameter vectors. 
 
-It can sometimes be helpful to wrap the parameter matrix in a user-defined type that also stores expensive intermediate objects needed for data simulated (e.g., Cholesky factors). In this case, the user-defined type should be a subtype of the abstract type [`ParameterConfigurations`](@ref), whose only requirement is a field `θ` that stores the matrix of parameters. See [Storing expensive intermediate objects for data simulation](@ref) for further discussion.   
+It can sometimes be helpful to wrap the parameter matrix in a user-defined type that also stores expensive intermediate objects needed for data simulated (e.g., Cholesky factors). The user-defined type should be a subtype of [`ParameterConfigurations`](@ref), whose only requirement is a field `θ` that stores the matrix of parameters. See [Storing expensive intermediate objects for data simulation](@ref) for further discussion.   
 
 ```@docs
 ParameterConfigurations
@@ -14,30 +14,42 @@ ParameterConfigurations
 
 ## Simulating data
 
-`NeuralEstimators` facilitates neural estimation for arbitrary statistical models by having the user implicitly define their model via simulated data, either as fixed instances or via a function that simulates data from the statistical model.
+The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data.
 
-The data are always stored as a `Vector{A}`, where each element of the vector corresponds to a data set of $m$ independent replicates associated with one parameter vector (note that $m$ is arbitrary), and where the type `A` depends on the multivariate structure of the data:
+The data are stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and the subtype `A` depends on the multivariate structure of the data. Common formats include:
 
-- For univariate and unstructured multivariate data, `A` is a $d \times m$ matrix where $d$ is the dimension each replicate (e.g., $d=1$ for univariate data).
-- For data collected over a regular grid, `A` is a ($N + 2$)-dimensional array, where $N$ is the dimension of the grid (e.g., $N = 1$ for time series, $N = 2$ for two-dimensional spatial grids, etc.). The first $N$ dimensions of the array correspond to the dimensions of the grid; the penultimate dimension stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes, and so on); and the final dimension stores the independent replicates. For example, to store 50 independent replicates of a bivariate spatial process measured over a 10x15 grid, one would construct an array of dimension 10x15x2x50.
-- For spatial data collected over irregular spatial locations, `A` is a [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.GNNGraph) with independent replicates (possibly with differing spatial locations) stored as subgraphs using the function [`batch`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#MLUtils.batch-Tuple{AbstractVector{%3C:GNNGraph}}).
+* **Unstructured data**: `A` is typically an $n \times m$ matrix, where:
+    * ``n`` is the dimension of each replicate (e.g., $n=1$ for univariate data, $n=2$ for bivariate data).  
+    * ``m`` is the number of independent replicates in each data set ($m$ is allowed to vary between data sets). 
+* __Data collected over a regular grid__: `A` is typically an ($N + 2$)-dimensional array, where: 
+    * The first $N$ dimensions correspond to the dimensions of the grid (e.g., $N = 1$ for time series, $N = 2$ for two-dimensional spatial grids). 
+    * The penultimate dimension stores the so-called "channels" (e.g., singleton for univariate processes, two for bivariate processes). 
+    * The final dimension stores the $m$ independent replicates. 
+* **Spatial data collected over irregular locations**: `A` is typically a [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.GNNGraph), where independent replicates (possibly with differing spatial locations) are stored as subgraphs. See the helper function [`spatialgraph()`](@ref) for constructing these graphs. 
+
+While the formats above cover many applications, the package is flexible: the data structure simply needs to align with the chosen neural-network architecture. 
 
 ## Estimators
 
-Several classes of neural estimators are available in the package.
+The package provides several classes of neural estimators, organised within a type hierarchy. At the top-level of the hierarchy is [`NeuralEstimator`](@ref), an abstract supertype for all neural estimators in the package. 
 
-The simplest class is [`PointEstimator`](@ref), used for constructing arbitrary mappings from the sample space to the parameter space. When constructing a generic point estimator, the user defines the loss function and therefore the Bayes estimator that will be targeted.
+Neural Bayes estimators are implemented as subtypes of the abstract supertype [`BayesEstimator`](@ref). The simple type [`PointEstimator`](@ref) is used for constructing neural Bayes estimators under general, user-defined loss functions. Several specialised types cater for the estimation of posterior quantiles based on the quantile loss function: see [`IntervalEstimator`](@ref) and its generalisation [`QuantileEstimatorDiscrete`](@ref) for estimating posterior quantiles for a fixed set of probability levels; and see [`QuantileEstimatorContinuous`](@ref) for estimating posterior quantiles based on a continuous probability level provided as input to the neural network.
 
-Several classes cater for the estimation of marginal posterior quantiles, based on the quantile loss function (see [`quantileloss()`](@ref)); in particular, see [`IntervalEstimator`](@ref) and [`QuantileEstimatorDiscrete`](@ref) for estimating marginal posterior quantiles for a fixed set of probability levels, and [`QuantileEstimatorContinuous`](@ref) for estimating marginal posterior quantiles with the probability level as an input to the neural network.
+The type [`PosteriorEstimator`](@ref) can be used to approximate the posterior distribution, and [`RatioEstimator`](@ref) can be used to approximate the likelihood-to-evidence ratio.
 
-In addition to point estimation, the package also provides the class [`RatioEstimator`](@ref) for approximating the so-called likelihood-to-evidence ratio. The binary classification problem at the heart of this approach proceeds based on the binary cross-entropy loss.
+Several types serve as wrappers around the aforementioned estimators, enhancing their functionality. [`PiecewiseEstimator`](@ref) applies different estimators based on the sample size of the data (see the discussion on [Variable sample sizes](@ref)). [`Ensemble`](@ref) combines multiple estimators, aggregating their estimates to improve accuracy.
 
-Users are free to choose the neural-network architecture of these estimators as they see fit (subject to some class-specific requirements), but the package also provides the convenience constructor [`initialise_estimator()`](@ref).
 
 ```@docs
 NeuralEstimator
 
+BayesEstimator
+
 PointEstimator
+
+PosteriorEstimator
+
+RatioEstimator
 
 IntervalEstimator
 
@@ -45,12 +57,11 @@ QuantileEstimatorDiscrete
 
 QuantileEstimatorContinuous
 
-RatioEstimator
-
 PiecewiseEstimator
 
 Ensemble
 ```
+
 
 ## Training
 
@@ -81,26 +92,24 @@ coverage
 
 ## Inference with observed data
 
+The following functions are intended to facilitate the use of a trained neural estimator with observed data. 
 
-
-### Inference using point estimators
-
-Inference with a neural Bayes (point) estimator proceeds simply by applying the estimator `θ̂` to the observed data `Z` (possibly containing multiple data sets) in a call of the form `θ̂(Z)`. To leverage a GPU, simply move the estimator and the data to the GPU using [`gpu()`](https://fluxml.ai/Flux.jl/stable/models/functors/#Flux.gpu-Tuple{Any}); see also [`estimateinbatches()`](@ref) to apply the estimator over batches of data, which can alleviate memory issues when working with a large number of data sets.
-
-Uncertainty quantification often proceeds through the bootstrap distribution, which is essentially available "for free" when bootstrap data sets can be quickly generated; this is facilitated by [`bootstrap()`](@ref) and [`interval()`](@ref). Alternatively, one may approximate a set of low and high marginal posterior quantiles using a specially constructed neural Bayes estimator, which can then be used to construct credible intervals: see [`IntervalEstimator`](@ref), [`QuantileEstimatorDiscrete`](@ref), and [`QuantileEstimatorContinuous`](@ref).  
+Note that most [`NeuralEstimators`](@ref) are callable and can be applied to data `Z` (possibly containing multiple data sets) in a call of the form `estimator(Z)` or similar. In these cases, one may leverage a GPU by simply moving the estimator and the data to the GPU using [`gpu()`](https://fluxml.ai/Flux.jl/stable/models/functors/#Flux.gpu-Tuple{Any}). See also [`estimate()`](@ref) to apply the estimator over batches of data, which can alleviate memory issues when working with large data sets (the methods below typically use this memory-safe approach where possible). 
 
 ```@docs
+estimate
+
 bootstrap
 
 interval
-```
-
-### Inference using likelihood and likelihood-to-evidence-ratio estimators
-
-```@docs
-mlestimate
-
-mapestimate
 
 sampleposterior
+
+posteriormean 
+
+posteriormedian
+
+posteriormode
+
+mlestimate
 ```

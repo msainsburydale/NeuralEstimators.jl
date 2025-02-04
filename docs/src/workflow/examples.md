@@ -1,88 +1,109 @@
 # Examples
 
-Before proceeding, we first load the required packages. The following packages are used throughout these examples:
+We first load the required packages, the following of which are used throughout these examples:
 
 ```
 using NeuralEstimators
-using Flux                 # Julia's deep-learning library
-using Distributions        # sampling from probability distributions
-using AlgebraOfGraphics    # visualisation
-using CairoMakie           # visualisation
+using Flux                                  # Julia's deep-learning library
+using Distributions: InverseGamma, Uniform  # sampling from probability distributions
+using AlgebraOfGraphics, CairoMakie         # visualisation
 ```
 
 The following packages will be used in the examples with [Gridded data](@ref) and [Irregular spatial data](@ref):  
 
 ```
-using Distances            # computing distance matrices 
-using Folds                # parallel simulation (start Julia with --threads=auto)
-using LinearAlgebra        # Cholesky factorisation
+using Distances                             # distance matrices 
+using Folds                                 # parallel simulation (start Julia with --threads=auto)
+using LinearAlgebra                         # Cholesky factorisation
 ```
 
 The following packages are used only in the example with [Irregular spatial data](@ref): 
 
 ```
-using GraphNeuralNetworks  # GNN architecture
-using Statistics           # mean()
+using GraphNeuralNetworks                   # GNN architecture
+using Statistics: mean                            
 ```
 
-Finally, various GPU backends can be used (see the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/gpu/#GPU-Support) for details). For instance, if one wishes to employ an NVIDIA GPU when running the following examples, simply the load the `CUDA.jl` package:  
+Finally, various GPU backends can be used (see the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/gpu/#GPU-Support) for details). For instance, to use an NVIDIA GPU in the following examples, simply the load the `CUDA.jl` package:  
 
 ```
 using CUDA
 ```
 
+Once a GPU package is loaded and an appropriate GPU is available, the functions in `NeuralEstimators` will automatically leverage the GPU to improve computational efficiency, while maintaining memory safety through the use of batched operations.
 
 ## Univariate data
 
-Here we develop a neural Bayes estimator for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $Z_1, \dots, Z_m$ that are independent and identically distributed realisations from the distribution $N(\mu, \sigma^2)$. 
+Here, we develop a neural Bayes estimator  for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $Z_1, \dots, Z_m$ that are independent and identically distributed realisations from the distribution $N(\mu, \sigma^2)$. (See [Estimators](@ref) for a list of other classes of estimators available in the package.)
 
-First, we define a function to sample parameters from the prior distribution. Here, we assume that the parameters are independent a priori and we adopt the marginal priors $\mu \sim N(0, 1)$ and $\sigma \sim IG(3, 1)$. The sampled parameters are stored as $p \times K$ matrices, with $p$ the number of parameters in the model and $K$ the number of sampled parameter vectors:
+We begin by defining a function to sample parameters from the prior distribution. Assuming prior independence, we adopt the marginal priors $\mu \sim N(0, 1)$ and $\sigma \sim IG(3, 1)$:
 
 ```
 function sample(K)
-	μ = rand(Normal(0, 1), 1, K)
-	σ = rand(InverseGamma(3, 1), 1, K)
-	θ = vcat(μ, σ)
+	μ = randn(K)
+	σ = rand(InverseGamma(3, 1), K)
+	θ = vcat(μ', σ')
 	return θ
 end
 ```
 
-Next, we implicitly define the statistical model through data simulation. In this package, the data are always stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and where the type `A` depends on the multivariate structure of the data. Since in this example each replicate $Z_1, \dots, Z_m$ is univariate, `A` should be a `Matrix` with $d=1$ row and $m$ columns. Below, we define our simulator given a single parameter vector, and given a matrix of parameter vectors (which simply applies the simulator to each column):
+Next, we define the statistical model implicitly through data simulation. The simulated data are stored as a `Vector{A}`, where each element corresponds to one parameter vector. The type `A` reflects the multivariate structure of the data. In this example, each replicate $Z_1, \dots, Z_m$ is univariate, so `A` is a Matrix with $n = 1$ row and $m$ columns:
 
 ```
-simulate(θ, m) = [ϑ[1] .+ ϑ[2] .* randn(1, m) for ϑ ∈ eachcol(θ)]
+function simulate(θ, m)
+    [ϑ[1] .+ ϑ[2] .* randn(1, m) for ϑ in eachcol(θ)]
+end
 ```
 
-We now design our neural-network architecture. The workhorse of the package is the [`DeepSet`](@ref) architecture, which provides an elegant framework for making inference with an arbitrary number of independent replicates and for incorporating both neural and user-defined statistics. The DeepSets framework consists of two neural networks, a summary network and an inference network. The inference network (also known as the outer network) is always a multilayer perceptron (MLP). However, the architecture of the summary network (also known as the inner network) depends on the multivariate structure of the data. With unstructured data (i.e., when there is no spatial or temporal correlation within a replicate), we use an MLP with input dimension equal to the dimension of each replicate of the statistical model (i.e., one for univariate data): 
+We now design our neural network. 
+
+As we are constructing a neural Bayes estimator, the neural network is a mapping $\mathcal{Z}\to\Theta$, and the dimensionality of the neural-network output is therefore $d \equiv \textrm{dim}(\Theta) = 2$. 
+
+Since our data are replicated, we adopt the DeepSets framework, implemented via the type [`DeepSet`](@ref). DeepSets consist of two neural networks: an inner network and an outer network. The inner network extracts summary statistics from the data, and its architecture depends on the multivariate structure of the data. For unstructured data (i.e., data without spatial or temporal correlation within each replicate), we use a multilayer perceptron (MLP). The input dimension matches the dimensionality of each data replicate, while the output dimension corresponds to the number of summary statistics appropriate for the model (a common choice is $d$). The outer network maps the learned summary statistics to the output space (here, the parameter space, $\Theta$). The outer network is always an MLP. 
+
+Below is an example of a DeepSets architecture for neural Bayes estimation in this example. Note that many models have parameter constraints (e.g., variance and range parameters that must be strictly positive). These constraints can be incorporated in the final layer of the neural network by choosing appropriate activation functions for each parameter. Here, we enforce the constraint $\sigma > 0$ by applying the softplus activation function in the final layer of the outer network, ensuring that all parameter estimates are valid. For some additional ways to constrain parameter estimates, see [Output layers](@ref). 
 
 ```
-p = 2                                                # number of parameters 
-ψ = Chain(Dense(1, 64, relu), Dense(64, 64, relu))   # summary network
-ϕ = Chain(Dense(64, 64, relu), Dense(64, p))         # inference network
-architecture = DeepSet(ψ, ϕ)
+n = 1    # dimension of each data replicate (univariate)
+d = 2    # dimension of the parameter vector θ
+w = 128  # width of each hidden layer 
+
+# Final layer has output dimension d and enforces parameter constraints
+final_layer = Parallel(
+    vcat,
+    Dense(w, 1, identity),     # μ ∈ ℝ
+    Dense(w, 1, softplus)      # σ > 0
+)
+
+# Inner and outer networks
+ψ = Chain(Dense(n, w, relu), Dense(w, d, relu))    
+ϕ = Chain(Dense(d, w, relu), final_layer)          
+
+# Combine into a DeepSet
+network = DeepSet(ψ, ϕ)
 ```
 
-In this example, we wish to construct a point estimator for the unknown parameter vector, and we therefore initialise a [`PointEstimator`](@ref) object based on our chosen architecture (see [Estimators](@ref) for a list of other estimators available in the package): 
+We then initialise the neural Bayes estimator by wrapping the neural network in a [`PointEstimator`](@ref): 
 
 ```
-θ̂ = PointEstimator(architecture)
+estimator = PointEstimator(network)
 ```
 
 Next, we train the estimator using [`train()`](@ref), here using the default absolute-error loss. We'll train the estimator using 50 independent replicates per parameter configuration. Below, we pass our user-defined functions for sampling parameters and simulating data, but one may also pass parameter or data instances, which will be held fixed during training:
 
 ```
 m = 50
-θ̂ = train(θ̂, sample, simulate, m = m)
+estimator = train(estimator, sample, simulate, m = m)
 ```
 
-To fully exploit the amortised nature of neural estimators, one may wish to save a trained estimator and load it in later sessions: see [Saving and loading neural estimators](@ref) for details on how this can be done. 
+One may wish to save a trained estimator and load it in a later session: see [Saving and loading neural estimators](@ref) for details on how this can be done. 
 
-The function [`assess()`](@ref) can be used to assess the trained estimator. Parametric and non-parametric bootstrap-based uncertainty quantification are facilitated by [`bootstrap()`](@ref) and [`interval()`](@ref), and this can also be included in the assessment stage through the keyword argument `boot`:
+The function [`assess()`](@ref) can be used to assess the trained estimator. Parametric and non-parametric bootstrap estimates can be obtained via [`bootstrap()`](@ref), with corresponding confidence intervals computed using [`interval()`](@ref). Additionally, bootstrap-based uncertainty quantification can be included in the assessment stage through the keyword argument `boot`:
 
 ```
 θ_test = sample(1000)
 Z_test = simulate(θ_test, m)
-assessment = assess(θ̂, θ_test, Z_test, boot = true)
+assessment = assess(estimator, θ_test, Z_test, boot = true)
 ```
 
 The resulting [`Assessment`](@ref) object contains the sampled parameters, the corresponding point estimates, and the corresponding lower and upper bounds of the bootstrap intervals. This object can be used to compute various diagnostics:
@@ -96,42 +117,32 @@ plot(assessment)
 
 ![Univariate Gaussian example: Estimates vs. truth](../assets/figures/univariate.png)
 
-As an alternative form of uncertainty quantification, one may approximate a set of marginal posterior quantiles by training a neural Bayes estimator under the quantile loss function, which allows one to generate approximate marginal posterior credible intervals. This is facilitated with [`IntervalEstimator`](@ref) which, by default, targets 95% central credible intervals:
+As an alternative form of uncertainty quantification with neural Bayes estimators, one may approximate a set of marginal posterior quantiles by training a neural Bayes estimator under the quantile loss function, which allows one to generate approximate marginal posterior credible intervals. This is facilitated with [`IntervalEstimator`](@ref) which, by default, targets 95% central credible intervals:
 
 ```
-q̂ = IntervalEstimator(architecture)
+q̂ = IntervalEstimator(network)
 q̂ = train(q̂, sample, simulate, m = m)
 ```
 
+The resulting posterior credible-interval estimator can also be assessed using [`assess()`](@ref). Often, these intervals have better coverage than bootstrap-based intervals.
 
-The resulting posterior credible-interval estimator can also be assessed with empirical simulation-based methods using [`assess()`](@ref), as we did above for the point estimator. Often, these intervals have better coverage than bootstrap-based intervals.
-
-Once an estimator is deemed to be satisfactorily calibrated, it may be applied to observed data (below, we use simulated data as a substitute for observed data):
+Once an estimator is deemed to be well calibrated, it may be applied to observed data (below, we use simulated data as a substitute for observed data):
 
 ```
-θ = sample(1)               # true parameters
-Z = simulate(θ, m)          # "observed" data
-θ̂(Z)                        # point estimates
-interval(bootstrap(θ̂, Z))   # 95% non-parametric bootstrap intervals
-interval(q̂, Z)              # 95% marginal posterior credible intervals
+θ = sample(1)                       # true parameters
+Z = simulate(θ, m)                  # "observed" data
+estimate(estimator, Z)              # point estimate
+interval(bootstrap(estimator, Z))   # 95% non-parametric bootstrap intervals
+interval(q̂, Z)                      # 95% marginal posterior credible intervals
 ```
-
-To utilise a GPU for improved computational efficiency, one may simply move the estimator and the data to the GPU through the calls `θ̂ = gpu(θ̂)` and `Z = gpu(Z)` before applying the estimator. Note that GPUs often have limited memory relative to CPUs, and this can sometimes lead to memory issues when working with very large data sets: in these cases, the function [`estimateinbatches()`](@ref) can be used to apply the estimator over batches of data to circumvent any memory concerns. 
-
-## Unstructured multivariate data
-
-Suppose now that each data set now consists of $m$ replicates $\boldsymbol{Z}_1, \dots, \boldsymbol{Z}_m$ of a $d$-dimensional multivariate distribution. Everything remains as given in the univariate example above, except that we now store each data set as a $d \times m$ matrix (previously they were stored as $1\times m$ matrices), and the summary network of the DeepSets representation takes a $d$-dimensional input (previously it took a 1-dimensional input).
-
-Note that, when estimating a full covariance matrix, one may wish to constrain the neural estimator to only produce parameters that imply a valid (i.e., positive definite) covariance matrix. This can be achieved by appending a  [`CovarianceMatrix`](@ref) layer to the end of the outer network of the DeepSets representation. However, the estimator will often learn to provide valid estimates, even if not constrained to do so.
-
 
 ## Gridded data
 
 For data collected over a regular grid, neural estimators are typically based on a convolutional neural network (CNN; see, e.g., [Dumoulin and Visin, 2016](https://arxiv.org/abs/1603.07285)). 
 
-When using CNNs with `NeuralEstimators`, each data set must be stored as a multi-dimensional array. The penultimate dimension stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes, etc.), while the final dimension stores independent replicates. For example, to store $50$ independent replicates of a bivariate spatial process measured over a $10\times15$ grid, one would construct an array of dimension $10\times15\times2\times50$.
+When using CNNs with `NeuralEstimators`, each data set must be stored as a multi-dimensional array. The penultimate dimension stores the so-called "channels" (this dimension is singleton for univariate processes, two for bivariate processes), while the final dimension stores independent replicates. For example, to store $50$ independent replicates of a bivariate spatial process measured over a $10\times15$ grid, one would construct an array of dimension $10\times15\times2\times50$.
 
- For illustration, here we develop a neural Bayes estimator for the spatial Gaussian process model with exponential covariance function and unknown range parameter $\theta$. The spatial domain is taken to be the unit square, and we adopt the prior $\theta \sim U(0.05, 0.5)$. 
+ For illustration, here we develop a neural Bayes estimator for the (univariate) spatial Gaussian process model with exponential covariance function and unknown range parameter $\theta > 0$. The spatial domain is taken to be the unit square, and we adopt the prior $\theta \sim U(0, 0.5)$. 
  
  Simulation from Gaussian processes typically involves the computation of an expensive intermediate object, namely, the Cholesky factor of a covariance matrix. Storing intermediate objects can enable the fast simulation of new data sets when the parameters are held fixed. Hence, in this example, we define a custom type `Parameters` subtyping [`ParameterConfigurations`](@ref) for storing the matrix of parameters and the corresponding Cholesky factors: 
 
@@ -142,20 +153,18 @@ struct Parameters{T} <: ParameterConfigurations
 end
 ```
  
- Further, we define two constructors for our custom type: one that accepts an integer $K$, and another that accepts a $p\times K$ matrix of parameters. The former constructor will be useful during the training stage for sampling from the prior distribution, while the latter constructor will be useful for parametric bootstrap (since this involves repeated simulation from the fitted model):
+Further, we define two constructors for our custom type: one that accepts an integer $K$, and another that accepts a $d\times K$ matrix of parameters. The former constructor will be useful during the training stage for sampling from the prior distribution, while the latter constructor will be useful for parametric bootstrap (since this involves repeated simulation from the fitted model):
 
 ```
 function sample(K::Integer)
-
 	# Sample parameters from the prior 
-	θ = rand(Uniform(0.05, 0.5), 1, K)
+	θ = 0.5 * rand(1, K)
 
 	# Pass to matrix constructor
 	Parameters(θ)
 end
 
 function Parameters(θ::Matrix)
-
 	# Spatial locations, a 16x16 grid over the unit square
 	pts = range(0, 1, length = 16)
 	S = expandgrid(pts, pts)
@@ -186,30 +195,30 @@ function simulate(parameters::Parameters, m = 1)
 end
 ```
 
-A possible architecture is as follows:
+A possible architecture is as follows. Note that deeper architectures that employ residual connections (see [ResidualBlock](@ref)) often lead to improved performance, and certain pooling layers (e.g., [GlobalMeanPool](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.GlobalMeanPool)) allow the neural network to accommodate grids of varying dimension; for further discussion and an illustration, see [Sainsbury-Dale et al. (2025, Sec. S3, S4)](https://doi.org/10.48550/arXiv.2501.04330). 
 
 ```
-# Summary network
+# Inner network 
 ψ = Chain(
-	Conv((3, 3), 1 => 32, relu),
-	MaxPool((2, 2)),
-	Conv((3, 3),  32 => 64, relu),
-	MaxPool((2, 2)),
-	Flux.flatten
-	)
+      Conv((3, 3), 1 => 32, relu),   # 3x3 convolutional filter, 1 input channel to 32 output channels
+      MaxPool((2, 2)),               # 2x2 max pooling for dimension reduction
+      Conv((3, 3), 32 => 64, relu),  # 3x3 convolutional filter, 32 input channels to 64 output channels
+      MaxPool((2, 2)),               # 2x2 max pooling for dimension reduction
+      Flux.flatten                   # flatten output to feed into a fully connected layer
+  )
 
-# Inference network
+# Outer network 
 ϕ = Chain(Dense(256, 64, relu), Dense(64, 1))
 
-# DeepSet
-architecture = DeepSet(ψ, ϕ)
+# DeepSet object
+network = DeepSet(ψ, ϕ)
 ```
 
 Next, we initialise a point estimator and a posterior credible-interval estimator:
 
 ```
-θ̂ = PointEstimator(architecture)
-q̂ = IntervalEstimator(architecture)
+θ̂ = PointEstimator(network)
+q̂ = IntervalEstimator(network)
 ```
 
 Now we train the estimators, here using fixed parameter instances to avoid repeated Cholesky factorisations (see [Storing expensive intermediate objects for data simulation](@ref) and [On-the-fly and just-in-time simulation](@ref) for further discussion):
@@ -238,30 +247,29 @@ plot(assessment)
 
 ![Gridded spatial Gaussian process example: Estimates vs. truth](../assets/figures/gridded.png)
 
-Finally, we can apply our estimators to observed data. Note that when we have a single replicate only (which is often the case in spatial statistics), non-parametric bootstrap is not possible, and we instead use parametric bootstrap:
+Finally, we can apply our estimators to observed data:
 
 ```
 θ = sample(1)                          # true parameter
 Z = simulate(θ)                        # "observed" data
-θ̂(Z)                                   # point estimates
+estimate(θ̂, Z)                         # point estimate
 interval(q̂, Z)                         # 95% marginal posterior credible intervals
-bs = bootstrap(θ̂, θ̂(Z), simulate, m)   # parametric bootstrap intervals
-interval(bs)                           # 95% parametric bootstrap intervals
 ```
+
+Note that missing data (e.g., due to cloud cover) can be accommodated using the [missing-data methods](@ref "Missing data") implemented in the package.
 
 ## Irregular spatial data
 
-To cater for spatial data collected over arbitrary spatial locations, one may construct a neural estimator with a graph neural network (GNN) architecture (see [Sainsbury-Dale, Zammit-Mangion, Richards, and Huser, 2025](https://doi.org/10.1080/10618600.2024.2433671)). The overall workflow remains as given in previous examples, with two key additional steps:
+To cater for spatial data collected over arbitrary spatial locations, one may construct a neural estimator with a graph neural network (GNN; see [Sainsbury-Dale, Zammit-Mangion, Richards, and Huser, 2025](https://doi.org/10.1080/10618600.2024.2433671)). The overall workflow remains as given in previous examples, with two key additional steps:
 
-- Sampling spatial configurations during the training phase, possibly using an appropriately chosen spatial point process: see, for example, [`maternclusterprocess`](@ref).
-- Storing the spatial data as a graph: see [`spatialgraph`](@ref).
+- Sampling spatial configurations during the training phase, possibly using an appropriately chosen spatial point process; see, for example, [`maternclusterprocess()`](@ref).
+- Storing the spatial data as a graph; see [`spatialgraph()`](@ref).
 
-For illustration, we again consider a spatial Gaussian process model with exponential covariance function, and we define a struct for storing expensive intermediate objects needed for data simulation. In this example, these objects include Cholesky factors, and spatial graphs which store the adjacency matrices needed to perform graph convolution: 
-
+For illustration, we again consider a spatial Gaussian process model with exponential covariance function, and we define a type for storing expensive intermediate objects needed for data simulation. In this example, these objects include Cholesky factors, and spatial graphs which store the adjacency matrices needed to perform graph convolution: 
 
 ```
-struct Parameters{T} <: ParameterConfigurations
-	θ::Matrix{T}   # true parameters  
+struct Parameters <: ParameterConfigurations
+	θ::Matrix      # true parameters  
 	L              # Cholesky factors
 	g              # spatial graphs
 	S              # spatial locations 
@@ -272,11 +280,10 @@ Again, we define two constructors, which will be convenient for sampling paramet
 
 ```
 function sample(K::Integer)
-
 	# Sample parameters from the prior 
-	θ = rand(Uniform(0.05, 0.5), 1, K)
+	θ = 0.5 * rand(1, K)
 
-	# Simulate spatial configurations over the unit square
+	# Sample spatial configurations from Matern cluster process on [0, 1]²
 	n = rand(200:300, K)
 	λ = rand(Uniform(10, 50), K)
 	S = [maternclusterprocess(λ = λ[k], μ = n[k]/λ[k]) for k ∈ 1:K]
@@ -286,20 +293,17 @@ function sample(K::Integer)
 end
 
 function Parameters(θ::Matrix, S)
-
-	# Number of parameter vectors
-	K = size(θ, 2)
-
-	# Distance matrices, covariance matrices, and Cholesky factors
-	D = pairwise.(Ref(Euclidean()), S, dims = 1)
-	L = Folds.map(1:K) do k
-		Σ = exp.(-D[k] ./ θ[k])
-		cholesky(Symmetric(Σ)).L
+	# Compute covariance matrices and Cholesky factors 
+	L = Folds.map(axes(θ, 2)) do k
+		D = pairwise(Euclidean(), S[k], dims = 1)
+		Σ = Symmetric(exp.(-D ./ θ[k]))
+		cholesky(Σ).L
 	end
 
 	# Construct spatial graphs
 	g = spatialgraph.(S)
 
+	# Store in Parameters object
 	Parameters(θ, L, g, S)
 end
 ```
@@ -321,7 +325,9 @@ end
 simulate(parameters::Parameters, m::Integer = 1) = simulate(parameters, range(m, m))
 ```
 
-Next, we construct our GNN architectur. Here, we use an architecture tailored to isotropic spatial dependence models; for further details, see Section 2.2 of [Sainsbury-Dale et al. (2025)](https://doi.org/10.1080/10618600.2024.2433671). In this example our goal is to construct a point estimator, however any other kind of estimator (see [Estimators](@ref)) can be constructed by simply substituting the appropriate estimator class in the final line below:
+Next, we construct our GNN architecture. Here, we use an architecture tailored to isotropic spatial dependence models; for further details, see [Sainsbury-Dale et al. (2025, Sec. 2.2)](https://doi.org/10.1080/10618600.2024.2433671). We also employ a sparse approximation of the empirical variogram as an expert summary statistic ([Gerber and Nychka, 2021](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382)).
+
+In this example our goal is to construct a point estimator, however any other kind of estimator (see [Estimators](@ref)) can be constructed by simply substituting the appropriate estimator class in the final line below:
 
 ```
 # Spatial weight functions: continuous surrogates for 0-1 basis functions 
@@ -338,13 +344,13 @@ propagation = GNNChain(
 # Readout module
 readout = GlobalPool(mean)
 
-# Summary network
+# Inner network
 ψ = GNNSummary(propagation, readout)
 
 # Expert summary statistics, the empirical variogram
 S = NeighbourhoodVariogram(h_max, q)
 
-# Inference network
+# Outer network
 ϕ = Chain(
 	Dense(2q => 128, relu), 
 	Dense(128 => 128, relu), 
@@ -355,7 +361,7 @@ S = NeighbourhoodVariogram(h_max, q)
 deepset = DeepSet(ψ, ϕ; S = S)
 
 # Point estimator
-θ̂ = PointEstimator(deepset)
+estimator = PointEstimator(deepset)
 ```
 
 Next, we train the estimator. 
@@ -365,7 +371,7 @@ m = 1
 K = 5000
 θ_train = sample(K)
 θ_val   = sample(K÷5)
-θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m, epochs = 20)
+estimator = train(estimator, θ_train, θ_val, simulate, m = m, epochs = 20)
 ``` 
 
 Note that the computations in GNNs are performed in parallel, making them particularly well-suited for GPUs, which typically contain thousands of cores. If you have access to an NVIDIA GPU, you can utilise it by simply loading the Julia package `CUDA`. 
@@ -375,7 +381,7 @@ Next, we assess our trained estimator:
 ```
 θ_test = sample(1000)
 Z_test = simulate(θ_test, m)
-assessment = assess(θ̂, θ_test, Z_test)
+assessment = assess(estimator, θ_test, Z_test)
 bias(assessment)   
 rmse(assessment)    
 risk(assessment)   
@@ -387,12 +393,12 @@ plot(assessment)
 Finally, once the estimator has been assessed, it may be applied to observed data, with bootstrap-based uncertainty quantification facilitated by [`bootstrap`](@ref) and [`interval`](@ref). Below, we use simulated data as a substitute for observed data:
 
 ```
-parameters = sample(1)             # sample a single parameter vector
-Z = simulate(parameters)           # simulate data                  
-θ = parameters.θ                   # true parameters used to generate data
-S = parameters.S                   # observed locations
-θ̂(Z)                               # point estimates
-θ̃ = Parameters(θ̂(Z), S)            # construct Parameters object from the point estimates
-bs = bootstrap(θ̂, θ̃, simulate, m)  # bootstrap estimates
+parameters = sample(1)             # sample a parameter vector and spatial locations              
+θ = parameters.θ                   # true parameters
+S = parameters.S                   # "observed" locations
+Z = simulate(parameters)           # "observed" data    
+θ̂ = estimate(estimator, Z)         # point estimate
+ps = Parameters(θ̂, S)              # construct Parameters object from point estimate
+bs = bootstrap(estimator, ps, simulate, m)  # parametric bootstrap estimates
 interval(bs)                       # parametric bootstrap confidence interval              
 ```

@@ -3,9 +3,9 @@
 
 ## Data simulators
 
-The philosophy of `NeuralEstimators` is to cater for arbitrary statistical models by having the user define their statistical model implicitly through simulated data. However, the following functions have been included as they may be helpful to others, and their source code illustrates how a user could formulate code for their own model.
+The philosophy of `NeuralEstimators` is to cater for any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. However, the following functions have been included as they may be helpful to others, and their source code illustrates how a user could formulate code for their own model.
 
-See also [Distributions.jl](https://juliastats.org/Distributions.jl/stable/) for a large range of distributions implemented in Julia, and the package [RCall](https://juliainterop.github.io/RCall.jl/stable/) for calling R functions within Julia. 
+See also [Distributions.jl](https://juliastats.org/Distributions.jl/stable/) for a range of distributions implemented in Julia, and the package [RCall](https://juliainterop.github.io/RCall.jl/stable/) for calling R functions within Julia. 
 
 ```@docs
 simulategaussian

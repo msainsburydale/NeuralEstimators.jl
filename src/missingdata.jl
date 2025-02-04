@@ -5,7 +5,7 @@ with ``l``th iteration
 
 ```math
 \boldsymbol{\theta}^{(l)} =
-\argmax_{\boldsymbol{\theta}}
+\underset{\boldsymbol{\theta}}{\mathrm{arg\,max}}
 \sum_{h = 1}^H \ell(\boldsymbol{\theta};  \boldsymbol{Z}_1,  \boldsymbol{Z}_2^{(lh)}) + H\log \pi(\boldsymbol{\theta})
 ```
 
@@ -35,7 +35,7 @@ given in a function call take precedence over those stored in the object.
 
 # Methods
 
-Once constructed, obects of type `EM` can be applied to data via the methods,
+Once constructed, objects of type `EM` can be applied to data via the methods,
 
 	(em::EM)(Z::A, θ₀::Union{Nothing, Vector} = nothing; ...) where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 	(em::EM)(Z::V, θ₀::Union{Nothing, Vector, Matrix} = nothing; ...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
@@ -68,7 +68,7 @@ end
 EM(simulateconditional, MAP) = EM(simulateconditional, MAP, nothing)
 EM(em::EM, θ₀) = EM(em.simulateconditional, em.MAP, θ₀)
 EM(simulateconditional, MAP, θ₀::Number) = EM(simulateconditional, MAP, [θ₀])
-#TODO think it's better if this is kept simple, and designed only for neural EM...
+#TODO think it's better if this is kept simple, and designed only for *neural* EM...
 
 function (em::EM)(Z::A, θ₀ = nothing; kwargs...)  where {A <: AbstractArray{T, N}} where {T, N}
 	@warn "Data has been passed to the EM algorithm that contains no missing elements... the MAP estimator will be applied directly to the data"
@@ -174,14 +174,12 @@ end
 	removedata(Z::Array, Iᵤ::Vector{Integer})
 	removedata(Z::Array, p::Union{Float, Vector{Float}}; prevent_complete_missing = true)
 	removedata(Z::Array, n::Integer; fixed_pattern = false, contiguous_pattern = false, variable_proportion = false)
-
 Replaces elements of `Z` with `missing`.
 
 The simplest method accepts a vector of integers `Iᵤ` that give the specific indices
 of the data to be removed.
 
-Alternatively, there are two methods available to generate data that are
-missing completely at random (MCAR).
+Alternatively, there are two methods available to randomly generate missing data.
 
 First, a vector `p` may be given that specifies the proportion of missingness
 for each element in the response vector. Hence, `p` should have length equal to
@@ -193,7 +191,7 @@ effective values of `p`).
 Second, if an integer `n` is provided, all replicates will contain
 `n` observations after the data are removed. If `fixed_pattern = true`, the
 missingness pattern is fixed for all replicates. If `contiguous_pattern = true`,
-the data will be removed in a contiguous block. If `variable_proportion = true`,
+the data will be removed in a contiguous block based on a randomly selected starting index. If `variable_proportion = true`,
 the proportion of missingness will vary across replicates, with each replicate containing
 between 1 and `n` observations after data removal, sampled uniformly (note that
 `variable_proportion` overrides `fixed_pattern`).

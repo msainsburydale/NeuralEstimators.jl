@@ -28,7 +28,7 @@ that is, a ``(d+1) × (d+1)`` triangular matrix with zero diagonal.
 Note that the triangular matrix is constructed on the CPU, but the returned
 matrix will be a GPU array if `v` is a GPU array. Note also that the
 return type is not of type `Triangular` matrix (i.e., the zeros are
-materialised) since `Traingular` matrices are not always compatible with other
+materialised) since `Triangular` matrices are not always compatible with other
 GPU operations.
 
 # Examples
@@ -294,66 +294,8 @@ function _checkgpu(use_gpu; verbose::Bool = true)
 end
 
 """
-	estimateinbatches(θ̂, z, t = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
-
-Apply the estimator `θ̂` on minibatches of `z` (and optionally other set-level information `t`) of size `batchsize`.
-
-This can prevent memory issues that can occur with large data sets, particularly
-on the GPU.
-
-Minibatching will only be done if there are multiple data sets in `z`; this
-will be inferred by `z` being a vector, or a tuple whose first element is a
-vector.
-"""
-function estimateinbatches(θ̂, z, θ = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
-
-	# Attempt to convert to Float32 for numerical efficiency
-	θ = θtoFloat32(θ)
-	z = ZtoFloat32(z)
-
-	# Tupleise if necessary
-  	z = isnothing(θ) ? z : (z, θ)
-
-	# Only do minibatching if we have multiple data sets
-	if typeof(z) <: AbstractVector
-		minibatching = true
-		batchsize = min(length(z), batchsize)
-	elseif typeof(z) <: Tuple && typeof(z[1]) <: AbstractVector
-		# Can only do minibatching if the number of data sets in z[1] aligns
-		# with the number of sets in z[2]:
-		K₁ = length(z[1])
-		K₂ = typeof(z[2]) <: AbstractVector ? length(z[2]) : size(z[2], 2)
-		minibatching = K₁ == K₂
-		batchsize = min(K₁, batchsize)
-	else # we dont have replicates: just apply the estimator without minibatching
-		minibatching = false
-	end
-
-	device  = _checkgpu(use_gpu, verbose = false)
-	θ̂ = θ̂ |> device
-
-	if !minibatching
-		z = z |> device
-		ŷ = θ̂(z; kwargs...)
-		ŷ = ŷ |> cpu
-	else
-		data_loader = _DataLoader(z, batchsize, shuffle=false, partial=true)
-		ŷ = map(data_loader) do zᵢ
-			zᵢ = zᵢ |> device
-			ŷ = θ̂(zᵢ; kwargs...)
-			ŷ = ŷ |> cpu
-			ŷ
-		end
-		ŷ = stackarrays(ŷ)
-	end
-
-	return ŷ
-end
-# Backwards compatability:
-_runondevice(θ̂, z, use_gpu::Bool; batchsize::Integer = 32) = estimateinbatches(θ̂, z; batchsize = batchsize, use_gpu = use_gpu)
-
-"""
     expandgrid(xs, ys)
+Generates a grid of all possible combinations of the elements from two input vectors, `xs` and `ys`. 
 
 Same as `expand.grid()` in `R`, but currently caters for two dimensions only.
 """
@@ -402,8 +344,7 @@ end
 
 """
 	stackarrays(v::V; merge = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-
-Stack a vector of arrays `v` along the last dimension of each array, optionally merging the final dimension of the stacked array.
+Stacks a vector of arrays `v` along the last dimension of each array, optionally merging the final dimension of the stacked array.
 
 The arrays must be of the same size for the first `N-1` dimensions. However, if
 `merge = true`, the size of the final dimension can vary.

@@ -3,11 +3,11 @@ using Documenter, NeuralEstimators
 
 makedocs(
     sitename="NeuralEstimators.jl",
-    # format = Documenter.LaTeX(),
-    # format = Documenter.LaTeX(platform = "none"), # extracting the .tex file can be useful for bug fixing
+    #format = Documenter.LaTeX(),
+    #format = Documenter.LaTeX(platform = "none"), # extracting the .tex file can be useful for bug fixing; compile it by navigating to docs/build and then running latexmk --shell-escape NeuralEstimators.jl.tex 
     pages = [
            "index.md",
-           "framework.md",
+           "methodology.md",
            "Workflow" => [
                 "workflow/overview.md",
                 "workflow/examples.md",
@@ -16,6 +16,7 @@ makedocs(
            "API" => [
                 "API/core.md",
                 "API/architectures.md",
+                "API/approximatedistributions.md",
                 "API/loss.md",
                 "API/simulation.md",
                 "API/utility.md",

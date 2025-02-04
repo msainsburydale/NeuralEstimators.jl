@@ -33,17 +33,11 @@ containertype
 
 encodedata
 
-estimateinbatches
-
 expandgrid
 
 IndicatorWeights
 
 KernelWeights
-
-initialise_estimator
-
-loadbestweights
 
 maternchols
 

@@ -18,8 +18,7 @@ are collected over differing sets of spatial locations,
 ```math
 \{\boldsymbol{s}_{ij}, \dots, \boldsymbol{s}_{in_i}\} \subset \mathcal{D}, \quad i = 1, \dots, m,
 ```
-`Z` should be given as an $m$-vector of $n_i$-vectors,
-and `S` should be given as an $m$-vector of $n_i \times d$ matrices.
+`Z` should be given as an $m$-vector of $n_i$-vectors, and `S` should be given as an $m$-vector of $n_i \times d$ matrices.
 
 The spatial information between neighbours is stored as an edge feature, with the specific 
 information controlled by the keyword arguments `stationary` and `isotropic`. 
@@ -68,7 +67,7 @@ function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, st
 		error("Nonstationarity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
 	end
 	ndata = DataStore()
-	S = Float32.(S)
+	S = f32(S)
 	A = adjacencymatrix(S; k = k, r = r, random = random) 
 	S = permutedims(S) # need final dimension to be n-dimensional
 	if store_S
@@ -91,7 +90,7 @@ function reshapeZ(Z::A) where A <: AbstractArray{T, 3} where {T}
 	# Dimension 2: n, number of spatial locations
 	# Dimension 3: m, number of replicates
 	# Permute dimensions 2 and 3 since GNNGraph requires final dimension to be n-dimensional
-	permutedims(Float32.(Z), (1, 3, 2))
+	permutedims(f32(Z), (1, 3, 2))
 end
 function reshapeZ(Z::V) where V <: AbstractVector{M} where M <: AbstractMatrix{T} where T 
 	# method for multidimensional processes with spatial locations varying between replicates
@@ -107,7 +106,7 @@ end
 
 # NB Not documenting for now, but spatialgraph is set up for multivariate data. Eventually, we will write:
 # "Let $q$ denote the dimension of the spatial process (e.g., $q = 1$ for 
-# univariate spatial processes, $q = 2$ for bivariate processes, etc.)". For fixed locations, we will then write: 
+# univariate spatial processes, $q = 2$ for bivariate processes)". For fixed locations, we will then write: 
 # "`Z` should be given as a $q \times n \times m$ array (alternatively as an $n \times m$ matrix when $q = 1$) and `S` should be given as a $n \times d$ matrix."
 # And for varying locations, we will write: 
 # "`Z` should be given as an $m$-vector of $q \times n_i$ matrices (alternatively as an $m$-vector of $n_i$-vectors when $q = 1$), and `S` should be given as an $m$-vector of $n_i \times d$ matrices."
@@ -192,7 +191,7 @@ function (l::IndicatorWeights)(h::M) where M <: AbstractMatrix{T} where T
 	bins_lower = h_cutoffs[1:end-1] # lower bounds of the distance bins 
 	N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
 	N = reduce(vcat, N)
-	Float32.(N)
+	f32(N)
 end
 Flux.trainable(l::IndicatorWeights) =  NamedTuple()
 
@@ -228,8 +227,8 @@ function KernelWeights(h_max, n_bins::Integer)
 	h_cutoffs = collect(h_cutoffs)
 	mu = [(h_cutoffs[i] + h_cutoffs[i+1]) / 2 for i in 1:n_bins] # midpoints of the intervals 
 	sigma = [(h_cutoffs[i+1] - h_cutoffs[i]) / 4 for i in 1:n_bins] # std dev so that 95% of mass is within the bin 
-	mu = Float32.(mu)
-	sigma = Float32.(sigma)
+	mu = f32(mu)
+	sigma = f32(sigma)
 	KernelWeights(mu, sigma) 
 end 
 function (l::KernelWeights)(h::M) where M <: AbstractMatrix{T} where T 
@@ -237,7 +236,7 @@ function (l::KernelWeights)(h::M) where M <: AbstractMatrix{T} where T
 	sigma = l.sigma 
 	N = [exp.(-(h .- mu[i:i]).^2 ./ (2 * sigma[i:i].^2)) for i in eachindex(mu)] # Gaussian kernel for each bin (NB avoid scalar indexing by i:i)
 	N = reduce(vcat, N) 
-	Float32.(N) 
+	f32(N) 
 end 
 Flux.trainable(l::KernelWeights) = NamedTuple()
 
@@ -275,9 +274,6 @@ function (l::GraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where 
     l.σ.(l.weight1 ⊠ x .+ l.weight2 ⊠ m .+ l.bias) # ⊠ is shorthand for batched_mul
 end
 
-
-# ---- SpatialGraphConv ----
-
 @doc raw"""
     SpatialGraphConv(in => out, g=relu; args...)
 
@@ -310,33 +306,32 @@ One may alternatively employ a nonlearnable function, for example, `f = (hᵢ, h
 specified through the keyword argument `f`.  
 
 The spatial distances between locations must be stored as an edge feature, as facilitated by [`spatialgraph()`](@ref). 
-The input to $\boldsymbol{w}(\cdot)$ is a $1 \times n$ matrix (i.e., a row vector) of spatial distances. 
-The output of $\boldsymbol{w}(\cdot)$ must be either a scalar; a vector of the same dimension as the feature vectors of the previous layer; 
+The input to $\boldsymbol{w}^{(l)}(\cdot)$ is a $1 \times n$ matrix (i.e., a row vector) of spatial distances. 
+The output of $\boldsymbol{w}^{(l)}(\cdot)$ must be either a scalar; a vector of the same dimension as the feature vectors of the previous layer; 
 or, if the features vectors of the previous layer are scalars, a vector of arbitrary dimension. 
 To promote identifiability, the weights are normalised to sum to one (row-wise) within each neighbourhood set. 
-By default, $\boldsymbol{w}(\cdot)$ is taken to be a multilayer perceptron with a single hidden layer, 
+By default, $\boldsymbol{w}^{(l)}(\cdot)$ is taken to be a multilayer perceptron with a single hidden layer, 
 although a custom choice for this function can be provided using the keyword argument `w`. 
 
 # Arguments
-- `in`: The dimension of input features.
-- `out`: The dimension of output features.
-- `g = relu`: Activation function.
-- `bias = true`: Add learnable bias?
-- `init = glorot_uniform`: Initialiser for $\boldsymbol{\Gamma}_{\!1}^{(l)}$, $\boldsymbol{\Gamma}_{\!2}^{(l)}$, and $\boldsymbol{\gamma}^{(l)}$. 
+- `in`: dimension of input features.
+- `out`: dimension of output features.
+- `g = relu`: activation function.
+- `bias = true`: add learnable bias?
+- `init = glorot_uniform`: initialiser for $\boldsymbol{\Gamma}_{\!1}^{(l)}$, $\boldsymbol{\Gamma}_{\!2}^{(l)}$, and $\boldsymbol{\gamma}^{(l)}$. 
 - `f = nothing`
 - `w = nothing` 
-- `w_width = 128`: (Only applicable if `w = nothing`) The width of the hidden layer in the MLP used to model $\boldsymbol{w}(\cdot, \cdot)$. 
-- `w_out = in`: (Only applicable if `w = nothing`) The output dimension of $\boldsymbol{w}(\cdot, \cdot)$.  
+- `w_width = 128` (applicable only if `w = nothing`): the width of the hidden layer in the MLP used to model $\boldsymbol{w}^{(l)}(\cdot, \cdot)$. 
+- `w_out = in` (applicable only if `w = nothing`): the output dimension of $\boldsymbol{w}^{(l)}(\cdot, \cdot)$.  
 
 # Examples
 ```
 using NeuralEstimators, Flux, GraphNeuralNetworks
 
 # Toy spatial data
-m = 5                  # number of independent replicates
-d = 2                  # spatial dimension
 n = 250                # number of spatial locations
-S = rand(n, d)         # spatial locations
+m = 5                  # number of independent replicates
+S = rand(n, 2)         # spatial locations
 Z = rand(n, m)         # data
 g = spatialgraph(S, Z) # construct the graph
 
@@ -484,17 +479,17 @@ function normalise_edge_neighbors(g::AbstractGNNGraph, e)
     return e ./ (den .+ eps(eltype(e)))
 end
 
+#TODO GNNSummary given a different name (maybe just GNN)? 
+#TODO Does it make sense to show GraphConv here? Maybe better to show SpatialGraphConv? 
 @doc raw"""
 	GNNSummary(propagation, readout)
-
-A graph neural network (GNN) module designed to serve as the summary network `ψ`
+A graph neural network (GNN) module designed to serve as the inner network `ψ`
 in the [`DeepSet`](@ref) representation when the data are graphical (e.g.,
 irregularly observed spatial data).
 
-The `propagation` module transforms graphical input data into a set of
+The `propagation` module transforms graph data into a set of
 hidden-feature graphs. The `readout` module aggregates these feature graphs into
-a single hidden feature vector of fixed length (i.e., a vector of summary
-statistics). The summary network is then defined as the composition of the
+a single hidden feature vector of fixed length. The network `ψ` is then defined as the composition of the
 propagation and readout modules.
 
 The data should be stored as a `GNNGraph` or `Vector{GNNGraph}`, where
@@ -508,34 +503,31 @@ using Flux: batch
 using Statistics: mean
 
 # Propagation module
-d = 1      # dimension of response variable
+r  = 1     # dimension of response variable
 nₕ = 32    # dimension of node feature vectors
-propagation = GNNChain(GraphConv(d => nₕ), GraphConv(nₕ => nₕ))
+propagation = GNNChain(GraphConv(r => nₕ), GraphConv(nₕ => nₕ))
 
 # Readout module
 readout = GlobalPool(mean)
-nᵣ = nₕ   # dimension of readout vector
 
-# Summary network
+# Inner network
 ψ = GNNSummary(propagation, readout)
 
-# Inference network
-p = 3     # number of parameters in the statistical model
+# Outer network
+d = 3     # output dimension 
 w = 64    # width of hidden layer
-ϕ = Chain(Dense(nᵣ, w, relu), Dense(w, p))
+ϕ = Chain(Dense(nₕ, w, relu), Dense(w, d))
 
-# Construct the estimator
-θ̂ = DeepSet(ψ, ϕ)
+# DeepSet object 
+ds = DeepSet(ψ, ϕ)
 
-# Apply the estimator to a single graph, a single graph with subgraphs
-# (corresponding to independent replicates), and a vector of graphs
-# (corresponding to multiple data sets each with independent replicates)
-g₁ = rand_graph(11, 30, ndata=rand(d, 11))
-g₂ = rand_graph(13, 40, ndata=rand(d, 13))
-g₃ = batch([g₁, g₂])
-θ̂(g₁)
-θ̂(g₃)
-θ̂([g₁, g₂, g₃])
+# Apply to data 
+g₁ = rand_graph(11, 30, ndata = rand32(r, 11)) 
+g₂ = rand_graph(13, 40, ndata = rand32(r, 13))
+g₃ = batch([g₁, g₂])  
+ds(g₁)                # single graph 
+ds(g₃)                # graph with subgraphs corresponding to independent replicates
+ds([g₁, g₂, g₃])      # vector of graphs, corresponding to multiple data sets 
 ```
 """
 struct GNNSummary{F, G}
@@ -768,7 +760,7 @@ function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Boo
 end
 
 ## helper functions
-deletecol!(A,cind) = SparseArrays.fkeep!(A,(i,j,v) -> j != cind)
+deletecol!(A,cind) = SparseArrays.fkeep!((i,j,v) -> j != cind, A)
 findnearest(A::AbstractArray, x) = argmin(abs.(A .- x))
 findnearest(V::SparseVector, q) = V.nzind[findnearest(V.nzval, q)] # efficient version for SparseVector that doesn't materialise a dense array
 function subsetneighbours(A, k) 
@@ -895,7 +887,7 @@ function findneighbours(d, k::Integer)
     return J, V 
 end
 
-# TODO this function is much, much slower than the R version... need to optimise. Might be slight penalty; try reduce(hcat, .)
+# TODO this function is much, much slower than the R version... need to optimise. Might be splat penalty; try reduce(hcat, .)
 function getknn(S, s, k; args...)
   tree = KDTree(S; args...)
   nn_index, nn_dist = knn(tree, s, k, true)
@@ -1059,12 +1051,11 @@ end
 
 """
 	maternclusterprocess(; λ=10, μ=10, r=0.1, xmin=0, xmax=1, ymin=0, ymax=1, unit_bounding_box=false)
+Generates a realisation from a Matérn cluster process (e.g., [Baddeley et al., 2015](https://www.taylorfrancis.com/books/mono/10.1201/b19708/spatial-point-patterns-adrian-baddeley-rolf-turner-ege-rubak), Ch. 12). 
 
-Simulates a Matérn cluster process with density of parent Poisson point process
-`λ`, mean number of daughter points `μ`, and radius of cluster disk `r`, over the
-simulation window defined by `xmin` and `xmax`, `ymin` and `ymax`.
+The process is defined by a parent homogenous Poisson point process with intensity `λ` > 0, a mean number of daughter points `μ` > 0, and a cluster radius `r` > 0. The simulation is performed over a rectangular window defined by [`xmin, xmax`] × [`ymin`, `ymax`].
 
-If `unit_bounding_box` is `true`, then the simulated points will be scaled so that
+If `unit_bounding_box = true`, the simulated points will be scaled so that
 the longest side of their bounding box is equal to one (this may change the simulation window). 
 
 See also the R package
