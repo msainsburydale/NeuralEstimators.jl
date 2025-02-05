@@ -17,9 +17,7 @@ If `estimator` is an `IntervalEstimator`, the column `estimate` will be replaced
 
 If `estimator` is a `QuantileEstimator`, the `df` will also contain a column `prob` indicating the probability level of the corresponding quantile estimate.
 
-Multiple `Assessment` objects can be combined with `merge()`
-(used for combining assessments from multiple point estimators) or `join()`
-(used for combining assessments from a point estimator and an interval estimator).
+Use `merge()` to combine assessments from multiple estimators of the same type or `join()` to combine assessments from a [`PointEstimator`](@ref) and an [`IntervalEstimator`](@ref).
 """
 struct Assessment
 	df::DataFrame
@@ -202,7 +200,6 @@ function coverage(assessment::Assessment;
 	return df
 end
 
-#TODO bootstrap sampling for bounds on this diagnostic
 function empiricalprob(assessment::Assessment;
 					   average_over_parameters::Bool = false,
 					   average_over_sample_sizes::Bool = true)
@@ -287,7 +284,7 @@ function assess(
 	@assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
 	if !isnothing(xi) ξ = xi end
 
-	if estimator isa IntervalEstimator || estimator isa Ensemble{<:IntervalEstimator}
+	if estimator isa Union{IntervalEstimator, Ensemble{<:IntervalEstimator}}
 		@assert isa(boot, Bool) && !boot "Although one could obtain the bootstrap distribution of an `IntervalEstimator`, it is currently not implemented with `assess()`. Please contact the package maintainer."
 	end
 
@@ -320,7 +317,7 @@ function assess(
 	end
 	@assert length(parameter_names) == p
 
-	if estimator isa IntervalEstimator || estimator isa Ensemble{<:IntervalEstimator}
+	if estimator isa Union{IntervalEstimator, Ensemble{<:IntervalEstimator}}
 		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = p)
 	else
 		estimate_names = parameter_names
@@ -357,7 +354,7 @@ function assess(
 	θ = stack(θ, variable_name = :parameter, value_name = :truth) # transform to long form
 
 	# Merge true parameters and estimates
-	if estimator isa IntervalEstimator || estimator isa Ensemble{<:IntervalEstimator}
+	if estimator isa Union{IntervalEstimator, Ensemble{<:IntervalEstimator}}
 		df = _merge2(θ, θ̂)
 	else
 		df = _merge(θ, θ̂)
@@ -389,7 +386,7 @@ function assess(
 		df[:, "α"] .= 1 - (probs[2] - probs[1])
 	end
 
-	if estimator isa IntervalEstimator || estimator isa Ensemble{<:IntervalEstimator}
+	if estimator isa Union{IntervalEstimator, Ensemble{<:IntervalEstimator}}
 		probs = estimator isa Ensemble{<:IntervalEstimator} ?  estimator[1].probs : estimator.probs
 		df[:, "α"] .= 1 - (probs[2] - probs[1])
 	end
@@ -428,7 +425,7 @@ function assess(
 	@assert length(parameter_names) == p
 
 	# Get the probability levels 
-	if estimator isa QuantileEstimatorDiscrete || estimator isa Ensemble{<:QuantileEstimatorDiscrete}
+	if estimator isa Union{QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorDiscrete}}
 		probs = estimator isa Ensemble{<:QuantileEstimatorDiscrete} ?  estimator[1].probs : estimator.probs
 	else
 		τ = [permutedims(probs) for _ in eachindex(Z)] # convert from vector to vector of matrices
@@ -438,14 +435,14 @@ function assess(
 	# Construct input set
 	i = estimator.i
 	if isnothing(i)
-		if estimator isa QuantileEstimatorDiscrete || estimator isa Ensemble{<:QuantileEstimatorDiscrete}
+		if estimator isa Union{QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorDiscrete}}
 			set_info = nothing
 		else
 			set_info = τ
 		end
 	else
 		θ₋ᵢ = θ[Not(i), :]
-		if estimator isa QuantileEstimatorDiscrete || estimator isa Ensemble{<:QuantileEstimatorDiscrete}
+		if estimator isa Union{QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorDiscrete}}
 			set_info = eachcol(θ₋ᵢ)
 		else
 			# Combine each θ₋ᵢ with the corresponding vector of
@@ -500,8 +497,6 @@ function assess(
 	E = length(estimators)
 	if isnothing(estimator_names) estimator_names = ["estimator$i" for i ∈ eachindex(estimators)] end
 	@assert length(estimator_names) == E
-
-	# use_ξ and use_gpu are allowed to be vectors
 	if use_xi != false use_ξ = use_xi end  # note that here we check "use_xi != false" since use_xi might be a vector of bools, so it can't be used directly in the if-statement
 	@assert eltype(use_ξ) == Bool
 	@assert eltype(use_gpu) == Bool
@@ -510,7 +505,7 @@ function assess(
 	@assert length(use_ξ) == E
 	@assert length(use_gpu) == E
 
-	# run the estimators
+	# Assess the estimators
 	assessments = map(1:E) do i
 		verbose && println("	Running $(estimator_names[i])...")
 		if use_ξ[i]
@@ -520,11 +515,13 @@ function assess(
 		end
 	end
 
-	# Combine the assessment objects #TODO this isn't very robust, for several reasons (could have more than two estimators, could have Ensembles, etc.)
-	if any(typeof.(estimators) .<: IntervalEstimator)
+	# Combine the assessment objects 
+	if E == 2 && any(isa.(estimators, Union{IntervalEstimator, Ensemble{<:IntervalEstimator}})) && any(isa.(estimators, Union{PointEstimator, Ensemble{<:PointEstimator}}))
 		assessment = join(assessments...)
-	else
+	elseif all(assessment -> names(assessment.df) == names(assessments[1].df), assessments)
 		assessment = merge(assessments...)
+	else 
+		assessment = assessments 
 	end
 
 	return assessment
