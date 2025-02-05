@@ -1474,5 +1474,6 @@ end
 		Z = simulate(θ, m)
 		sampleposterior(estimator, Z) # posterior draws 
 		posteriormean(estimator, Z)   # point estimate
+		posteriorquantile(estimator, Z, [0.1, 0.5])   # quantiles 
 	end 
 end 

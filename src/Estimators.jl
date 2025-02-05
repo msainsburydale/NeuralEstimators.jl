@@ -23,13 +23,11 @@ struct PointEstimator <: BayesEstimator
 end
 (estimator::PointEstimator)(Z) = estimator.network(Z)
 
-#TODO Single shared summary statistic computation for efficiency
-#TODO enforce probs ∈ (0, 1)
+#TODO Single shared summary statistic computation for efficiency (also for QuantileEstimatorContinuous)
 @doc raw"""
 	IntervalEstimator <: BayesEstimator
-	IntervalEstimator(u, v = u; probs = [0.025, 0.975], g::Function = exp)
-	IntervalEstimator(u, c::Union{Function, Compress}; probs = [0.025, 0.975], g::Function = exp)
-	IntervalEstimator(u, v, c::Union{Function, Compress}; probs = [0.025, 0.975], g::Function = exp)
+	IntervalEstimator(u, v = u, c::Union{Function, Compress} = identity; probs = [0.025, 0.975], g = exp)
+	IntervalEstimator(u, c::Union{Function, Compress}; probs = [0.025, 0.975], g = exp)
 	(estimator::IntervalEstimator)(Z)
 A neural estimator that jointly estimates marginal posterior credible intervals based on the probability levels `probs` (by default, 95% central credible intervals).
 
@@ -86,16 +84,21 @@ estimate(estimator, Z)
 interval(estimator, Z)
 ```
 """
-struct IntervalEstimator{H} <: BayesEstimator
-	u::DeepSet
-	v::DeepSet
+struct IntervalEstimator{N, H} <: BayesEstimator
+	u::N 
+	v::N
 	c::Union{Function,Compress}
 	probs::H
 	g::Function
 end
-IntervalEstimator(u::DeepSet, v::DeepSet = u; probs = [0.025, 0.975], g = exp) = IntervalEstimator(deepcopy(u), deepcopy(v), identity, probs, g)
-IntervalEstimator(u::DeepSet, c::Compress; probs = [0.025, 0.975], g = exp) = IntervalEstimator(deepcopy(u), deepcopy(u), c, probs, g)
-IntervalEstimator(u::DeepSet, v::DeepSet, c::Compress; probs = [0.025, 0.975], g = exp) = IntervalEstimator(deepcopy(u), deepcopy(v), c, probs, g)
+function IntervalEstimator(u, v = u, c::Union{Function, Compress} = identity; probs = [0.025, 0.975], g = exp)
+	if !isa(probs, AbstractArray)
+        probs = [probs]
+    end
+    @assert all(0 .< probs .< 1) 
+	IntervalEstimator(deepcopy(u), deepcopy(v), c, probs, g)
+end 
+IntervalEstimator(u, c::Union{Function, Compress}; kwargs...) = IntervalEstimator(deepcopy(u), deepcopy(u), c; kwargs...)
 Flux.trainable(est::IntervalEstimator) = (u = est.u, v = est.v)
 function (est::IntervalEstimator)(Z)
 	bₗ = est.u(Z)                # lower bound
@@ -103,15 +106,12 @@ function (est::IntervalEstimator)(Z)
 	vcat(est.c(bₗ), est.c(bᵤ))
 end
 
-#TODO Single shared summary statistic computation for efficiency
-#TODO improve print output
 #TODO function for neat output as dxT matrix like interval() 
 @doc raw"""
 	QuantileEstimatorDiscrete <: BayesEstimator
-	QuantileEstimatorDiscrete(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus, i = nothing)
+	QuantileEstimatorDiscrete(v; probs = [0.025, 0.5, 0.975], g = Flux.softplus, i = nothing)
 	(estimator::QuantileEstimatorDiscrete)(Z)
 	(estimator::QuantileEstimatorDiscrete)(Z, θ₋ᵢ)
-
 A neural estimator that jointly estimates a fixed set of marginal posterior
 quantiles, with probability levels $\{\tau_1, \dots, \tau_T\}$ controlled by the
 keyword argument `probs`. This generalises [`IntervalEstimator`](@ref) to support an arbitrary number of probability levels. 
@@ -178,8 +178,7 @@ w = 64   # width of each hidden layer
 v = DeepSet(ψ, ϕ)
 
 # Initialise the estimator
-τ = [0.05, 0.25, 0.5, 0.75, 0.95]
-estimator = QuantileEstimatorDiscrete(v; probs = τ)
+estimator = QuantileEstimatorDiscrete(v)
 
 # Train the estimator
 estimator = train(estimator, sample, simulate, m = m)
@@ -198,9 +197,8 @@ w = 64  # width of each hidden layer
 v = DeepSet(ψ, ϕ)
 
 # Initialise estimators respectively targetting quantiles of μ∣Z,σ and σ∣Z,μ
-τ = [0.05, 0.25, 0.5, 0.75, 0.95]
-q₁ = QuantileEstimatorDiscrete(v; probs = τ, i = 1)
-q₂ = QuantileEstimatorDiscrete(v; probs = τ, i = 2)
+q₁ = QuantileEstimatorDiscrete(v; i = 1)
+q₂ = QuantileEstimatorDiscrete(v; i = 2)
 
 # Train the estimators
 q₁ = train(q₁, sample, simulate, m = m)
@@ -220,7 +218,11 @@ struct QuantileEstimatorDiscrete{V, P} <: BayesEstimator
 	g::Union{Function, Nothing}
 	i::Union{Integer, Nothing}
 end
-function QuantileEstimatorDiscrete(v; probs = [0.05, 0.25, 0.5, 0.75, 0.95], g = Flux.softplus, i::Union{Integer, Nothing} = nothing)
+function QuantileEstimatorDiscrete(v; probs = [0.025, 0.5, 0.975], g = Flux.softplus, i::Union{Integer, Nothing} = nothing)
+	if !isa(probs, AbstractArray)
+        probs = [probs]
+    end
+    @assert all(0 .< probs .< 1) 
 	if !isnothing(i) @assert i > 0 end
 	QuantileEstimatorDiscrete(deepcopy.(repeat([v], length(probs))), probs, g, i)
 end
@@ -254,20 +256,12 @@ function (est::QuantileEstimatorDiscrete)(Z, θ₋ᵢ::Vector)
 end
 (est::QuantileEstimatorDiscrete)(Z, θ₋ᵢ::Number) = est(Z, [θ₋ᵢ])
 
-# Assess the estimators
-# using AlgebraOfGraphics, CairoMakie
-# θ = sample(1000)
-# Z = simulate(θ, m)
-# assessment = assess([q₁, q₂], θ, Z, parameter_names = ["μ", "σ"])
-# plot(assessment)
-
 # function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
 # 	μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
 # 	σ̃ = sqrt((1/σ₀^2 + length(Z)/σ²)^-1)
 # 	Normal(μ̃, σ̃)
 # end
 
-#TODO incorporate this into docs somewhere: It's based on the fact that a pair (θᵏ, Zᵏ) sampled as θᵏ ∼ p(θ), Zᵏ ~ p(Z ∣ θᵏ) is also a sample from θᵏ ∼ p(θ ∣ Zᵏ), Zᵏ ~ p(Z).
 #TODO clarify output structure when we have multiple probability levels (what is the ordering in this case?)
 @doc raw"""
 	QuantileEstimatorContinuous <: BayesEstimator
@@ -397,16 +391,16 @@ q̂ᵢ(Z, θ₋ᵢ, τ)
 q̂ᵢ(Z[1], θ₋ᵢ, τ)
 ```
 """
-struct QuantileEstimatorContinuous <: NeuralEstimator
-	deepset::DeepSet #TODO remove ::DeepSet
+struct QuantileEstimatorContinuous{N} <: NeuralEstimator
+	network::N 
 	i::Union{Integer, Nothing}
 end
-function QuantileEstimatorContinuous(deepset::DeepSet; i::Union{Integer, Nothing} = nothing)
+function QuantileEstimatorContinuous(network; i::Union{Integer, Nothing} = nothing)
 	if !isnothing(i) @assert i > 0 end
-	QuantileEstimatorContinuous(deepset, i)
+	QuantileEstimatorContinuous(network, i)
 end
 # core method (used internally)
-(est::QuantileEstimatorContinuous)(tup::Tuple) = est.deepset(tup)
+(est::QuantileEstimatorContinuous)(tup::Tuple) = est.network(tup)
 # user-level convenience functions (not used internally)
 function (est::QuantileEstimatorContinuous)(Z, τ)
 	if !isnothing(est.i)
@@ -593,14 +587,14 @@ mlestimate(r̂, z; θ₀ = θ₀)                      # maximum-likelihood esti
 posteriormode(r̂, z; θ₀ = θ₀)                   # posterior mode 
 ```
 """
-struct RatioEstimator <: NeuralEstimator
-	deepset::DeepSet #TODO remove ::DeepSet
+struct RatioEstimator{N} <: NeuralEstimator
+	network::N 
 end
 function (estimator::RatioEstimator)(Z, θ; kwargs...)
 	estimator((Z, θ); kwargs...) # "Tupleise" the input and pass to Tuple method
 end
 function (estimator::RatioEstimator)(Zθ::Tuple; classifier::Bool = false)
-	c = σ(estimator.deepset(Zθ))
+	c = σ(estimator.network(Zθ))
 	if typeof(c) <: AbstractVector
 		c = reduce(vcat, c)
 	end
@@ -766,8 +760,8 @@ rmse(assessment)
 ensemble(Z)
 ```
 """
-struct Ensemble <: NeuralEstimator
-	estimators
+struct Ensemble{T <: NeuralEstimator} <: NeuralEstimator
+	estimators::Vector{T}
 end
 Ensemble(architecture::Function, J::Integer) = Ensemble([architecture() for j in 1:J])
 
@@ -795,7 +789,7 @@ end
 
 function (ensemble::Ensemble)(Z; aggr = median)
 	# Compute estimate from each estimator, yielding a vector of matrices
-	# NB can be done in parallel, but I think the overhead will outweigh the benefit
+	# NB can be done in parallel, but I think the overhead may outweigh the benefit
 	θ̂ = [estimator(Z) for estimator in ensemble.estimators]
 
 	# Stack matrices along a new third dimension
@@ -808,7 +802,6 @@ function (ensemble::Ensemble)(Z; aggr = median)
 	return θ̂
 end
 
-# Overload Base functions
 Base.getindex(e::Ensemble, i::Integer) = e.estimators[i]
 Base.getindex(e::Ensemble, indices::AbstractVector{<:Integer}) = Ensemble(e.estimators[indices])
 Base.getindex(e::Ensemble, indices::UnitRange{<:Integer}) = Ensemble(e.estimators[indices])

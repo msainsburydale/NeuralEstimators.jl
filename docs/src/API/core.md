@@ -109,6 +109,8 @@ posteriormean
 
 posteriormedian
 
+posteriorquantile
+
 posteriormode
 
 mlestimate

@@ -71,10 +71,24 @@ posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Intege
 	posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...)	
 Computes the vector of marginal posterior medians $_doc_string
 
-See also [`posteriormean()`](@ref), [`posteriormode()`](@ref), and [`mlestimate()`](@ref).
+See also [`posteriormean()`](@ref), [`posteriorquantile()`](@ref), and [`mlestimate()`](@ref).
 """
 posteriormedian(θ::AbstractMatrix) = median(θ; dims = 2)
 posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormedian(sampleposterior(estimator, Z, N; kwargs...))
+
+"""
+	posteriorquantile(θ::AbstractMatrix, probs)	
+	posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, probs, N::Integer = 1000; kwargs...)	
+Computes the vector of marginal posterior quantiles with (a collection of) probability levels `probs`, $_doc_string
+
+The return value is a ``d`` × `length(probs)` matrix. 
+
+See also [`posteriormedian()`](@ref).
+"""
+function posteriorquantile(θ::AbstractMatrix, probs) 
+	mapslices(row -> quantile(row, probs), θ, dims = 2)
+end
+posteriorquantile(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, probs, N::Integer = 1000; kwargs...) = posteriorquantile(sampleposterior(estimator, Z, N; kwargs...), probs)
 
 
 # ---- Posterior sampling ----

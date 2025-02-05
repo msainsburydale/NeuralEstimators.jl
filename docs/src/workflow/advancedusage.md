@@ -257,10 +257,10 @@ Next, we construct and train a masked neural Bayes estimator using a CNN archite
 	Flux.flatten
 	)
 ϕ = Chain(Dense(64, 256, relu), Dense(256, d, exp))
-deepset = DeepSet(ψ, ϕ)
+network = DeepSet(ψ, ϕ)
 
 # Initialise point estimator
-θ̂ = PointEstimator(deepset)
+θ̂ = PointEstimator(network)
 
 # Train the masked neural Bayes estimator
 θ̂ = train(θ̂, Parameters, simulatemissing, m = 1, ξ = ξ, K = 1000, epochs = 10)
@@ -299,10 +299,10 @@ First, we construct a neural approximation of the MAP estimator. In this example
 	Dense(64, 256, relu),
 	Dense(256, d, exp)
 	)
-deepset = DeepSet(ψ, ϕ)
+network = DeepSet(ψ, ϕ)
 
 # Initialise point estimator
-θ̂ = PointEstimator(deepset)
+θ̂ = PointEstimator(network)
 
 # Train neural Bayes estimator
 H = 50
@@ -452,7 +452,7 @@ final_layer = Dense(w, 2, sigmoid)      # ρ, δ  ∈ [0,1]
 ϕ = Chain(Dense(w, w, relu), final_layer)          
 
 # Combine into a DeepSet
-deepset = DeepSet(ψ, ϕ)
+network = DeepSet(ψ, ϕ)
 
 θ̂ = PointEstimator(network)
 

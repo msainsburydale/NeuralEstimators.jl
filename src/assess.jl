@@ -287,7 +287,7 @@ function assess(
 	@assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
 	if !isnothing(xi) ξ = xi end
 
-	if typeof(estimator) <: IntervalEstimator
+	if typeof(estimator) <: IntervalEstimator || typeof(estimator) <: Ensemble{IntervalEstimator}
 		@assert isa(boot, Bool) && !boot "Although one could obtain the bootstrap distribution of an `IntervalEstimator`, it is currently not implemented with `assess()`. Please contact the package maintainer."
 	end
 
@@ -320,7 +320,7 @@ function assess(
 	end
 	@assert length(parameter_names) == p
 
-	if typeof(estimator) <: IntervalEstimator
+	if typeof(estimator) <: IntervalEstimator || typeof(estimator) <: Ensemble{IntervalEstimator}
 		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = p)
 	else
 		estimate_names = parameter_names
@@ -357,7 +357,7 @@ function assess(
 	θ = stack(θ, variable_name = :parameter, value_name = :truth) # transform to long form
 
 	# Merge true parameters and estimates
-	if typeof(estimator) <: IntervalEstimator
+	if typeof(estimator) <: IntervalEstimator || typeof(estimator) <: Ensemble{IntervalEstimator}
 		df = _merge2(θ, θ̂)
 	else
 		df = _merge(θ, θ̂)
@@ -389,7 +389,7 @@ function assess(
 		df[:, "α"] .= 1 - (probs[2] - probs[1])
 	end
 
-	if typeof(estimator) <: IntervalEstimator
+	if typeof(estimator) <: IntervalEstimator || typeof(estimator) <: Ensemble{IntervalEstimator}
 		probs = estimator.probs
 		df[:, "α"] .= 1 - (probs[2] - probs[1])
 	end
@@ -398,7 +398,8 @@ function assess(
 end
 
 function assess(
-	estimator::Union{QuantileEstimatorContinuous, QuantileEstimatorDiscrete}, θ::P, Z;
+	estimator::Union{QuantileEstimatorContinuous, QuantileEstimatorDiscrete, Ensemble{QuantileEstimatorContinuous}, Ensemble{QuantileEstimatorDiscrete}}, 
+	θ::P, Z;
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
 	estimator_name::Union{Nothing, String} = nothing,
 	estimator_names::Union{Nothing, String} = nothing, # for backwards compatibility
@@ -427,8 +428,12 @@ function assess(
 	@assert length(parameter_names) == p
 
 	# If the estimator is a QuantileEstimatorDiscrete, then we use its probability levels
-	if typeof(estimator) <: QuantileEstimatorDiscrete
-		probs = estimator.probs
+	if typeof(estimator) <: QuantileEstimatorDiscrete || typeof(estimator) <: Ensemble{QuantileEstimatorDiscrete}
+		if typeof(estimator) <: Ensemble{QuantileEstimatorDiscrete}
+			probs = estimator[1].probs
+		else 
+			probs = estimator.probs
+		end
 	else
 		τ = [permutedims(probs) for _ in eachindex(Z)] # convert from vector to vector of matrices
 	end
@@ -437,14 +442,14 @@ function assess(
 	# Construct input set
 	i = estimator.i
 	if isnothing(i)
-		if typeof(estimator) <: QuantileEstimatorDiscrete
+		if typeof(estimator) <: QuantileEstimatorDiscrete || typeof(estimator) <: Ensemble{QuantileEstimatorDiscrete}
 			set_info = nothing
 		else
 			set_info = τ
 		end
 	else
 		θ₋ᵢ = θ[Not(i), :]
-		if typeof(estimator) <: QuantileEstimatorDiscrete
+		if typeof(estimator) <: QuantileEstimatorDiscrete || typeof(estimator) <: Ensemble{QuantileEstimatorDiscrete}
 			set_info = eachcol(θ₋ᵢ)
 		else
 			# Combine each θ₋ᵢ with the corresponding vector of

@@ -155,7 +155,7 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: Abstra
 		d((Z, vec(x)))
 	else
 		# Designed for situations where we have a fixed data set and want to
-		# evaluate the deepset object for many different set-level covariates
+		# evaluate the object for many different set-level covariates
 		t = summarystatistics(d, Z) # only needs to be computed once
 		tx = vcat(repeat(t, 1, size(x, 2)), x) # NB ideally we'd avoid copying t so many times here, using @view
 		d.ϕ(tx) # Sanity check: stackarrays([d((Z, vec(x̃))) for x̃ in eachcol(x)])
@@ -182,7 +182,7 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V, M}} where {V <: AbstractV
 		d((Z, eachcol(x)))
 	else
 		# Designed for situations where we have a several data sets and we want
-		# to evaluate the deepset object for many different set-level covariates
+		# to evaluate the object for many different set-level covariates
 		[d((z, x)) for z in Z]
 	end
 end
@@ -196,8 +196,6 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 	reduce(hcat, vec.(permutedims.(result)))
 end
 
-# Fallback method to allow neural estimators to be called directly
-summarystatistics(est, Z) = summarystatistics(est.deepset, Z)
 # Single data set
 function summarystatistics(d::DeepSet, Z::A) where A
 	if !isnothing(d.ψ)

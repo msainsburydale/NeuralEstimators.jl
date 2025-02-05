@@ -5,7 +5,7 @@ using AlgebraOfGraphics
 using CairoMakie
 import CairoMakie: plot
 export plot # method for Assessment objects
-using ColorSchemes
+using ColorSchemes #TODO this isn't listed in the dependencies?
 
 """
     plot(assessment::Assessment; grid::Bool = false) 
@@ -68,6 +68,8 @@ function plot(assessment::Assessment; grid::Bool = false)
 	figure = draw(figure, facet=(; linkxaxes=:none, linkyaxes=linkyaxes)) #, axis=(; aspect=1)) # couldn't fix the aspect ratio without messing up the positioning of the titles
 	return figure
 end
+
+#It's based on the fact that a pair (θᵏ, Zᵏ) sampled as θᵏ ∼ p(θ), Zᵏ ~ p(Z ∣ θᵏ) is also a sample from θᵏ ∼ p(θ ∣ Zᵏ), Zᵏ ~ p(Z).
 
 # using CairoMakie # for save()
 # figure = plot(assessment)

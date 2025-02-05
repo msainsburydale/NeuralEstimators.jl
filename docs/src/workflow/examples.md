@@ -358,10 +358,10 @@ S = NeighbourhoodVariogram(h_max, q)
 )
 
 # DeepSet object
-deepset = DeepSet(ψ, ϕ; S = S)
+network = DeepSet(ψ, ϕ; S = S)
 
 # Point estimator
-estimator = PointEstimator(deepset)
+estimator = PointEstimator(network)
 ```
 
 Next, we train the estimator. 

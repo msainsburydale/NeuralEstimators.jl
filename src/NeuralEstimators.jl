@@ -47,7 +47,7 @@ export PointEstimator, IntervalEstimator, QuantileEstimatorContinuous, QuantileE
 export Ensemble, PiecewiseEstimator 
 include("Estimators.jl")
 
-export sampleposterior, posteriormean, posteriormedian, posteriormode, mlestimate, bootstrap, interval, estimate
+export sampleposterior, posteriormean, posteriormedian, posteriormode, posteriorquantile, mlestimate, bootstrap, interval, estimate
 include("inference.jl")
 
 export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights, KernelWeights, PowerDifference
