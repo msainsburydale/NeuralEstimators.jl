@@ -287,7 +287,7 @@ function assess(
 	@assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
 	if !isnothing(xi) ξ = xi end
 
-	if typeof(estimator) <: IntervalEstimator || typeof(estimator) <: Ensemble{IntervalEstimator}
+	if estimator isa IntervalEstimator || estimator isa Ensemble{<:IntervalEstimator}
 		@assert isa(boot, Bool) && !boot "Although one could obtain the bootstrap distribution of an `IntervalEstimator`, it is currently not implemented with `assess()`. Please contact the package maintainer."
 	end
 
@@ -315,12 +315,12 @@ function assess(
 	# Extract the parameter names from ξ or θ, if provided
 	if !isnothing(ξ) && haskey(ξ, :parameter_names)
 		parameter_names = ξ.parameter_names
-	elseif typeof(θ) <: NamedMatrix
+	elseif θ isa NamedMatrix
 		parameter_names = names(θ, 1)
 	end
 	@assert length(parameter_names) == p
 
-	if typeof(estimator) <: IntervalEstimator || typeof(estimator) <: Ensemble{IntervalEstimator}
+	if estimator isa IntervalEstimator || estimator isa Ensemble{<:IntervalEstimator}
 		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = p)
 	else
 		estimate_names = parameter_names
@@ -357,7 +357,7 @@ function assess(
 	θ = stack(θ, variable_name = :parameter, value_name = :truth) # transform to long form
 
 	# Merge true parameters and estimates
-	if typeof(estimator) <: IntervalEstimator || typeof(estimator) <: Ensemble{IntervalEstimator}
+	if estimator isa IntervalEstimator || estimator isa Ensemble{<:IntervalEstimator}
 		df = _merge2(θ, θ̂)
 	else
 		df = _merge(θ, θ̂)
@@ -367,7 +367,7 @@ function assess(
 		if boot == true
 			verbose && println("	Computing $((probs[2] - probs[1]) * 100)% non-parametric bootstrap intervals...")
 			# bootstrap estimates
-			@assert !(typeof(Z) <: Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer"
+			@assert !(Z isa Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer"
 			bs = bootstrap.(Ref(estimator), Z, use_gpu = use_gpu, B = B)
 		else # if boot is not a Bool, we will assume it is a bootstrap data set. # TODO probably should add some checks on boot in this case (length should be equal to K, for example)
 			verbose && println("	Computing $((probs[2] - probs[1]) * 100)% parametric bootstrap intervals...")
@@ -389,7 +389,7 @@ function assess(
 		df[:, "α"] .= 1 - (probs[2] - probs[1])
 	end
 
-	if typeof(estimator) <: IntervalEstimator || typeof(estimator) <: Ensemble{IntervalEstimator}
+	if estimator isa IntervalEstimator || estimator isa Ensemble{<:IntervalEstimator}
 		probs = estimator.probs
 		df[:, "α"] .= 1 - (probs[2] - probs[1])
 	end
@@ -398,7 +398,7 @@ function assess(
 end
 
 function assess(
-	estimator::Union{QuantileEstimatorContinuous, QuantileEstimatorDiscrete, Ensemble{QuantileEstimatorContinuous}, Ensemble{QuantileEstimatorDiscrete}}, 
+	estimator::Union{QuantileEstimatorContinuous, QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorContinuous}, Ensemble{<:QuantileEstimatorDiscrete}}, 
 	θ::P, Z;
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
 	estimator_name::Union{Nothing, String} = nothing,
@@ -422,14 +422,14 @@ function assess(
 	@assert K == length(m) "The number of data sets in `Z` must equal the number of parameter vectors in `θ`"
 
 	# Extract the parameter names from θ if provided
-	if typeof(θ) <: NamedMatrix
+	if θ isa NamedMatrix
 		parameter_names = names(θ, 1)
 	end
 	@assert length(parameter_names) == p
 
 	# If the estimator is a QuantileEstimatorDiscrete, then we use its probability levels
-	if typeof(estimator) <: QuantileEstimatorDiscrete || typeof(estimator) <: Ensemble{QuantileEstimatorDiscrete}
-		if typeof(estimator) <: Ensemble{QuantileEstimatorDiscrete}
+	if estimator isa QuantileEstimatorDiscrete || estimator isa Ensemble{<:QuantileEstimatorDiscrete}
+		if estimator isa Ensemble{<:QuantileEstimatorDiscrete}
 			probs = estimator[1].probs
 		else 
 			probs = estimator.probs
@@ -442,14 +442,14 @@ function assess(
 	# Construct input set
 	i = estimator.i
 	if isnothing(i)
-		if typeof(estimator) <: QuantileEstimatorDiscrete || typeof(estimator) <: Ensemble{QuantileEstimatorDiscrete}
+		if estimator isa QuantileEstimatorDiscrete || estimator isa Ensemble{<:QuantileEstimatorDiscrete}
 			set_info = nothing
 		else
 			set_info = τ
 		end
 	else
 		θ₋ᵢ = θ[Not(i), :]
-		if typeof(estimator) <: QuantileEstimatorDiscrete || typeof(estimator) <: Ensemble{QuantileEstimatorDiscrete}
+		if estimator isa QuantileEstimatorDiscrete || estimator isa Ensemble{<:QuantileEstimatorDiscrete}
 			set_info = eachcol(θ₋ᵢ)
 		else
 			# Combine each θ₋ᵢ with the corresponding vector of
@@ -509,8 +509,8 @@ function assess(
 	if use_xi != false use_ξ = use_xi end  # note that here we check "use_xi != false" since use_xi might be a vector of bools, so it can't be used directly in the if-statement
 	@assert eltype(use_ξ) == Bool
 	@assert eltype(use_gpu) == Bool
-	if typeof(use_ξ) == Bool use_ξ = repeat([use_ξ], E) end
-	if typeof(use_gpu) == Bool use_gpu = repeat([use_gpu], E) end
+	if use_ξ isa Bool use_ξ = repeat([use_ξ], E) end
+	if use_gpu isa Bool use_gpu = repeat([use_gpu], E) end
 	@assert length(use_ξ) == E
 	@assert length(use_gpu) == E
 
@@ -524,7 +524,7 @@ function assess(
 		end
 	end
 
-	# Combine the assessment objects
+	# Combine the assessment objects #TODO this isn't very robust, for several reasons (could have more than two estimators, could have Ensembles, etc.)
 	if any(typeof.(estimators) .<: IntervalEstimator)
 		assessment = join(assessments...)
 	else
