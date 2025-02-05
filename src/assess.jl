@@ -390,7 +390,7 @@ function assess(
 	end
 
 	if estimator isa IntervalEstimator || estimator isa Ensemble{<:IntervalEstimator}
-		probs = estimator.probs
+		probs = estimator isa Ensemble{<:IntervalEstimator} ?  estimator[1].probs : estimator.probs
 		df[:, "α"] .= 1 - (probs[2] - probs[1])
 	end
 
@@ -427,13 +427,9 @@ function assess(
 	end
 	@assert length(parameter_names) == p
 
-	# If the estimator is a QuantileEstimatorDiscrete, then we use its probability levels
+	# Get the probability levels 
 	if estimator isa QuantileEstimatorDiscrete || estimator isa Ensemble{<:QuantileEstimatorDiscrete}
-		if estimator isa Ensemble{<:QuantileEstimatorDiscrete}
-			probs = estimator[1].probs
-		else 
-			probs = estimator.probs
-		end
+		probs = estimator isa Ensemble{<:QuantileEstimatorDiscrete} ?  estimator[1].probs : estimator.probs
 	else
 		τ = [permutedims(probs) for _ in eachindex(Z)] # convert from vector to vector of matrices
 	end
