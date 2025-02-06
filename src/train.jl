@@ -13,7 +13,9 @@ provided with specific sets of parameters (`θ_train` and `θ_val`) and/or data
 
 In all methods, the validation parameters and data are held fixed to reduce noise when evaluating the validation risk.
 
-The estimator is returned on the CPU so that it can be saved post training. 
+When the data are held fixed and the number of replicates in each element of `Z_train` is a multiple of the number of replicates in each element of `Z_val`, the training data will be recycled across epochs. For instance, if each element of `Z_train` contains 50 replicates and each element of `Z_val` contains 10 replicates, the first epoch will use the first 10 replicates of `Z_train`, the second epoch will use the next 10 replicates, and so on. Note that this recycling mechanism requires the data to be subsettable using [`subsetdata()`](@ref).
+
+The estimator is returned on the CPU so that it can be easily saved post training. 
 
 # Keyword arguments common to all methods:
 - `loss = mae` (applicable only to [`PointEstimator`](@ref)): loss function used to train the neural network. In addition to the standard loss functions provided by `Flux` (e.g., `mae`, `mse`), see [Loss functions](@ref) for further options. 
@@ -82,15 +84,7 @@ estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, epochs = 5)
 """
 function train end
 
-#NB This behaviour is important for the implementation of trainx() but unnecessary for the user to know.
-# If the number of replicates in `Z_train` is a multiple of the
-# number of replicates for each element of `Z_val`, the training data will be
-# recycled throughout training. For example, if each
-# element of `Z_train` consists of 50 replicates, and each
-# element of `Z_val` consists of 10 replicates, the first epoch will use the first
-# 10 replicates in `Z_train`, the second epoch uses the next 10 replicates, and so
-# on, until the sixth epoch again uses the first 10 replicates. Note that this
-# requires the data to be subsettable with the function `subsetdata`.
+# NB to following the naming convention, batchsize and savepath should be batch_size and save_path
 
 function _train(estimator, sampler, simulator;
 	m = nothing,
@@ -102,7 +96,7 @@ function _train(estimator, sampler, simulator;
 	optimiser          = Flux.setup(Adam(), estimator),
     batchsize::Integer = 32,
     epochs::Integer    = 100,
-	savepath::Union{String, Nothing} = nothing, #TODO savepath to save_path 
+	savepath::Union{String, Nothing} = nothing, 
 	stopping_epochs::Integer = 5,
     use_gpu::Bool      = true,
 	verbose::Bool      = true,

@@ -1,6 +1,5 @@
 """
 	Assessment(df::DataFrame, runtime::DataFrame)
-
 A type for storing the output of `assess()`. The field `runtime` contains the
 total time taken for each estimator. The field `df` is a long-form `DataFrame`
 with columns:
@@ -23,7 +22,6 @@ struct Assessment
 	df::DataFrame
 	runtime::DataFrame
 end
-
 
 function merge(assessment::Assessment, assessments::Assessment...)
 	df   = assessment.df
@@ -71,6 +69,361 @@ function join(assessment::Assessment, assessments::Assessment...)
 	Assessment(df, runtime)
 end
 
+
+# NB ξ is undocumented now because it isn't needed when assessing NeuralEstimator objects, which is the use case 99% of the time for assess(). I leave it here for backwards compatibility only. 
+# - `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices). Can also be provided as `xi`. 
+# - `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses `ξ`: if it does, the estimator will be applied as `estimator(Z, ξ)`. This argument is useful when multiple `estimators` are provided, only some of which need `ξ`; hence, if only one estimator is provided and `ξ` is not `nothing`, `use_ξ` is automatically set to `true`. Can also be provided as `use_xi`.
+"""
+	assess(estimator, θ, Z; ...)
+	assess(estimators::Vector, θ, Z; ...)
+Assesses an `estimator` (or a collection of `estimators`) based on true parameters `θ` and corresponding simulated data `Z`.
+
+The parameters `θ` should be given as a ``d`` × ``K`` matrix, where ``d`` is the parameter dimension and ``K`` is the number of sampled parameter vectors. 
+
+The data `Z` should be a `Vector`, with each element representing a single simulated data set. If `length(Z)` is greater than ``K``, `θ` will be recycled via horizontal concatenation: `θ = repeat(θ, outer = (1, J))`, where `J = length(Z) ÷ K` is the number of simulated data sets per parameter vector. This allows assessment of the estimator's sampling distribution under fixed parameters.
+
+The return value is of type [`Assessment`](@ref). 
+
+# Keyword arguments
+- `parameter_names::Vector{String}`: names of the parameters (sensible defaults provided). 
+- `estimator_names::Vector{String}`: names of the estimators (sensible defaults provided).
+- `use_gpu = true`: `Bool` or collection of `Bool` objects with length equal to the number of estimators.
+- `probs` (applicable only to [`PointEstimator`](@ref) and [`QuantileEstimatorContinuous`](@ref)): probability levels taking values between 0 and 1. For a `PointEstimator`, the default is `nothing` (no bootstrap uncertainty quantification); if provided, it must be a two-element vector specifying the lower and upper probability levels for non-parametric bootstrap intervals. For a `QuantileEstimatorContinuous`, `probs` defines the probability levels at which the estimator is evaluated (default: `range(0.01, stop=0.99, length=100)`).
+- `B::Integer = 400` (applicable only to [`PointEstimator`](@ref)): number of bootstrap samples. 
+"""
+function assess(
+	estimator, 
+	θ::P, Z;
+	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
+	estimator_name::Union{Nothing, String} = nothing,
+	estimator_names::Union{Nothing, String} = nothing, 
+	ξ  = nothing,
+    xi = nothing,
+	use_gpu::Bool = true,
+	probs = nothing, 
+	B::Integer = 400
+	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+	# Check duplicated arguments that are needed so that the R interface uses ASCII characters only
+	@assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
+	if !isnothing(xi) ξ = xi end
+
+	# Extract the matrix of parameters
+	θ = _extractθ(θ)
+	p, K = size(θ)
+
+	# Check the size of the test data conforms with θ 
+	m = numberreplicates(Z)
+	if !(typeof(m) <: Vector{Int}) # a vector of vectors has been given, attempt to convert Z to the correct format
+		Z = reduce(vcat, Z) 
+		m = numberreplicates(Z)
+	end
+	KJ = length(m) # NB this can be different to length(Z) when we have set-level information, in which case length(Z) = 2
+	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors in `θ`"
+	J = KJ ÷ K
+	if J > 1
+		θ = repeat(θ, outer = (1, J))
+	end
+	if θ isa NamedMatrix
+		parameter_names = names(θ, 1)
+	end
+	@assert length(parameter_names) == p
+
+	estimate_names = parameter_names
+
+	if !isnothing(ξ)
+		runtime = @elapsed θ̂ = estimator(Z, ξ) # note that the gpu is never used in this case
+	else
+		runtime = @elapsed θ̂ = estimate(estimator, Z, use_gpu = use_gpu)
+	end
+	θ̂ = convert(Matrix, θ̂) # sometimes estimator returns vectors rather than matrices, which can mess things up
+
+	# Convert to DataFrame and add information
+	runtime = DataFrame(runtime = runtime)
+	θ̂ = DataFrame(θ̂', estimate_names)
+	θ̂[!, "m"] = m
+	θ̂[!, "k"] = repeat(1:K, J)
+	θ̂[!, "j"] = repeat(1:J, inner = K)
+
+	# Add estimator name if it was provided
+	if !isnothing(estimator_names) estimator_name = estimator_names end # deprecation coercion
+	if !isnothing(estimator_name)
+		θ̂[!, "estimator"] .= estimator_name
+		runtime[!, "estimator"] .= estimator_name
+	end
+
+	# Dataframe containing the true parameters
+	θ = convert(Matrix, θ)
+	θ = DataFrame(θ', parameter_names)
+	# Replicate θ to match the number of rows in θ̂. Note that the parameter
+	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
+	# in an outer fashion.
+	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
+	θ = stack(θ, variable_name = :parameter, value_name = :truth) # transform to long form
+
+	# Merge true parameters and estimates
+	df = _merge(θ, θ̂)
+
+	if !isnothing(probs) 
+		@assert length(probs) == 2
+		@assert !(Z isa Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer"
+		bs = bootstrap.(Ref(estimator), Z, use_gpu = use_gpu, B = B)
+		# compute bootstrap intervals and convert to same format returned by IntervalEstimator
+		intervals = stackarrays(vec.(interval.(bs, probs = probs)), merge = false)
+		# convert to dataframe and merge
+		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = p)
+		intervals = DataFrame(intervals', estimate_names)
+		intervals[!, "m"] = m
+		intervals[!, "k"] = repeat(1:K, J)
+		intervals[!, "j"] = repeat(1:J, inner = K)
+		intervals = _merge2(θ, intervals)
+		df[:, "lower"] = intervals[:, "lower"]
+		df[:, "upper"] = intervals[:, "upper"]
+		df[:, "α"] .= 1 - (probs[2] - probs[1])
+	end
+
+	return Assessment(df, runtime)
+end
+
+
+function assess(
+	estimator::Union{IntervalEstimator, Ensemble{<:IntervalEstimator}}, 
+	θ::P, Z;
+	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
+	estimator_name::Union{Nothing, String} = nothing,
+	estimator_names::Union{Nothing, String} = nothing, 
+	use_gpu::Bool = true
+	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+	# Extract the matrix of parameters
+	θ = _extractθ(θ)
+	p, K = size(θ)
+
+	# Check the size of the test data conforms with θ 
+	m = numberreplicates(Z)
+	if !(typeof(m) <: Vector{Int}) # a vector of vectors has been given, attempt to convert Z to the correct format
+		Z = reduce(vcat, Z) 
+		m = numberreplicates(Z)
+	end
+	KJ = length(m) # NB this can be different to length(Z) when we have set-level information, in which case length(Z) = 2
+	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors in `θ`"
+	J = KJ ÷ K
+	if J > 1
+		θ = repeat(θ, outer = (1, J))
+	end
+	if θ isa NamedMatrix
+		parameter_names = names(θ, 1)
+	end
+	@assert length(parameter_names) == p
+
+	estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = p)
+
+	runtime = @elapsed θ̂ = estimate(estimator, Z, use_gpu = use_gpu)
+
+	# Convert to DataFrame and add information
+	runtime = DataFrame(runtime = runtime)
+	θ̂ = DataFrame(θ̂', estimate_names)
+	θ̂[!, "m"] = m
+	θ̂[!, "k"] = repeat(1:K, J)
+	θ̂[!, "j"] = repeat(1:J, inner = K)
+
+	# Add estimator name if it was provided
+	if !isnothing(estimator_names) estimator_name = estimator_names end # deprecation coercion
+	if !isnothing(estimator_name)
+		θ̂[!, "estimator"] .= estimator_name
+		runtime[!, "estimator"] .= estimator_name
+	end
+
+	# Dataframe containing the true parameters
+	θ = convert(Matrix, θ)
+	θ = DataFrame(θ', parameter_names)
+	# Replicate θ to match the number of rows in θ̂. Note that the parameter
+	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
+	# in an outer fashion.
+	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
+	θ = stack(θ, variable_name = :parameter, value_name = :truth) # transform to long form
+
+	# Merge true parameters and estimates
+	df = _merge2(θ, θ̂)
+	probs = estimator isa Ensemble{<:IntervalEstimator} ?  estimator[1].probs : estimator.probs
+	df[:, "α"] .= 1 - (probs[2] - probs[1])
+
+	return Assessment(df, runtime)
+end
+
+
+function assess(
+	estimator::Union{QuantileEstimatorContinuous, QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorContinuous}, Ensemble{<:QuantileEstimatorDiscrete}}, 
+	θ::P, Z;
+	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
+	estimator_name::Union{Nothing, String} = nothing,
+	estimator_names::Union{Nothing, String} = nothing, # for backwards compatibility
+	use_gpu::Bool = true,
+	probs = f32(range(0.01, stop=0.99, length=100))
+	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+	# Extract the matrix of parameters
+	θ = _extractθ(θ)
+	p, K = size(θ)
+
+	# Check the size of the test data conforms with θ
+	m = numberreplicates(Z)
+	if !(typeof(m) <: Vector{Int}) # indicates that a vector of vectors has been given
+		Z = reduce(vcat, Z) 
+		m = numberreplicates(Z)
+	end
+	@assert K == length(m) "The number of data sets in `Z` must equal the number of parameter vectors in `θ`"
+
+	# Extract the parameter names from θ if provided
+	if θ isa NamedMatrix
+		parameter_names = names(θ, 1)
+	end
+	@assert length(parameter_names) == p
+
+	# Get the probability levels 
+	if estimator isa Union{QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorDiscrete}}
+		probs = estimator isa Ensemble{<:QuantileEstimatorDiscrete} ?  estimator[1].probs : estimator.probs
+	else
+		τ = [permutedims(probs) for _ in eachindex(Z)] # convert from vector to vector of matrices
+	end
+	n_probs = length(probs)
+
+	# Construct input set
+	i = estimator.i
+	if isnothing(i)
+		if estimator isa Union{QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorDiscrete}}
+			set_info = nothing 
+		else
+			set_info = τ
+		end
+	else
+		θ₋ᵢ = θ[Not(i), :]
+		if estimator isa Union{QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorDiscrete}}
+			set_info = eachcol(θ₋ᵢ)
+		else
+			# Combine each θ₋ᵢ with the corresponding vector of probability levels, which requires repeating θ₋ᵢ appropriately
+			set_info = map(1:K) do k
+				θ₋ᵢₖ = repeat(θ₋ᵢ[:, k:k], inner = (1, n_probs))
+				vcat(θ₋ᵢₖ, probs')
+			end
+		end
+		θ = θ[i:i, :]
+		parameter_names = parameter_names[i:i]
+	end
+
+	# Estimates 
+	runtime = @elapsed θ̂ = estimate(estimator, Z, set_info, use_gpu = use_gpu)
+
+	# Convert to DataFrame and add information
+	p = size(θ, 1)
+	runtime = DataFrame(runtime = runtime)
+	df = DataFrame(
+		parameter = repeat(repeat(parameter_names, inner = n_probs), K),
+		truth = repeat(vec(θ), inner = n_probs),
+		prob = repeat(repeat(probs, outer = p), K),
+		estimate = vec(θ̂),
+		m = repeat(m, inner = n_probs*p),
+		k = repeat(1:K, inner = n_probs*p),
+		j = 1 # just for consistency with other methods
+		)
+
+	# Add estimator name if it was provided
+	if !isnothing(estimator_names) estimator_name = estimator_names end # deprecation coercion
+	if !isnothing(estimator_name)
+		df[!, "estimator"] .= estimator_name
+		runtime[!, "estimator"] .= estimator_name
+	end
+
+	return Assessment(df, runtime)
+end
+
+function assess(
+	estimators::Union{AbstractVector, Tuple}, θ::P, Z; 
+	estimator_names::Union{Nothing, Vector{String}} = nothing,
+	use_xi = false,
+	use_ξ = false,
+	ξ  = nothing,
+	xi = nothing,
+	use_gpu = true,
+	verbose::Bool = true,
+	kwargs...
+	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+	E = length(estimators)
+	if isnothing(estimator_names) estimator_names = ["estimator$i" for i ∈ eachindex(estimators)] end
+	@assert length(estimator_names) == E
+	if use_xi != false use_ξ = use_xi end  # NB here we check "use_xi != false" since use_xi might be a vector of bools, so it can't be used directly in the if-statement
+	@assert eltype(use_ξ) == Bool
+	@assert eltype(use_gpu) == Bool
+	if use_ξ isa Bool use_ξ = repeat([use_ξ], E) end
+	if use_gpu isa Bool use_gpu = repeat([use_gpu], E) end
+	@assert length(use_ξ) == E
+	@assert length(use_gpu) == E
+
+	# Assess the estimators
+	assessments = map(1:E) do i
+		verbose && println("	Running $(estimator_names[i])...")
+		if use_ξ[i]
+			assess(estimators[i], θ, Z, ξ = ξ; use_gpu = use_gpu[i], estimator_name = estimator_names[i], kwargs...)
+		else
+			assess(estimators[i], θ, Z; use_gpu = use_gpu[i], estimator_name = estimator_names[i], kwargs...)
+		end
+	end
+
+	# Combine the assessment objects 
+	if E == 2 && any(isa.(estimators, Union{IntervalEstimator, Ensemble{<:IntervalEstimator}})) && any(isa.(estimators, Union{PointEstimator, Ensemble{<:PointEstimator}}))
+		assessment = join(assessments...)
+	elseif all(assessment -> names(assessment.df) == names(assessments[1].df), assessments)
+		assessment = merge(assessments...)
+	else 
+		assessment = assessments 
+	end
+
+	return assessment
+end
+
+function _merge(θ, θ̂)
+
+	non_measure_vars = [:m, :k, :j]
+	if "estimator" ∈ names(θ̂) push!(non_measure_vars, :estimator) end
+
+	# Transform θ̂ to long form
+	θ̂ = stack(θ̂, Not(non_measure_vars), variable_name = :parameter, value_name = :estimate)
+
+	# Merge θ and θ̂ by adding true parameters to θ̂
+	θ̂[!, :truth] = θ[:, :truth]
+
+	return θ̂
+end
+
+function _merge2(θ, θ̂)
+
+	non_measure_vars = [:m, :k, :j]
+	if "estimator" ∈ names(θ̂) push!(non_measure_vars, :estimator) end
+
+	# Convert θ̂ into appropriate form
+	# Lower bounds:
+	df = copy(θ̂)
+	select!(df, Not(contains.(names(df), "upper")))
+	df = stack(df, Not(non_measure_vars), variable_name = :parameter, value_name = :lower)
+	df.parameter = replace.(df.parameter, r"_lower$"=>"")
+	df1 = df
+	# Upper bounds:
+	df = copy(θ̂)
+	select!(df, Not(contains.(names(df), "lower")))
+	df = stack(df, Not(non_measure_vars), variable_name = :parameter, value_name = :upper)
+	df.parameter = replace.(df.parameter, r"_upper$"=>"")
+	df2 = df
+	# Join lower and upper bounds:
+	θ̂ = innerjoin(df1, df2, on = [non_measure_vars..., :parameter])
+
+	# Merge θ and θ̂ by adding true parameters to θ̂
+	θ̂[!, :truth] = θ[:, :truth]
+
+	return θ̂
+end
+
+
 @doc raw"""
 	risk(assessment::Assessment; ...)
 
@@ -97,7 +450,7 @@ function risk(df::DataFrame;
 			  average_over_parameters::Bool = false,
 			  average_over_sample_sizes::Bool = true)
 
-	#TODO the default loss should change if we have an IntervalEstimator/QuantileEstimator
+	#TODO the default loss should change based on the type of estimator
 
 	grouping_variables = "estimator" ∈ names(df) ? [:estimator] : []
 	if !average_over_parameters push!(grouping_variables, :parameter) end
@@ -244,326 +597,3 @@ function intervalscore(assessment::Assessment;
 	return df
 end
 
-"""
-	assess(estimator, θ, Z)
-
-Using an `estimator` (or a collection of estimators), computes estimates from data `Z`
-simulated based on true parameter vectors stored in `θ`.
-
-The data `Z` should be a `Vector`, with each element corresponding to a single
-simulated data set. If `Z` contains more data sets than parameter vectors, the
-parameter matrix `θ` will be recycled by horizontal concatenation via the call
-`θ = repeat(θ, outer = (1, J))` where `J = length(Z) ÷ K` is the number of
-simulated data sets and `K = size(θ, 2)` is the number of parameter vectors.
-
-The return value is of type [`Assessment`](@ref). 
-
-# Keyword arguments
-- `estimator_names::Vector{String}`: names of the estimators (sensible defaults provided).
-- `parameter_names::Vector{String}`: names of the parameters (sensible defaults provided). If `ξ` is provided with a field `parameter_names`, those names will be used.
-- `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices). Can also be provided as `xi`.
-- `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses `ξ`: if it does, the estimator will be applied as `estimator(Z, ξ)`. This argument is useful when multiple `estimators` are provided, only some of which need `ξ`; hence, if only one estimator is provided and `ξ` is not `nothing`, `use_ξ` is automatically set to `true`. Can also be provided as `use_xi`.
-- `use_gpu = true`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators.
-- `probs = range(0.01, stop=0.99, length=100)`: (relevant only for `estimator::QuantileEstimatorContinuous`) a collection of probability levels in (0, 1).
-"""
-function assess(
-	estimator, θ::P, Z;
-	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
-	estimator_name::Union{Nothing, String} = nothing,
-	estimator_names::Union{Nothing, String} = nothing, # for backwards compatibility
-	ξ  = nothing,
-    xi = nothing,
-	use_gpu::Bool = true,
-	verbose::Bool = false, # for backwards compatibility
-	boot = false,           # TODO document and test
-	probs = [0.025, 0.975], # TODO document and test
-	B::Integer = 400        # TODO document and test
-	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-
-	# Check duplicated arguments that are needed so that the R interface uses ASCII characters only
-	@assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
-	if !isnothing(xi) ξ = xi end
-
-	if estimator isa Union{IntervalEstimator, Ensemble{<:IntervalEstimator}}
-		@assert isa(boot, Bool) && !boot "Although one could obtain the bootstrap distribution of an `IntervalEstimator`, it is currently not implemented with `assess()`. Please contact the package maintainer."
-	end
-
-	# Extract the matrix of parameters
-	θ = _extractθ(θ)
-	p, K = size(θ)
-
-	# Check the size of the test data conforms with θ
-	m = numberreplicates(Z)
-	if !(typeof(m) <: Vector{Int}) # indicates that a vector of vectors has been given
-		# The data `Z` should be a a vector, with each element of the vector
-		# corresponding to a single simulated data set... attempted to convert `Z` to the correct format
-		Z = vcat(Z...) # convert to a single vector
-		m = numberreplicates(Z)
-	end
-	KJ = length(m) # note that this can be different to length(Z) when we have set-level information (in which case length(Z) = 2)
-	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors in `θ`"
-	J = KJ ÷ K
-	if J > 1
-		# There are more simulated data sets than unique parameter vectors: the
-		# parameter matrix will be recycled by horizontal concatenation.
-		θ = repeat(θ, outer = (1, J))
-	end
-
-	# Extract the parameter names from ξ or θ, if provided
-	if !isnothing(ξ) && haskey(ξ, :parameter_names)
-		parameter_names = ξ.parameter_names
-	elseif θ isa NamedMatrix
-		parameter_names = names(θ, 1)
-	end
-	@assert length(parameter_names) == p
-
-	if estimator isa Union{IntervalEstimator, Ensemble{<:IntervalEstimator}}
-		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = p)
-	else
-		estimate_names = parameter_names
-	end
-
-	if !isnothing(ξ)
-		runtime = @elapsed θ̂ = estimator(Z, ξ) # note that the gpu is never used in this case
-	else
-		runtime = @elapsed θ̂ = estimate(estimator, Z, use_gpu = use_gpu)
-	end
-	θ̂ = convert(Matrix, θ̂) # sometimes estimator returns vectors rather than matrices, which can mess things up
-
-	# Convert to DataFrame and add information
-	runtime = DataFrame(runtime = runtime)
-	θ̂ = DataFrame(θ̂', estimate_names)
-	θ̂[!, "m"] = m
-	θ̂[!, "k"] = repeat(1:K, J)
-	θ̂[!, "j"] = repeat(1:J, inner = K)
-
-	# Add estimator name if it was provided
-	if !isnothing(estimator_names) estimator_name = estimator_names end # deprecation coercion
-	if !isnothing(estimator_name)
-		θ̂[!, "estimator"] .= estimator_name
-		runtime[!, "estimator"] .= estimator_name
-	end
-
-	# Dataframe containing the true parameters
-	θ = convert(Matrix, θ)
-	θ = DataFrame(θ', parameter_names)
-	# Replicate θ to match the number of rows in θ̂. Note that the parameter
-	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
-	# in an outer fashion.
-	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
-	θ = stack(θ, variable_name = :parameter, value_name = :truth) # transform to long form
-
-	# Merge true parameters and estimates
-	if estimator isa Union{IntervalEstimator, Ensemble{<:IntervalEstimator}}
-		df = _merge2(θ, θ̂)
-	else
-		df = _merge(θ, θ̂)
-	end
-
-	if boot != false
-		if boot == true
-			verbose && println("	Computing $((probs[2] - probs[1]) * 100)% non-parametric bootstrap intervals...")
-			# bootstrap estimates
-			@assert !(Z isa Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer"
-			bs = bootstrap.(Ref(estimator), Z, use_gpu = use_gpu, B = B)
-		else # if boot is not a Bool, we will assume it is a bootstrap data set. # TODO probably should add some checks on boot in this case (length should be equal to K, for example)
-			verbose && println("	Computing $((probs[2] - probs[1]) * 100)% parametric bootstrap intervals...")
-			# bootstrap estimates
-			dummy_θ̂ = rand(p, 1) # dummy parameters needed for parameteric bootstrap (this requirement should really be removed). Might be necessary to define a function parametricbootstrap().
-			bs = bootstrap.(Ref(estimator), Ref(dummy_θ̂), boot, use_gpu = use_gpu)
-		end
-		# compute bootstrap intervals and convert to same format returned by IntervalEstimator
-		intervals = stackarrays(vec.(interval.(bs, probs = probs)), merge = false)
-		# convert to dataframe and merge
-		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = p)
-		intervals = DataFrame(intervals', estimate_names)
-		intervals[!, "m"] = m
-		intervals[!, "k"] = repeat(1:K, J)
-		intervals[!, "j"] = repeat(1:J, inner = K)
-		intervals = _merge2(θ, intervals)
-		df[:, "lower"] = intervals[:, "lower"]
-		df[:, "upper"] = intervals[:, "upper"]
-		df[:, "α"] .= 1 - (probs[2] - probs[1])
-	end
-
-	if estimator isa Union{IntervalEstimator, Ensemble{<:IntervalEstimator}}
-		probs = estimator isa Ensemble{<:IntervalEstimator} ?  estimator[1].probs : estimator.probs
-		df[:, "α"] .= 1 - (probs[2] - probs[1])
-	end
-
-	return Assessment(df, runtime)
-end
-
-function assess(
-	estimator::Union{QuantileEstimatorContinuous, QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorContinuous}, Ensemble{<:QuantileEstimatorDiscrete}}, 
-	θ::P, Z;
-	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
-	estimator_name::Union{Nothing, String} = nothing,
-	estimator_names::Union{Nothing, String} = nothing, # for backwards compatibility
-	use_gpu::Bool = true,
-	probs = f32(range(0.01, stop=0.99, length=100))
-	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-
-	# Extract the matrix of parameters
-	θ = _extractθ(θ)
-	p, K = size(θ)
-
-	# Check the size of the test data conforms with θ
-	m = numberreplicates(Z)
-	if !(typeof(m) <: Vector{Int}) # indicates that a vector of vectors has been given
-		# The data `Z` should be a a vector, with each element of the vector
-		# corresponding to a single simulated data set... attempted to convert `Z` to the correct format
-		Z = vcat(Z...) # convert to a single vector
-		m = numberreplicates(Z)
-	end
-	@assert K == length(m) "The number of data sets in `Z` must equal the number of parameter vectors in `θ`"
-
-	# Extract the parameter names from θ if provided
-	if θ isa NamedMatrix
-		parameter_names = names(θ, 1)
-	end
-	@assert length(parameter_names) == p
-
-	# Get the probability levels 
-	if estimator isa Union{QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorDiscrete}}
-		probs = estimator isa Ensemble{<:QuantileEstimatorDiscrete} ?  estimator[1].probs : estimator.probs
-	else
-		τ = [permutedims(probs) for _ in eachindex(Z)] # convert from vector to vector of matrices
-	end
-	n_probs = length(probs)
-
-	# Construct input set
-	i = estimator.i
-	if isnothing(i)
-		if estimator isa Union{QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorDiscrete}}
-			set_info = nothing
-		else
-			set_info = τ
-		end
-	else
-		θ₋ᵢ = θ[Not(i), :]
-		if estimator isa Union{QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorDiscrete}}
-			set_info = eachcol(θ₋ᵢ)
-		else
-			# Combine each θ₋ᵢ with the corresponding vector of
-			# probability levels, which requires repeating θ₋ᵢ appropriately
-			set_info = map(1:K) do k
-				θ₋ᵢₖ = repeat(θ₋ᵢ[:, k:k], inner = (1, n_probs))
-				vcat(θ₋ᵢₖ, probs')
-			end
-		end
-		θ = θ[i:i, :]
-		parameter_names = parameter_names[i:i]
-	end
-
-	# Estimates 
-	runtime = @elapsed θ̂ = estimate(estimator, Z, set_info, use_gpu = use_gpu)
-
-	# Convert to DataFrame and add information
-	p = size(θ, 1)
-	runtime = DataFrame(runtime = runtime)
-	df = DataFrame(
-		parameter = repeat(repeat(parameter_names, inner = n_probs), K),
-		truth = repeat(vec(θ), inner = n_probs),
-		prob = repeat(repeat(probs, outer = p), K),
-		estimate = vec(θ̂),
-		m = repeat(m, inner = n_probs*p),
-		k = repeat(1:K, inner = n_probs*p),
-		j = 1 # just for consistency with other methods
-		)
-
-	# Add estimator name if it was provided
-	if !isnothing(estimator_names) estimator_name = estimator_names end # deprecation coercion
-	if !isnothing(estimator_name)
-		df[!, "estimator"] .= estimator_name
-		runtime[!, "estimator"] .= estimator_name
-	end
-
-	return Assessment(df, runtime)
-end
-
-function assess(
-	estimators::Vector, θ::P, Z;
-	estimator_names::Union{Nothing, Vector{String}} = nothing,
-	use_xi = false,
-	use_ξ = false,
-	ξ  = nothing,
-	xi = nothing,
-	use_gpu = true,
-	verbose::Bool = true,
-	kwargs...
-	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-
-	E = length(estimators)
-	if isnothing(estimator_names) estimator_names = ["estimator$i" for i ∈ eachindex(estimators)] end
-	@assert length(estimator_names) == E
-	if use_xi != false use_ξ = use_xi end  # note that here we check "use_xi != false" since use_xi might be a vector of bools, so it can't be used directly in the if-statement
-	@assert eltype(use_ξ) == Bool
-	@assert eltype(use_gpu) == Bool
-	if use_ξ isa Bool use_ξ = repeat([use_ξ], E) end
-	if use_gpu isa Bool use_gpu = repeat([use_gpu], E) end
-	@assert length(use_ξ) == E
-	@assert length(use_gpu) == E
-
-	# Assess the estimators
-	assessments = map(1:E) do i
-		verbose && println("	Running $(estimator_names[i])...")
-		if use_ξ[i]
-			assess(estimators[i], θ, Z, ξ = ξ; use_gpu = use_gpu[i], estimator_name = estimator_names[i], kwargs...)
-		else
-			assess(estimators[i], θ, Z; use_gpu = use_gpu[i], estimator_name = estimator_names[i], kwargs...)
-		end
-	end
-
-	# Combine the assessment objects 
-	if E == 2 && any(isa.(estimators, Union{IntervalEstimator, Ensemble{<:IntervalEstimator}})) && any(isa.(estimators, Union{PointEstimator, Ensemble{<:PointEstimator}}))
-		assessment = join(assessments...)
-	elseif all(assessment -> names(assessment.df) == names(assessments[1].df), assessments)
-		assessment = merge(assessments...)
-	else 
-		assessment = assessments 
-	end
-
-	return assessment
-end
-
-function _merge(θ, θ̂)
-
-	non_measure_vars = [:m, :k, :j]
-	if "estimator" ∈ names(θ̂) push!(non_measure_vars, :estimator) end
-
-	# Transform θ̂ to long form
-	θ̂ = stack(θ̂, Not(non_measure_vars), variable_name = :parameter, value_name = :estimate)
-
-	# Merge θ and θ̂ by adding true parameters to θ̂
-	θ̂[!, :truth] = θ[:, :truth]
-
-	return θ̂
-end
-
-function _merge2(θ, θ̂)
-
-	non_measure_vars = [:m, :k, :j]
-	if "estimator" ∈ names(θ̂) push!(non_measure_vars, :estimator) end
-
-	# Convert θ̂ into appropriate form
-	# Lower bounds:
-	df = copy(θ̂)
-	select!(df, Not(contains.(names(df), "upper")))
-	df = stack(df, Not(non_measure_vars), variable_name = :parameter, value_name = :lower)
-	df.parameter = replace.(df.parameter, r"_lower$"=>"")
-	df1 = df
-	# Upper bounds:
-	df = copy(θ̂)
-	select!(df, Not(contains.(names(df), "lower")))
-	df = stack(df, Not(non_measure_vars), variable_name = :parameter, value_name = :upper)
-	df.parameter = replace.(df.parameter, r"_upper$"=>"")
-	df2 = df
-	# Join lower and upper bounds:
-	θ̂ = innerjoin(df1, df2, on = [non_measure_vars..., :parameter])
-
-	# Merge θ and θ̂ by adding true parameters to θ̂
-	θ̂[!, :truth] = θ[:, :truth]
-
-	return θ̂
-end

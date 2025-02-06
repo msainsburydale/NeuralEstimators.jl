@@ -23,12 +23,12 @@ struct PointEstimator <: BayesEstimator
 end
 (estimator::PointEstimator)(Z) = estimator.network(Z)
 
-#TODO Single shared summary statistic computation for efficiency (also for QuantileEstimatorContinuous)
 @doc raw"""
 	IntervalEstimator <: BayesEstimator
 	IntervalEstimator(u, v = u, c::Union{Function, Compress} = identity; probs = [0.025, 0.975], g = exp)
 	IntervalEstimator(u, c::Union{Function, Compress}; probs = [0.025, 0.975], g = exp)
 	(estimator::IntervalEstimator)(Z)
+
 A neural estimator that jointly estimates marginal posterior credible intervals based on the probability levels `probs` (by default, 95% central credible intervals).
 
 The estimator employs a representation that prevents quantile crossing. Specifically, given data ``\boldsymbol{Z}``, 
@@ -106,12 +106,12 @@ function (est::IntervalEstimator)(Z)
 	vcat(est.c(bₗ), est.c(bᵤ))
 end
 
-#TODO function for neat output as dxT matrix like interval() 
 @doc raw"""
 	QuantileEstimatorDiscrete <: BayesEstimator
 	QuantileEstimatorDiscrete(v; probs = [0.025, 0.5, 0.975], g = Flux.softplus, i = nothing)
 	(estimator::QuantileEstimatorDiscrete)(Z)
 	(estimator::QuantileEstimatorDiscrete)(Z, θ₋ᵢ)
+
 A neural estimator that jointly estimates a fixed set of marginal posterior
 quantiles, with probability levels $\{\tau_1, \dots, \tau_T\}$ controlled by the
 keyword argument `probs`. This generalises [`IntervalEstimator`](@ref) to support an arbitrary number of probability levels. 
@@ -212,7 +212,7 @@ q₁(Z, θ₋ᵢ)
 q₁(Z[1], θ₋ᵢ)
 ```
 """
-struct QuantileEstimatorDiscrete{V, P} <: BayesEstimator
+struct QuantileEstimatorDiscrete{V, P} <: BayesEstimator #TODO function for neat output as dxT matrix like interval() 
 	v::V
 	probs::P
 	g::Union{Function, Nothing}
@@ -262,7 +262,6 @@ end
 # 	Normal(μ̃, σ̃)
 # end
 
-#TODO clarify output structure when we have multiple probability levels (what is the ordering in this case?)
 @doc raw"""
 	QuantileEstimatorContinuous <: BayesEstimator
 	QuantileEstimatorContinuous(network; i = nothing, num_training_probs::Integer = 1)
@@ -434,28 +433,6 @@ end
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Number) = est(Z, [θ₋ᵢ], τ)
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Vector) = est(Z, [θ₋ᵢ], τ)
 
-# # Closed-form posterior for comparison
-# function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
-
-# 	# Parameters of posterior distribution
-# 	μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
-# 	σ̃ = sqrt((1/σ₀^2 + length(Z)/σ²)^-1)
-
-# 	# Posterior
-# 	Normal(μ̃, σ̃)
-# end
-
-# # Estimate the posterior 0.1-quantile for 1000 test data sets
-# τ = 0.1f0
-# q̂(Z, τ)                        # neural quantiles
-# quantile.(posterior.(Z), τ)'   # true quantiles
-
-# # Estimate several quantiles for a single data set
-# z = Z[1]
-# τ = f32([0.1, 0.25, 0.5, 0.75, 0.9])
-# q̂(z, τ')                     # neural quantiles (note that τ is given as row vector)
-# quantile.(posterior(z), τ)   # true quantiles
-
 @doc raw"""
 	PosteriorEstimator <: NeuralEstimator
 	PosteriorEstimator(q::ApproximateDistribution, network)
@@ -513,10 +490,9 @@ struct PosteriorEstimator <: NeuralEstimator
 end
 numdistributionalparams(estimator::PosteriorEstimator) = numdistributionalparams(estimator.q)
 logdensity(estimator::PosteriorEstimator, θ, Z) = logdensity(estimator.q, θ, estimator.network(Z)) 
-(estimator::PosteriorEstimator)(Zθ::Tuple) = logdensity(estimator, Zθ[2], Zθ[1]) # internal method only used for convenience during training # TODO not ideal that we assume an ordering here
+(estimator::PosteriorEstimator)(Zθ::Tuple) = logdensity(estimator, Zθ[2], Zθ[1]) # internal method only used during training # TODO not ideal that we assume an ordering here
 sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000) = sampleposterior(estimator.q, estimator.network(Z), N)
 
-# <!-- There are also practical advantages to considering the likelihood-to-evidence ratio: for example, given conditionally (on $\boldsymbol{\theta}$) independent and identically distributed (iid) replicates $\boldsymbol{Z}_1, \dots, \boldsymbol{Z}_m$, the likelihood-to-evidence ratio is of the form $p(\boldsymbol{Z}_1, \dots, \boldsymbol{Z}_m \mid \boldsymbol{\theta}) / p(\boldsymbol{Z}_1, \dots, \boldsymbol{Z}_m) \propto \prod_{i=1}^m r(\boldsymbol{Z}_i, \boldsymbol{\theta})$, that is, a product of single-replicate likelihood-to-evidence ratios.  -->
 @doc raw"""
 	RatioEstimator <: NeuralEstimator
 	RatioEstimator(network)
@@ -700,7 +676,6 @@ function (estimator::PiecewiseEstimator)(Z)
 end
 Base.show(io::IO, estimator::PiecewiseEstimator) = print(io, "\nPiecewise estimator with $(length(estimator.estimators)) estimators and sample size change-points: $(estimator.changepoints)")
 
-#TODO Think about whether Parallel() might also be useful for ensembles (this might allow for faster computations, and immediate out-of-the-box integration with other parts of the package).
 """
 	Ensemble <: NeuralEstimator
 	Ensemble(estimators)
@@ -721,6 +696,8 @@ Note that `train()` currently acts sequentially on the component estimators.
 
 The ensemble components can be accessed by indexing the ensemble; the number
 of component estimators can be obtained using `length()`.
+
+See also [`Parallel`](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.Parallel), which can be used to mimic ensemble methods with an appropriately chosen `connection`. 
 
 # Examples
 ```

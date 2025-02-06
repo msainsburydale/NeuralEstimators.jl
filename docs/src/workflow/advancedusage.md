@@ -408,111 +408,96 @@ Below, we construct a neural point estimator for fully observed data generated f
 using NeuralEstimators, Flux, Folds
 using LinearAlgebra: Symmetric, cholesky
 using Distributions: Uniform, Normal
-using CairoMakie 
+using AlgebraOfGraphics, CairoMakie        
 
-m = 200     # number of independent replicates in each data set
-
+# Sampling from the prior of θ
 function sample(K)
-	# Sample parameters from the prior 
-	ρ = rand(Uniform(0.0, 0.99),1, K)
-	δ = rand(Uniform(0.0, 1.0),1, K)
-	return vcat(ρ, δ)
+	ρ = rand(Uniform(0.0, 0.99), K)
+	δ = rand(Uniform(0.0, 1.0), K)
+	return vcat(ρ', δ')
 end
 
+# Marginal simulation of Z | θ
 function simulate(θ, m) 
-
-	K = size(θ, 2)
-	Z = Folds.map(1:K) do k
+	Z = Folds.map(1:size(θ, 2)) do k
 		ρ = θ[1, k]
 		δ = θ[2, k]
 		Σ = [1 ρ; ρ 1]
 		L = cholesky(Symmetric(Σ)).L
-
-		X = L * randn(2, m) # Standard Gaussian margins
-		X = cdf.(Normal(), X)  # Uniform margins
-		X = - log.(1 .- X) # Unit exponential margins
-
-		R = -log.(1 .- rand(Uniform(0.0, 1.0), 1, m)) # nit exponential margins
-
+		X = L * randn(2, m)                 # Standard Gaussian margins
+		X = cdf.(Normal(), X)               # Uniform margins
+		X = -log.(1 .- X)                   # Unit exponential margins
+		R = -log.(1 .- rand(1, m))         
 		z = δ .* R .+ (1 - δ) .* X
-
 		z
 	end
-	Z
+	return Z
 end
 
-
-# Hidden layer width
-w = 32  
-
-final_layer = Dense(w, 2, sigmoid)      # ρ, δ  ∈ [0,1]
-
-# Inner and outer networks
+# Inner and outer networks, with the final layer of ϕ enforcing ρ, δ ∈ (0,1)
+w = 32 
 ψ = Chain(Dense(2, w, relu), Dense(w, w, relu))    
-ϕ = Chain(Dense(w, w, relu), final_layer)          
+ϕ = Chain(Dense(w, w, relu), Dense(w, 2, sigmoid))          
 
 # Combine into a DeepSet
 network = DeepSet(ψ, ϕ)
 
+# Construct the estimator 
 θ̂ = PointEstimator(network)
 
-# training: full simulation on-the-fly
+# Training
+m = 200  # number of independent replicates in each data set
 θ̂ = train(θ̂, sample, simulate, m = m)
 
-
+# Assess the estimator 
 θ_test = sample(1000)
 Z_test = simulate(θ_test, m)
-assessment = assess(θ̂, θ_test, Z_test, boot = false)     
-figure = plot(assessment)
+assessment = assess(θ̂, θ_test, Z_test)  
+plot(assessment)
 
+figure = plot(assessment)
 save("docs/src/assets/figures/censoring1.png", figure, px_per_unit = 3, size = (600, 300))
 ```
 
 ### General setting
 
-Let $\boldsymbol{Z} \equiv (\boldsymbol{Z}_1', \dots, \boldsymbol{Z}_m')'$ denote the complete-data vector. In the general censoring setting, a user must provide a function `censorandaugment` that constructs, from $\boldsymbol{Z}$, augmented data $\boldsymbol{A}=(\tilde{\boldsymbol{Z}}, \boldsymbol{W}')'$. Similarly to [The masking approach](@ref), we here consider inference using a vector of indicator variables that encode the censoring pattern, denoted by $\boldsymbol{W}$; here $\boldsymbol{W}$ has elements equal to one or zero if the corresponding element of $\boldsymbol{Z}$ is left censored or observed, respectively. However, unlike typical masking, we do not set censored values to `missing`; we instead construct $\tilde{\boldsymbol{Z}}$, which comprises the vector $\boldsymbol{Z}$ with censored values set to some pre-specified constant, contained within the vector $\boldsymbol{\zeta}$, such that
+Let $\boldsymbol{Z} \equiv (\boldsymbol{Z}_1', \dots, \boldsymbol{Z}_m')'$ denote the complete-data vector. In the general censoring setting, a user must provide a function `censorandaugment()` that constructs, from $\boldsymbol{Z}$, augmented data $\boldsymbol{A}=(\tilde{\boldsymbol{Z}}, \boldsymbol{W}')'$. Similarly to [The masking approach](@ref) for missing data, we here consider inference using a vector of indicator variables that encode the censoring pattern, denoted by $\boldsymbol{W}$; here $\boldsymbol{W}$ has elements equal to one or zero if the corresponding element of $\boldsymbol{Z}$ is left censored or observed, respectively. However, unlike typical masking, we do not set censored values to `missing`; we instead construct $\tilde{\boldsymbol{Z}}$, which comprises the vector $\boldsymbol{Z}$ with censored values set to some pre-specified constant, contained within the vector $\boldsymbol{\zeta}$, such that
 
 ```math
 \tilde{\boldsymbol{Z}} \equiv \boldsymbol{Z} \odot \boldsymbol{W} + \boldsymbol{\zeta} \odot ( \boldsymbol{1} - \boldsymbol{W}),
 ```
 where $\boldsymbol{1}$ is a vector of ones (of equivalent dimension to $\boldsymbol{W}$) and where $\odot$ denotes elementwise multiplication. Note that $\boldsymbol{\zeta}$ and the censoring pattern can differ across replicates $t=1,\dots,m$, as well as the underlying model parameter values.
 
-The augmented data $\boldsymbol{A}$ is an input to the neural network, and the inner network $\boldsymbol{\psi}$ should be designed as to account for its dimension. The way in which concatenation of $\tilde{\boldsymbol{Z}}$ and $\boldsymbol{W}$ is performed may differ depending on the type of the first layer use in $\boldsymbol{\psi}$: if using a `Dense` layer, one can concatenate $\tilde{\boldsymbol{Z}}$ and $\boldsymbol{W}$ along the first dimension (as they are both matrices; i nthis case, with dimension ($2,m$)); if using graph layers or `Conv` layers, $\tilde{\boldsymbol{Z}}$ and $\boldsymbol{W}$ should be concatenated as if they were two separate channels in a graph/image (see [`encodedata()`](@ref)).
+The augmented data $\boldsymbol{A}$ is an input to the neural network, and the inner network $\boldsymbol{\psi}$ should be designed as to account for its dimension. The way in which concatenation of $\tilde{\boldsymbol{Z}}$ and $\boldsymbol{W}$ is performed may differ depending on the type of the first layer use in $\boldsymbol{\psi}$: if using a `Dense` layer, one can concatenate $\tilde{\boldsymbol{Z}}$ and $\boldsymbol{W}$ along the first dimension (as they are both matrices; in this case, with dimension ($2,m$)); if using graph layers or `Conv` layers, $\tilde{\boldsymbol{Z}}$ and $\boldsymbol{W}$ should be concatenated as if they were two separate channels in a graph/image (see [`encodedata()`](@ref)).
 
-Note that the function `censorandaugment` should be applied to data during both training and at evaluation time; any manipulation of data that is performed at train time should also be performed to data at test time!
+Note that the function `censorandaugment()` should be applied to data during both training and at evaluation time; any manipulation of data that is performed at train time should also be performed to data at test time!
 
-Below, the function `censorandaugment` takes in a vector of censoring levels $\boldsymbol{c}$ of the same length as $\boldsymbol{Z}_i$, and sets censored values to $\zeta_1=\dots=\zeta_m=\zeta$; in this way, the censoring mechanism and augmentation values, $\boldsymbol{\zeta}$, do not vary with the model parameter values or with the replicate index.
+Below, the function `censorandaugment()` takes in a vector of censoring levels $\boldsymbol{c}$ of the same length as $\boldsymbol{Z}_i$, and sets censored values to $\zeta_1=\dots=\zeta_m=\zeta$; in this way, the censoring mechanism and augmentation values, $\boldsymbol{\zeta}$, do not vary with the model parameter values or with the replicate index.
 
 ```
-function censorandaugment(z; c,  ζ=0)
+function censorandaugment(z; c, ζ=0)
     I = 1 * (z .<= c)
-    z = ifelse.(z .<= c,  ζ, z)
+    z = ifelse.(z .<= c, ζ, z)
     return vcat(z, I)
 end
 ```
 
-Censoring is performed during training. To ensure this, we employ `censorandaugment` during simulation:
+Censoring is performed during training. To ensure this, we employ `censorandaugment()` during simulation:
 
 ```
 function simulatecensored(θ, m; c, ζ) 
-    
 	Z = simulate(θ, m)
 	A = Folds.map(Z) do Zₖ
-
-        # censor data and create augmented datasest
-        A =  mapslices(Z -> censorandaugment(Z, c = c, ζ = ζ), Zₖ, dims = 1)
-        A # augmented dataset
-
+		mapslices(Z -> censorandaugment(Z, c = c, ζ = ζ), Zₖ, dims = 1)
 	end
-	A
+	return A
 end
 
-# We can now generate data, with values below 0.4 censored and set to ζ = -1.
-K = 1000  # number of training samples
-
+# Generate censored data, with values below 0.4 censored and set to ζ = -1.
+K = 1000       # number of training samples
+c = [0.4, 0.4] # censoring thresholds
 θ_train = sample(K)
-c = [0.4, 0.4]
-Z_train = simulatecensored(θ_train, m;  c = c, ζ = -1.0)
+Z_train = simulatecensored(θ_train, m; c = c, ζ = -1.0)
 ```
 
 To adapt the point estimator architecture to handle the augmented dataset, we change the dimension of the input from two to four.
@@ -520,13 +505,14 @@ To adapt the point estimator architecture to handle the augmented dataset, we ch
 ψ₂ = Chain(Dense(4, w, relu), Dense(w, w, relu))   
 ϕ₂ = Chain(Dense(w, w, relu), Dense(w, 2, sigmoid))          
 
-
 # Combine into a DeepSet
-θ̂_cNBE = PointEstimator(DeepSet(ψ₂, ϕ₂))
+network = DeepSet(ψ₂, ϕ₂)
 
+# Construct the estimator
+θ̂_cNBE = PointEstimator(network)
 
-# training: full simulation on-the-fly
-simulator(θ, m)  = simulatecensored(θ, m; c = c, ζ = -1.0) 
+# Training
+simulator(θ, m) = simulatecensored(θ, m; c = [0.4, 0.4], ζ = -1.0) 
 θ̂_cNBE = train(θ̂_cNBE, sample, simulator, m = m)
 ```
 
@@ -534,7 +520,7 @@ We assess the estimator using the same test parameter values as for `θ̂` above
 
 ```
 Z_test = simulator(θ_test, m)
-assessment_censored = assess(θ̂_cNBE, θ_test, Z_test, boot = false)   
+assessment_censored = assess(θ̂_cNBE, θ_test, Z_test)   
 figure = plot(assessment_censored)
 
 save("docs/src/assets/figures/censoring2.png", figure, px_per_unit = 3, size = (600, 300))
@@ -544,32 +530,23 @@ save("docs/src/assets/figures/censoring2.png", figure, px_per_unit = 3, size = (
 
 In a peak-over-threshold modelling setup, censoring of data is determined by a user-specified quantile level $\tau$, typically taken to be close to one. During inference, artificial censoring is imposed: data that do not exceed their marginal $\tau$-quantile are treated as left censored. For example, in the running example, we censor components of $\boldsymbol{Z}_i$ below the $\tau$-quantile of the marginal distribution of the random scale mixture, i.e., $F^{-1}(\tau; \delta)$, where $F(z;\delta)$ is the ($\delta$-dependent) marginal distribution function of $\boldsymbol{Z}_i$; this has a closed form expression, see [Huser and Wadsworth (2018)](https://www.tandfonline.com/doi/full/10.1080/01621459.2017.1411813).
 
-Peaks-over-threshold modelling, with $\tau$ fixed, can easilly be implemented by adapting the `censorandaugment` in [General setting](@ref), i.e., by imposing that `c` is an evaluation of $F(\tau; \delta)$. However, [Richards et al. (2024)](https://jmlr.org/papers/v25/23-1134.html) show that one can amortise a point estimator with respect to the choice of $\tau$, by treating $\tau$ as random and allowing it to feature as an input into the outer neural network, $\boldsymbol{\phi}$. Note that, in this setting, the estimator cannot be trained via `simulation-on-the-fly`, and a finite number of $K$ data/parameter pairs must be sampled prior to training!
+Peaks-over-threshold modelling, with $\tau$ fixed, can easilly be implemented by adapting the `censorandaugment()` in [General setting](@ref), i.e., by imposing that `c` is an evaluation of $F(\tau; \delta)$. However, [Richards et al. (2024)](https://jmlr.org/papers/v25/23-1134.html) show that one can amortise a point estimator with respect to the choice of $\tau$, by treating $\tau$ as random and allowing it to feature as an input into the outer neural network, $\boldsymbol{\phi}$. Note that, in this setting, the estimator cannot be trained via `simulation-on-the-fly`, and a finite number of $K$ data/parameter pairs must be sampled prior to training!
 
 We also follow [Richards et al. (2024)](https://jmlr.org/papers/v25/23-1134.html) and consider inference for data on standardised margins; that is, we pre-standardise the data $\boldsymbol{Z}$ to have unit exponential margins, rather than $\delta$-dependent margins. This can help to improve the numerical stability of estimator training, as well as increasing training efficiency.
 
 ```
-# Define prior for τ. Here we allow $\tau$ to be Uniform(0.4,0.6).
-
-function priorτ(K)
-
+function sampleτ(K)
 	τ = rand(Uniform(0.4, 0.6), 1, K)
-
     return τ
 end
 
-
-function simulatecensored(θ, τ,  m;  ζ) 
-
+function simulatecensored(θ, τ, m;  ζ) 
     Z = simulate(θ, m)
-
-	K = size(θ, 2)
-	A = Folds.map(1:K) do k
-
+	A = Folds.map(1:size(θ, 2)) do k
         Zₖ = Z[k]
         τₖ = τ[k]
 
-         #Transform to Uniform margins; see Huser and Wadsworth (2018)
+        # Transform to Uniform margins; see Huser and Wadsworth (2018)
         if δ == 0.5 
             Z̃ₖ = 1 .- exp.(- 2 .* Zₖ) .* (1 .+ 2 .* Zₖ) 
         else 
@@ -582,7 +559,7 @@ function simulatecensored(θ, τ,  m;  ζ)
 
         # censor data and create augmented datasest
         A =  mapslices(Z -> censorandaugment(Z, c = c, ζ = ζ), Z̃ₖ, dims = 1)
-        A # augmented dataset
+        A 
 
 	end
 
@@ -595,8 +572,8 @@ end
 K = 3000  # number of training samples
 θ_train  = sample(K)
 θ_val    = sample(K)
-τ_train  = priorτ(K)
-τ_val    = priorτ(K)
+τ_train  = sampleτ(K)
+τ_val    = sampleτ(K)
 
 Z_train = simulatecensored(θ_train, τ_train, m;  ζ = -1.0)
 Z_val   = simulatecensored(θ_val, τ_val, m;  ζ = -1.0)
@@ -613,26 +590,23 @@ As $\tau$ features as an input into the outer network of the DeepSet estimator, 
 # Combine into a DeepSet
 θ̂_cNBE_τ = PointEstimator(DeepSet(ψ₃, ϕ₃))
 
-
 # training; note we make use of set-level statistics
 θ̂_cNBE_τ = train(θ̂_cNBE_τ, θ_train, θ_val, (Z_train, τ_train), (Z_val, τ_val))
-
 
 # assessment with τ fixed to 0.5, but using the same test values as previously
 τ_test =  repeat([0.5], 1000)'
 Z_test = simulatecensored(θ_test, τ_test, m;  ζ = -1.0)
 
-assessment_tau = assess(θ̂_cNBE_τ, θ_test, (Z_test, τ_test), boot = false)    
+assessment_tau = assess(θ̂_cNBE_τ, θ_test, (Z_test, τ_test))    
 figure = plot(assessment_tau)
 
 save("docs/src/assets/figures/censoring3.png", figure, px_per_unit = 3, size = (600, 300))
-
 
 # assessment with τ fixed to 0.4
 τ_test =  repeat([0.4], 1000)'
 Z_test = simulatecensored(θ_test, τ_test, m;  ζ = -1.0)
                         
-assessment_tau = assess(θ̂_cNBE_τ, θ_test, (Z_test, τ_test), boot = false)    
+assessment_tau = assess(θ̂_cNBE_τ, θ_test, (Z_test, τ_test))    
 figure = plot(assessment_tau)
 
 save("docs/src/assets/figures/censoring4.png", figure, px_per_unit = 3, size = (600, 300))

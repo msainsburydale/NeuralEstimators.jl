@@ -600,7 +600,6 @@ end
 	end
 end
 
-
 @testset "Output layers: $dvc" for dvc ∈ devices
 
 	function testbackprop(l, dvc, p::Integer, K::Integer, d::Integer)
@@ -857,11 +856,11 @@ MLE(Z, ξ) = MLE(Z) # doesn't need ξ but include it for testing
 				# J == 1
 				Z_test = simulator(parameters, m)
 				assessment = assess([θ̂], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
-				assessment = assess(θ̂, parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
+				assessment = assess(θ̂, parameters, Z_test, use_gpu = use_gpu)
 				if covar == "set-level covariates"
-					@test_throws Exception assess(θ̂, parameters, Z_test, use_gpu = use_gpu, verbose = verbose, boot=true)
+					@test_throws Exception assess(θ̂, parameters, Z_test, use_gpu = use_gpu, probs = [0.025, 0.975])
 				else
-					assessment = assess(θ̂, parameters, Z_test, use_gpu = use_gpu, verbose = verbose, boot=true)
+					assessment = assess(θ̂, parameters, Z_test, use_gpu = use_gpu, probs = [0.025, 0.975])
 
 					coverage(assessment)
 					coverage(assessment; average_over_parameters = true)
@@ -1273,13 +1272,13 @@ end
 	q₂ = QuantileEstimatorDiscrete(v; probs = τ, i = 2)
 
 	# Train the estimators
-	q₁ = train(q₁, prior, simulate, m = m, epochs = 2, verbose = false)
-	q₂ = train(q₂, prior, simulate, m = m, epochs = 2, verbose = false)
+	q₁ = train(q₁, prior, simulate, m = m, epochs = 2, verbose = verbose)
+	q₂ = train(q₂, prior, simulate, m = m, epochs = 2, verbose = verbose)
 
 	# Assess the estimators
 	θ = prior(1000)
 	Z = simulate(θ, m)
-	assessment = assess([q₁, q₂], θ, Z, verbose = false)
+	assessment = assess([q₁, q₂], θ, Z, verbose = verbose)
 
 	# Estimate quantiles of μ∣Z,σ with σ = 0.5 and for many data sets
 	θ₋ᵢ = 0.5f0

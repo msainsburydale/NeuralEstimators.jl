@@ -143,6 +143,8 @@ end
 
 # ---- Optimisation-based point estimates ----
 
+# TODO density evaluation with PosteriorEstimator would allow us to use these grid and gradient-based methods for computing the posterior mode
+
 @doc raw"""
 	mlestimate(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, penalty::Function = θ -> 1, use_gpu = true)
 Computes the (approximate) maximum likelihood estimate given data $\boldsymbol{Z}$,

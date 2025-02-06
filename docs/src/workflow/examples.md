@@ -98,12 +98,12 @@ estimator = train(estimator, sample, simulate, m = m)
 
 One may wish to save a trained estimator and load it in a later session: see [Saving and loading neural estimators](@ref) for details on how this can be done. 
 
-The function [`assess()`](@ref) can be used to assess the trained estimator. Parametric and non-parametric bootstrap estimates can be obtained via [`bootstrap()`](@ref), with corresponding confidence intervals computed using [`interval()`](@ref). Additionally, bootstrap-based uncertainty quantification can be included in the assessment stage through the keyword argument `boot`:
+The function [`assess()`](@ref) can be used to assess the trained estimator. Parametric and non-parametric bootstrap estimates can be obtained via [`bootstrap()`](@ref), with corresponding confidence intervals computed using [`interval()`](@ref). Additionally, non-parametric bootstrap-based uncertainty quantification can be included in the assessment stage through the keyword argument `probs`:
 
 ```
 θ_test = sample(1000)
 Z_test = simulate(θ_test, m)
-assessment = assess(estimator, θ_test, Z_test, boot = true)
+assessment = assess(estimator, θ_test, Z_test, probs = [0.025, 0.975])
 ```
 
 The resulting [`Assessment`](@ref) object contains the sampled parameters, the corresponding point estimates, and the corresponding lower and upper bounds of the bootstrap intervals. This object can be used to compute various diagnostics:
