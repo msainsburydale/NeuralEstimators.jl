@@ -548,11 +548,10 @@ assessment2 = assess(θ̂_cNBE2, θ_test, Z_test2)
 
 figure1 = plot(assessment1)
 figure2 = plot(assessment2)
-
-save("docs/src/assets/figures/censoring1.png", figure1, px_per_unit = 3, size = (600, 300))
-save("docs/src/assets/figures/censoring2.png", figure2, px_per_unit = 3, size = (600, 300))
-
 ```
+
+![With no censoring](../assets/figures/censoring1.png)
+![With mild censoring](../assets/figures/censoring2.png)
 
 Note that the estimators are not amortised with respect to the censoring scheme, and a new estimator must be built and trained if the censoring scheme changes. However, amortisation with respect to the censoring scheme is possible if we specify a parameterised censoring scheme; one such scheme features in [Peaks-over-threshold modelling](@ref).
 
@@ -644,16 +643,13 @@ Z_test = simulatecensored(θ_test, τ_test, m;  ζ = -1.0)
 assessment_tau1 = assess(θ̂_τ, θ_test, (Z_test, τ_test))    
 figure3 = plot(assessment_tau1)
 
-save("docs/src/assets/figures/censoring3.png", figure3, px_per_unit = 3, size = (600, 300))
-
 # assessment with τ fixed to 0.9. Note that we do not retrain the estimator.
 τ_test =  repeat([0.9], 1000)'
 Z_test = simulatecensored(θ_test, τ_test, m;  ζ = -1.0)
                         
 assessment_tau2 = assess(θ̂_τ, θ_test, (Z_test, τ_test))    
 figure4 = plot(assessment_tau2)
-
-save("docs/src/assets/figures/censoring4.png", figure4, px_per_unit = 3, size = (600, 300))
 ```
 
-
+![Assessment with τ fixed to 0.75](../assets/figures/censoring3.png)
+![Assessment with τ fixed to 0.9](../assets/figures/censoring4.png)

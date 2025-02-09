@@ -193,7 +193,7 @@ end
 		d = 2  # spatial dimension
 
 		# Spatial locations fixed for all replicates
-		n = 100
+		n = 1000
 		S = rand(n, d)
 		Z = rand(n, m)
 		g = spatialgraph(S)
@@ -201,7 +201,7 @@ end
 		g = spatialgraph(S, Z)
 
 		# Spatial locations varying between replicates
-		n = rand(50:100, m)
+		n = rand(500:1000, m)
 		S = rand.(n, d)
 		Z = rand.(n)
 		g = spatialgraph(S)
@@ -210,7 +210,7 @@ end
 
 		# Mutlivariate processes: spatial locations fixed for all replicates
 		q = 2 # bivariate spatial process
-		n = 100
+		n = 1000
 		S = rand(n, d)
 		Z = rand(q, n, m)
 		g = spatialgraph(S)
@@ -218,7 +218,7 @@ end
 		g = spatialgraph(S, Z)
 
 		# Mutlivariate processes: spatial locations varying between replicates
-		n = rand(50:100, m)
+		n = rand(500:1000, m)
 		S = rand.(n, d)
 		Z = rand.(q, n)
 		g = spatialgraph(S)
