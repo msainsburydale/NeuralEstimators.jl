@@ -393,9 +393,9 @@ neuralem(Z, θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
 
 ## Censored data
 
-Neural estimators can be constructed to handle censored data as input, by exploiting [The masking approach](@ref) detailed above, which was used in the case of missing data. The key difference here is, unlike the data missingness pattern, the censoring pattern is known and must be user specified. For simplicity, we here describe methdology for left censored data (i.e., we observe exactly only those data that exceed some threshold), but extensions to right or interval censoring are possible. 
+Neural estimators can be constructed to handle censored data as input, by exploiting [The masking approach](@ref) described above in the context of missing data. For simplicity, here we describe inference with left censored data (i.e., where we observe only those data that exceed some threshold), but extensions to right or interval censoring are possible. 
 
-[Richards et al. (2024)](https://jmlr.org/papers/v25/23-1134.html) discuss neural point estimation from censored data in the context of peaks-over-threshold extremal dependence modelling, where artifical censoring of data is imposed to reduce estimation bias in the presence of marginally non-extreme events. For peaks-over-threshold models, observed data are treated as censored if they exceed their corresponding marginal $\tau$-quantile, for $\tau \in (0,1)$ close to one. We present two approaches to censoring data: a [General setting](@ref), where users specifiy their own deterministic "censoring", and [Peaks-over-threshold modelling](@ref), where users supply a (censoring) quantile level $\tau$, which can be treated as random and/or feature as an input to the neural network.
+[Richards et al. (2024)](https://jmlr.org/papers/v25/23-1134.html) discuss neural Bayes estimation from censored data in the context of peaks-over-threshold extremal dependence modelling, where artifical censoring of data is imposed to reduce estimation bias in the presence of marginally non-extreme events. For peaks-over-threshold models, observed data are treated as censored if they exceed their corresponding marginal $\tau$-quantile, for $\tau \in (0,1)$ close to one. We present two approaches to censoring data: a [General setting](@ref), where users specifiy their own deterministic "censoring", and [Peaks-over-threshold modelling](@ref), where users supply a (censoring) quantile level $\tau$, which can be treated as random and/or feature as an input to the neural network.
 
 As a running example, we consider a bivariate random scale Gaussian mixture; see [Engelke, Opitiz, and Wadsworth (2019)](https://link.springer.com/article/10.1007/s10687-019-00353-3) and [Huser and Wadsworth (2018)](https://www.tandfonline.com/doi/full/10.1080/01621459.2017.1411813). We consider the task of estimating $\boldsymbol{\theta}=(\rho,\delta)'$, for correlation parameter $\rho \in [0,1)$ and shape parameter $\delta \in [0,1]$. Data $\boldsymbol{Z}_1,\dots,\boldsymbol{Z}_m$ are independent and identically distributed according to the random scale construction
 ```math
@@ -405,25 +405,22 @@ where $R_i \sim \text{Exp}(1)$ and $\boldsymbol{X}_i$ is a bivariate random vect
 
 Simulation of the random scale mixture and its marginal ditribution function are provided below.
 ```
+# Libraries used throughout this example
+using NeuralEstimators, Flux
+using Folds
 using LinearAlgebra: Symmetric, cholesky
 using Distributions: cdf, Uniform, Normal
-       
-# Sampling from the prior for θ
+using AlgebraOfGraphics, CairoMakie   
 
-d = 2 # number of parameters
-
+# Sampling θ from the prior distribution
 function sample(K)
-
 	ρ = rand(Uniform(0.0, 0.99), K)
 	δ = rand(Uniform(0.0, 1.0), K)
-
 	return vcat(ρ', δ')
 end
 
 # Marginal simulation of Z | θ
-
 function simulate(θ, m) 
-
 	Z = Folds.map(1:size(θ, 2)) do k
 		ρ = θ[1, k]
 		δ = θ[2, k]
@@ -436,21 +433,17 @@ function simulate(θ, m)
 		z = δ .* R .+ (1 - δ) .* X
 		z
 	end
-
 	return Z
 end
 
 # Marginal distribution function; see Huser and Wadsworth (2018)
-
 function F(z; δ)
-
 	if δ == 0.5 
         u = 1 .- exp.(- 2 .* z) .* (1 .+ 2 .* z) 
     else 
         u = 1 .- (δ ./ (2 .* δ .- 1)) .* exp.(- z ./ δ) .+ ((1 .- δ) ./ (2 * δ .- 1)) .* exp.( - z ./ (1 - δ)) 
     end
-
-	u
+	return u
 end
 ```
 
@@ -470,10 +463,8 @@ Note that the function `censorandaugment()` should be applied to data during bot
 
 ```
 function censorandaugment(z; c, ζ = 0)
-
     I = 1 * (z .<= c)
     z = ifelse.(z .<= c, ζ, z)
-
     return vcat(z, I)
 end
 ```
@@ -481,26 +472,19 @@ end
 Censoring is performed during training. To ensure this, we use `censorandaugment()` within the simulation function:
 
 ```
-using Folds
-
 # Marginal simulation of censored data
 function simulatecensored(θ, m; c, ζ) 
-
 	Z = simulate(θ, m)
-
 	A = Folds.map(Z) do Zₖ
 		mapslices(Z -> censorandaugment(Z, c = c, ζ = ζ), Zₖ, dims = 1)
 	end
-
 	return A
 end
 
 # Generate censored data, with values below 0.5 censored and set to ζ = -1.
-
 K = 1000       # number of training samples
 c = [0.5, 0.5] # censoring thresholds
-m = 200     # number of independent replicates in each data set
-
+m = 200        # number of independent replicates in each data set
 θ_train = sample(K)
 Z_train = simulatecensored(θ_train, m; c = c, ζ = -1.0)
 ```
@@ -508,17 +492,13 @@ Z_train = simulatecensored(θ_train, m; c = c, ζ = -1.0)
 To construct a point estimator which can accomodate the augmented dataset, we ensure that the dimension of the input layer is $2d$, where $d$ is the number of parameters. Below, we construct and train a point estimator for the generated censored data.
 
 ```
-using NeuralEstimators, Flux
+d = 2   # dimension of θ
+w = 128  # width of each hidden layer
 
-w = 32  # Hidden layer width
-
-# Inner and outer networks, with the final layer of ϕ enforcing ρ, δ ∈ (0,1)
-final_layer = Dense(w, d, sigmoid)      # ρ, δ  ∈ [0,1]
-
+# DeepSet neural network, with the final layer of ϕ enforcing ρ, δ ∈ (0,1)
+final_layer = Dense(w, d, sigmoid)      
 ψ = Chain(Dense(d * 2, w, relu), Dense(w, w, relu))    
 ϕ = Chain(Dense(w, w, relu), final_layer)           
-
-# Combine into a DeepSet
 network = DeepSet(ψ, ϕ)
 
 # Construct the estimator
@@ -533,14 +513,12 @@ We now train and test two estimators for censored data; one with `c = [0, 0]` an
 θ_test = sample(1000) # test parameter values
 
 # With no censoring
-
 simulator(θ, m) = simulatecensored(θ, m; c = [0, 0], ζ = -1.0) 
 θ̂_cNBE1 = train(θ̂_cNBE, sample, simulator, m = m)
 Z_test1 = simulatecensored(θ_test, m; c = [0, 0], ζ = -1.0) 
 assessment1 = assess(θ̂_cNBE1, θ_test, Z_test1)   
 
 # With mild censoring
-
 simulator(θ, m) = simulatecensored(θ, m; c = [0.5, 0.5], ζ = -1.0) 
 θ̂_cNBE2 = train(θ̂_cNBE, sample, simulator, m = m)
 Z_test2 = simulatecensored(θ_test, m; c = [0.5, 0.5], ζ = -1.0) 
@@ -564,18 +542,13 @@ Peaks-over-threshold modelling, with $\tau$ fixed, can be easily implemented by 
 We also follow [Richards et al. (2024)](https://jmlr.org/papers/v25/23-1134.html) and consider inference for data on standardised margins; we pre-standardise data $\boldsymbol{Z}$ to have unit exponential margins, rather than $\delta$-dependent margins. This can help to improve the numerical stability of estimator training, as well as increasing training efficiency.
 
 ```
-# Define a prior for τ
-
-# In practice, 
+# Sampling τ from its prior
 function sampleτ(K)
-
 	τ = rand(Uniform(0.7, 0.9), 1, K) 
-
     return τ
 end
 
 # Adapt the censored data simulation to allow for τ as an input
-
 function simulatecensored(θ, τ, m;  ζ) 
 
     Z = simulate(θ, m)
@@ -598,20 +571,16 @@ function simulatecensored(θ, τ, m;  ζ)
 
 	end
 
-    A
+    return A
 end
 
-# We then generate the data used for training and validation
-
+# Generate the data used for training and validation
 K = 10000   # number of training samples
 m = 1000    # number of independent replicates in each data set
-
 θ_train  = sample(K)
 θ_val    = sample(K)
-
 τ_train  = sampleτ(K)
 τ_val    = sampleτ(K)
-
 Z_train  = simulatecensored(θ_train, τ_train, m;  ζ = -1.0)
 Z_val    = simulatecensored(θ_val, τ_val, m;  ζ = -1.0)
 ```
@@ -619,14 +588,15 @@ Z_val    = simulatecensored(θ_val, τ_val, m;  ζ = -1.0)
 As $\tau$ is now an input into the outer neural network of the DeepSet estimator, we must increase the input dimension of $\boldsymbol{\phi}$ (by one) when designing the neural estimator architecture. Below, we construct and train such an estimator.
 
 ```
-# Inner and outer networks
+# Construct DeepSet neural network
 ψ = Chain(Dense(d * 2, w, relu), Dense(w, w, relu))    
-ϕ = Chain(Dense(w + 1, w, relu), Dense(w, d, sigmoid))    
+ϕ = Chain(Dense(w + 1, w, relu), Dense(w, d, sigmoid))
+network = DeepSet(ψ, ϕ)
 
-# Combine into a DeepSet
-θ̂_τ = PointEstimator(DeepSet(ψ, ϕ))
+# Initialise estimator
+θ̂_τ = PointEstimator(network)
 
-# training; note we make use of set-level statistics
+# Training
 θ̂_τ = train(θ̂_τ, θ_train, θ_val, (Z_train, τ_train), (Z_val, τ_val))
 ```
 
@@ -634,8 +604,6 @@ We use our trained estimator for any specified and fixed value of $\tau$ within 
 
 We can assess the estimator for different values of $\tau$, corresponding to different amounts of censoring (larger $\tau$ corresponds to more censoring). As expected, estimation from data with less censoring (lower $\tau$) suffers from lower uncertainty.
 ```
-using AlgebraOfGraphics, CairoMakie   
-
 # assessment with τ fixed to 0.75
 τ_test =  repeat([0.75], 1000)'
 Z_test = simulatecensored(θ_test, τ_test, m;  ζ = -1.0)

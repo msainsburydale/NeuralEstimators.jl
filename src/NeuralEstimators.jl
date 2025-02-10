@@ -82,16 +82,16 @@ include("deprecated.jl")
 end
 
 # ---- longer term/lower priority:
-# - Functionality: Make Ensemble “play well” throughout the package. 
-# - Functionality: assess(est::PosteriorEstimator) and assess(est::RatioEstimator) using simulation-based calibration (e.g., qq plots). Also a CRPS diagnostic for PosteriorEstimators. 
-# - Functionality: Incorporate the following package (possibly as an extension) to greatly expand bootstrap functionality; https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
+# - Functionality: Ensure that Ensemble “plays well” throughout the package. 
+# - Functionality: assess(estimator::PosteriorEstimator) and assess(estimator::RatioEstimator) and corresponding diagnostics. 
+# - Functionality: Incorporate the following package (possibly as an extension) to expand bootstrap functionality; https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
 # -	Functionality: Training, option to check validation risk (and save the optimal estimator) more frequently than the end of each epoch, which would avoid wasted computation when we have very large training sets. 
-# - Functionality: Sequence (e.g., time-series) input https://jldc.ch/post/seq2one-flux/, and see also the new recurrent layers added to Flux. 
 # - Functionality: Helper functions for censored data. 
 # - Functionality: Explicit learning of summary statistics.
 # - Polishing: Might be better to use Plots rather than {AlgebraOfGraphics, CairoMakie}.
 # - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/
 # -	Add NeuralEstimators.jl to https://github.com/smsharma/awesome-neural-sbi#code-packages-and-benchmarks
+# - Examples: Sequence (e.g., time-series) input https://jldc.ch/post/seq2one-flux/, and see also the new recurrent layers added to Flux. 
 # - Examples: Bivariate data in multivariate section.
 # - Examples: Discrete parameters (e.g., Chan et al., 2018). Might need extra functionality for this.
 # - Documentation: Turn some examples into "doctests" for automatic checking of examples.
