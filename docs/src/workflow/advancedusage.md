@@ -467,14 +467,6 @@ function censorandaugment(z; c, ζ = 0)
     z = ifelse.(z .<= c, ζ, z)
     return vcat(z, I)
 end
-
-function censorandaugment(z; c, ζ = 0)
-    I  = findall(z .<= c)
-	z = removedata(z, I)
-	z = copy(reshape(z, size(z, 1), 1, :))
-    A  = encodedata(z; c = ζ) #TODO messy that c becomes ζ
-    return A
-end
 ```
 
 Censoring is performed during training. To ensure this, we use `censorandaugment()` within the simulation function:
