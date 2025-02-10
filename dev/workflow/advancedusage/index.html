@@ -281,14 +281,6 @@ end</code></pre><h3 id="General-setting"><a class="docs-heading-anchor" href="#G
     I = 1 * (z .&lt;= c)
     z = ifelse.(z .&lt;= c, ζ, z)
     return vcat(z, I)
-end
-
-function censorandaugment(z; c, ζ = 0)
-    I  = findall(z .&lt;= c)
-	z = removedata(z, I)
-	z = copy(reshape(z, size(z, 1), 1, :))
-    A  = encodedata(z; c = ζ) #TODO messy that c becomes ζ
-    return A
 end</code></pre><p>Censoring is performed during training. To ensure this, we use <code>censorandaugment()</code> within the simulation function:</p><pre><code class="nohighlight hljs"># Marginal simulation of censored data
 function simulatecensored(θ, m; c, ζ) 
 	Z = simulate(θ, m)
