@@ -397,7 +397,7 @@ Neural estimators can be constructed to handle censored data as input, by exploi
 
 [Richards et al. (2024)](https://jmlr.org/papers/v25/23-1134.html) discuss neural Bayes estimation from censored data in the context of peaks-over-threshold extremal dependence modelling, where artifical censoring of data is imposed to reduce estimation bias in the presence of marginally non-extreme events. For peaks-over-threshold models, observed data are treated as censored if they exceed their corresponding marginal $\tau$-quantile, for $\tau \in (0,1)$ close to one. We present two approaches to censoring data: a [General setting](@ref), where users specifiy their own deterministic "censoring", and [Peaks-over-threshold modelling](@ref), where users supply a (censoring) quantile level $\tau$, which can be treated as random and/or feature as an input to the neural network.
 
-As a running example, we consider a bivariate random scale Gaussian mixture; see [Engelke, Opitiz, and Wadsworth (2019)](https://link.springer.com/article/10.1007/s10687-019-00353-3) and [Huser and Wadsworth (2018)](https://www.tandfonline.com/doi/full/10.1080/01621459.2017.1411813). We consider the task of estimating $\boldsymbol{\theta}=(\rho,\delta)'$, for correlation parameter $\rho \in [0,1)$ and shape parameter $\delta \in [0,1]$. Data $\boldsymbol{Z}_1,\dots,\boldsymbol{Z}_m$ are independent and identically distributed according to the random scale construction
+As a running example, we consider a bivariate random scale Gaussian mixture; see [Engelke, Opitz, and Wadsworth (2019)](https://link.springer.com/article/10.1007/s10687-019-00353-3) and [Huser and Wadsworth (2018)](https://www.tandfonline.com/doi/full/10.1080/01621459.2017.1411813). We consider the task of estimating $\boldsymbol{\theta}=(\rho,\delta)'$, for correlation parameter $\rho \in [0,1)$ and shape parameter $\delta \in [0,1]$. Data $\boldsymbol{Z}_1,\dots,\boldsymbol{Z}_m$ are independent and identically distributed according to the random scale construction
 ```math
 \boldsymbol{Z}_i = \delta R_i + (1-\delta)  \boldsymbol{X}_i,
 ```
@@ -466,6 +466,14 @@ function censorandaugment(z; c, ζ = 0)
     I = 1 * (z .<= c)
     z = ifelse.(z .<= c, ζ, z)
     return vcat(z, I)
+end
+
+function censorandaugment(z; c, ζ = 0)
+    I  = findall(z .<= c)
+	z = removedata(z, I)
+	z = copy(reshape(z, size(z, 1), 1, :))
+    A  = encodedata(z; c = ζ) #TODO messy that c becomes ζ
+    return A
 end
 ```
 

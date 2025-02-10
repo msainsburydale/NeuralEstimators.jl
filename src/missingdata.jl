@@ -171,12 +171,12 @@ end
 
 
 """
-	removedata(Z::Array, Iᵤ::Vector{Integer})
+	removedata(Z::Array, Iᵤ::Vector{T}) where T <: Union{Integer, CartesianIndex}
 	removedata(Z::Array, p::Union{Float, Vector{Float}}; prevent_complete_missing = true)
 	removedata(Z::Array, n::Integer; fixed_pattern = false, contiguous_pattern = false, variable_proportion = false)
 Replaces elements of `Z` with `missing`.
 
-The simplest method accepts a vector of integers `Iᵤ` that give the specific indices
+The simplest method accepts a vector `Iᵤ` that specifes the indices
 of the data to be removed.
 
 Alternatively, there are two methods available to randomly generate missing data.
@@ -313,7 +313,7 @@ function removedata(Z::V, p::Vector{F}; args...) where {V <: AbstractVector{T}} 
 	removedata(reshape(Z, :, 1), p)[:]
 end
 
-function removedata(Z::A, Iᵤ::V) where {A <: AbstractArray{T, N}, V <: AbstractVector{I}} where {T, N, I <: Integer}
+function removedata(Z::A, Iᵤ::V) where {A <: AbstractArray{T, N}, V <: AbstractVector{I}} where {T, N, I <: Union{Integer, CartesianIndex}}
 
 	# Convert the Array to a type that allows missing data
 	Z₁ = convert(Array{Union{T, Missing}}, Z)
@@ -339,7 +339,7 @@ the new second-to-last dimension.
 ```
 using NeuralEstimators
 
-# Generate some missing data
+# Generate some data with missing elements 
 Z = rand(16, 16, 1, 1)
 Z = removedata(Z, 0.25)	 # remove 25% of the data
 

@@ -98,3 +98,10 @@ end
 # - Precompile to reduce latency: See https://julialang.org/blog/2021/01/precompile_tutorial/. 
 # - Functionality: Add "AR(k) time series" example, or a Ricker model (an example using partially exchangeable neural networks)
 # - Functionality: GNN: I set the code up to have ndata as a 3D array; with this format, non-parametric bootstrap would be fast (since we can just subset the array data). Non-parametric bootstrap is currently super slow because subsetdata() is super slow with graphical data... would be good to fix this so that non-parametric bootstrap is more efficient, and also so that train() is more efficient (and so that we don’t need to add qualifiers to the subsetting methods). Note that this may also be resolved by improvements to GraphNeuralNetworks.jl.
+# function censorandaugment(z; c, ζ = 0)
+#     I  = findall(z .<= c)
+# 	z = removedata(z, I)
+# 	z = copy(reshape(z, size(z, 1), 1, :))
+#     A  = encodedata(z; c = ζ) #TODO messy that c becomes ζ
+#     return A
+# end
