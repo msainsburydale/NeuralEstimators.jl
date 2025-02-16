@@ -37,7 +37,7 @@ Neural Bayes estimators are implemented as subtypes of the abstract supertype [`
 
 The type [`PosteriorEstimator`](@ref) can be used to approximate the posterior distribution, and [`RatioEstimator`](@ref) can be used to approximate the likelihood-to-evidence ratio.
 
-Several types serve as wrappers around the aforementioned estimators, enhancing their functionality. [`PiecewiseEstimator`](@ref) applies different estimators based on the sample size of the data (see the discussion on [Variable sample sizes](@ref)). [`Ensemble`](@ref) combines multiple estimators, aggregating their estimates to improve accuracy.
+Several types serve as wrappers around the aforementioned estimators, enhancing their functionality. [`PiecewiseEstimator`](@ref) applies different estimators based on the sample size of the data (see the discussion on [Variable sample sizes](@ref)). Finally, [`Ensemble`](@ref) combines multiple estimators, aggregating their individual estimates to improve accuracy.
 
 
 ```@docs

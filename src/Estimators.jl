@@ -424,7 +424,7 @@ end
 	PosteriorEstimator(q::ApproximateDistribution, network)
 A neural estimator that approximates the posterior distribution $p(\boldsymbol{\theta} \mid \boldsymbol{Z})$, based on a neural `network` and an approximate distribution `q` (see the available in-built [Approximate distributions](@ref)). 
 
-The neural `network` is a mapping from the sample space to a space determined by the chosen approximate distribution `q`. Often, the output space is the space $\mathcal{K}$ of the approximate-distribution parameters $\boldsymbol{\kappa}$. However, for certain distributions (notably, [`NormalisingFlow`](@ref)), the neural network outputs summary statistics of suitable dimension (e.g., the dimension $d$ of the parameter vector). 
+The neural `network` is a mapping from the sample space to a space determined by the chosen approximate distribution `q`. Often, the output space is the space $\mathcal{K}$ of the approximate-distribution parameters $\boldsymbol{\kappa}$. However, for certain distributions (notably, [`NormalisingFlow`](@ref)), the neural network outputs summary statistics of suitable dimension (e.g., the dimension $d$ of the parameter vector), which are then transformed into parameters of the approximate distribution using conventional multilayer perceptrons (see [`NormalisingFlow`](@ref)). 
 
 # Examples
 ```julia
@@ -660,9 +660,9 @@ Base.show(io::IO, estimator::PiecewiseEstimator) = print(io, "\nPiecewise estima
 	Ensemble(estimators)
 	Ensemble(architecture::Function, J::Integer)
 	(ensemble::Ensemble)(Z; aggr = median)
-Defines an ensemble based on a collection of `estimators` which,
+Defines an ensemble of `estimators` which,
 when applied to data `Z`, returns the median
-(or another summary defined by `aggr`) of the estimates.
+(or another summary defined by `aggr`) of the individual estimates (see, e.g., [Sainsbury-Dale et al., 2025, Sec. S3](https://doi.org/10.48550/arXiv.2501.04330)).
 
 The ensemble can be initialised with a collection of trained `estimators` and then
 applied immediately to observed data. Alternatively, the ensemble can be

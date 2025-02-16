@@ -88,7 +88,7 @@ The return value is of type [`Assessment`](@ref).
 - `parameter_names::Vector{String}`: names of the parameters (sensible defaults provided). 
 - `estimator_names::Vector{String}`: names of the estimators (sensible defaults provided).
 - `use_gpu = true`: `Bool` or collection of `Bool` objects with length equal to the number of estimators.
-- `probs = nothing` (applicable only to [`PointEstimator`](@ref)): probability levels taking values between 0 and 1. If `nothing` no bootstrap uncertainty quantification is done; if provided, it must be a two-element vector specifying the lower and upper probability levels for non-parametric bootstrap intervals. 
+- `probs = nothing` (applicable only to [`PointEstimator`](@ref)): probability levels taking values between 0 and 1. By default, no bootstrap uncertainty quantification is done; if `probs` is provided, it must be a two-element vector specifying the lower and upper probability levels for the non-parametric bootstrap intervals (note that parametric bootstrap is not currently supported with `assess()`).  
 - `B::Integer = 400` (applicable only to [`PointEstimator`](@ref)): number of bootstrap samples. 
 """
 function assess(
@@ -470,7 +470,7 @@ Computes a Monte Carlo approximation of an estimator's bias,
 ```math
 {\textrm{bias}}(\hat{\boldsymbol{\theta}}(\cdot))
 \approx
-\frac{1}{K} \sum_{k=1}^K \hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(k)}) - \boldsymbol{\theta}^{(k)},
+\frac{1}{K} \sum_{k=1}^K \{\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(k)}) - \boldsymbol{\theta}^{(k)}\},
 ```
 
 where ``\{\boldsymbol{\theta}^{(k)} : k = 1, \dots, K\}`` denotes a set of ``K`` parameter vectors sampled from the
@@ -497,7 +497,7 @@ Computes a Monte Carlo approximation of an estimator's root-mean-squared error,
 ```math
 {\textrm{rmse}}(\hat{\boldsymbol{\theta}}(\cdot))
 \approx
-\sqrt{\frac{1}{K} \sum_{k=1}^K (\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(k)}) - \boldsymbol{\theta}^{(k)})^2},
+\sqrt{\frac{1}{K} \sum_{k=1}^K \{\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(k)}) - \boldsymbol{\theta}^{(k)}\}^2},
 ```
 
 where ``\{\boldsymbol{\theta}^{(k)} : k = 1, \dots, K\}`` denotes a set of ``K`` parameter vectors sampled from the

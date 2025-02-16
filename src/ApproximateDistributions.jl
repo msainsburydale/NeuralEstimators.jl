@@ -294,11 +294,11 @@ the parameter vector and `dstar` is the dimension of the summary statistics for 
     
 Normalising flows are diffeomorphisms (i.e., invertible, differentiable transformations with differentiable inverses) that map a simple base distribution (e.g., standard Gaussian) to a more complex target distribution (e.g., the posterior). They achieve this by applying a sequence of learned transformations, the forms of which are chosen to be invertible and allow for tractable density computation via the change of variables formula. This allows for efficient density evaluation during the training stage, and efficient sampling during the inference stage. For further details, see the reviews by [Kobyzev et al. (2020)](https://ieeexplore.ieee.org/document/9089305) and [Papamakarios (2021)](https://dl.acm.org/doi/abs/10.5555/3546258.3546315).
 
-When using a `NormalisingFlow` as the approximate distribution of a [`PosteriorEstimator`](@ref), 
-the neural `network` of the [`PosteriorEstimator`](@ref) should be a mapping from the sample space to ``\mathbb{R}^{d^*}``, 
-where ``d^*`` is an appropriate number of summary statistics for the given parameter vector (e.g., ``d^* = d``).
-
 `NormalisingFlow` uses affine coupling blocks (see [`AffineCouplingBlock`](@ref)), with activation normalisation ([Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685)) and permutations used between each block. The base distribution is taken to be a standard multivariate Gaussian distribution. 
+
+When using a `NormalisingFlow` as the approximate distribution of a [`PosteriorEstimator`](@ref), 
+the neural network of the [`PosteriorEstimator`](@ref) should be a mapping from the sample space to ``\mathbb{R}^{d^*}``, 
+where ``d^*`` is an appropriate number of summary statistics for the given parameter vector (e.g., ``d^* = d``). The summary statistics are then mapped to the parameters of the affine coupling blocks using conventional multilayer perceptrons (see [`AffineCouplingBlock`](@ref)).
 
 # Keyword arguments
 - `num_coupling_layers::Integer = 6`: number of coupling layers. 
