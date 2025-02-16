@@ -1,13 +1,11 @@
 """
 	NeuralEstimator
-
-An abstract supertype for all neural estimators in `NeuralEstimators.jl`.
+An abstract supertype for all neural estimators.
 """
 abstract type NeuralEstimator end
 
 """
 	BayesEstimator <: NeuralEstimator
-
 An abstract supertype for neural Bayes estimators.
 """
 abstract type BayesEstimator <: NeuralEstimator  end
@@ -15,8 +13,7 @@ abstract type BayesEstimator <: NeuralEstimator  end
 """
 	PointEstimator <: BayesEstimator
     PointEstimator(network)
-	(estimator::PointEstimator)(Z)
-A point estimator, where the neural `network` is a mapping from the sample space to the parameter space.
+A neural point estimator, where the neural `network` is a mapping from the sample space to the parameter space.
 """
 struct PointEstimator <: BayesEstimator
 	network 
@@ -27,8 +24,6 @@ end
 	IntervalEstimator <: BayesEstimator
 	IntervalEstimator(u, v = u, c::Union{Function, Compress} = identity; probs = [0.025, 0.975], g = exp)
 	IntervalEstimator(u, c::Union{Function, Compress}; probs = [0.025, 0.975], g = exp)
-	(estimator::IntervalEstimator)(Z)
-
 A neural estimator that jointly estimates marginal posterior credible intervals based on the probability levels `probs` (by default, 95% central credible intervals).
 
 The estimator employs a representation that prevents quantile crossing. Specifically, given data ``\boldsymbol{Z}``, 
@@ -44,18 +39,14 @@ monotonically increasing function (e.g., exponential or softplus); and each
 ``c_i(⋅)`` is a monotonically increasing function that maps its input to the
 prior support of ``\theta_i``.
 
-The functions ``c_i(⋅)`` may be collectively defined by a ``d``-dimensional object of type
-[`Compress`](@ref). If these functions are unspecified, they will be set to the
-identity function so that the range of the intervals will be unrestricted. 
-If only a single neural-network architecture is provided, it will be used for both ``\boldsymbol{u}(⋅)`` and ``\boldsymbol{v}(⋅)``.
+The functions ``c_i(⋅)`` may be collectively defined by a ``d``-dimensional [`Compress`](@ref) object, which can constrain the interval estimator's output to the prior support. If these functions are unspecified, they will be set to the identity function so that the range of the intervals will be unrestricted. If only a single neural-network architecture is provided, it will be used for both ``\boldsymbol{u}(⋅)`` and ``\boldsymbol{v}(⋅)``.
 
 The return value when applied to data using [`estimate`()](@ref) is a matrix with ``2d`` rows, where the first and second ``d`` rows correspond to the lower and upper bounds, respectively. The function [`interval()`](@ref) can be used to format this output in a readable ``d`` × 2 matrix.  
 
-See also [`QuantileEstimatorDiscrete`](@ref) and
-[`QuantileEstimatorContinuous`](@ref).
+See also [`QuantileEstimator`](@ref).
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux
 
 # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
@@ -107,11 +98,8 @@ function (est::IntervalEstimator)(Z)
 end
 
 @doc raw"""
-	QuantileEstimatorDiscrete <: BayesEstimator
-	QuantileEstimatorDiscrete(v; probs = [0.025, 0.5, 0.975], g = Flux.softplus, i = nothing)
-	(estimator::QuantileEstimatorDiscrete)(Z)
-	(estimator::QuantileEstimatorDiscrete)(Z, θ₋ᵢ)
-
+	QuantileEstimator <: BayesEstimator
+	QuantileEstimator(v; probs = [0.025, 0.5, 0.975], g = Flux.softplus, i = nothing)
 A neural estimator that jointly estimates a fixed set of marginal posterior
 quantiles, with probability levels $\{\tau_1, \dots, \tau_T\}$ controlled by the
 keyword argument `probs`. This generalises [`IntervalEstimator`](@ref) to support an arbitrary number of probability levels. 
@@ -156,10 +144,8 @@ The return value is a matrix with $\{d - \text{dim}(\boldsymbol{\theta}_{-i})\} 
 first ``T`` rows correspond to the estimated quantiles for the first
 parameter, the second ``T`` rows corresponds to the estimated quantiles for the second parameter, and so on.
 
-See also [`QuantileEstimatorContinuous`](@ref).
-
 # Examples
-```
+```julia
 using NeuralEstimators, Flux
 
 # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
@@ -178,7 +164,7 @@ w = 64   # width of each hidden layer
 v = DeepSet(ψ, ϕ)
 
 # Initialise the estimator
-estimator = QuantileEstimatorDiscrete(v)
+estimator = QuantileEstimator(v)
 
 # Train the estimator
 estimator = train(estimator, sample, simulate, m = m)
@@ -197,8 +183,8 @@ w = 64  # width of each hidden layer
 v = DeepSet(ψ, ϕ)
 
 # Initialise estimators respectively targetting quantiles of μ∣Z,σ and σ∣Z,μ
-q₁ = QuantileEstimatorDiscrete(v; i = 1)
-q₂ = QuantileEstimatorDiscrete(v; i = 2)
+q₁ = QuantileEstimator(v; i = 1)
+q₂ = QuantileEstimator(v; i = 2)
 
 # Train the estimators
 q₁ = train(q₁, sample, simulate, m = m)
@@ -212,22 +198,22 @@ q₁(Z, θ₋ᵢ)
 q₁(Z[1], θ₋ᵢ)
 ```
 """
-struct QuantileEstimatorDiscrete{V, P} <: BayesEstimator #TODO function for neat output as dxT matrix like interval() 
+struct QuantileEstimator{V, P} <: BayesEstimator #TODO function for neat output as dxT matrix like interval() 
 	v::V
 	probs::P
 	g::Union{Function, Nothing}
 	i::Union{Integer, Nothing}
 end
-function QuantileEstimatorDiscrete(v; probs = [0.025, 0.5, 0.975], g = Flux.softplus, i::Union{Integer, Nothing} = nothing)
+function QuantileEstimator(v; probs = [0.025, 0.5, 0.975], g = Flux.softplus, i::Union{Integer, Nothing} = nothing)
 	if !isa(probs, AbstractArray)
         probs = [probs]
     end
     @assert all(0 .< probs .< 1) 
 	if !isnothing(i) @assert i > 0 end
-	QuantileEstimatorDiscrete(deepcopy.(repeat([v], length(probs))), probs, g, i)
+	QuantileEstimator(deepcopy.(repeat([v], length(probs))), probs, g, i)
 end
-Flux.trainable(est::QuantileEstimatorDiscrete) = (v = est.v, )
-function (est::QuantileEstimatorDiscrete)(input) # input might be Z, or a tuple (Z, θ₋ᵢ)
+Flux.trainable(est::QuantileEstimator) = (v = est.v, )
+function (est::QuantileEstimator)(input) # input might be Z, or a tuple (Z, θ₋ᵢ)
 
 	# Apply each neural network to Z
 	v = map(est.v) do v
@@ -246,7 +232,7 @@ function (est::QuantileEstimatorDiscrete)(input) # input might be Z, or a tuple 
 	reduce(vcat, q)
 end
 # user-level convenience methods (not used internally) for full conditional estimation
-function (est::QuantileEstimatorDiscrete)(Z, θ₋ᵢ::Vector)
+function (est::QuantileEstimator)(Z, θ₋ᵢ::Vector)
 	i = est.i
 	@assert !isnothing(i) "slot i must be specified when approximating a full conditional"
 	if isa(Z, Vector) # repeat θ₋ᵢ to match the number of data sets
@@ -254,7 +240,9 @@ function (est::QuantileEstimatorDiscrete)(Z, θ₋ᵢ::Vector)
 	end
 	est((Z, θ₋ᵢ))  # "Tupleise" the input and apply the estimator
 end
-(est::QuantileEstimatorDiscrete)(Z, θ₋ᵢ::Number) = est(Z, [θ₋ᵢ])
+(est::QuantileEstimator)(Z, θ₋ᵢ::Number) = est(Z, [θ₋ᵢ])
+const QuantileEstimatorDiscrete = QuantileEstimator # alias
+
 
 # function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
 # 	μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
@@ -262,12 +250,10 @@ end
 # 	Normal(μ̃, σ̃)
 # end
 
+# ; and see [`QuantileEstimatorContinuous`](@ref) for estimating posterior quantiles based on a continuous probability level provided as input to the neural network.
 @doc raw"""
 	QuantileEstimatorContinuous <: BayesEstimator
 	QuantileEstimatorContinuous(network; i = nothing, num_training_probs::Integer = 1)
-	(estimator::QuantileEstimatorContinuous)(Z, τ)
-	(estimator::QuantileEstimatorContinuous)(Z, θ₋ᵢ, τ)
-
 A neural estimator that estimates marginal posterior quantiles, with the probability level `τ` given as input to the neural network.
 
 Given data $\boldsymbol{Z}$ and the desired probability level 
@@ -300,10 +286,10 @@ Second, the number of output neurons in the final layer of the outer network mus
 The return value is a matrix with $d - \text{dim}(\boldsymbol{\theta}_{-i})$ rows,
 corresponding to the estimated quantile for each parameter not in $\boldsymbol{\theta}_{-i}$.
 
-See also [`QuantileEstimatorDiscrete`](@ref).
+See also [`QuantileEstimator`](@ref).
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux
 
 # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
@@ -436,16 +422,12 @@ end
 @doc raw"""
 	PosteriorEstimator <: NeuralEstimator
 	PosteriorEstimator(q::ApproximateDistribution, network)
-	sampleposterior(estimator::PosteriorEstimator, Z, N::Integer)
-	posteriormean(estimator::PosteriorEstimator, Z, N::Integer)
-A neural estimator that approximates the posterior distribution $p(\boldsymbol{\theta} \mid \boldsymbol{Z})$. 
+A neural estimator that approximates the posterior distribution $p(\boldsymbol{\theta} \mid \boldsymbol{Z})$, based on a neural `network` and an approximate distribution `q` (see the available in-built [Approximate distributions](@ref)). 
 
-The neural `network` is a mapping from the sample space to a space that depends on the chosen approximate distribution `q` (see the available in-built [Approximate distributions](@ref)). 
-Often, the output space of the neural network is the space $\mathcal{K}$ of approximate-distribution parameters $\boldsymbol{\kappa}$.  
-However, for certain approximate distributions (notably, [`NormalisingFlow`](@ref)), the neural network should output summary statistics of some suitable dimension (e.g., the dimension $d$ of the parameter vector). 
+The neural `network` is a mapping from the sample space to a space determined by the chosen approximate distribution `q`. Often, the output space is the space $\mathcal{K}$ of the approximate-distribution parameters $\boldsymbol{\kappa}$. However, for certain distributions (notably, [`NormalisingFlow`](@ref)), the neural network outputs summary statistics of suitable dimension (e.g., the dimension $d$ of the parameter vector). 
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux
 
 # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
@@ -463,13 +445,6 @@ w = 128
 ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
 ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, d))
 network = DeepSet(ψ, ϕ)
-
-## Alternatively, to use a Gaussian approximate distribution: 
-# q = GaussianDistribution(d) 
-# w = 128
-# ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
-# ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, numdistributionalparams(q)))
-# network = DeepSet(ψ, ϕ)
 
 # Initialise the estimator
 estimator = PosteriorEstimator(q, network)
@@ -493,12 +468,16 @@ logdensity(estimator::PosteriorEstimator, θ, Z) = logdensity(estimator.q, θ, e
 (estimator::PosteriorEstimator)(Zθ::Tuple) = logdensity(estimator, Zθ[2], Zθ[1]) # internal method only used during training # TODO not ideal that we assume an ordering here
 sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000) = sampleposterior(estimator.q, estimator.network(Z), N)
 
+## Alternatively, to use a Gaussian approximate distribution: 
+# q = GaussianDistribution(d) 
+# w = 128
+# ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
+# ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, numdistributionalparams(q)))
+# network = DeepSet(ψ, ϕ)
+
 @doc raw"""
 	RatioEstimator <: NeuralEstimator
 	RatioEstimator(network)
-	(estimator::RatioEstimator)(Z, θ)
-	sampleposterior(estimator::RatioEstimator, Z, N::Integer)
-	posteriormean(estimator::RatioEstimator, Z, N::Integer)
 A neural estimator that estimates the likelihood-to-evidence ratio,
 ```math
 r(\boldsymbol{Z}, \boldsymbol{\theta}) \equiv p(\boldsymbol{Z} \mid \boldsymbol{\theta})/p(\boldsymbol{Z}),
@@ -525,7 +504,7 @@ or frequentist
 inferential algorithms.
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux
 
 # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
@@ -621,7 +600,7 @@ trained for moderate-to-large sample sizes (e.g., ``m > 30``), one may construct
 See also [`trainx()`](@ref).
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux
 
 n = 2    # bivariate data
@@ -700,7 +679,7 @@ of component estimators can be obtained using `length()`.
 See also [`Parallel`](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.Parallel), which can be used to mimic ensemble methods with an appropriately chosen `connection`. 
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux
 
 # Data Z|θ ~ N(θ, 1) with θ ~ N(0, 1)

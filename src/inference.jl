@@ -1,8 +1,6 @@
 """
-	estimate(estimator, Z, T = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
-Applies `estimator` to batches of `Z` (and optionally other set-level information `T`) of size `batchsize`.
-
-This can prevent memory issues that can occur with large data sets, particularly on the GPU.
+	estimate(estimator, Z; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+Applies `estimator` to batches of `Z` of size `batchsize`, which can prevent memory issues that can occur with large data sets. 
 
 Batching will only be done if there are multiple data sets in `Z`, which will be inferred by `Z` being a vector, or a tuple whose first element is a vector.
 """
@@ -61,7 +59,7 @@ based either on a ``d`` × ``N`` matrix `θ` of posterior draws, where ``d`` den
 	posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...)	
 Computes the posterior mean $_doc_string
 
-See also [`posteriormedian()`](@ref), [`posteriormode()`](@ref), and [`mlestimate()`](@ref).
+See also [`posteriormedian()`](@ref), [`posteriormode()`](@ref).
 """
 posteriormean(θ::AbstractMatrix) = mean(θ; dims = 2)
 posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormean(sampleposterior(estimator, Z, N; kwargs...))
@@ -71,7 +69,7 @@ posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Intege
 	posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...)	
 Computes the vector of marginal posterior medians $_doc_string
 
-See also [`posteriormean()`](@ref), [`posteriorquantile()`](@ref), and [`mlestimate()`](@ref).
+See also [`posteriormean()`](@ref), [`posteriorquantile()`](@ref).
 """
 posteriormedian(θ::AbstractMatrix) = median(θ; dims = 2)
 posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormedian(sampleposterior(estimator, Z, N; kwargs...))
@@ -146,46 +144,20 @@ end
 # TODO density evaluation with PosteriorEstimator would allow us to use these grid and gradient-based methods for computing the posterior mode
 
 @doc raw"""
-	mlestimate(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, penalty::Function = θ -> 1, use_gpu = true)
-Computes the (approximate) maximum likelihood estimate given data $\boldsymbol{Z}$,
-```math
-\underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}),
-```
-where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function implied by `estimator`.
-
-If a vector `θ₀` of initial parameter estimates is given, the approximate
-likelihood is maximised by gradient descent (requires `Optim.jl` to be loaded). Otherwise, if a matrix of parameters
-`θ_grid` is given, the approximate likelihood is maximised by grid search.
-
-A maximum penalised likelihood estimate,
-```math
-\underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta}),
-```
-can be obtained by specifying the keyword argument `penalty` that defines the penalty term $p(\boldsymbol{\theta})$.
-
-See also [`posteriormean()`](@ref), [`posteriormedian()`](@ref), and [`posteriormode()`](@ref).
-"""
-mlestimate(est::RatioEstimator, Z; kwargs...) = _maximisedensity(est, Z; kwargs...)
-mlestimate(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, mlestimate.(Ref(est), Z; kwargs...))
-
-@doc raw"""
 	posteriormode(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, prior::Function = θ -> 1, use_gpu = true)
 Computes the (approximate) posterior mode (maximum a posteriori estimate) given data $\boldsymbol{Z}$,
 ```math
 \underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta}),
 ```
-where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function implied by `estimator`, and $p(\boldsymbol{\theta})$ denotes the prior density function controlled through the keyword argument `prior`.
+where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function implied by `estimator`, and $p(\boldsymbol{\theta})$ denotes the prior density function controlled through the keyword argument `prior`. Note that this estimate can be viewed as an approximate maximum penalised likelihood estimate, with penalty term $p(\boldsymbol{\theta})$. 
 
 If a vector `θ₀` of initial parameter estimates is given, the approximate
 posterior density is maximised by gradient descent (requires `Optim.jl` to be loaded). Otherwise, if a matrix of parameters
 `θ_grid` is given, the approximate posterior density is maximised by grid search.
 
-See also [`mlestimate()`](@ref), [`posteriormedian()`](@ref), and [`posteriormean()`](@ref).
+See also [`posteriormedian()`](@ref), [`posteriormean()`](@ref).
 """
-posteriormode(est::RatioEstimator, Z; kwargs...) = _maximisedensity(est, Z; kwargs...)
-posteriormode(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, mlestimate.(Ref(est), Z; kwargs...))
-
-function _maximisedensity(
+function posteriormode(
 	est::RatioEstimator, Z;
 	prior::Function = θ -> 1f0, penalty::Union{Function, Nothing} = nothing,
 	θ_grid = nothing, theta_grid = nothing,
@@ -220,7 +192,8 @@ function _maximisedensity(
 
 	return θ̂
 end
-_maximisedensity(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, _maximisedensity.(Ref(est), Z; kwargs...))
+posteriormode(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, posteriormode.(Ref(est), Z; kwargs...))
+
 
 # Here, we define _optimdensity() for the case that Optim has not been loaded
 # For the case that Optim is loaded, _optimdensity() is overloaded in ext/NeuralEstimatorsOptimExt.jl

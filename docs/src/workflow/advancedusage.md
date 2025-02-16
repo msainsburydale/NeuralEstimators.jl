@@ -4,7 +4,7 @@
 
 In regards to saving and loading, neural estimators behave in the same manner as regular Flux models. Therefore, the examples and recommendations outlined in the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/saving/) also apply directly to neural estimators. For example, to save the model state of the neural estimator `estimator`, run:
 
-```
+```julia
 using Flux
 using BSON: @save, @load
 model_state = Flux.state(estimator)
@@ -13,7 +13,7 @@ model_state = Flux.state(estimator)
 
 Then, to load it in a new session, one may initialise a neural estimator with the same architecture used previously, and load the saved model state as follows:
 
-```
+```julia
 @load "estimator.bson" model_state
 Flux.loadmodel!(estimator, model_state)
 ```
@@ -45,7 +45,7 @@ Another class of regularisation techniques involve modifying the loss function. 
 
 For illustration, the following code constructs a neural Bayes estimator using dropout and L₁ regularisation with penalty coefficient $\lambda = 10^{-4}$:
 
-```
+```julia
 using NeuralEstimators, Flux
 
 # Data Z|θ ~ N(θ, 1) with θ ~ N(0, 1)
@@ -116,9 +116,9 @@ Alternatively, one could treat the sample size as a random variable, $M$, with s
 ```
 This approach does not materially alter the workflow, except that one must also sample the number of replicates before simulating the data during the training phase.
 
-The following pseudocode illustrates how one may modify a general data simulator to train under a range of sample sizes, with the distribution of $M$ defined by passing any object that can be sampled using `rand(m, K)` (e.g., an integer range like `1:30`, an integer-valued distribution from [Distributions.jl](https://juliastats.org/Distributions.jl/stable/univariate/)):
+The following pseudocode illustrates how one may modify a general data simulator to train under a range of sample sizes, with the distribution of $M$ defined by passing any object that can be sampled using `rand(m, K)` (e.g., an integer range like `1:30`, or an integer-valued distribution from [Distributions.jl](https://juliastats.org/Distributions.jl/stable/univariate/)):
 
-```
+```julia
 # Method that allows m to be an object that can be sampled from
 function simulate(parameters, m)
 	# Number of parameter vectors stored in parameters
@@ -144,39 +144,32 @@ Neural networks do not naturally handle missing data, and this property can prec
 
 As a running example, we consider a Gaussian process model where the data are collected over a regular grid, but where some elements of the grid are unobserved. This situation often arises in, for example, remote-sensing applications, where the presence of cloud cover prevents measurement in some places. Below, we load the packages needed in this example, and define some aspects of the model that will remain constant throughout (e.g., the prior, the spatial domain). We also define types and functions for sampling from the prior distribution and for simulating marginally from the data model.
 
-```
+```julia
 using NeuralEstimators, Flux
 using Distributions: Uniform
 using Distances, LinearAlgebra
 using Statistics: mean
 
-# Set the prior and define the number of parameters in the statistical model
-Π = (
-	τ = Uniform(0, 1.0),
-	ρ = Uniform(0, 0.4)
-)
+# Prior and dimension of parameter vector
+Π = (τ = Uniform(0, 1.0), ρ = Uniform(0, 0.4))
 d = length(Π)
 
-# Define the (gridded) spatial domain and compute the distance matrix
+# Define the grid and compute the distance matrix
 points = range(0, 1, 16)
 S = expandgrid(points, points)
 D = pairwise(Euclidean(), S, dims = 1)
 
-# Store model information for later use
-ξ = (
-	Π = Π,
-	S = S,
-	D = D
-)
+# Collect model information for later use
+ξ = (Π = Π, S = S, D = D)
 
-# Struct for storing parameters+Cholesky factors
+# Struct for storing parameters and Cholesky factors
 struct Parameters <: ParameterConfigurations
 	θ
 	L
 end
 
 # Constructor for above struct
-function Parameters(K::Integer, ξ)
+function sample(K::Integer, ξ)
 
 	# Sample parameters from the prior
 	Π = ξ.Π
@@ -199,13 +192,12 @@ function simulate(parameters::Parameters, m::Integer)
 	K = size(parameters, 2)
 	τ = parameters.θ[1, :]
 	L = parameters.L
-	n = isqrt(size(L, 1))
+	G = isqrt(size(L, 1)) # side-length of grid
 
 	Z = map(1:K) do k
 		z = simulategaussian(L[:, :, k], m)
 		z = z + τ[k] * randn(size(z)...)
-		z = Float32.(z)
-		z = reshape(z, n, n, 1, :)
+		z = reshape(z, G, G, 1, :)
 		z
 	end
 
@@ -218,16 +210,16 @@ end
 The first missing-data technique that we consider is the so-called masking approach of [Wang et al. (2024)](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1012184); see also the discussion by [Sainsbury-Dale et al. (2025, Sec. 2.2)](https://doi.org/10.48550/arXiv.2501.04330). The strategy involves completing the data by replacing missing values with zeros, and using auxiliary variables to encode the missingness pattern, which are also passed into the network.
 
 Let $\boldsymbol{Z}$ denote the complete-data vector. Then, the masking approach considers inference based on $\boldsymbol{W}$, a vector of indicator variables that encode the missingness pattern (with elements equal to one or zero if the corresponding element of $\boldsymbol{Z}$ is observed or missing, respectively), and
-
 ```math
 \boldsymbol{U} \equiv \boldsymbol{Z} \odot \boldsymbol{W},
 ```
+where $\odot$ denotes elementwise multiplication and the product of a missing element and zero is defined to be zero. Irrespective of the missingness pattern, $\boldsymbol{U}$ and $\boldsymbol{W}$ have the same fixed dimensions and hence may be processed easily using a single neural network. A neural point estimator is then trained on realisations of $\{\boldsymbol{U}, \boldsymbol{W}\}$ which, by construction, do not contain any missing elements. 
 
-where $\odot$ denotes elementwise multiplication and the product of a missing element and zero is defined to be zero. Irrespective of the missingness pattern, $\boldsymbol{U}$ and $\boldsymbol{W}$ have the same fixed dimensions and hence may be processed easily using a single neural network. A neural point estimator is then trained on realisations of $\{\boldsymbol{U}, \boldsymbol{W}\}$ which, by construction, do not contain any missing elements.
+The manner in which $\boldsymbol{U}$ and $\boldsymbol{W}$ are combined depends on the multivariate structure of the data and the chosen architecture. For example, when the data are gridded and the neural network is a CNN, then $\boldsymbol{U}$ and $\boldsymbol{W}$ can be concatenated along the channels dimension (i.e., the penultimate dimension of the array).  The construction of augmented data sets $\{\boldsymbol{U}, \boldsymbol{W}\}$ from incomplete data is facilitated by the helper function [`encodedata()`](@ref).
 
-Since the missingness pattern $\boldsymbol{W}$ is now an input to the neural network, it must be incorporated during the training phase. When interest lies only in making inference from a single already-observed data set, $\boldsymbol{W}$ is fixed and known, and the Bayes risk remains unchanged. However, amortised inference, whereby one trains a single neural network that will be used to make inference with many data sets, requires a joint model for the data $\boldsymbol{Z}$ and the missingness pattern $\boldsymbol{W}$, which is here defined as follows:
+Since the missingness pattern $\boldsymbol{W}$ is now an input to the neural network, it must be incorporated during the training phase. When interest lies only in making inference from a single already-observed data set, $\boldsymbol{W}$ is fixed and known, and the Bayes risk remains unchanged. However, amortised inference, whereby one trains a single neural network that will be used to make inference with many data sets, requires a joint model for the data $\boldsymbol{Z}$ and the missingness pattern $\boldsymbol{W}$, which is here defined as follows (see the helper function [`removedata()`](@ref)):
 
-```
+```julia
 # Marginal simulation from the data model and a MCAR missingness model
 function simulatemissing(parameters::Parameters, m::Integer)
 
@@ -244,11 +236,9 @@ function simulatemissing(parameters::Parameters, m::Integer)
 end
 ```
 
-Note that the helper functions [`removedata()`](@ref) and [`encodedata()`](@ref) facilitate the construction of augmented data sets $\{\boldsymbol{U}, \boldsymbol{W}\}$.
-
 Next, we construct and train a masked neural Bayes estimator using a CNN architecture. Here, the first convolutional layer takes two input channels, since we store the augmented data $\boldsymbol{U}$ in the first channel and the missingness pattern $\boldsymbol{W}$ in the second. We construct a point estimator, but the masking approach is applicable with any other kind of estimator (see [Estimators](@ref)):
 
-```
+```julia
 # Construct DeepSet object
 ψ = Chain(
 	Conv((10, 10), 2 => 16,  relu),
@@ -263,13 +253,13 @@ network = DeepSet(ψ, ϕ)
 θ̂ = PointEstimator(network)
 
 # Train the masked neural Bayes estimator
-θ̂ = train(θ̂, Parameters, simulatemissing, m = 1, ξ = ξ, K = 1000, epochs = 10)
+θ̂ = train(θ̂, sample, simulatemissing, m = 1, ξ = ξ, K = 1000, epochs = 10)
 ```
 
-Once trained, we can apply our masked neural Bayes estimator to (incomplete) observed data. The data must be encoded in the same manner that was done during training. Below, we use simulated data as a surrogate for real data, with a missingness proportion of 0.25:
+Once trained, we can apply our masked neural Bayes estimator to (incomplete) observed data. The data must be encoded in the same manner as during training. Below, we use simulated data as a surrogate for real data, with a missingness proportion of 0.25:
 
-```
-θ = Parameters(1, ξ)     # true parameters
+```julia
+θ = sample(1, ξ)     # true parameters
 Z = simulate(θ, 1)[1]    # complete data
 Z = removedata(Z, 0.25)  # "observed" incomplete data (i.e., with missing values)
 UW = encodedata(Z)       # augmented data {U, W}
@@ -287,7 +277,7 @@ where realisations of the missing-data component, $\{\boldsymbol{Z}_2^{(lh)} : h
 
 First, we construct a neural approximation of the MAP estimator. In this example, we will take $H=50$. When $H$ is taken to be reasonably large, one may lean on the [Bernstein-von Mises](https://en.wikipedia.org/wiki/Bernstein%E2%80%93von_Mises_theorem) theorem to train the neural Bayes estimator under linear or quadratic loss; otherwise, one should train the estimator under a continuous relaxation of the 0--1 loss (e.g., the [`tanhloss()`](@ref) in the limit $\kappa \to 0$). This is done as follows:
 
-```
+```julia
 # Construct DeepSet object
 ψ = Chain(
 	Conv((10, 10), 1 => 16,  relu),
@@ -306,12 +296,12 @@ network = DeepSet(ψ, ϕ)
 
 # Train neural Bayes estimator
 H = 50
-θ̂ = train(θ̂, Parameters, simulate, m = H, ξ = ξ, K = 1000, epochs = 10)
+θ̂ = train(θ̂, sample, simulate, m = H, ξ = ξ, K = 1000, epochs = 10)
 ```
 
 Next, we define a function for conditional simulation (see [`EM`](@ref) for details on the required format of this function):
 
-```
+```julia
 function simulateconditional(Z::M, θ, ξ; nsims::Integer = 1) where {M <: AbstractMatrix{Union{Missing, T}}} where T
 
 	# Save the original dimensions
@@ -380,8 +370,8 @@ end
 
 Now we can use the neural EM algorithm to get parameter point estimates from data containing missing values. The algorithm is implemented with the type [`EM`](@ref). Again, here we use simulated data as a surrogate for real data:
 
-```
-θ = Parameters(1, ξ)            # true parameters
+```julia
+θ = sample(1, ξ)            # true parameters
 Z = simulate(θ, 1)[1][:, :]     # complete data
 Z = removedata(Z, 0.25)         # "observed" incomplete data (i.e., with missing values)
 θ₀ = mean.([Π...])              # initial estimate, the prior mean
@@ -404,7 +394,7 @@ As a running example, we consider a bivariate random scale Gaussian mixture; see
 where $R_i \sim \text{Exp}(1)$ and $\boldsymbol{X}_i$ is a bivariate random vector following a Gaussian copula with correlation $\rho$ and unit exponential margins. We note that the vector $\boldsymbol{Z}_i$ does not itself have unit exponential margins; instead, its marginal distribution function, $F(z;\delta),$ is dependent on $\delta$; this has a closed form expression, see [Huser and Wadsworth (2018)](https://www.tandfonline.com/doi/full/10.1080/01621459.2017.1411813).
 
 Simulation of the random scale mixture and its marginal ditribution function are provided below.
-```
+```julia
 # Libraries used throughout this example
 using NeuralEstimators, Flux
 using Folds
@@ -461,7 +451,7 @@ The augmented data $\boldsymbol{A}$ is an input to the neural network, and so th
 
 Note that the function `censorandaugment()` should be applied to data during both training and at evaluation time. Any manipulation of data that is performed during simulation of the training data should also be performed to data at test time. Below, the function `censorandaugment()` takes in a vector of censoring levels $\boldsymbol{c}$ of the same length as $\boldsymbol{Z}_i$, and sets censored values to $\zeta_1=\dots=\zeta_m=\zeta$. In this way, the censoring mechanism and augmentation values, $\boldsymbol{\zeta}$, do not vary with the model parameter values or with the replicate index.
 
-```
+```julia
 function censorandaugment(z; c, ζ = 0)
     I = 1 * (z .<= c)
     z = ifelse.(z .<= c, ζ, z)
@@ -471,7 +461,7 @@ end
 
 Censoring is performed during training. To ensure this, we use `censorandaugment()` within the simulation function:
 
-```
+```julia
 # Marginal simulation of censored data
 function simulatecensored(θ, m; c, ζ) 
 	Z = simulate(θ, m)
@@ -491,7 +481,7 @@ Z_train = simulatecensored(θ_train, m; c = c, ζ = -1.0)
 
 To construct a point estimator which can accomodate the augmented dataset, we ensure that the dimension of the input layer is $2d$, where $d$ is the number of parameters. Below, we construct and train a point estimator for the generated censored data.
 
-```
+```julia
 d = 2   # dimension of θ
 w = 128  # width of each hidden layer
 
@@ -508,7 +498,7 @@ network = DeepSet(ψ, ϕ)
 We now train and test two estimators for censored data; one with `c = [0, 0]` and one with `c = [0.5, 0.5]`, which correspond to no and mild censoring, respectively. We assess the estimators using the same test data. As expected, the neural estimator designed for non-censored data has lower sampling uncertainty, as the data it uses are more informative.
 
 
-```
+```julia
 # Training and assessment
 θ_test = sample(1000) # test parameter values
 
@@ -541,7 +531,7 @@ Peaks-over-threshold modelling, with $\tau$ fixed, can be easily implemented by 
 
 We also follow [Richards et al. (2024)](https://jmlr.org/papers/v25/23-1134.html) and consider inference for data on standardised margins; we pre-standardise data $\boldsymbol{Z}$ to have unit exponential margins, rather than $\delta$-dependent margins. This can help to improve the numerical stability of estimator training, as well as increasing training efficiency.
 
-```
+```julia
 # Sampling τ from its prior
 function sampleτ(K)
 	τ = rand(Uniform(0.7, 0.9), 1, K) 
@@ -587,7 +577,7 @@ Z_val    = simulatecensored(θ_val, τ_val, m;  ζ = -1.0)
 
 As $\tau$ is now an input into the outer neural network of the DeepSet estimator, we must increase the input dimension of $\boldsymbol{\phi}$ (by one) when designing the neural estimator architecture. Below, we construct and train such an estimator.
 
-```
+```julia
 # Construct DeepSet neural network
 ψ = Chain(Dense(d * 2, w, relu), Dense(w, w, relu))    
 ϕ = Chain(Dense(w + 1, w, relu), Dense(w, d, sigmoid))
@@ -603,7 +593,7 @@ network = DeepSet(ψ, ϕ)
 We use our trained estimator for any specified and fixed value of $\tau$ within the support of its prior (in this case, [0.7,0.9]). Our trained estimator is amortised with respect to $\tau$; we do not need to retrain the estimator for different degrees of censoring.
 
 We can assess the estimator for different values of $\tau$, corresponding to different amounts of censoring (larger $\tau$ corresponds to more censoring). As expected, estimation from data with less censoring (lower $\tau$) suffers from lower uncertainty.
-```
+```julia
 # assessment with τ fixed to 0.75
 τ_test =  repeat([0.75], 1000)'
 Z_test = simulatecensored(θ_test, τ_test, m;  ζ = -1.0)

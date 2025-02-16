@@ -33,7 +33,7 @@ While the formats above cover many applications, the package is flexible: the da
 
 The package provides several classes of neural estimators, organised within a type hierarchy. At the top-level of the hierarchy is [`NeuralEstimator`](@ref), an abstract supertype for all neural estimators in the package. 
 
-Neural Bayes estimators are implemented as subtypes of the abstract supertype [`BayesEstimator`](@ref). The simple type [`PointEstimator`](@ref) is used for constructing neural Bayes estimators under general, user-defined loss functions. Several specialised types cater for the estimation of posterior quantiles based on the quantile loss function: see [`IntervalEstimator`](@ref) and its generalisation [`QuantileEstimatorDiscrete`](@ref) for estimating posterior quantiles for a fixed set of probability levels; and see [`QuantileEstimatorContinuous`](@ref) for estimating posterior quantiles based on a continuous probability level provided as input to the neural network.
+Neural Bayes estimators are implemented as subtypes of the abstract supertype [`BayesEstimator`](@ref). The simple type [`PointEstimator`](@ref) is used for constructing neural Bayes estimators under general, user-defined loss functions. Several specialised types cater for the estimation of posterior quantiles based on the quantile loss function: see [`IntervalEstimator`](@ref) and its generalisation [`QuantileEstimator`](@ref) for estimating posterior quantiles for a fixed set of probability levels. 
 
 The type [`PosteriorEstimator`](@ref) can be used to approximate the posterior distribution, and [`RatioEstimator`](@ref) can be used to approximate the likelihood-to-evidence ratio.
 
@@ -53,9 +53,7 @@ RatioEstimator
 
 IntervalEstimator
 
-QuantileEstimatorDiscrete
-
-QuantileEstimatorContinuous
+QuantileEstimator
 
 PiecewiseEstimator
 
@@ -92,9 +90,7 @@ coverage
 
 ## Inference with observed data
 
-The following functions are intended to facilitate the use of a trained neural estimator with observed data. 
-
-Note that most [`NeuralEstimators`](@ref) are callable and can be applied to data `Z` (possibly containing multiple data sets) in a call of the form `estimator(Z)` or similar. In these cases, one may leverage a GPU by simply moving the estimator and the data to the GPU using [`gpu()`](https://fluxml.ai/Flux.jl/stable/models/functors/#Flux.gpu-Tuple{Any}). See also [`estimate()`](@ref) to apply the estimator over batches of data, which can alleviate memory issues when working with large data sets (the methods below typically use this memory-safe approach where possible). 
+The following functions facilitate the use of a trained neural estimator with observed data. 
 
 ```@docs
 estimate
@@ -112,6 +108,4 @@ posteriormedian
 posteriorquantile
 
 posteriormode
-
-mlestimate
 ```

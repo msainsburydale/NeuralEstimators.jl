@@ -326,24 +326,21 @@ end
 
 """
 	encodedata(Z::A; c::T = zero(T)) where {A <: AbstractArray{Union{Missing, T}, N}} where T, N
-For data `Z` with missing entries, returns an encoded data set (U, W) where
-W encodes the missingness pattern as an indicator vector and U is the original data Z
-with missing entries replaced by a fixed constant `c`.
+For data `Z` with missing entries, returns an encoded data set `(U, W)` where 
+`U` is the original data `Z` with missing entries replaced by a fixed constant `c`, 
+and `W` encodes the missingness pattern as an indicator array 
+equal to one if the corresponding element of `Z` is observed and zero otherwise.
 
-The indicator vector W is stored in the second-to-last dimension of `Z`, which
-should be singleton. If the second-to-last dimension is not singleton, then
-two singleton dimensions will be added to the array, and W will be stored in
-the new second-to-last dimension.
+The behavior depends on the dimensionality of `Z`. If `Z` has 1 or 2 dimensions, 
+the indicator array `W` is concatenated along the first dimension of `Z`. If `Z` has more than 2 
+dimensions, `W` is concatenated along the second-to-last dimension of `Z`. 
 
 # Examples
 ```
 using NeuralEstimators
 
-# Generate some data with missing elements 
 Z = rand(16, 16, 1, 1)
-Z = removedata(Z, 0.25)	 # remove 25% of the data
-
-# Encode the data
+Z = removedata(Z, 0.25)	# remove 25% of the data at random
 UW = encodedata(Z)
 ```
 """
@@ -352,25 +349,22 @@ function encodedata(Z::A; c::T = zero(T)) where {A <: AbstractArray{Union{Missin
 	# Store the container type for later use
 	ArrayType = containertype(Z)
 
-	# Make some space for the indicator variable
-	if N == 1 || size(Z, N-1) != 1
-		Z = reshape(Z, (size(Z)..., 1, 1))
-		Ñ = N + 2
-	else
-		Ñ = N
-	end
-
 	# Compute the indicator variable and the encoded data
 	W = isnotmissing.(Z)
 	U = copy(Z) # copy to avoid mutating the original data
 	U[ismissing.(U)] .= c
 
 	# Convert from eltype of U from Union{Missing, T} to T
-	# U = convert(Array{T, N}, U) # NB this doesn't work if Z was modified in the if statement
-	U = convert(ArrayType{T, Ñ}, U)
+	U = convert(Array{T, N}, U) 
 
-	# Combine the encoded data and the indicator variable
-	UW = cat(U, W; dims = Ñ - 1)
+	# Concatenate the data and indicator variable along the appropriate dimension
+	if N <= 2
+		# Concatenate along the first dimension for 1D or 2D data
+		UW = cat(U, W; dims = 1)
+	else
+		# Concatenate along the penultimate dimension for higher-dimensional data
+		UW = cat(U, W; dims = N - 1)
+	end
 
 	return UW
 end

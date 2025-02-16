@@ -6,12 +6,9 @@ The package supports neural Bayes estimators, which transform data into point su
 
 User-friendliness is a central focus of the package, which is designed to minimise "boilerplate" code while preserving complete flexibility in the neural-network architecture and other workflow components. The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. A convenient interface for R users is available on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
 
-### Getting started 
+Once familiar with the [Methodology](@ref), see the [Overview](@ref) of the package workflow and the [Examples](@ref), or refer to the [Quick start](@ref) section below.
 
-Once familiar with the [Methodology](@ref), see the [Overview](@ref) of the package workflow and the illustrative [Examples](@ref).
-
-
-### Installation
+## Installation
 
 To install the package, please first install the current stable release of [`Julia`](https://julialang.org/downloads/). Then, one may install the current stable version of the package using the following command inside `Julia`:
 
@@ -25,7 +22,45 @@ Alternatively, one may install the current development version using the command
 using Pkg; Pkg.add(url = "https://github.com/msainsburydale/NeuralEstimators.jl")
 ```
 
-### Supporting and citing
+## Quick start 
+
+In the following minimal example, we develop a [neural Bayes estimator](@ref "Neural Bayes estimators") for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $\boldsymbol{Z} \equiv (Z_1, \dots, Z_m)'$, where each $Z_i \overset{\mathrm{iid}}\sim N(\mu, \sigma^2)$. 
+
+```julia
+using NeuralEstimators, Flux
+
+# Priors μ,σ ~ U(0, 1) and data Zᵢ|μ,σ ~ N(μ, σ²), i = 1,…, m
+d = 2    # dimension of the parameter vector θ
+n = 1    # dimension of each data replicate Zᵢ
+sample(K) = rand(d, K) 
+simulate(θ, m = 100) = [ϑ[1] .+ ϑ[2] * randn(n, m) for ϑ ∈ eachcol(θ)]  
+
+# Neural network, based on the DeepSets architecture
+w = 128  # width of each hidden layer 
+ψ = Chain(Dense(n, w, relu), Dense(w, w, relu))
+ϕ = Chain(Dense(w, w, relu), Dense(w, d))
+network = DeepSet(ψ, ϕ)
+
+# Initialise a neural point estimator
+estimator = PointEstimator(network) 
+
+# Train the estimator
+estimator = train(estimator, sample, simulate, epochs = 20)
+
+# Assess the estimator
+θ_test = sample(1000)
+Z_test = simulate(θ_test)
+assessment = assess(estimator, θ_test, Z_test)
+bias(assessment)   # μ = 0.001, σ = 0.001
+rmse(assessment)   # μ = 0.05,  σ = 0.04
+
+# Apply the estimator to observed data
+θ = [0.8 0.1]'          # true parameters
+Z = simulate(θ)         # "observed" data
+estimate(estimator, Z)  # point estimate: μ̂ = 0.797, σ̂ = 0.087
+```
+
+## Supporting and citing
 
 This software was developed as part of academic research. If you would like to support it, please star the [repository](https://github.com/msainsburydale/NeuralEstimators.jl). If you use it in your research or other activities, please also use the following citations.
 
@@ -53,7 +88,7 @@ This software was developed as part of academic research. If you would like to s
   }
 ```
 
-### Contributing
+## Contributing
 
 If you encounter a bug or have a suggestion, please consider [opening an issue](https://github.com/msainsburydale/NeuralEstimators.jl/issues) or submitting a pull request. Instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/README.md). When adding functionality to the package, you may wish to add unit tests to the file [test/runtests.jl](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/test/runtests.jl). You can then run these tests locally by executing the following command from the root folder:
 ```bash

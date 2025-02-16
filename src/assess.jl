@@ -12,9 +12,9 @@ with columns:
 - `k`:         the index of the parameter vector
 - `j`:         the index of the data set (in the case that multiple data sets are associated with each parameter vector)
 
-If `estimator` is an `IntervalEstimator`, the column `estimate` will be replaced by the columns `lower` and `upper`, containing the lower and upper bounds of the interval, respectively.
+If the estimator is an [`IntervalEstimator`](@ref), the column `estimate` will be replaced by the columns `lower` and `upper`, containing the lower and upper bounds of the interval, respectively.
 
-If `estimator` is a `QuantileEstimator`, the `df` will also contain a column `prob` indicating the probability level of the corresponding quantile estimate.
+If the estimator is a [`QuantileEstimator`](@ref), there will also be a column `prob` indicating the probability level of the corresponding quantile estimate.
 
 Use `merge()` to combine assessments from multiple estimators of the same type or `join()` to combine assessments from a [`PointEstimator`](@ref) and an [`IntervalEstimator`](@ref).
 """
@@ -69,7 +69,7 @@ function join(assessment::Assessment, assessments::Assessment...)
 	Assessment(df, runtime)
 end
 
-
+# - `probs` (applicable only to [`PointEstimator`](@ref) and [`QuantileEstimatorContinuous`](@ref)): probability levels taking values between 0 and 1. For a `PointEstimator`, the default is `nothing` (no bootstrap uncertainty quantification); if provided, it must be a two-element vector specifying the lower and upper probability levels for non-parametric bootstrap intervals. For a `QuantileEstimatorContinuous`, `probs` defines the probability levels at which the estimator is evaluated (default: `range(0.01, stop=0.99, length=100)`).
 # NB ξ is undocumented now because it isn't needed when assessing NeuralEstimator objects, which is the use case 99% of the time for assess(). I leave it here for backwards compatibility only. 
 # - `ξ = nothing`: an arbitrary collection of objects that are fixed (e.g., distance matrices). Can also be provided as `xi`. 
 # - `use_ξ = false`: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators. Specifies whether or not the estimator uses `ξ`: if it does, the estimator will be applied as `estimator(Z, ξ)`. This argument is useful when multiple `estimators` are provided, only some of which need `ξ`; hence, if only one estimator is provided and `ξ` is not `nothing`, `use_ξ` is automatically set to `true`. Can also be provided as `use_xi`.
@@ -88,7 +88,7 @@ The return value is of type [`Assessment`](@ref).
 - `parameter_names::Vector{String}`: names of the parameters (sensible defaults provided). 
 - `estimator_names::Vector{String}`: names of the estimators (sensible defaults provided).
 - `use_gpu = true`: `Bool` or collection of `Bool` objects with length equal to the number of estimators.
-- `probs` (applicable only to [`PointEstimator`](@ref) and [`QuantileEstimatorContinuous`](@ref)): probability levels taking values between 0 and 1. For a `PointEstimator`, the default is `nothing` (no bootstrap uncertainty quantification); if provided, it must be a two-element vector specifying the lower and upper probability levels for non-parametric bootstrap intervals. For a `QuantileEstimatorContinuous`, `probs` defines the probability levels at which the estimator is evaluated (default: `range(0.01, stop=0.99, length=100)`).
+- `probs = nothing` (applicable only to [`PointEstimator`](@ref)): probability levels taking values between 0 and 1. If `nothing` no bootstrap uncertainty quantification is done; if provided, it must be a two-element vector specifying the lower and upper probability levels for non-parametric bootstrap intervals. 
 - `B::Integer = 400` (applicable only to [`PointEstimator`](@ref)): number of bootstrap samples. 
 """
 function assess(

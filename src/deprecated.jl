@@ -10,6 +10,7 @@ loadweights(path::String) = load(path, @__MODULE__)[:weights]
 
 # aliases for backwards compatability
 mapestimate = posteriormode; export mapestimate
+mlestimate = posteriormode; export mlestimate
 WeightedGraphConv = SpatialGraphConv; export WeightedGraphConv 
 simulategaussianprocess = simulategaussian; export simulategaussianprocess
 estimateinbatches = estimate; export estimateinbatches

@@ -259,28 +259,21 @@ end
 		n = 16
 		Z = rand(n)
 		Z = removedata(Z, 0.25)
-		UW = encodedata(Z);
-		@test ndims(UW) == 3
-		@test size(UW) == (n, 2, 1)
+		UW = encodedata(Z)
+		@test ndims(UW) == 1
+		@test size(UW) == (2n,)
 	
 		Z = rand(n, n)
 		Z = removedata(Z, 0.25)
-		UW = encodedata(Z);
-		@test ndims(UW) == 4
-		@test size(UW) == (n, n, 2, 1)
+		UW = encodedata(Z)
+		@test ndims(UW) == 2
+		@test size(UW) == (2n, n)
 	
-		Z = rand(n, n, 1, 1)
+		Z = rand(n, n, 3, 5)
 		Z = removedata(Z, 0.25)
-		UW = encodedata(Z);
+		UW = encodedata(Z)
 		@test ndims(UW) == 4
-		@test size(UW) == (n, n, 2, 1)
-	
-		m = 5
-		Z = rand(n, n, 1, m)
-		Z = removedata(Z, 0.25)
-		UW = encodedata(Z);
-		@test ndims(UW) == 4
-		@test size(UW) == (n, n, 2, m)
+		@test size(UW) == (n, n, 6, 5)
 	end
 
 	@testset "vectotri: $dvc" for dvc ∈ devices

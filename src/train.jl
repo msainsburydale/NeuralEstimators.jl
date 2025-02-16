@@ -39,7 +39,7 @@ The estimator is returned on the CPU so that it can be easily saved post trainin
 - `epochs_per_θ_refresh = 1`: the number of passes to make through the training set before the training parameters are refreshed. Must be a multiple of `epochs_per_Z_refresh`. Can also be provided as `epochs_per_theta_refresh`.
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux
 
 # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ N(0, 1) and σ ~ U(0, 1)

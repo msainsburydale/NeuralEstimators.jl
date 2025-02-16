@@ -681,7 +681,7 @@ Wrapper around the standard
 [Dense](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dense) layer that
 ensures positive weights (biases are left unconstrained).
 
-This layer can be useful for constucting (partially) monotonic neural networks (see, e.g., [`QuantileEstimatorContinuous`](@ref)).
+This layer can be useful for constucting (partially) monotonic neural networks. 
 
 # Examples
 ```
