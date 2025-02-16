@@ -12,8 +12,7 @@ other requirements.
 See [`subsetparameters()`](@ref) for the generic function for subsetting these objects. 
 
 # Examples
-
-```
+```julia
 struct P <: ParameterConfigurations
 	θ
 	# other expensive intermediate objects...
