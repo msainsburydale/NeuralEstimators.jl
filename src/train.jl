@@ -28,7 +28,7 @@ The estimator is returned on the CPU so that it can be easily saved post trainin
 - `verbose = true`: flag indicating whether information, including empirical risk values and timings, should be printed to the console during training.
 
 # Keyword arguments common to `train(estimator, sampler, simulator)` and `train(estimator, θ_train, θ_val, simulator)`:
-- `m = nothing`: arguments to the simulator (typically the number of replicates in each data set as an `Integer` or an `Integer` collection). The `simulator` is called as `simulator(θ, m)` if `m` is given and as `simulator(θ)` otherwise. 
+- `m = nothing`: arguments to the simulator (typically the number of replicates in each data set as an `Integer` or an `Integer` collection). The simulator is called as `simulator(θ, m)` if `m` is given and as `simulator(θ)` otherwise. 
 - `epochs_per_Z_refresh = 1`: the number of passes to make through the training set before the training data are refreshed.
 - `simulate_just_in_time = false`: flag indicating whether we should simulate just-in-time, in the sense that only a `batchsize` number of parameter vectors and corresponding data are in memory at a given time.
 
@@ -665,11 +665,11 @@ end
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 
 """
-	trainx(estimator, sampler::Function, simulator::Function, m::Vector{Integer}; ...)
-	trainx(estimator, θ_train, θ_val, simulator::Function, m::Vector{Integer}; ...)
-	trainx(estimator, θ_train, θ_val, Z_train, Z_val, m::Vector{Integer}; ...)
-	trainx(estimator, θ_train, θ_val, Z_train::V, Z_val::V; ...) where {V <: AbstractVector{AbstractVector{Any}}}
-A wrapper around `train()` to construct neural estimators for different sample sizes.
+	trainmultiple(estimator, sampler::Function, simulator::Function, m::Vector{Integer}; ...)
+	trainmultiple(estimator, θ_train, θ_val, simulator::Function, m::Vector{Integer}; ...)
+	trainmultiple(estimator, θ_train, θ_val, Z_train, Z_val, m::Vector{Integer}; ...)
+	trainmultiple(estimator, θ_train, θ_val, Z_train::V, Z_val::V; ...) where {V <: AbstractVector{AbstractVector{Any}}}
+A wrapper around `train()` to construct multiple neural estimators for different sample sizes `m`.
 
 The positional argument `m` specifies the desired sample sizes.
 Each estimator is pre-trained with the estimator for the previous sample size (see [Sainsbury-Dale at al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522), Sec 2.3.3). For example, if `m = [m₁, m₂]`, the estimator for sample size `m₂` is
@@ -687,18 +687,18 @@ The keyword arguments inherit from `train()`. The keyword arguments `epochs`,
 For example, if training two estimators, one may use a different number of
 epochs for each estimator by providing `epochs = [epoch₁, epoch₂]`.
 
+The function returns a vector of neural estimators, each corresponding to a sample size in `m`.
+
 See also [PiecewiseEstimator](@ref).
 """
-function trainx end
+function trainmultiple end
 
-function _trainx(estimator; sampler = nothing, simulator = nothing, M = nothing, θ_train = nothing, θ_val = nothing, Z_train = nothing, Z_val = nothing, args...)
+function _trainmultiple(estimator; sampler = nothing, simulator = nothing, M = nothing, θ_train = nothing, θ_val = nothing, Z_train = nothing, Z_val = nothing, args...)
 
-	# Base.depwarn("`trainx` is deprecated and will be removed soon. Use `PiecewiseEstimator` instead.", :trainx)
-
-	@assert !(typeof(estimator) <: Vector) # check that estimator is not a vector of estimators, which is common error if one calls trainx() on the output of a previous call to trainx()
+	@assert !(typeof(estimator) <: Vector) # check that estimator is not a vector of estimators, which is common error if one calls trainmultiple() on the output of a previous call to trainmultiple()
 
 	kwargs = (;args...)
-	verbose = _checkargs_trainx(kwargs)
+	verbose = _checkargs_trainmultiple(kwargs)
 
 	@assert all(M .> 0)
 	M = sort(M)
@@ -735,29 +735,29 @@ function _trainx(estimator; sampler = nothing, simulator = nothing, M = nothing,
 	end
 	return estimators
 end
-trainx(estimator, sampler, simulator, M; args...) = _trainx(estimator, sampler = sampler, simulator = simulator, M = M; args...)
-trainx(estimator, θ_train::P, θ_val::P, simulator, M; args...)  where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _trainx(estimator, θ_train = θ_train, θ_val = θ_val, simulator = simulator, M = M; args...)
+trainmultiple(estimator, sampler, simulator, M; args...) = _trainmultiple(estimator, sampler = sampler, simulator = simulator, M = M; args...)
+trainmultiple(estimator, θ_train::P, θ_val::P, simulator, M; args...)  where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _trainmultiple(estimator, θ_train = θ_train, θ_val = θ_val, simulator = simulator, M = M; args...)
 
 # This method is for when the data can be easily subsetted
-function trainx(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
 
 	@assert length(unique(numberreplicates(Z_val))) == 1 "The elements of `Z_val` should be equally replicated: check with `numberreplicates(Z_val)`"
 	@assert length(unique(numberreplicates(Z_train))) == 1 "The elements of `Z_train` should be equally replicated: check with `numberreplicates(Z_train)`"
 
-	_trainx(estimator, θ_train = θ_train, θ_val = θ_val, Z_train = Z_train, Z_val = Z_val, M = M; args...)
+	_trainmultiple(estimator, θ_train = θ_train, θ_val = θ_val, Z_train = Z_train, Z_val = Z_val, M = M; args...)
 end
 
 # This method is for when the data CANNOT be easily subsetted, so another layer of vectors is needed
-function trainx(estimator, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: Union{V₁, Tuple{V₁, V₂}}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
+function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: Union{V₁, Tuple{V₁, V₂}}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
 
 	@assert length(Z_train) == length(Z_val)
 
-	@assert !(typeof(estimator) <: Vector) # check that estimator is not a vector of estimators, which is common error if one calls trainx() on the output of a previous call to trainx()
+	@assert !(typeof(estimator) <: Vector) # check that estimator is not a vector of estimators, which is common error if one calls trainmultiple() on the output of a previous call to trainmultiple()
 
 	E = length(Z_train) # number of estimators
 
 	kwargs = (;args...)
-	verbose = _checkargs_trainx(kwargs)
+	verbose = _checkargs_trainmultiple(kwargs)
 
 	# Create a copy of estimator for each sample size
 	estimators = _deepcopyestimator(estimator, kwargs, E)
@@ -796,8 +796,8 @@ function trainx(estimator, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...
 	return estimators
 end
 
-function _checkargs_trainx(kwargs)
-	@assert !haskey(kwargs, :m) "Please provide the number of independent replicates, `m`, as a positional argument (i.e., provide the argument simply as `trainx(..., m)` rather than `trainx(..., m = m)`)."
+function _checkargs_trainmultiple(kwargs)
+	@assert !haskey(kwargs, :m) "Please provide the number of independent replicates, `m`, as a positional argument (i.e., provide the argument simply as `trainmultiple(..., m)` rather than `trainmultiple(..., m = m)`)."
 	verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
 	return verbose
 end

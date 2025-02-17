@@ -597,7 +597,7 @@ trained for moderate-to-large sample sizes (e.g., ``m > 30``), one may construct
 `PiecewiseEstimator` that dispatches ``\hat{\boldsymbol{\theta}}_1(\cdot)`` if
 ``m \leq 30`` and ``\hat{\boldsymbol{\theta}}_2(\cdot)`` otherwise.
 
-See also [`trainx()`](@ref).
+See also [`trainmultiple()`](@ref).
 
 # Examples
 ```julia

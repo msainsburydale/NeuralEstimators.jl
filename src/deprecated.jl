@@ -14,6 +14,7 @@ mlestimate = posteriormode; export mlestimate
 WeightedGraphConv = SpatialGraphConv; export WeightedGraphConv 
 simulategaussianprocess = simulategaussian; export simulategaussianprocess
 estimateinbatches = estimate; export estimateinbatches
+trainx = trainmultiple; export trainx
 _runondevice(θ̂, z, use_gpu::Bool; batchsize::Integer = 32) = estimate(θ̂, z; batchsize = batchsize, use_gpu = use_gpu)
 
 

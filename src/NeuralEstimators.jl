@@ -60,7 +60,7 @@ include("simulate.jl")
 export gaussiandensity, schlatherbivariatedensity
 include("densities.jl")
 
-export train, subsetdata
+export train, trainmultiple, subsetdata
 include("train.jl")
 
 export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
