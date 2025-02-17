@@ -394,7 +394,7 @@ As a running example, we consider a bivariate random scale Gaussian mixture; see
 where $R_i \sim \text{Exp}(1)$ and $\boldsymbol{X}_i$ is a bivariate random vector following a Gaussian copula with correlation $\rho$ and unit exponential margins. We note that the vector $\boldsymbol{Z}_i$ does not itself have unit exponential margins; instead, its marginal distribution function, $F(z;\delta),$ is dependent on $\delta$; this has a closed form expression, see [Huser and Wadsworth (2019)](https://www.tandfonline.com/doi/full/10.1080/01621459.2017.1411813).
 
 Simulation of the random scale mixture and its marginal ditribution function are provided below.
-```
+```julia
 # Libraries used throughout this example
 using NeuralEstimators, Flux
 using Folds
@@ -451,7 +451,7 @@ The augmented data $\boldsymbol{A}$ is an input to the neural network, and so th
 
 Note that the function `censorandaugment()` should be applied to data during both training and at evaluation time. Any manipulation of data that is performed during simulation of the training data should also be performed to data at test time. Below, the function `censorandaugment()` takes in a vector of censoring levels $\boldsymbol{c}$ of the same length as $\boldsymbol{Z}_i$, and sets censored values to $\zeta_1=\dots=\zeta_m=\zeta$. In this way, the censoring mechanism and augmentation values, $\boldsymbol{\zeta}$, do not vary with the model parameter values or with the replicate index.
 
-```
+```julia
 function censorandaugment(z; c, ζ = 0)
     I = 1 * (z .<= c)
     z = ifelse.(z .<= c, ζ, z)
@@ -461,7 +461,7 @@ end
 
 Censoring is performed during training. To ensure this, we use `censorandaugment()` within the simulation function:
 
-```
+```julia
 # Marginal simulation of censored data
 function simulatecensored(θ, m; c, ζ) 
 	Z = simulate(θ, m)
@@ -483,7 +483,7 @@ Z_train = simulatecensored(θ_train, m; c = c, ζ = -1.0)
 
 To construct a point estimator which can accomodate the augmented dataset, we ensure that the dimension of the input layer is $2d$, where $d$ is the number of parameters. Below, we construct and train a point estimator for the generated censored data.
 
-```
+```julia
 d = 2   # dimension of θ
 w = 128  # width of each hidden layer
 
@@ -500,7 +500,7 @@ network = DeepSet(ψ, ϕ)
 We now train and test two estimators for censored data; one with `c = [0, 0]` and one with `c = [0.5, 0.5]`, which correspond to no and mild censoring, respectively. We assess the estimators using the same test data. As expected, the neural estimator designed for non-censored data has lower sampling uncertainty, as the data it uses are more informative.
 
 
-```
+```julia
 # Training and assessment
 θ_test = sample(1000) # test parameter values
 
@@ -533,7 +533,7 @@ Peaks-over-threshold modelling, with $\tau$ fixed, can be easily implemented by 
 
 We also follow [Richards et al. (2024)](https://jmlr.org/papers/v25/23-1134.html) and consider inference for data on standardised margins; we pre-standardise data $\boldsymbol{Z}$ to have unit exponential margins, rather than $\delta$-dependent margins. This can help to improve the numerical stability of estimator training, as well as increasing training efficiency.
 
-```
+```julia
 # Sampling τ from its prior
 function sampleτ(K)
 	τ = rand(Uniform(0.7, 0.9), 1, K) 
@@ -579,7 +579,7 @@ Z_val    = simulatecensored(θ_val, τ_val, m;  ζ = -1.0)
 
 As $\tau$ is now an input into the outer neural network of the DeepSet estimator, we must increase the input dimension of $\boldsymbol{\phi}$ (by one) when designing the neural estimator architecture. Below, we construct and train such an estimator.
 
-```
+```julia
 # Construct DeepSet neural network
 ψ = Chain(Dense(d * 2, w, relu), Dense(w, w, relu))    
 ϕ = Chain(Dense(w + 1, w, relu), Dense(w, d, sigmoid))
@@ -595,7 +595,7 @@ network = DeepSet(ψ, ϕ)
 We use our trained estimator for any specified and fixed value of $\tau$ within the support of its prior (in this case, [0.7,0.9]). Our trained estimator is amortised with respect to $\tau$; we do not need to retrain the estimator for different degrees of censoring.
 
 We can assess the estimator for different values of $\tau$, corresponding to different amounts of censoring (larger $\tau$ corresponds to more censoring). As expected, estimation from data with less censoring (lower $\tau$) suffers from lower uncertainty.
-```
+```julia
 # assessment with τ fixed to 0.75
 τ_test =  repeat([0.75], 1000)'
 Z_test = simulatecensored(θ_test, τ_test, m;  ζ = -1.0)
