@@ -1,6 +1,6 @@
 # Architectures
 
-In principle, any [`Flux`](https://fluxml.ai/Flux.jl/stable/) model can be used to construct the neural network. To integrate it into the workflow, one need only define a method that transforms $K$-dimensional vectors of data sets into matrices with $K$ columns, where the number of rows corresponds to the dimensionality of the output spaces listed in the [Overview](@ref). 
+In principle, any [`Flux`](https://fluxml.ai/Flux.jl/stable/) model can be used to construct the neural network (see the [Gridded data](@ref) example). To integrate it into the workflow, one need only define a method that transforms $K$-dimensional vectors of data sets into matrices with $K$ columns, where the number of rows corresponds to the dimensionality of the output spaces listed in the [Overview](@ref). 
 
 ## Modules
 

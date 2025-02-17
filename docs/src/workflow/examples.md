@@ -198,7 +198,7 @@ function simulate(parameters::Parameters, m = 1)
 end
 ```
 
-A possible architecture is as follows. Note that deeper architectures that employ residual connections (see [ResidualBlock](@ref)) often lead to improved performance, and certain pooling layers (e.g., [GlobalMeanPool](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.GlobalMeanPool)) allow the neural network to accommodate grids of varying dimension; for further discussion and an illustration, see [Sainsbury-Dale et al. (2025, Sec. S3, S4)](https://doi.org/10.48550/arXiv.2501.04330). 
+A possible neural-network architecture is as follows. Note that deeper architectures that employ residual connections (see [ResidualBlock](@ref)) often lead to improved performance, and certain pooling layers (e.g., [GlobalMeanPool](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.GlobalMeanPool)) allow the neural network to accommodate grids of varying dimension; for further discussion and an illustration, see [Sainsbury-Dale et al. (2025, Sec. S3, S4)](https://doi.org/10.48550/arXiv.2501.04330). 
 
 ```julia
 # Inner network 
@@ -217,6 +217,25 @@ A possible architecture is as follows. Note that deeper architectures that emplo
 network = DeepSet(ψ, ϕ)
 ```
 
+Above, we embedded our CNN within the DeepSets framework to accommodate scenarios involving replicated spatial data (e.g., when fitting models for spatial extremes). However, as noted in Step 4 of the [Overview](@ref), the package allows users to define the neural network using any Flux model. Since this example does not include independent replicates, the following CNN model is equivalent to the DeepSets architecture used above:  
+
+```julia
+struct CNN{T <: Chain} 
+	chain::T
+end
+function (cnn::CNN)(Z) 
+	cnn.chain(stackarrays(Z))
+end
+network = CNN(Chain(
+	Conv((3, 3), 1 => 32, relu),
+	MaxPool((2, 2)),Conv((3, 3), 32 => 64, relu), 
+	MaxPool((2, 2)), 
+	Flux.flatten, 
+	Dense(256, 64, relu), 
+	Dense(64, 1)                   
+))
+```
+
 Next, we initialise a point estimator and a posterior credible-interval estimator:
 
 ```julia
@@ -227,12 +246,11 @@ q̂ = IntervalEstimator(network)
 Now we train the estimators, here using fixed parameter instances to avoid repeated Cholesky factorisations (see [Storing expensive intermediate objects for data simulation](@ref) and [On-the-fly and just-in-time simulation](@ref) for further discussion):
 
 ```julia
-K = 10000  # number of training parameter vectors
-m = 1      # number of independent replicates in each data set
+K = 10000 # number of training parameter vectors
 θ_train = sample(K)
-θ_val = sample(K ÷ 10)
-θ̂ = train(θ̂, θ_train, θ_val, simulate, m = m)
-q̂ = train(q̂, θ_train, θ_val, simulate, m = m)
+θ_val   = sample(K ÷ 10)
+θ̂ = train(θ̂, θ_train, θ_val, simulate)
+q̂ = train(q̂, θ_train, θ_val, simulate)
 ```
 
 Once the estimators have been trained, we assess them using empirical simulation-based methods:
@@ -253,10 +271,10 @@ plot(assessment)
 Finally, we can apply our estimators to observed data:
 
 ```julia
-θ = sample(1)                          # true parameter
+θ = Parameters(Matrix([0.1]'))         # true parameter
 Z = simulate(θ)                        # "observed" data
-estimate(θ̂, Z)                         # point estimate
-interval(q̂, Z)                         # 95% marginal posterior credible intervals
+estimate(θ̂, Z)                         # point estimate: 0.11
+interval(q̂, Z)                         # 95% marginal posterior credible interval: [0.08, 0.16]
 ```
 
 Note that missing data (e.g., due to cloud cover) can be accommodated using the [missing-data methods](@ref "Missing data") implemented in the package.

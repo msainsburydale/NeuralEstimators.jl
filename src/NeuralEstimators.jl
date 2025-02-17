@@ -87,7 +87,6 @@ end
 # - Functionality: assess(estimator::PosteriorEstimator) and assess(estimator::RatioEstimator) and corresponding diagnostics. 
 # - Functionality: Incorporate the following package (possibly as an extension) to expand bootstrap functionality; https://github.com/juliangehring/Bootstrap.jl. Note also the "straps()" method that allows one to obtain the bootstrap distribution. I think what I can do is define a method of interval(bs::BootstrapSample). Maybe one difficulty will be how to re-sample... Not sure how the bootstrap method will know to sample from the independent replicates dimension (the last dimension) of each array.
 # -	Functionality: Training, option to check validation risk (and save the optimal estimator) more frequently than the end of each epoch, which would avoid wasted computation when we have very large training sets. 
-# - Functionality: Helper functions for censored data. 
 # - Functionality: Explicit learning of summary statistics.
 # - Polishing: Might be better to use Plots rather than {AlgebraOfGraphics, CairoMakie}.
 # - Add NeuralEstimators.jl to the list of packages that use Documenter: see https://documenter.juliadocs.org/stable/man/examples/

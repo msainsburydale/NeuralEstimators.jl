@@ -124,10 +124,10 @@ X  = [rand32(dₓ) for _ ∈ eachindex(Z)]
 ds((Z, X))
 ```
 """
-struct DeepSet{T, G, K}
+struct DeepSet{T, G, K, A}
 	ψ::T
 	ϕ::G
-	a::ElementwiseAggregator
+	a::A
 	S::K
 end
 function DeepSet(ψ, ϕ, a::Function = mean; S = nothing)
