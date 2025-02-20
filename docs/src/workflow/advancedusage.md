@@ -594,16 +594,18 @@ network = DeepSet(ψ, ϕ)
 We use our trained estimator for any specified and fixed value of $\tau$ within the support of its prior (in this case, [0.5,0.9]). Our trained estimator is amortised with respect to $\tau$; we do not need to retrain the estimator for different degrees of censoring.
 
 We can assess the estimator for different values of $\tau$, corresponding to different amounts of censoring (larger $\tau$ corresponds to more censoring). As expected, estimation from data with less censoring (lower $\tau$) suffers from lower uncertainty.
+
+
 ```julia
 # assessment with τ fixed to 0.5
-τ_test =  repeat([0.5], 1000)'
+τ_test = repeat([0.5], 1000)'
 Z_test = simulatecensored(θ_test, τ_test, m;  ζ = -1.0)
 
 assessment_tau1 = assess(θ̂_τ, θ_test, (Z_test, τ_test))    
 plot(assessment_tau1)
 
 # assessment with τ fixed to 0.8. Note that we do not retrain the estimator.
-τ_test =  repeat([0.8], 1000)'
+τ_test = repeat([0.8], 1000)'
 Z_test = simulatecensored(θ_test, τ_test, m;  ζ = -1.0)
                         
 assessment_tau2 = assess(θ̂_τ, θ_test, (Z_test, τ_test))    
