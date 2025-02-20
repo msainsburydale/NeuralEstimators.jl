@@ -420,7 +420,7 @@ function simulate(θ, m)
 		X = -log.(1 .- cdf.(Normal(), X))   # Transform to unit exponential margins
 		R = -log.(1 .- rand(1, m))         
 		Y = δ .* R .+ (1 - δ) .* X          # Transform to uniform margins
-        Z = F.(Y; δ = δ)
+    	Z = F.(Y; δ = δ)
 		Z = -log.(1 .- Z)                   # Transform to exponential margins
 
 	end
@@ -467,7 +467,9 @@ Censoring is performed during training. To ensure this, we use `censorandaugment
 function simulatecensored(θ, m; c, ζ) 
 	Z = simulate(θ, m)
 	A = Folds.map(Z) do Zₖ
-		mapslices(Z -> censorandaugment(Z, c = c, ζ = ζ), Zₖ, dims = 1)
+
+	mapslices(Z -> censorandaugment(Z, c = c, ζ = ζ), Zₖ, dims = 1)
+	
 	end
 	return A
 end
@@ -491,7 +493,7 @@ w = 128  # width of each hidden layer
 # DeepSet neural network, with the final layer of ϕ enforcing ρ ∈ [-1,1], δ ∈ (0,1)
 final_layer = Parallel(
     vcat,
-    Dense(w, 1, tanh),     # ρ ∈ [-1,1]
+    Dense(w, 1, tanh),        # ρ ∈ [-1,1]
     Dense(w, 1, sigmoid)      # δ ∈ (0,1)
 )
 ψ = Chain(Dense(d * 2, w, relu), Dense(w, w, relu))    
