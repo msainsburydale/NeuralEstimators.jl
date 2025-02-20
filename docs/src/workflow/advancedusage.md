@@ -566,7 +566,7 @@ function simulatecensored(θ, τ, m;  ζ)
 end
 
 # Generate the data used for training and validation
-K = 10000   # number of training samples
+K = 50000   # number of training samples
 m = 500        # number of independent replicates in each data set
 θ_train  = sample(K)
 θ_val    = sample(K ÷ 5)
