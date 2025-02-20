@@ -255,7 +255,7 @@ function simulate(θ, m)
 		X = -log.(1 .- cdf.(Normal(), X))   # Transform to unit exponential margins
 		R = -log.(1 .- rand(1, m))         
 		Y = δ .* R .+ (1 - δ) .* X          # Transform to uniform margins
-        Z = F.(Y; δ = δ)
+    	Z = F.(Y; δ = δ)
 		Z = -log.(1 .- Z)                   # Transform to exponential margins
 
 	end
@@ -278,7 +278,9 @@ end</code></pre><p>Censoring is performed during training. To ensure this, we us
 function simulatecensored(θ, m; c, ζ) 
 	Z = simulate(θ, m)
 	A = Folds.map(Z) do Zₖ
-		mapslices(Z -&gt; censorandaugment(Z, c = c, ζ = ζ), Zₖ, dims = 1)
+
+	mapslices(Z -&gt; censorandaugment(Z, c = c, ζ = ζ), Zₖ, dims = 1)
+	
 	end
 	return A
 end
@@ -296,7 +298,7 @@ w = 128  # width of each hidden layer
 # DeepSet neural network, with the final layer of ϕ enforcing ρ ∈ [-1,1], δ ∈ (0,1)
 final_layer = Parallel(
     vcat,
-    Dense(w, 1, tanh),     # ρ ∈ [-1,1]
+    Dense(w, 1, tanh),        # ρ ∈ [-1,1]
     Dense(w, 1, sigmoid)      # δ ∈ (0,1)
 )
 ψ = Chain(Dense(d * 2, w, relu), Dense(w, w, relu))    
@@ -377,4 +379,4 @@ plot(assessment_tau1)
 Z_test = simulatecensored(θ_test, τ_test, m;  ζ = -1.0)
                         
 assessment_tau2 = assess(θ̂_τ, θ_test, (Z_test, τ_test))    
-plot(assessment_tau2)</code></pre><p><img src="../../assets/figures/censoring3.png" alt="Assessment with τ fixed to 0.5"/> <img src="../../assets/figures/censoring4.png" alt="Assessment with τ fixed to 0.8"/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/">« Examples</a><a class="docs-footer-nextpage" href="../../API/core/">Core »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Thursday 20 February 2025 09:39">Thursday 20 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+plot(assessment_tau2)</code></pre><p><img src="../../assets/figures/censoring3.png" alt="Assessment with τ fixed to 0.5"/> <img src="../../assets/figures/censoring4.png" alt="Assessment with τ fixed to 0.8"/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/">« Examples</a><a class="docs-footer-nextpage" href="../../API/core/">Core »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Thursday 20 February 2025 09:41">Thursday 20 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
