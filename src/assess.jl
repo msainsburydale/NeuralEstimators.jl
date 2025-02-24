@@ -185,6 +185,70 @@ function assess(
 	return Assessment(df, runtime)
 end
 
+function assess(
+	estimator::PosteriorEstimator, 
+	θ::P, Z;
+	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
+	estimator_name::Union{Nothing, String} = nothing,
+	estimator_names::Union{Nothing, String} = nothing, 
+	N::Integer = 1000,
+	kwargs...
+	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+
+	# Extract the matrix of parameters
+	θ = _extractθ(θ)
+	p, K = size(θ)
+
+	# Check the size of the test data conforms with θ 
+	m = numberreplicates(Z)
+	if !(typeof(m) <: Vector{Int}) # a vector of vectors has been given, attempt to convert Z to the correct format
+		Z = reduce(vcat, Z) 
+		m = numberreplicates(Z)
+	end
+	KJ = length(m) # NB this can be different to length(Z) when we have set-level information, in which case length(Z) = 2
+	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors in `θ`"
+	J = KJ ÷ K
+	if J > 1
+		θ = repeat(θ, outer = (1, J))
+	end
+	if θ isa NamedMatrix
+		parameter_names = names(θ, 1)
+	end
+	@assert length(parameter_names) == p
+
+	estimate_names = parameter_names
+
+	runtime = @elapsed θ̂ = posteriormedian(estimator, Z, N; kwargs...)
+
+	# Convert to DataFrame and add information
+	runtime = DataFrame(runtime = runtime)
+	θ̂ = DataFrame(θ̂', estimate_names)
+	θ̂[!, "m"] = m
+	θ̂[!, "k"] = repeat(1:K, J)
+	θ̂[!, "j"] = repeat(1:J, inner = K)
+
+	# Add estimator name if it was provided
+	if !isnothing(estimator_names) estimator_name = estimator_names end # deprecation coercion
+	if !isnothing(estimator_name)
+		θ̂[!, "estimator"] .= estimator_name
+		runtime[!, "estimator"] .= estimator_name
+	end
+
+	# Dataframe containing the true parameters
+	θ = convert(Matrix, θ)
+	θ = DataFrame(θ', parameter_names)
+	# Replicate θ to match the number of rows in θ̂. Note that the parameter
+	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
+	# in an outer fashion.
+	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
+	θ = stack(θ, variable_name = :parameter, value_name = :truth) # transform to long form
+
+	# Merge true parameters and estimates
+	df = _merge(θ, θ̂)
+
+	return Assessment(df, runtime)
+end
+
 
 function assess(
 	estimator::Union{IntervalEstimator, Ensemble{<:IntervalEstimator}}, 

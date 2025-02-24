@@ -356,7 +356,7 @@ end
 
 function sampleposterior(flow::NormalisingFlow, TZ::AbstractMatrix, N::Integer; use_gpu::Bool = true) 
 
-    @assert size(TZ, 2) == 1
+    @assert size(TZ, 2) == 1 
     
     # Sample from the base distribution (standard Gaussian) and repeat TZ to match the desired sample size
     U = randn(Float32, flow.d, N)

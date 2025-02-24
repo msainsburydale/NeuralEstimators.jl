@@ -50,6 +50,7 @@ function plot(assessment::Assessment; grid::Bool = false)
   
 	linkyaxes=:none
 	if "estimate" ∈ names(df) #TODO only want this for point estimates 
+		#TODO fix the vertical axis to have the same limits as the horizontal axis
 		if num_estimators > 1
 		  colors = [unique(df.estimator)[i] => ColorSchemes.Set1_4.colors[i] for i ∈ 1:num_estimators]
 		  if grid
