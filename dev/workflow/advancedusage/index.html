@@ -292,7 +292,7 @@ K = 1000       # number of training samples
 c = [0.4, 0.4] # censoring thresholds
 m = 200        # number of independent replicates in each data set
 θ_train = sample(K)
-Z_train = simulatecensored(θ_train, m; c = c, ζ = -1.0)</code></pre><p>To construct a point estimator which can accomodate the augmented dataset, we ensure that the dimension of the input layer is <span>$2d$</span>, where <span>$d$</span> is the number of parameters. Below, we construct and train a point estimator for the generated censored data.</p><pre><code class="language-julia hljs">d = 2   # dimension of θ
+Z_train = simulatecensored(θ_train, m; c = c, ζ = -1.0)</code></pre><p>To construct a point estimator which can accommodate the augmented dataset, we adjust the dimension of the input layer. We must ensure that the dimension of the input layer is <span>$2n$</span>, where <span>$n$</span> is the final dimension of each independent replicate of <span>$\boldsymbol{Z}. In the case of spatial data, the final dimension is typically $n=1$</span>, as the data are represented as an array/graph with one channel (see <a href="../examples/#Gridded-data">Gridded data</a> and <a href="../examples/#Irregular-spatial-data">Irregular spatial data</a>). For our running example, <span>$n=2$</span>, as the data are bivariate.</p><p>Below, we construct and train a point estimator for the generated censored data.</p><pre><code class="language-julia hljs">n = 2    # dimension of each independent replicate of Z
 w = 128  # width of each hidden layer
 
 # DeepSet neural network, with the final layer of ϕ enforcing ρ ∈ [-1,1], δ ∈ (0,1)
@@ -301,7 +301,7 @@ final_layer = Parallel(
     Dense(w, 1, tanh),        # ρ ∈ [-1,1]
     Dense(w, 1, sigmoid)      # δ ∈ (0,1)
 )
-ψ = Chain(Dense(d * 2, w, relu), Dense(w, w, relu))    
+ψ = Chain(Dense(n * 2, w, relu), Dense(w, w, relu))    
 ϕ = Chain(Dense(w, w, relu), final_layer)           
 network = DeepSet(ψ, ϕ)
 
@@ -337,9 +337,9 @@ function simulatecensored(θ, τ, m;  ζ)
 	A = Folds.map(1:K) do k
         Zₖ = Z[k]
         τₖ = τ[k]
-		δₖ = θ[2, k]
 
-		cₖ = -log(1 - τₖ) # As the data is on exponential margins, we set c as the τₖ-quantile of the exponential distribution
+        # As the data are on exponential margins, we set c as the τₖ-quantile of the exponential distribution
+		cₖ = -log(1 - τₖ) 
         # Censor data and create augmented datasest
         A =  mapslices(Z -&gt; censorandaugment(Z, c = cₖ, ζ = ζ), Zₖ, dims = 1)
 
@@ -359,7 +359,7 @@ m = 500        # number of independent replicates in each data set
 τ_val    = sampleτ(K ÷ 5)
 Z_train  = simulatecensored(θ_train, τ_train, m;  ζ = -1.0)
 Z_val    = simulatecensored(θ_val, τ_val, m;  ζ = -1.0)</code></pre><p>As <span>$\tau$</span> is now an input into the outer neural network of the <a href="../../API/architectures/#NeuralEstimators.DeepSet"><code>DeepSet</code></a> estimator, we must increase the input dimension of <span>$\boldsymbol{\phi}$</span> (by one) when designing the neural estimator architecture. Below, we construct and train such an estimator.</p><pre><code class="language-julia hljs"># Construct DeepSet neural network
-ψ = Chain(Dense(d * 2, w, relu), Dense(w, w, relu))    
+ψ = Chain(Dense(n * 2, w, relu), Dense(w, w, relu))    
 ϕ = Chain(Dense(w + 1, w, relu), final_layer)
 network = DeepSet(ψ, ϕ)
 
@@ -379,4 +379,4 @@ plot(assessment_tau1)
 Z_test = simulatecensored(θ_test, τ_test, m;  ζ = -1.0)
                         
 assessment_tau2 = assess(θ̂_τ, θ_test, (Z_test, τ_test))    
-plot(assessment_tau2)</code></pre><p><img src="../../assets/figures/censoring3.png" alt="Assessment with τ fixed to 0.5"/> <img src="../../assets/figures/censoring4.png" alt="Assessment with τ fixed to 0.8"/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/">« Examples</a><a class="docs-footer-nextpage" href="../../API/core/">Core »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Thursday 20 February 2025 09:41">Thursday 20 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+plot(assessment_tau2)</code></pre><p><img src="../../assets/figures/censoring3.png" alt="Assessment with τ fixed to 0.5"/> <img src="../../assets/figures/censoring4.png" alt="Assessment with τ fixed to 0.8"/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/">« Examples</a><a class="docs-footer-nextpage" href="../../API/core/">Core »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Monday 24 February 2025 08:50">Monday 24 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
