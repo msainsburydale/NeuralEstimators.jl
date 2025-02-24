@@ -62,6 +62,7 @@ Computes the posterior mean $_doc_string
 See also [`posteriormedian()`](@ref), [`posteriormode()`](@ref).
 """
 posteriormean(θ::AbstractMatrix) = mean(θ; dims = 2)
+posteriormean(θ::AbstractVector{<:AbstractMatrix}) = reduce(hcat, posteriormean.(θ))
 posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormean(sampleposterior(estimator, Z, N; kwargs...))
 
 """
@@ -72,6 +73,7 @@ Computes the vector of marginal posterior medians $_doc_string
 See also [`posteriormean()`](@ref), [`posteriorquantile()`](@ref).
 """
 posteriormedian(θ::AbstractMatrix) = median(θ; dims = 2)
+posteriormedian(θ::AbstractVector{<:AbstractMatrix}) = reduce(hcat, posteriormedian.(θ))
 posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormedian(sampleposterior(estimator, Z, N; kwargs...))
 
 """
@@ -91,8 +93,6 @@ posteriorquantile(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, probs
 
 # ---- Posterior sampling ----
 
-#TODO Parallel computations in outer broadcasting functions
-#TODO Basic MCMC sampler (initialised with θ₀)
 @doc raw"""
 	sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000)
 	sampleposterior(estimator::RatioEstimator, Z, N::Integer = 1000; θ_grid, prior::Function = θ -> 1f0)
@@ -100,20 +100,22 @@ Samples from the approximate posterior distribution implied by `estimator`.
 
 The positional argument `N` controls the size of the posterior sample.
 
+Returns $d$ × `N` matrix of posterior samples, where $d$ is the dimension of the parameter vector. If `Z` is a vector containing multiple data sets, a vector of matrices will be returned 
+
 When sampling based on a `RatioEstimator`, the sampling algorithm is based on a fine-gridding of the
 parameter space, specified through the keyword argument `θ_grid` (or `theta_grid`). 
 The approximate posterior density is evaluated over this grid, which is then
-used to draw samples. This is very effective when making inference with a
+used to draw samples. This is effective when making inference with a
 small number of parameters. For models with a large number of parameters,
-other sampling algorithms may be needed (please feel free to contact the
-package maintainer for discussion). The prior distribution $p(\boldsymbol{\theta})$ is controlled through the keyword argument `prior` (by default, a uniform prior is used).
+other sampling algorithms may be needed (please contact the package maintainer). 
+The prior distribution $p(\boldsymbol{\theta})$ is controlled through the keyword argument `prior` (by default, a uniform prior is used).
 """
 function sampleposterior(est::RatioEstimator,
 				Z,
 				N::Integer = 1000;
 			    prior::Function = θ -> 1f0,
 				θ_grid = nothing, theta_grid = nothing,
-				# θ₀ = nothing, theta0 = nothing,
+				# θ₀ = nothing, theta0 = nothing, #TODO Basic MCMC sampler (initialised with θ₀)
 				kwargs...)
 
 	# Check duplicated arguments that are needed so that the R interface uses ASCII characters only
@@ -135,9 +137,26 @@ function sampleposterior(est::RatioEstimator,
 		reduce(hcat, θ)
 	end
 end
-function sampleposterior(est::RatioEstimator, Z::AbstractVector, args...; kwargs...)
-	sampleposterior.(Ref(est), Z, args...; kwargs...)
+function sampleposterior(est::RatioEstimator, Z::AbstractVector, N::Integer = 1000; kwargs...) 
+	# Simple broadcasting to handle multiple data sets (NB this could be done in parallel)
+	if length(Z) == 1 
+		sampleposterior(est, Z[1], N; kwargs...)
+	else
+		sampleposterior.(Ref(est), Z, N; kwargs...)
+	end
 end
+
+sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000; kwargs...) = sampleposterior(estimator.q, estimator.network(Z), N; kwargs...)
+function sampleposterior(est::PosteriorEstimator, Z::AbstractVector, N::Integer = 1000; kwargs...) 
+	# Simple broadcasting to handle multiple data sets (NB this could be done in parallel)
+	if length(Z) == 1 
+		sampleposterior(est, Z[1], N; kwargs...)
+	else
+		sampleposterior.(Ref(est), Z, N; kwargs...)
+	end
+end
+
+
 
 # ---- Optimisation-based point estimates ----
 

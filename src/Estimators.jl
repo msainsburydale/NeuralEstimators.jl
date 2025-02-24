@@ -453,7 +453,7 @@ estimator = PosteriorEstimator(q, network)
 estimator = train(estimator, sample, simulate, m = m)
 
 # Inference with observed data 
-θ = [0.8f0; 0.1f0]
+θ = [0.8f0 0.1f0]'
 Z = simulate(θ, m)
 sampleposterior(estimator, Z) # posterior draws 
 posteriormean(estimator, Z)   # point estimate
@@ -466,7 +466,6 @@ end
 numdistributionalparams(estimator::PosteriorEstimator) = numdistributionalparams(estimator.q)
 logdensity(estimator::PosteriorEstimator, θ, Z) = logdensity(estimator.q, θ, estimator.network(Z)) 
 (estimator::PosteriorEstimator)(Zθ::Tuple) = logdensity(estimator, Zθ[2], Zθ[1]) # internal method only used during training # TODO not ideal that we assume an ordering here
-sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000) = sampleposterior(estimator.q, estimator.network(Z), N)
 
 ## Alternatively, to use a Gaussian approximate distribution: 
 # q = GaussianDistribution(d) 
