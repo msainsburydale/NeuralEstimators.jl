@@ -484,10 +484,12 @@ m = 200        # number of independent replicates in each data set
 Z_train = simulatecensored(θ_train, m; c = c, ζ = -1.0)
 ```
 
-To construct a point estimator which can accomodate the augmented dataset, we ensure that the dimension of the input layer is $2d$, where $d$ is the number of parameters. Below, we construct and train a point estimator for the generated censored data.
+To construct a point estimator which can accommodate the augmented dataset, we adjust the dimension of the input layer. We must ensure that the dimension of the input layer is $2n$, where $n$ is the final dimension of each independent replicate of $\boldsymbol{Z}. In the case of spatial data, the final dimension is typically $n=1$, as the data are represented as an array/graph with one channel (see [Gridded data](@ref) and [Irregular spatial data](@ref)). For our running example, $n=2$, as the data are bivariate.
+
+Below, we construct and train a point estimator for the generated censored data.
 
 ```julia
-d = 2   # dimension of θ
+n = 2    # dimension of each independent replicate of Z
 w = 128  # width of each hidden layer
 
 # DeepSet neural network, with the final layer of ϕ enforcing ρ ∈ [-1,1], δ ∈ (0,1)
@@ -496,7 +498,7 @@ final_layer = Parallel(
     Dense(w, 1, tanh),        # ρ ∈ [-1,1]
     Dense(w, 1, sigmoid)      # δ ∈ (0,1)
 )
-ψ = Chain(Dense(d * 2, w, relu), Dense(w, w, relu))    
+ψ = Chain(Dense(n * 2, w, relu), Dense(w, w, relu))    
 ϕ = Chain(Dense(w, w, relu), final_layer)           
 network = DeepSet(ψ, ϕ)
 
@@ -554,9 +556,9 @@ function simulatecensored(θ, τ, m;  ζ)
 	A = Folds.map(1:K) do k
         Zₖ = Z[k]
         τₖ = τ[k]
-		δₖ = θ[2, k]
 
-		cₖ = -log(1 - τₖ) # As the data is on exponential margins, we set c as the τₖ-quantile of the exponential distribution
+        # As the data are on exponential margins, we set c as the τₖ-quantile of the exponential distribution
+		cₖ = -log(1 - τₖ) 
         # Censor data and create augmented datasest
         A =  mapslices(Z -> censorandaugment(Z, c = cₖ, ζ = ζ), Zₖ, dims = 1)
 
@@ -582,7 +584,7 @@ As $\tau$ is now an input into the outer neural network of the [`DeepSet`](@ref)
 
 ```julia
 # Construct DeepSet neural network
-ψ = Chain(Dense(d * 2, w, relu), Dense(w, w, relu))    
+ψ = Chain(Dense(n * 2, w, relu), Dense(w, w, relu))    
 ϕ = Chain(Dense(w + 1, w, relu), final_layer)
 network = DeepSet(ψ, ϕ)
 
