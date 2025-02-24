@@ -558,9 +558,9 @@ function simulatecensored(θ, τ, m;  ζ)
         τₖ = τ[k]
 
         # As the data are on exponential margins, we set c as the τₖ-quantile of the exponential distribution
-		cₖ = -log(1 - τₖ) 
+        cₖ = -log(1 - τₖ) 
         # Censor data and create augmented datasest
-        A =  mapslices(Z -> censorandaugment(Z, c = cₖ, ζ = ζ), Zₖ, dims = 1)
+        A  = mapslices(Z -> censorandaugment(Z, c = cₖ, ζ = ζ), Zₖ, dims = 1)
 
         A 
 
