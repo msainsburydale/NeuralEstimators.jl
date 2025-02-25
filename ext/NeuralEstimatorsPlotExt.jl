@@ -4,15 +4,14 @@ using NeuralEstimators
 using AlgebraOfGraphics
 using CairoMakie
 import CairoMakie: plot
-export plot # method for Assessment objects
-using ColorSchemes #TODO this isn't listed in the dependencies?
+export plot # export plot(assessment::Assessment)
 
 """
     plot(assessment::Assessment; grid::Bool = false) 
 
 Method for visualising the performance of a neural estimator (or multiple neural estimators). 
 
-One may set `grid=true` to facet the figure based on the estimator. 
+One may set `grid = true` to facet the figure based on the estimator. 
 
 When assessing a `QuantileEstimator`, the diagnostic is constructed as follows: 
  
@@ -49,15 +48,14 @@ function plot(assessment::Assessment; grid::Bool = false)
 	end
   
 	linkyaxes=:none
-	if "estimate" ∈ names(df) #TODO only want this for point estimates 
+	if "estimate" ∈ names(df) 
 		#TODO fix the vertical axis to have the same limits as the horizontal axis
 		if num_estimators > 1
-		  colors = [unique(df.estimator)[i] => ColorSchemes.Set1_4.colors[i] for i ∈ 1:num_estimators]
 		  if grid
-			figure += data(df) * mapping(:truth, :estimate, color = :estimator, col = :estimator, row = :parameter) * visual(palettes=(color=colors,), alpha = 0.75)
+			figure += data(df) * mapping(:truth, :estimate, color = :estimator, col = :estimator, row = :parameter) * visual(alpha = 0.75)
 			linkyaxes=:minimal
 		  else 
-			figure += data(df) * mapping(:truth, :estimate, color = :estimator, layout = :parameter) * visual(palettes=(color=colors,), alpha = 0.75)
+			figure += data(df) * mapping(:truth, :estimate, color = :estimator, layout = :parameter) * visual(alpha = 0.75)
 			linkyaxes=:none
 		  end
 		else
@@ -70,11 +68,11 @@ function plot(assessment::Assessment; grid::Bool = false)
 	return figure
 end
 
-#It's based on the fact that a pair (θᵏ, Zᵏ) sampled as θᵏ ∼ p(θ), Zᵏ ~ p(Z ∣ θᵏ) is also a sample from θᵏ ∼ p(θ ∣ Zᵏ), Zᵏ ~ p(Z).
-
 # using CairoMakie # for save()
 # figure = plot(assessment)
 # save("docs/src/assets/figures/gridded.png", figure, px_per_unit = 3, size = (600, 300))
 # save("GNN.png", figure, px_per_unit = 3, size = (450, 450))
+# save("docs/src/assets/figures/generalcensoring.png", figure, px_per_unit = 3, size = (750, 300))
+# save("docs/src/assets/figures/potcensoring.png", figure, px_per_unit = 3, size = (750, 300))
 
 end
