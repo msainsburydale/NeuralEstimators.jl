@@ -230,9 +230,10 @@ Z = removedata(Z, 0.25)         # &quot;observed&quot; incomplete data (i.e., wi
 θ₀ = mean.([Π...])              # initial estimate, the prior mean
 
 neuralem = EM(simulateconditional, θ̂)
-neuralem(Z, θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)</code></pre><h2 id="Censored-data"><a class="docs-heading-anchor" href="#Censored-data">Censored data</a><a id="Censored-data-1"></a><a class="docs-heading-anchor-permalink" href="#Censored-data" title="Permalink"></a></h2><p>Neural estimators can be constructed to handle censored data as input, by exploiting the <a href="#The-masking-approach">masking approach</a> described above in the context of missing data. For simplicity, here we describe inference with left censored data (i.e., where we observe only those data that exceed some threshold), but extensions to right or interval censoring are possible. We first present the framework for <a href="#General-censoring">General censoring</a>, where data are considered censored based on an arbitrary, user-defined censoring scheme. We then consider <a href="#Peaks-over-threshold-censoring">Peaks-over-threshold censoring</a>, a special case in which the data are treated as censored if they do not exceed their corresponding marginal <span>$\tau$</span>-quantile for <span>$\tau \in (0,1)$</span> close to one (<a href="https://jmlr.org/papers/v25/23-1134.html">Richards et al., 2024</a>).</p><p>As a running example, we consider a bivariate random scale Gaussian mixture copula; see <a href="https://link.springer.com/article/10.1007/s10687-019-00353-3">Engelke, Opitz, and Wadsworth (2019)</a> and <a href="https://www.tandfonline.com/doi/full/10.1080/01621459.2017.1411813">Huser and Wadsworth (2019)</a>. We consider the task of estimating <span>$\boldsymbol{\theta}=(\rho,\delta)&#39;$</span>, for correlation parameter <span>$\rho \in (-1,1)$</span> and shape parameter <span>$\delta \in [0,1]$</span>. Variables <span>$\boldsymbol{Y}_1,\dots,\boldsymbol{Y}_m$</span> are independent and identically distributed according to the random scale construction</p><p class="math-container">\[\boldsymbol{Y}_i = \delta R_i + (1-\delta)  \boldsymbol{X}_i,\]</p><p>where <span>$R_i \sim \text{Exp}(1)$</span> and <span>$\boldsymbol{X}_i$</span> is a bivariate random vector following a Gaussian copula with correlation <span>$\rho$</span> and unit exponential margins. We note that the vector <span>$\boldsymbol{Y}_i$</span> does not itself have unit exponential margins. Instead, its marginal distribution function, <span>$F(y;\delta),$</span> is dependent on <span>$\delta$</span>; this has a closed form expression, see <a href="https://www.tandfonline.com/doi/full/10.1080/01621459.2017.1411813">Huser and Wadsworth (2019)</a>. In practice, the parameter <span>$\delta$</span> is unknown, and so the random scale construction is treated as a copula and fitted to standardised uniform data. That is, the data used for inference are <span>$\boldsymbol{Z}_i = F(\boldsymbol{Y}_i; \delta),$</span> which have been transformed to a uniform scale via the <span>$\delta$</span>-dependent marginal dsitribution function.   </p><p>Simulation of the random scale mixture (on uniform margins) and its marginal ditribution function are provided below. To increase training efficiency, we apply a transformation of the input data to exponential margins.</p><pre><code class="language-julia hljs"># Libraries used throughout this example
+neuralem(Z, θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)</code></pre><h2 id="Censored-data"><a class="docs-heading-anchor" href="#Censored-data">Censored data</a><a id="Censored-data-1"></a><a class="docs-heading-anchor-permalink" href="#Censored-data" title="Permalink"></a></h2><p>Neural estimators can be constructed to handle censored data as input, by exploiting the <a href="#The-masking-approach">masking approach</a> described above in the context of missing data. For simplicity, here we describe inference with left censored data (i.e., where we observe only those data that exceed some threshold), but extensions to right or interval censoring are possible. We first present the framework for <a href="#General-censoring">General censoring</a>, where data are considered censored based on an arbitrary, user-defined censoring scheme. We then consider <a href="#Peaks-over-threshold-censoring">Peaks-over-threshold censoring</a>, a special case in which the data are treated as censored if they do not exceed their corresponding marginal <span>$\tau$</span>-quantile for <span>$\tau \in (0,1)$</span> close to one (<a href="https://jmlr.org/papers/v25/23-1134.html">Richards et al., 2024</a>).</p><p>As a running example, we consider a bivariate random scale Gaussian mixture copula; see <a href="https://link.springer.com/article/10.1007/s10687-019-00353-3">Engelke, Opitz, and Wadsworth (2019)</a> and <a href="https://www.tandfonline.com/doi/full/10.1080/01621459.2017.1411813">Huser and Wadsworth (2019)</a>. We consider the task of estimating <span>$\boldsymbol{\theta}=(\rho,\delta)&#39;$</span>, for correlation parameter <span>$\rho \in (-1,1)$</span> and shape parameter <span>$\delta \in [0,1]$</span>. Variables <span>$\boldsymbol{Y}_1,\dots,\boldsymbol{Y}_m$</span> are independent and identically distributed according to the random scale construction</p><p class="math-container">\[\boldsymbol{Y}_i = \delta R_i + (1-\delta)  \boldsymbol{X}_i,\]</p><p>where <span>$R_i \sim \text{Exp}(1)$</span> and <span>$\boldsymbol{X}_i$</span> is a bivariate random vector following a Gaussian copula with correlation <span>$\rho$</span> and unit exponential margins. We note that the vector <span>$\boldsymbol{Y}_i$</span> does not itself have unit exponential margins. Instead, its marginal distribution function, <span>$F(y;\delta),$</span> is dependent on <span>$\delta$</span>; this has a closed form expression, see <a href="https://www.tandfonline.com/doi/full/10.1080/01621459.2017.1411813">Huser and Wadsworth (2019)</a>. In practice, the parameter <span>$\delta$</span> is unknown, and so the random scale construction is treated as a copula and fitted to standardised uniform data. That is, the data used for inference are <span>$\boldsymbol{Z}_i = F(\boldsymbol{Y}_i; \delta),$</span> which have been transformed to a uniform scale via the <span>$\delta$</span>-dependent marginal dsitribution function.   </p><p>Simulation of the random scale mixture (on uniform margins) and its marginal ditribution function are provided below. Transforming the data to exponential margins can, in some cases, enhance training efficiency (<a href="https://jmlr.org/papers/v25/23-1134.html">Richards et al., 2024</a>). However, for simplicity, we do not apply this transformation here.</p><pre><code class="language-julia hljs"># Libraries used throughout this example
 using NeuralEstimators, Flux
 using Folds
+using CUDA # GPU if it is available
 using LinearAlgebra: Symmetric, cholesky
 using Distributions: cdf, Uniform, Normal, quantile
 using AlgebraOfGraphics, CairoMakie   
@@ -241,7 +242,8 @@ using AlgebraOfGraphics, CairoMakie
 function sample(K)
 	ρ = rand(Uniform(-0.99, 0.99), K)
 	δ = rand(Uniform(0.0, 1.0), K)
-	return vcat(ρ&#39;, δ&#39;)
+	θ = vcat(ρ&#39;, δ&#39;)
+	return θ 
 end
 
 # Marginal simulation of Z | θ
@@ -254,9 +256,8 @@ function simulate(θ, m)
 		X = L * randn(2, m)                 # Standard Gaussian margins
 		X = -log.(1 .- cdf.(Normal(), X))   # Transform to unit exponential margins
 		R = -log.(1 .- rand(1, m))         
-		Y = δ .* R .+ (1 - δ) .* X          # Transform to uniform margins
-		Z = F.(Y; δ = δ)
-		Z = -log.(1 .- Z)                   # Transform to exponential margins 
+		Y = δ .* R .+ (1 - δ) .* X          
+		Z = F.(Y; δ = δ)                     # Transform to uniform margins
 	end
 	return Z
 end
@@ -294,7 +295,7 @@ final_layer = Parallel(
 network = DeepSet(ψ, ϕ)
 
 # Initialise the estimator
-estimator = PointEstimator(network)</code></pre><p>We now train and assess two estimators for censored data; one with <code>c = [0, 0]</code> and one with <code>c = [0.4, 0.4]</code>, which correspond to no and mild censoring, respectively. As expected, the neural estimator that uses non-censored data has lower RMSE, as the data it uses contain more information.</p><pre><code class="language-julia hljs"># Number of independent replicates in each data set
+estimator = PointEstimator(network)</code></pre><p>We now train and assess two estimators for censored data; one with <code>c = [0, 0]</code> and one with <code>c = [0.5, 0.5]</code>, which correspond to no and mild censoring, respectively. As expected, the neural estimator that uses non-censored data has lower RMSE, as the data it uses contain more information.</p><pre><code class="language-julia hljs"># Number of independent replicates in each data set
 m = 200 
 
 # Train an estimator with no censoring
@@ -302,20 +303,20 @@ simulator1(θ, m) = simulatecensored(θ, m; c = [0, 0])
 estimator1 = train(estimator, sample, simulator1, m = m) 
 
 # Train an estimator with mild censoring
-simulator2(θ, m) = simulatecensored(θ, m; c = [0.4, 0.4]) 
+simulator2(θ, m) = simulatecensored(θ, m; c = [0.5, 0.5]) 
 estimator2 = train(estimator, sample, simulator2, m = m)
 
 # Assessment
 θ_test = sample(1000) 
 UW_test1 = simulator1(θ_test, m)
 UW_test2 = simulator2(θ_test, m)
-assessment1 = assess(estimator1, θ_test, UW_test1, parameter_names = [&quot;ρ&quot;, &quot;δ&quot;]) 
-assessment2 = assess(estimator2, θ_test, UW_test2, parameter_names = [&quot;ρ&quot;, &quot;δ&quot;])   
+assessment1 = assess(estimator1, θ_test, UW_test1, parameter_names = [&quot;ρ&quot;, &quot;δ&quot;], estimator_name = &quot;No censoring&quot;) 
+assessment2 = assess(estimator2, θ_test, UW_test2, parameter_names = [&quot;ρ&quot;, &quot;δ&quot;], estimator_name = &quot;Mild censoring&quot;)   
 assessment  = merge(assessment1, assessment2)
 rmse(assessment)
-plot(assessment)</code></pre><table><tr><th style="text-align: right">Estimator</th><th style="text-align: right">Parameter</th><th style="text-align: right">RMSE</th></tr><tr><td style="text-align: right">estimator1</td><td style="text-align: right">ρ</td><td style="text-align: right">0.238167</td></tr><tr><td style="text-align: right">estimator1</td><td style="text-align: right">δ</td><td style="text-align: right">0.100688</td></tr><tr><td style="text-align: right">estimator2</td><td style="text-align: right">ρ</td><td style="text-align: right">0.324838</td></tr><tr><td style="text-align: right">estimator2</td><td style="text-align: right">δ</td><td style="text-align: right">0.115169</td></tr></table><p><img src="../../assets/figures/generalcensoring.png" alt="General censoring"/></p><h3 id="Peaks-over-threshold-censoring"><a class="docs-heading-anchor" href="#Peaks-over-threshold-censoring">Peaks-over-threshold censoring</a><a id="Peaks-over-threshold-censoring-1"></a><a class="docs-heading-anchor-permalink" href="#Peaks-over-threshold-censoring" title="Permalink"></a></h3><p><a href="https://jmlr.org/papers/v25/23-1134.html">Richards et al. (2024)</a> discuss neural Bayes estimation from censored data in the context of peaks-over-threshold extremal dependence modelling, where deliberate censoring of data is imposed to reduce estimation bias in the presence of marginally non-extreme events. In these settings, data are treated as censored if they do not exceed their corresponding marginal <span>$\tau$</span>-quantile, for <span>$\tau \in (0,1)$</span> close to one. </p><p>Peaks-over-threshold censoring, with <span>$\tau$</span> fixed, can be easily implemented using the <a href="#General-censoring">General censoring</a> framework by setting the censoring threshold equal to the <span>$\tau$</span>-th quantile of the data <span>$\boldsymbol{Z}$</span>. Further, <a href="https://jmlr.org/papers/v25/23-1134.html">Richards et al. (2024)</a> show that one can amortise a neural estimator with respect to the choice of <span>$\tau$</span> by treating it as an input to the neural network. </p><p>Below, we sample a fixed set of <span>$K$</span> data/parameter pairs from the prior to training. Since the data in our running example are on exponential margins, we set the censoring thresholds based on the quantile of the exponential distribution.</p><pre><code class="language-julia hljs"># Sampling values of τ to use during training 
+plot(assessment)</code></pre><table><tr><th style="text-align: right">Estimator</th><th style="text-align: right">Parameter</th><th style="text-align: right">RMSE</th></tr><tr><td style="text-align: right">No censoring</td><td style="text-align: right">ρ</td><td style="text-align: right">0.238167</td></tr><tr><td style="text-align: right">No censoring</td><td style="text-align: right">δ</td><td style="text-align: right">0.100688</td></tr><tr><td style="text-align: right">Mild censoring</td><td style="text-align: right">ρ</td><td style="text-align: right">0.394838</td></tr><tr><td style="text-align: right">Mild censoring</td><td style="text-align: right">δ</td><td style="text-align: right">0.135169</td></tr></table><p><img src="../../assets/figures/generalcensoring.png" alt="General censoring"/></p><h3 id="Peaks-over-threshold-censoring"><a class="docs-heading-anchor" href="#Peaks-over-threshold-censoring">Peaks-over-threshold censoring</a><a id="Peaks-over-threshold-censoring-1"></a><a class="docs-heading-anchor-permalink" href="#Peaks-over-threshold-censoring" title="Permalink"></a></h3><p><a href="https://jmlr.org/papers/v25/23-1134.html">Richards et al. (2024)</a> discuss neural Bayes estimation from censored data in the context of peaks-over-threshold extremal dependence modelling, where deliberate censoring of data is imposed to reduce estimation bias in the presence of marginally non-extreme events. In these settings, data are treated as censored if they do not exceed their corresponding marginal <span>$\tau$</span>-quantile, for <span>$\tau \in (0,1)$</span> close to one. </p><p>Peaks-over-threshold censoring, with <span>$\tau$</span> fixed, can be easily implemented using the <a href="#General-censoring">General censoring</a> framework by setting the censoring threshold equal to the <span>$\tau$</span>-th quantile of the data <span>$\boldsymbol{Z}$</span>. Further, <a href="https://jmlr.org/papers/v25/23-1134.html">Richards et al. (2024)</a> show that one can amortise a neural estimator with respect to the choice of <span>$\tau$</span> by treating it as an input to the neural network. </p><p>Below, we sample a fixed set of <span>$K$</span> parameter-data pairs for training the neural network. </p><pre><code class="language-julia hljs"># Sampling values of τ to use during training 
 function sampleτ(K)
-	τ = rand(Uniform(0.5, 0.9), 1, K) 
+	τ = rand(Uniform(0.0, 0.9), 1, K) 
 end
 
 # Adapt the censored data simulation to allow for τ as an input
@@ -325,23 +326,21 @@ function simulatecensored(θ, τ, m; kwargs...)
 	UW = Folds.map(1:K) do k
         Zₖ = Z[k]
         τₖ = τ[k]
-        # data are on exponential margins; set c to the τₖ-quantile of the exponential distribution
-        cₖ = -log(1 - τₖ) 
-        # Censor data and create augmented datasest
+        cₖ = τₖ # data are on uniform margins: censoring threshold equals τ
         mapslices(Z -&gt; censorandaugment(Z; c = cₖ, kwargs...), Zₖ, dims = 1)
 	end
 end
 
 # Generate the data used for training and validation
-K = 10000  # number of training samples
+K = 50000  # number of training samples
 m = 500    # number of independent replicates in each data set
 θ_train  = sample(K)
 θ_val    = sample(K ÷ 5)
 τ_train  = sampleτ(K)
 τ_val    = sampleτ(K ÷ 5)
 UW_train = simulatecensored(θ_train, τ_train, m)
-UW_val   = simulatecensored(θ_val, τ_val, m)</code></pre><p>In this example, the probability level <span>$\tau$</span> can be incorporated as an input to the neural network by treating it as an input to the outer neural network of the <a href="../../API/architectures/#NeuralEstimators.DeepSet"><code>DeepSet</code></a> architecture. To do this, we increase the input dimension of the outer network by one, and then combine the data <span>$\{\boldsymbol{U}, \boldsymbol{W}\}$</span> and <span>$\tau$</span> as a tuple (see <a href="../../API/architectures/#NeuralEstimators.DeepSet"><code>DeepSet</code></a> for details). </p><pre><code class="language-julia hljs"># Construct DeepSet neural network
-ψ = Chain(Dense(n * 2, w, relu), Dense(w, w, relu))    
+UW_val   = simulatecensored(θ_val, τ_val, m)</code></pre><p>In this example, the probability level <span>$\tau$</span> can be incorporated as an input to the neural network by treating it as an input to the outer neural network of the <a href="../../API/architectures/#NeuralEstimators.DeepSet"><code>DeepSet</code></a> architecture. To do this, we increase the input dimension of the outer network by one, and then combine the data <span>$\{\boldsymbol{U}, \boldsymbol{W}\}$</span> and <span>$\tau$</span> as a tuple (see <a href="../../API/architectures/#NeuralEstimators.DeepSet"><code>DeepSet</code></a> for details). </p><pre><code class="language-julia hljs"># Construct neural network based on DeepSet architecture
+ψ = Chain(Dense(n * 2, w, relu),Dense(w, w, relu))    
 ϕ = Chain(Dense(w + 1, w, relu), final_layer)
 network = DeepSet(ψ, ϕ)
 
@@ -349,20 +348,20 @@ network = DeepSet(ψ, ϕ)
 estimator = PointEstimator(network)
 
 # Train the estimator
-estimator = train(estimator, θ_train, θ_val, (UW_train, τ_train), (UW_val, τ_val))</code></pre><p>Our trained estimator can now be used for any value of <span>$\tau$</span> within the range used during training (<span>$\tau \in [0.5,0.9]$</span>). Since the estimator is amortised with respect to <span>$\tau$</span>, there is no need to retrain it for different degrees of censoring.</p><p>Below, we assess the estimator for different values of <span>$\tau$</span>. As expected, RMSE increases with <span>$\tau$</span> (larger <span>$\tau$</span> corresponds to more censoring). </p><pre><code class="language-julia hljs"># Test parameters
+estimator = train(estimator, θ_train, θ_val, (UW_train, τ_train), (UW_val, τ_val))</code></pre><p>Our trained estimator can now be used for any value of <span>$\tau$</span> within the range used during training (<span>$\tau \in [0,0.9]$</span>). Since the estimator is amortised with respect to <span>$\tau$</span>, there is no need to retrain it for different degrees of censoring.</p><p>Below, we assess the estimator for different values of <span>$\tau$</span>. As expected, RMSE increases with <span>$\tau$</span> (larger <span>$\tau$</span> corresponds to more censoring). </p><pre><code class="language-julia hljs"># Test parameters
 θ_test = sample(1000)
 
-# Assessment with τ fixed to 0.5
-τ_test1 = repeat([0.5], 1000)&#39;
+# Assessment with τ fixed to 0 (no censoring)
+τ_test1  = fill(0.0, 1000)&#39;
 UW_test1 = simulatecensored(θ_test, τ_test1, m)
-assessment1 = assess(estimator, θ_test, (UW_test1, τ_test1), parameter_names = [&quot;ρ&quot;, &quot;δ&quot;], estimator_name = &quot;τ = 0.50&quot;)   
+assessment1 = assess(estimator, θ_test, (UW_test1, τ_test1), parameter_names = [&quot;ρ&quot;, &quot;δ&quot;], estimator_name = &quot;τ = 0&quot;)   
 
-# Assessment with τ fixed to 0.85
-τ_test2 = repeat([0.85], 1000)&#39;
+# Assessment with τ fixed to 0.8
+τ_test2  = fill(0.8, 1000)&#39;
 UW_test2 = simulatecensored(θ_test, τ_test2, m)
-assessment2 = assess(estimator, θ_test, (UW_test2, τ_test2), parameter_names = [&quot;ρ&quot;, &quot;δ&quot;], estimator_name = &quot;τ = 0.85&quot;)   
+assessment2 = assess(estimator, θ_test, (UW_test2, τ_test2), parameter_names = [&quot;ρ&quot;, &quot;δ&quot;], estimator_name = &quot;τ = 0.8&quot;)   
 
-# Compare results between the two censoring levels
+# Compare results between the two censoring probability levels
 assessment = merge(assessment1, assessment2)
 rmse(assessment)
-plot(assessment)</code></pre><table><tr><th style="text-align: right">Estimator</th><th style="text-align: right">Parameter</th><th style="text-align: right">RMSE</th></tr><tr><td style="text-align: right">τ = 0.50</td><td style="text-align: right">ρ</td><td style="text-align: right">0.341780</td></tr><tr><td style="text-align: right">τ = 0.50</td><td style="text-align: right">δ</td><td style="text-align: right">0.107799</td></tr><tr><td style="text-align: right">τ = 0.85</td><td style="text-align: right">ρ</td><td style="text-align: right">0.466348</td></tr><tr><td style="text-align: right">τ = 0.85</td><td style="text-align: right">δ</td><td style="text-align: right">0.124913</td></tr></table><p><img src="../../assets/figures/potcensoring.png" alt="Peaks-over-threshold censoring"/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/">« Examples</a><a class="docs-footer-nextpage" href="../../API/core/">Core »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Tuesday 25 February 2025 14:43">Tuesday 25 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+plot(assessment)</code></pre><table><tr><th style="text-align: right">Estimator</th><th style="text-align: right">Parameter</th><th style="text-align: right">RMSE</th></tr><tr><td style="text-align: right">τ = 0</td><td style="text-align: right">ρ</td><td style="text-align: right">0.241780</td></tr><tr><td style="text-align: right">τ = 0</td><td style="text-align: right">δ</td><td style="text-align: right">0.096779</td></tr><tr><td style="text-align: right">τ = 0.80</td><td style="text-align: right">ρ</td><td style="text-align: right">0.476348</td></tr><tr><td style="text-align: right">τ = 0.80</td><td style="text-align: right">δ</td><td style="text-align: right">0.124913</td></tr></table><p><img src="../../assets/figures/potcensoring.png" alt="Peaks-over-threshold censoring"/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/">« Examples</a><a class="docs-footer-nextpage" href="../../API/core/">Core »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Wednesday 26 February 2025 07:23">Wednesday 26 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
