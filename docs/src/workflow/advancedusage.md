@@ -391,11 +391,13 @@ As a running example, we consider a bivariate random scale Gaussian mixture copu
 ```
 where $R_i \sim \text{Exp}(1)$ and $\boldsymbol{X}_i$ is a bivariate random vector following a Gaussian copula with correlation $\rho$ and unit exponential margins. We note that the vector $\boldsymbol{Y}_i$ does not itself have unit exponential margins. Instead, its marginal distribution function, $F(y;\delta),$ is dependent on $\delta$; this has a closed form expression, see [Huser and Wadsworth (2019)](https://www.tandfonline.com/doi/full/10.1080/01621459.2017.1411813). In practice, the parameter $\delta$ is unknown, and so the random scale construction is treated as a copula and fitted to standardised uniform data. That is, the data used for inference are $\boldsymbol{Z}_i = F(\boldsymbol{Y}_i; \delta),$ which have been transformed to a uniform scale via the $\delta$-dependent marginal dsitribution function.   
 
-Simulation of the random scale mixture (on uniform margins) and its marginal ditribution function are provided below. To increase training efficiency, we apply a transformation of the input data to exponential margins.
+Simulation of the random scale mixture (on uniform margins) and its marginal ditribution function are provided below. Transforming the data to exponential margins can, in some cases, enhance training efficiency ([Richards et al., 2024](https://jmlr.org/papers/v25/23-1134.html)). However, for simplicity, we do not apply this transformation here.
+
 ```julia
 # Libraries used throughout this example
 using NeuralEstimators, Flux
 using Folds
+using CUDA # GPU if it is available
 using LinearAlgebra: Symmetric, cholesky
 using Distributions: cdf, Uniform, Normal, quantile
 using AlgebraOfGraphics, CairoMakie   
@@ -404,7 +406,8 @@ using AlgebraOfGraphics, CairoMakie
 function sample(K)
 	ρ = rand(Uniform(-0.99, 0.99), K)
 	δ = rand(Uniform(0.0, 1.0), K)
-	return vcat(ρ', δ')
+	θ = vcat(ρ', δ')
+	return θ 
 end
 
 # Marginal simulation of Z | θ
@@ -417,9 +420,8 @@ function simulate(θ, m)
 		X = L * randn(2, m)                 # Standard Gaussian margins
 		X = -log.(1 .- cdf.(Normal(), X))   # Transform to unit exponential margins
 		R = -log.(1 .- rand(1, m))         
-		Y = δ .* R .+ (1 - δ) .* X          # Transform to uniform margins
-		Z = F.(Y; δ = δ)
-		Z = -log.(1 .- Z)                   # Transform to exponential margins 
+		Y = δ .* R .+ (1 - δ) .* X          
+		Z = F.(Y; δ = δ)                     # Transform to uniform margins
 	end
 	return Z
 end
@@ -490,7 +492,7 @@ network = DeepSet(ψ, ϕ)
 estimator = PointEstimator(network)
 ```
 
-We now train and assess two estimators for censored data; one with `c = [0, 0]` and one with `c = [0.4, 0.4]`, which correspond to no and mild censoring, respectively. As expected, the neural estimator that uses non-censored data has lower RMSE, as the data it uses contain more information.
+We now train and assess two estimators for censored data; one with `c = [0, 0]` and one with `c = [0.5, 0.5]`, which correspond to no and mild censoring, respectively. As expected, the neural estimator that uses non-censored data has lower RMSE, as the data it uses contain more information.
 
 
 ```julia
@@ -502,15 +504,15 @@ simulator1(θ, m) = simulatecensored(θ, m; c = [0, 0])
 estimator1 = train(estimator, sample, simulator1, m = m) 
 
 # Train an estimator with mild censoring
-simulator2(θ, m) = simulatecensored(θ, m; c = [0.4, 0.4]) 
+simulator2(θ, m) = simulatecensored(θ, m; c = [0.5, 0.5]) 
 estimator2 = train(estimator, sample, simulator2, m = m)
 
 # Assessment
 θ_test = sample(1000) 
 UW_test1 = simulator1(θ_test, m)
 UW_test2 = simulator2(θ_test, m)
-assessment1 = assess(estimator1, θ_test, UW_test1, parameter_names = ["ρ", "δ"]) 
-assessment2 = assess(estimator2, θ_test, UW_test2, parameter_names = ["ρ", "δ"])   
+assessment1 = assess(estimator1, θ_test, UW_test1, parameter_names = ["ρ", "δ"], estimator_name = "No censoring") 
+assessment2 = assess(estimator2, θ_test, UW_test2, parameter_names = ["ρ", "δ"], estimator_name = "Mild censoring")   
 assessment  = merge(assessment1, assessment2)
 rmse(assessment)
 plot(assessment)
@@ -518,11 +520,10 @@ plot(assessment)
 
 | Estimator  | Parameter | RMSE     |
 | ----------|-----------|----------|
-| estimator1 | ρ         | 0.238167 |
-| estimator1 | δ         | 0.100688 |
-| estimator2 | ρ         | 0.324838 |
-| estimator2 | δ         | 0.115169 |
-
+| No censoring | ρ         | 0.238167 |
+| No censoring | δ         | 0.100688 |
+| Mild censoring | ρ       | 0.394838 |
+| Mild censoring | δ         | 0.135169 |
 
 ![General censoring](../assets/figures/generalcensoring.png)
 
@@ -532,12 +533,12 @@ plot(assessment)
 
 Peaks-over-threshold censoring, with $\tau$ fixed, can be easily implemented using the [General censoring](@ref) framework by setting the censoring threshold equal to the $\tau$-th quantile of the data $\boldsymbol{Z}$. Further, [Richards et al. (2024)](https://jmlr.org/papers/v25/23-1134.html) show that one can amortise a neural estimator with respect to the choice of $\tau$ by treating it as an input to the neural network. 
 
-Below, we sample a fixed set of $K$ data/parameter pairs from the prior to training. Since the data in our running example are on exponential margins, we set the censoring thresholds based on the quantile of the exponential distribution.
+Below, we sample a fixed set of $K$ parameter-data pairs for training the neural network. 
 
 ```julia
 # Sampling values of τ to use during training 
 function sampleτ(K)
-	τ = rand(Uniform(0.5, 0.9), 1, K) 
+	τ = rand(Uniform(0.0, 0.9), 1, K) 
 end
 
 # Adapt the censored data simulation to allow for τ as an input
@@ -547,15 +548,13 @@ function simulatecensored(θ, τ, m; kwargs...)
 	UW = Folds.map(1:K) do k
         Zₖ = Z[k]
         τₖ = τ[k]
-        # data are on exponential margins; set c to the τₖ-quantile of the exponential distribution
-        cₖ = -log(1 - τₖ) 
-        # Censor data and create augmented datasest
+        cₖ = τₖ # data are on uniform margins: censoring threshold equals τ
         mapslices(Z -> censorandaugment(Z; c = cₖ, kwargs...), Zₖ, dims = 1)
 	end
 end
 
 # Generate the data used for training and validation
-K = 10000  # number of training samples
+K = 50000  # number of training samples
 m = 500    # number of independent replicates in each data set
 θ_train  = sample(K)
 θ_val    = sample(K ÷ 5)
@@ -568,8 +567,8 @@ UW_val   = simulatecensored(θ_val, τ_val, m)
 In this example, the probability level $\tau$ can be incorporated as an input to the neural network by treating it as an input to the outer neural network of the [`DeepSet`](@ref) architecture. To do this, we increase the input dimension of the outer network by one, and then combine the data $\{\boldsymbol{U}, \boldsymbol{W}\}$ and $\tau$ as a tuple (see [`DeepSet`](@ref) for details). 
 
 ```julia
-# Construct DeepSet neural network
-ψ = Chain(Dense(n * 2, w, relu), Dense(w, w, relu))    
+# Construct neural network based on DeepSet architecture
+ψ = Chain(Dense(n * 2, w, relu),Dense(w, w, relu))    
 ϕ = Chain(Dense(w + 1, w, relu), final_layer)
 network = DeepSet(ψ, ϕ)
 
@@ -580,26 +579,25 @@ estimator = PointEstimator(network)
 estimator = train(estimator, θ_train, θ_val, (UW_train, τ_train), (UW_val, τ_val))
 ```
 
-Our trained estimator can now be used for any value of $\tau$ within the range used during training ($\tau \in [0.5,0.9]$). Since the estimator is amortised with respect to $\tau$, there is no need to retrain it for different degrees of censoring.
+Our trained estimator can now be used for any value of $\tau$ within the range used during training ($\tau \in [0,0.9]$). Since the estimator is amortised with respect to $\tau$, there is no need to retrain it for different degrees of censoring.
 
 Below, we assess the estimator for different values of $\tau$. As expected, RMSE increases with $\tau$ (larger $\tau$ corresponds to more censoring). 
-
 
 ```julia
 # Test parameters
 θ_test = sample(1000)
 
-# Assessment with τ fixed to 0.5
-τ_test1 = repeat([0.5], 1000)'
+# Assessment with τ fixed to 0 (no censoring)
+τ_test1  = fill(0.0, 1000)'
 UW_test1 = simulatecensored(θ_test, τ_test1, m)
-assessment1 = assess(estimator, θ_test, (UW_test1, τ_test1), parameter_names = ["ρ", "δ"], estimator_name = "τ = 0.50")   
+assessment1 = assess(estimator, θ_test, (UW_test1, τ_test1), parameter_names = ["ρ", "δ"], estimator_name = "τ = 0")   
 
-# Assessment with τ fixed to 0.85
-τ_test2 = repeat([0.85], 1000)'
+# Assessment with τ fixed to 0.8
+τ_test2  = fill(0.8, 1000)'
 UW_test2 = simulatecensored(θ_test, τ_test2, m)
-assessment2 = assess(estimator, θ_test, (UW_test2, τ_test2), parameter_names = ["ρ", "δ"], estimator_name = "τ = 0.85")   
+assessment2 = assess(estimator, θ_test, (UW_test2, τ_test2), parameter_names = ["ρ", "δ"], estimator_name = "τ = 0.8")   
 
-# Compare results between the two censoring levels
+# Compare results between the two censoring probability levels
 assessment = merge(assessment1, assessment2)
 rmse(assessment)
 plot(assessment)
@@ -607,10 +605,9 @@ plot(assessment)
 
 | Estimator  | Parameter | RMSE     |
 |------------|-----------|----------|
-| τ = 0.50   | ρ         | 0.341780 |
-| τ = 0.50   | δ         | 0.107799 |
-| τ = 0.85   | ρ         | 0.466348 |
-| τ = 0.85   | δ         | 0.124913 |
-
+| τ = 0      | ρ         | 0.241780 |
+| τ = 0      | δ         | 0.096779 |
+| τ = 0.80   | ρ         | 0.476348 |
+| τ = 0.80   | δ         | 0.124913 |
 
 ![Peaks-over-threshold censoring](../assets/figures/potcensoring.png)
