@@ -88,13 +88,24 @@ function train end
 # NB to follow the naming convention, batchsize and savepath should be batch_size and save_path
 
 function findlr(opt)
-    while opt isa AbstractArray || opt isa Tuple || opt isa NamedTuple  # Keep indexing deeper
-        opt = opt[1]  # Go to the first element
-		if opt isa Optimisers.Leaf
-			return opt.rule.eta  # Extract eta from the rule
-		end
+    if opt isa Optimisers.Leaf
+        return opt.rule.eta
+    elseif opt isa AbstractArray || opt isa Tuple
+        for subopt in opt
+            eta = findlr(subopt)
+            if !isnothing(eta)
+                return eta
+            end
+        end
+    elseif opt isa NamedTuple
+        for (_, subopt) in pairs(opt)
+            eta = findlr(subopt)
+            if !isnothing(eta)
+                return eta
+            end
+        end
     end
-    return error("No Optimisers.Leaf found in the given structure")
+    return nothing
 end
 
 function _train(estimator, sampler, simulator;
@@ -360,7 +371,7 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		optimiser          = Flux.setup(Adam(5e-4), estimator),
+		optimiser        = Flux.setup(Adam(5e-4), estimator),
 		savepath::Union{String, Nothing} = nothing,
 		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
