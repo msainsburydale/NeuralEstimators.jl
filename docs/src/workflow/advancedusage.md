@@ -442,19 +442,19 @@ end
 
 Inference with censored data can proceed in an analogous manner to the [The masking approach](@ref) for missing data. First, consider a vector $\boldsymbol{W}$ of indicator variables that encode the censoring pattern, with elements equal to one or zero if the corresponding element of the data $\boldsymbol{Z} \equiv (Z_1, \dots, Z_n)'$ is censored or observed, respectively. That is, $\boldsymbol{W} \equiv (\mathbb{I}({Z}_j  \leq c_j) : j = 1, \dots, n)'$ where $c_j$, $j = 1, \dots, n$, is a censoring threshold. Second, consider an augmented data vector 
 ```math
-\boldsymbol{U} \equiv \boldsymbol{Z} \odot \boldsymbol{W} + \boldsymbol{\zeta} \odot ( \boldsymbol{1} - \boldsymbol{W}),
+\boldsymbol{U} \equiv \boldsymbol{Z} \odot \boldsymbol{W} + \boldsymbol{v} \odot ( \boldsymbol{1} - \boldsymbol{W}),
 ```
-where $\boldsymbol{1}$ is a vector of ones of appropriate dimension, $\boldsymbol{\zeta} \in \mathbb{R}^n$ is user-defined, and $\odot$ denotes elementwise multiplication. A neural estimator for censored data is then trained on realisations of the augmented data set, $\{\boldsymbol{U}, \boldsymbol{W}\}$. 
+where $\boldsymbol{1}$ is a vector of ones of appropriate dimension, $\boldsymbol{v} \in \mathbb{R}^n$ is user-defined, and $\odot$ denotes elementwise multiplication. A neural estimator for censored data is then trained on realisations of the augmented data set, $\{\boldsymbol{U}, \boldsymbol{W}\}$. 
 
 The manner in which $\boldsymbol{U}$ and $\boldsymbol{W}$ are combined depends on the multivariate structure of the data and the chosen architecture. For example, when the data are gridded and the neural network is a CNN, then $\boldsymbol{U}$ and $\boldsymbol{W}$ can be concatenated along the channels dimension (i.e., the penultimate dimension of the array). In this example, we have replicated, unstructured bivariate data stored as matrices of dimension $2\times m$, where $m$ denotes the number of independent replicates, and so the neural network is based on dense multilayer perceptrons (MLPs). In these settings, a simple way to combine $\boldsymbol{U}$ and $\boldsymbol{W}$ so that they can be passed through the neural network is to concatenate $\boldsymbol{U}$ and $\boldsymbol{W}$ along their first dimension, so that the resulting input is a matrix of dimension $4 \times m$. 
 
-The following helper function implements a simple version of the general censoring framework described above, based on a vector of censoring levels $\boldsymbol{c}$ and with $\boldsymbol{\zeta}$ fixed to a constant such that the censoring mechanism and augmentation values do not vary with the model parameter values or with the replicate index.
+The following helper function implements a simple version of the general censoring framework described above, based on a vector of censoring levels $\boldsymbol{c}$ and with $\boldsymbol{v}$ fixed to a constant such that the censoring mechanism and augmentation values do not vary with the model parameter values or with the replicate index.
 
 ```julia
 # Constructing augmented data from Z and the censoring threshold c
-function censorandaugment(Z; c, ζ = -1.0)
+function censorandaugment(Z; c, v = -1.0)
     W = 1 * (Z .<= c)
-    U = ifelse.(Z .<= c, ζ, Z)
+    U = ifelse.(Z .<= c, v, Z)
     return vcat(U, W)
 end
 ```
@@ -492,7 +492,7 @@ network = DeepSet(ψ, ϕ)
 estimator = PointEstimator(network)
 ```
 
-We now train and assess two estimators for censored data; one with `c = [0, 0]` and one with `c = [0.5, 0.5]`, which correspond to no and mild censoring, respectively. As expected, the neural estimator that uses non-censored data has lower RMSE, as the data it uses contain more information.
+We now train and assess two estimators for censored data; one with `c = [0, 0]` and one with `c = [0.5, 0.5]`. When the data $\boldsymbol{Z}$ are on uniform margins, the components of `c` can be interpreted as the expected number of censored values in each component; thus, `c = [0, 0]` corresonds to no censoring of the data, and `c = [0.5, 0.5]` corresponds to a situation where, on average, 50% of each dimension ${Z}_j$ is censored. As expected, the neural estimator that uses non-censored data has lower RMSE, as the data it uses contain more information.
 
 
 ```julia
@@ -526,6 +526,8 @@ plot(assessment)
 | Mild censoring | δ         | 0.135169 |
 
 ![General censoring](../assets/figures/generalcensoring.png)
+
+Here we have trained two separate neural estimators to handle two different censoring threshold vectors. However, one could train a single neural estimator that caters for a range of censoring thresholds, `c`, by allowing it to vary with the data samples and using it as an input to the neural network. In the next section, we illustrate this in the context of peaks-over-threshold modelling, whereby a single censoring threshold is defined to be the marginal $\tau$-quantile of the data, and we amortise the estimator with respect to the probability level $\tau$. In a peaks-over-threshold setting, variation in the censoring thresholds can be created by placing a prior on $\tau$, which induces a prior on `c`.
 
 ### Peaks-over-threshold censoring
 
