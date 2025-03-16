@@ -20,11 +20,12 @@ The estimator is returned on the CPU so that it can be easily saved post trainin
 # Keyword arguments common to all methods:
 - `loss = mae` (applicable only to [`PointEstimator`](@ref)): loss function used to train the neural network. In addition to the standard loss functions provided by `Flux` (e.g., `mae`, `mse`), see [Loss functions](@ref) for further options. 
 - `epochs = 100`: number of epochs to train the neural network. An epoch is one complete pass through the entire training data set when doing stochastic gradient descent.
+- `stopping_epochs = 5`: cease training if the risk does not improve in this number of epochs.
 - `batchsize = 32`: the batchsize to use when performing stochastic gradient descent, that is, the number of training samples processed between each update of the neural-network parameters.
-- `optimiser = Flux.setup(Adam(), estimator)`: any Optimisers.jl optimisation rule for updating the neural-network parameters. When the training data and/or parameters are held fixed, one may wish to employ regularisation to prevent overfitting; for example, `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), estimator)`, which corresponds to L₂ regularisation with penalty coefficient λ=10⁻⁴. 
-- `savepath::Union{String, Nothing} = nothing`: path to save the trained estimator and other information; if `nothing` (default), nothing is saved. Otherwise, the neural-network parameters (i.e., the weights and biases) will be saved during training as `bson` files; the risk function evaluated over the training and validation sets will also be saved, in the first and second columns of `loss_per_epoch.csv`, respectively; the best parameters (as measured by validation risk) will be saved as `best_network.bson`.
-- `stopping_epochs = 5`: cease training if the risk doesn't improve in this number of epochs.
+- `optimiser = Flux.setup(Adam(5e-4), estimator)`: any [Optimisers.jl](https://fluxml.ai/Optimisers.jl/stable/) optimisation rule for updating the neural-network parameters. When the training data and/or parameters are held fixed, one may wish to employ regularisation to prevent overfitting; for example, `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), estimator)`, which corresponds to L₂ regularisation with penalty coefficient λ=10⁻⁴. 
+- `lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule}`: defines the learning-rate schedule for adaptively changing the learning rate during training. Accepts either a [ParameterSchedulers.jl](https://fluxml.ai/ParameterSchedulers.jl/dev/) object or `nothing` for a fixed learning rate. By default, it uses [`CosAnneal`](https://fluxml.ai/ParameterSchedulers.jl/dev/api/cyclic/#ParameterSchedulers.CosAnneal) with a maximum set to the initial learning rate from `optimiser`, a minimum of zero, and a period equal to the number of epochs. The learning rate is updated at the end of each epoch. 
 - `use_gpu = true`: flag indicating whether to use a GPU if one is available.
+- `savepath::Union{Nothing, String} = nothing`: path to save the trained estimator and other information; if `nothing` (default), nothing is saved. Otherwise, the neural-network parameters (i.e., the weights and biases) will be saved during training as `bson` files; the risk function evaluated over the training and validation sets will also be saved, in the first and second columns of `loss_per_epoch.csv`, respectively; the best parameters (as measured by validation risk) will be saved as `best_network.bson`.
 - `verbose = true`: flag indicating whether information, including empirical risk values and timings, should be printed to the console during training.
 
 # Keyword arguments common to `train(estimator, sampler, simulator)` and `train(estimator, θ_train, θ_val, simulator)`:
@@ -68,23 +69,33 @@ estimator = PointEstimator(network)
 m = 15
 
 # Training: simulation on-the-fly
-estimator  = train(estimator, sampler, simulator, m = m, epochs = 5)
+estimator  = train(estimator, sampler, simulator, m = m)
 
 # Training: simulation on-the-fly with fixed parameters
 K = 10000
 θ_train = sampler(K)
 θ_val   = sampler(K)
-estimator = train(estimator, θ_train, θ_val, simulator, m = m, epochs = 5)
+estimator = train(estimator, θ_train, θ_val, simulator, m = m)
 
 # Training: fixed parameters and fixed data
 Z_train   = simulator(θ_train, m)
 Z_val     = simulator(θ_val, m)
-estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, epochs = 5)
+estimator = train(estimator, θ_train, θ_val, Z_train, Z_val)
 ```
 """
 function train end
 
-# NB to following the naming convention, batchsize and savepath should be batch_size and save_path
+# NB to follow the naming convention, batchsize and savepath should be batch_size and save_path
+
+function findlr(opt)
+    while opt isa AbstractArray || opt isa Tuple || opt isa NamedTuple  # Keep indexing deeper
+        opt = opt[1]  # Go to the first element
+		if opt isa Optimisers.Leaf
+			return opt.rule.eta  # Extract eta from the rule
+		end
+    end
+    return error("No Optimisers.Leaf found in the given structure")
+end
 
 function _train(estimator, sampler, simulator;
 	m = nothing,
@@ -93,7 +104,7 @@ function _train(estimator, sampler, simulator;
 	epochs_per_Z_refresh::Integer = 1,
 	simulate_just_in_time::Bool = false,
 	loss = Flux.Losses.mae,
-	optimiser          = Flux.setup(Adam(), estimator),
+	optimiser          = Flux.setup(Adam(5e-4), estimator),
     batchsize::Integer = 32,
     epochs::Integer    = 100,
 	savepath::Union{String, Nothing} = nothing, 
@@ -101,7 +112,8 @@ function _train(estimator, sampler, simulator;
     use_gpu::Bool      = true,
 	verbose::Bool      = true,
 	K::Integer         = 10_000, 
-	K_val::Integer     = K ÷ 5 + 1
+	K_val::Integer     = K ÷ 5 + 1, 
+	lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false)
 	)
 
 	# Check duplicated arguments that are needed so that the R interface uses ASCII characters only
@@ -143,6 +155,11 @@ function _train(estimator, sampler, simulator;
 	batches = ceil((K / batchsize))
 
 	store_entire_train_set = epochs_per_Z_refresh > 1 || !simulate_just_in_time
+
+	# If provided, convert the learning-rate schedule to an iterable
+	if !isnothing(lr_schedule)
+		lr_schedule = Stateful(lr_schedule)
+	end
 
 	# For loops create a new scope for the variables that are not present in the
 	# enclosing scope, and such variables get a new binding in each iteration of
@@ -192,12 +209,11 @@ function _train(estimator, sampler, simulator;
 
 		epoch_time += @elapsed val_risk = _risk(estimator, loss, val_set, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
-		verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
+		verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" findlr(optimiser))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
 		!isnothing(savepath) && @save loss_path loss_per_epoch
 
 		# If the current risk is better than the previous best, save estimator and
-		# update the minimum validation risk; otherwise, add to the early
-		# stopping counter
+		# update the minimum validation risk; otherwise, add to the early stopping counter
 		if val_risk <= min_val_risk
 			!isnothing(savepath) && _savestate(estimator, savepath, epoch)
 			min_val_risk = val_risk
@@ -208,6 +224,10 @@ function _train(estimator, sampler, simulator;
 			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
 		end
 
+		if !isnothing(lr_schedule)
+		 	next_lr = ParameterSchedulers.next!(lr_schedule) 
+			Optimisers.adjust!(optimiser, next_lr) 
+		end
     end
 
 	# save key information and the best estimator
@@ -223,12 +243,13 @@ function _train(estimator, θ_train::P, θ_val::P, simulator;
 		epochs_per_Z_refresh::Integer = 1,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		optimiser          = Flux.setup(Adam(), estimator),
+		optimiser          = Flux.setup(Adam(5e-4), estimator),
 		savepath::Union{String, Nothing} = nothing,
 		simulate_just_in_time::Bool = false,
 		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
-		verbose::Bool    = true
+		verbose::Bool    = true, 
+		lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false)
 		) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
 	_checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
@@ -257,6 +278,11 @@ function _train(estimator, θ_train::P, θ_val::P, simulator;
 
 	# Save initial estimator
 	!isnothing(savepath) && _savestate(estimator, savepath, 0)
+
+	# If provided, convert the learning-rate schedule to an iterable
+	if !isnothing(lr_schedule)
+		lr_schedule = Stateful(lr_schedule)
+	end
 
 	# We may simulate Z_train in its entirety either because (i) we
 	# want to avoid the overhead of simulating continuously or (ii) we are
@@ -300,7 +326,7 @@ function _train(estimator, θ_train::P, θ_val::P, simulator;
 		# Compute the validation risk and report to the user
 		epoch_time += @elapsed val_risk = _risk(estimator, loss, val_set, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
-		verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
+		verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" findlr(optimiser))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
 
 		# save the loss every epoch in case training is prematurely halted
 		!isnothing(savepath) && @save loss_path loss_per_epoch
@@ -316,6 +342,11 @@ function _train(estimator, θ_train::P, θ_val::P, simulator;
 			early_stopping_counter += 1
 			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
 		end
+
+		if !isnothing(lr_schedule)
+			next_lr = ParameterSchedulers.next!(lr_schedule) 
+		   Optimisers.adjust!(optimiser, next_lr) 
+	   end
     end
 
 	# save key information and save the best estimator as best_network.bson.
@@ -329,11 +360,12 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 		batchsize::Integer = 32,
 		epochs::Integer  = 100,
 		loss             = Flux.Losses.mae,
-		optimiser          = Flux.setup(Adam(), estimator),
+		optimiser          = Flux.setup(Adam(5e-4), estimator),
 		savepath::Union{String, Nothing} = nothing,
 		stopping_epochs::Integer = 5,
 		use_gpu::Bool    = true,
-		verbose::Bool    = true
+		verbose::Bool    = true, 
+		lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false)
 		) where {T, P <: Union{Tuple, AbstractMatrix, ParameterConfigurations}}
 
 	@assert batchsize > 0
@@ -385,6 +417,11 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	loss_per_epoch = [initial_train_risk val_risk;]
 	!isnothing(savepath) && _savestate(estimator, savepath, 0)
 
+	# If provided, convert the learning-rate schedule to an iterable
+	if !isnothing(lr_schedule)
+		lr_schedule = Stateful(lr_schedule)
+	end
+
 	local estimator_best = deepcopy(estimator)
 	local min_val_risk = val_risk
 	local early_stopping_counter = 0
@@ -397,7 +434,7 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
 		epoch_time += @elapsed val_risk = _risk(estimator, loss, val_set, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
-		verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Run time of epoch: $(round(epoch_time, digits = 3)) seconds")
+		verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" findlr(optimiser))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
 
 		# save the loss every epoch in case training is prematurely halted
 		!isnothing(savepath) && @save loss_path loss_per_epoch
@@ -413,6 +450,10 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 			early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
 		end
 
+		if !isnothing(lr_schedule)
+			next_lr = ParameterSchedulers.next!(lr_schedule) 
+		   Optimisers.adjust!(optimiser, next_lr) 
+	    end
     end
 
 	# save key information

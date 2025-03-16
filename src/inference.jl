@@ -138,6 +138,9 @@ function sampleposterior(est::RatioEstimator,
 	end
 end
 function sampleposterior(est::RatioEstimator, Z::AbstractVector, N::Integer = 1000; kwargs...) 
+
+	Z = f32(Z)
+
 	# Simple broadcasting to handle multiple data sets (NB this could be done in parallel)
 	if length(Z) == 1 
 		sampleposterior(est, Z[1], N; kwargs...)
@@ -148,6 +151,9 @@ end
 
 sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000; kwargs...) = sampleposterior(estimator.q, estimator.network(Z), N; kwargs...)
 function sampleposterior(est::PosteriorEstimator, Z::AbstractVector, N::Integer = 1000; kwargs...) 
+
+	Z = f32(Z)
+
 	# Simple broadcasting to handle multiple data sets (NB this could be done in parallel)
 	if length(Z) == 1 
 		sampleposterior(est, Z[1], N; kwargs...)

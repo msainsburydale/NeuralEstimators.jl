@@ -182,6 +182,12 @@ An affine coupling block splits its input $\boldsymbol{\theta}$ into two disjoin
 ```
 where $\boldsymbol{\kappa}_{\boldsymbol{\gamma},1}(\cdot)$ and $\boldsymbol{\kappa}_{\boldsymbol{\gamma},2}(\cdot)$ are generic, non-invertible multilayer perceptrons (MLPs) that are functions of both the (transformed) first input component $\tilde{\boldsymbol{\theta}}_1$ and the learned $d^*$-dimensional summary statistics $\boldsymbol{T}(\boldsymbol{Z})$ (see [`PosteriorEstimator`](@ref)). 
 
+To prevent numerical overflows and stabilise the training of the model, the scaling factors $\boldsymbol{\kappa}_{\boldsymbol{\gamma},1}(\cdot)$ are clamped using the function 
+```math
+f(\boldsymbol{s}) = \frac{2c}{\pi}\tan^{-1}(\frac{\boldsymbol{s}}{c}),
+```
+where $c = 1.9$ is a fixed clamping threshold. This transformation ensures that the scaling factors do not grow excessively large.
+
 Additional keyword arguments `kwargs` are passed to the [`MLP`](@ref) constructor when creating `κ₁` and `κ₂`. 
 """
 struct AffineCouplingBlock{M <: MLP}
@@ -198,9 +204,14 @@ function AffineCouplingBlock(d₁::Integer, dstar::Integer, d₂::Integer; kwarg
 end
 
 numdistributionalparams(block::AffineCouplingBlock) = 2 * block.d₂
+
+function softclamp(s)
+    clamp = 1.9f0
+    return (2.0f0 * clamp / Float32(π)) * atan.(s / clamp)
+end
  
 function forward(net::AffineCouplingBlock, X, Y, TZ)
-     S = net.scale(Y, TZ)
+     S = softclamp(net.scale(Y, TZ))
      T = net.translate(Y, TZ)
      U = X .* exp.(S) .+ T
      log_det_J = sum(S, dims = 1) 
@@ -208,7 +219,7 @@ function forward(net::AffineCouplingBlock, X, Y, TZ)
 end 
  
 function inverse(net::AffineCouplingBlock, U, V, TZ)
-     S = net.scale(U, TZ)
+     S = softclamp(net.scale(U, TZ))
      T = net.translate(U, TZ)
      θ = (V .- T) .* exp.(-S)
      return θ

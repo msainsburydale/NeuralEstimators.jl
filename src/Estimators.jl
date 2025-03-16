@@ -474,6 +474,37 @@ logdensity(estimator::PosteriorEstimator, θ, Z) = logdensity(estimator.q, θ, e
 # ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, numdistributionalparams(q)))
 # network = DeepSet(ψ, ϕ)
 
+
+# using NeuralEstimators, Flux
+
+# # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
+# d = 3     # dimension of the parameter vector θ
+# n = 1     # dimension of each independent replicate of Z
+# m = 10000    # number of independent replicates in each data set
+# sample(K) = 20* rand32(d, K)
+# simulate(θ, m) = [-ϑ[1] .+ ϑ[3]  .+ ϑ[2] .* randn32(n, m) for ϑ in eachcol(θ)]
+
+# # Distribution used to approximate the posterior 
+# q = NormalisingFlow(d, d; num_coupling_layers = 10) 
+
+# # Neural network (outputs d summary statistics)
+# w = 128   
+# ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
+# ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, d))
+# network = DeepSet(ψ, ϕ)
+
+# # Initialise the estimator
+# estimator = PosteriorEstimator(q, network)
+
+# # Train the estimator
+# estimator = train(estimator, sample, simulate, m = m)
+
+# # Inference with observed data 
+# θ = [0.8f0 0.1f0]'
+# Z = simulate(θ, m)
+# sampleposterior(estimator, Z) # posterior draws 
+# posteriormean(estimator, Z)   # point estimate
+
 @doc raw"""
 	RatioEstimator <: NeuralEstimator
 	RatioEstimator(network)
