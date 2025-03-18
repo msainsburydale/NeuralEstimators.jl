@@ -464,7 +464,7 @@ struct PosteriorEstimator <: NeuralEstimator
 	network
 end
 numdistributionalparams(estimator::PosteriorEstimator) = numdistributionalparams(estimator.q)
-logdensity(estimator::PosteriorEstimator, θ, Z) = logdensity(estimator.q, θ, estimator.network(Z)) 
+logdensity(estimator::PosteriorEstimator, θ, Z) = logdensity(estimator.q, f32(θ), estimator.network(f32(Z))) 
 (estimator::PosteriorEstimator)(Zθ::Tuple) = logdensity(estimator, Zθ[2], Zθ[1]) # internal method only used during training # TODO not ideal that we assume an ordering here
 
 ## Alternatively, to use a Gaussian approximate distribution: 

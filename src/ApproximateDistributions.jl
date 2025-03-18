@@ -205,11 +205,10 @@ end
 
 numdistributionalparams(block::AffineCouplingBlock) = 2 * block.d₂
 
-function softclamp(s)
-    clamp = 1.9f0
-    return (2.0f0 * clamp / Float32(π)) * atan.(s / clamp)
-end
- 
+const clamp_value = 1.9f0
+const softclamp_scale = 2.0f0 * clamp_value / Float32(π)
+softclamp(s) = softclamp_scale * atan.(s / clamp_value)
+
 function forward(net::AffineCouplingBlock, X, Y, TZ)
      S = softclamp(net.scale(Y, TZ))
      T = net.translate(Y, TZ)

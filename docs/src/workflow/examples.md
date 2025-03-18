@@ -228,7 +228,8 @@ function (cnn::CNN)(Z)
 end
 network = CNN(Chain(
 	Conv((3, 3), 1 => 32, relu),
-	MaxPool((2, 2)),Conv((3, 3), 32 => 64, relu), 
+	MaxPool((2, 2)),
+	Conv((3, 3), 32 => 64, relu), 
 	MaxPool((2, 2)), 
 	Flux.flatten, 
 	Dense(256, 64, relu), 
