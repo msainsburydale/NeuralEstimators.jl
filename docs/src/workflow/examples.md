@@ -50,7 +50,7 @@ function sample(K)
 end
 ```
 
-Next, we define the statistical model implicitly through data simulation. The simulated data are stored as a `Vector{A}`, where each element corresponds to one parameter vector. The type `A` reflects the multivariate structure of the data. In this example, each replicate $Z_1, \dots, Z_m$ is univariate, so `A` is a Matrix with $n = 1$ row and $m$ columns:
+Next, we define the statistical model implicitly through data simulation. Since our data are replicated, the simulated data are stored as a `Vector{A}`, where each element corresponds to one parameter vector. The type `A` reflects the multivariate structure of the data. In this example, each replicate $Z_1, \dots, Z_m$ is univariate, so `A` is a Matrix with $n = 1$ row and $m$ columns:
 
 ```julia
 function simulate(θ, m)
@@ -217,24 +217,18 @@ A possible neural-network architecture is as follows. Note that deeper architect
 network = DeepSet(ψ, ϕ)
 ```
 
-Above, we embedded our CNN within the DeepSets framework to accommodate scenarios involving replicated spatial data (e.g., when fitting models for spatial extremes). However, as noted in Step 4 of the [Overview](@ref), the package allows users to define the neural network using any Flux model. Since this example does not include independent replicates, the following CNN model is equivalent to the DeepSets architecture used above:  
+Above, we embedded our CNN within the DeepSets framework to accommodate scenarios involving replicated spatial data (e.g., when fitting models for spatial extremes). However, the package allows users to define the neural network using any Flux model. Since this example does not include independent replicates, one could instead store each simulated data set in the final dimension of a four-dimensional array, and then use the following generic CNN architecture:  
 
 ```julia
-struct CNN{T <: Chain} 
-	chain::T
-end
-function (cnn::CNN)(Z) 
-	cnn.chain(stackarrays(Z))
-end
-network = CNN(Chain(
-	Conv((3, 3), 1 => 32, relu),
-	MaxPool((2, 2)),
-	Conv((3, 3), 32 => 64, relu), 
-	MaxPool((2, 2)), 
-	Flux.flatten, 
-	Dense(256, 64, relu), 
-	Dense(64, 1)                   
-))
+# network = Chain(
+# 	Conv((3, 3), 1 => 32, relu),
+# 	MaxPool((2, 2)),
+# 	Conv((3, 3), 32 => 64, relu), 
+# 	MaxPool((2, 2)), 
+# 	Flux.flatten, 
+# 	Dense(256, 64, relu), 
+# 	Dense(64, 1)                   
+# )
 ```
 
 Next, we initialise a point estimator and a posterior credible-interval estimator:
