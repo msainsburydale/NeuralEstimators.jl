@@ -9,6 +9,10 @@ nested_eltype(x) = nested_eltype(typeof(x))
 nested_eltype(::Type{T}) where T <:AbstractArray = nested_eltype(eltype(T))
 nested_eltype(::Type{T}) where T = T
 
+# Subsetting Assessment
+Base.getindex(A::Assessment, i::Integer) = getfield(A, i)
+Base.getindex(A::Assessment, s::Symbol) = getfield(A, s)
+
 """
 	rowwisenorm(A)
 Computes the row-wise norm of a matrix `A`.
