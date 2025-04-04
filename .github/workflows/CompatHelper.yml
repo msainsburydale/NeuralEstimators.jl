@@ -41,5 +41,3 @@ jobs:
         shell: julia --color=yes {0}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # authentication with GitHub Actions token
-          # COMPATHELPER_PRIV: ${{ secrets.DOCUMENTER_KEY }} # authentication with SSH deploy key
-          COMPATHELPER_PRIV: ${{ secrets.COMPATHELPER_PRIV }} # authentication with SSH deploy key
