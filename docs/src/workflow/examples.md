@@ -217,19 +217,7 @@ A possible neural-network architecture is as follows. Note that deeper architect
 network = DeepSet(ψ, ϕ)
 ```
 
-Above, we embedded our CNN within the DeepSets framework to accommodate scenarios involving replicated spatial data (e.g., when fitting models for spatial extremes). However, the package allows users to define the neural network using any Flux model. Since this example does not include independent replicates, one could instead store each simulated data set in the final dimension of a four-dimensional array, and then use the following generic CNN architecture:  
-
-```julia
-# network = Chain(
-# 	Conv((3, 3), 1 => 32, relu),
-# 	MaxPool((2, 2)),
-# 	Conv((3, 3), 32 => 64, relu), 
-# 	MaxPool((2, 2)), 
-# 	Flux.flatten, 
-# 	Dense(256, 64, relu), 
-# 	Dense(64, 1)                   
-# )
-```
+Above, we embedded our CNN within the DeepSets framework to accommodate scenarios involving replicated spatial data (e.g., when fitting models for spatial extremes). However, the package allows users to define the neural network using any Flux model. Since this example does not include independent replicates, one could instead store each simulated data set in the final dimension of a four-dimensional array, and then use a generic CNN architecture.  
 
 Next, we initialise a point estimator and a posterior credible-interval estimator:
 
