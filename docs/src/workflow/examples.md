@@ -376,7 +376,7 @@ m = 1
 K = 5000
 θ_train = sample(K)
 θ_val   = sample(K÷5)
-estimator = train(estimator, θ_train, θ_val, simulate, m = m, epochs = 20)
+estimator = train(estimator, θ_train, θ_val, simulate, m = m, epochs = 10)
 ``` 
 
 Note that the computations in GNNs are performed in parallel, making them particularly well-suited for GPUs, which typically contain thousands of cores. If you have access to an NVIDIA GPU, you can utilise it by simply loading the Julia package `CUDA`. 
