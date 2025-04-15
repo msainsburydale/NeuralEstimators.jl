@@ -35,7 +35,7 @@ One may also regularly refresh the set $\vartheta_{\text{train}}$ of parameter v
 The above strategies are facilitated with various methods of [`train()`](@ref).
 
 
-## Input scaling 
+## Feature scaling 
 
 It is important to ensure that the data passed through the neural network are on a **reasonable numerical scale**, since values with very large absolute value can lead to **numerical instability** during training (e.g., exploding gradients). 
 
@@ -45,7 +45,7 @@ A relatively simply way to achieve this is by including a transformation in the 
 network = Chain(z -> log.(1 + z), ...)
 ```
 
-Or, if the data are not strictly positive, one may consider the following signed transformation:
+If the data are not strictly positive, one may consider the following signed transformation:
 
 ```julia
 network = Chain(z -> sign.(z) .* log.(1 .+ abs.(z)), ...)
