@@ -196,17 +196,19 @@ end
 		n = 1000
 		S = rand(n, d)
 		Z = rand(n, m)
-		g = spatialgraph(S)
-		#g = spatialgraph(g, Z) #TODO why is this failing on CI but not on my computer?
-		#g = spatialgraph(S, Z) #TODO why is this failing on CI but not on my computer?
-
+		g = spatialgraph(S) 
+		@test g.num_nodes == n
+		g = spatialgraph(g, Z) 
+		g = spatialgraph(S, Z) 
+		
 		# Spatial locations varying between replicates
 		n = rand(500:1000, m)
 		S = rand.(n, d)
 		Z = rand.(n)
 		g = spatialgraph(S)
-		#g = spatialgraph(g, Z) #TODO why is this failing on CI but not on my computer?
-		#g = spatialgraph(S, Z) #TODO why is this failing on CI but not on my computer?
+		@test g.num_nodes == sum(n)
+		g = spatialgraph(g, Z) 
+		g = spatialgraph(S, Z) 
 
 		# Mutlivariate processes: spatial locations fixed for all replicates
 		q = 2 # bivariate spatial process
@@ -214,16 +216,18 @@ end
 		S = rand(n, d)
 		Z = rand(q, n, m)
 		g = spatialgraph(S)
-		#g = spatialgraph(g, Z) #TODO why is this failing on CI but not on my computer?
-		#g = spatialgraph(S, Z) #TODO why is this failing on CI but not on my computer?
+		@test g.num_nodes == n
+		g = spatialgraph(g, Z) 
+		g = spatialgraph(S, Z) 
 
 		# Mutlivariate processes: spatial locations varying between replicates
 		n = rand(500:1000, m)
 		S = rand.(n, d)
 		Z = rand.(q, n)
 		g = spatialgraph(S)
-		#g = spatialgraph(g, Z) #TODO why is this failing on CI but not on my computer?
-		#g = spatialgraph(S, Z) #TODO why is this failing on CI but not on my computer?
+		@test g.num_nodes == sum(n)
+		g = spatialgraph(g, Z) 
+		g = spatialgraph(S, Z) 
 	end
 
 	@testset "missingdata" begin
@@ -253,7 +257,6 @@ end
 		mapslices(x -> sum(ismissing.(x))/length(x), removedata(Z, p), dims = 2)
 		# Check that none of the replicates contain 100% missing:
 		@test !(d ∈ unique(mapslices(x -> sum(ismissing.(x)), removedata(Z, p), dims = 1)))
-	
 	
 		# encodedata() 
 		n = 16
@@ -405,11 +408,11 @@ end
 	m = 5                                   # number of independent replicates
 	Z = L * randn(n, m)                     # simulated data
 	r = 0.15                                # radius of neighbourhood set
-	#g = spatialgraph(S, Z, r = r)      |> dvc # TODO add these back once I figure out why the Graphs are not working properly
-	#nv = NeighbourhoodVariogram(r, 10) |> dvc
-	#nv(g)
-	#@test length(nv(g)) == 10
-	#@test all(nv(g) .>= 0)
+	g = spatialgraph(S, Z, r = r) |> dvc 
+	nv = NeighbourhoodVariogram(r, 10) |> dvc
+	nv(g)
+	@test length(nv(g)) == 10
+	@test all(nv(g) .>= 0)
 end
 
 @testset "Loss functions: $dvc" for dvc ∈ devices
@@ -553,30 +556,29 @@ end
 		m = 5                  
 		S = rand(n, 2)         
 		Z = rand(n, m)
-		# TODO add these back once I figure out why the Graphs are not working properly         
-		# g = spatialgraph(S, Z) 
-		# ch = 10
-		# l = SpatialGraphConv(1 => ch)
-		# l = l |> dvc 
-		# g = g |> dvc 
-		# y = l(g)
-		# @test size(y.ndata.x) == (ch, m, n)
-		# # Back propagation
-		# pars = deepcopy(trainables(l))
-		# optimiser = Flux.setup(Flux.Adam(), l)
-		# ∇ = Flux.gradient(l -> mae(l(g).ndata.x, similar(y.ndata.x)), l) 
-		# Flux.update!(optimiser, l, ∇[1])
-		# @test trainables(l) != pars 
+		g = spatialgraph(S, Z) 
+		ch = 10
+		l = SpatialGraphConv(1 => ch)
+		l = l |> dvc 
+		g = g |> dvc 
+		y = l(g)
+		@test size(y.ndata.Z) == (ch, m, n)
+		# Back propagation
+		pars = deepcopy(trainables(l))
+		optimiser = Flux.setup(Flux.Adam(), l)
+		∇ = Flux.gradient(l -> mae(l(g).ndata.Z, similar(y.ndata.Z)), l) 
+		Flux.update!(optimiser, l, ∇[1])
+		@test trainables(l) != pars 
 
-		# # GNNSummary
-		# propagation = GNNChain(SpatialGraphConv(1 => ch), SpatialGraphConv(ch => ch))
-		# readout = GlobalPool(mean)
-		# ψ = GNNSummary(propagation, readout)
-		# ψ = ψ |> dvc 
-		# g = g |> dvc 
-		# y = ψ(g)
-		# @test size(y) == (ch, m)
-		# testbackprop(ψ, g, dvc)
+		# GNNSummary
+		propagation = GNNChain(SpatialGraphConv(1 => ch), SpatialGraphConv(ch => ch))
+		readout = GlobalPool(mean)
+		ψ = GNNSummary(propagation, readout)
+		ψ = ψ |> dvc 
+		g = g |> dvc 
+		y = ψ(g)
+		@test size(y) == (ch, m)
+		testbackprop(ψ, g, dvc)
 	end
 	
 	@testset "Spatial weight functions: $Weights" for Weights ∈ [IndicatorWeights, KernelWeights] 
@@ -711,7 +713,7 @@ end
 	dₜ = 16    # dimension of neural summary statistic
 	for S in (nothing, samplesize)
 		for dₓ in (0, 2) # dimension of set-level inputs 
-			for data in ("unstructured", "grid") #, "graph") # TODO add graph back once I figure out why the Graphs are not working properly
+			for data in ("unstructured", "grid", "graph") 
 				dₛ = isnothing(S) ? 0 : 1 # dimension of expert summary statistic
 				if data == "unstructured"
 					Z = [rand32(n, m) for m ∈ M]

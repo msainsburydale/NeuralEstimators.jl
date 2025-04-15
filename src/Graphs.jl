@@ -6,8 +6,7 @@ Given spatial data `Z` measured at spatial locations `S`, constructs a
 [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/stable/api/gnngraph/#GNNGraph-type)
 ready for use in a graph neural network that employs [`SpatialGraphConv`](@ref) layers. 
 
-When $m$ independent replicates are collected over the same set of
-$n$ spatial locations,
+When $m$ independent replicates are collected over the same set of $n$ spatial locations,
 ```math
 \{\boldsymbol{s}_1, \dots, \boldsymbol{s}_n\} \subset \mathcal{D},
 ```
@@ -51,7 +50,7 @@ Z = rand.(n)
 g = spatialgraph(S, Z)
 ```
 """
-function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, store_S::Bool = false, kwargs...)
+function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, kwargs...)
 
 	# Determine neighbourhood based on keyword arguments 
 	kwargs = (;kwargs...)
@@ -59,24 +58,19 @@ function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, st
 	r = haskey(kwargs, :r) ? kwargs.r : 0.15
 	random = haskey(kwargs, :random) ? kwargs.random : false
 
-	#TODO
 	if !isotropic 
 		error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
 	end
 	if !stationary 
 		error("Nonstationarity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
 	end
-	ndata = DataStore()
+
 	S = f32(S)
 	A = adjacencymatrix(S; k = k, r = r, random = random) 
 	S = permutedims(S) # need final dimension to be n-dimensional
-	if store_S
-		ndata = (ndata..., S = S)
-	end
-	GNNGraph(A, ndata = ndata, edata = permutedims(A.nzval))
+	GNNGraph(A, ndata = (S = S,), edata = permutedims(A.nzval))
 end
 spatialgraph(S::AbstractVector; kwargs...) = batch(spatialgraph.(S; kwargs...)) # spatial locations varying between replicates
-
 
 # Wrappers that allow data to be passed into an already-constructed graph
 # (useful for partial simulation on the fly with the parameters held fixed)
@@ -393,6 +387,12 @@ function SpatialGraphConv(
 	b = bias ? Flux.create_bias(Γ1, true, out) : false
 
     SpatialGraphConv(Γ1, Γ2, b, w, f, g)
+end
+
+function (l::SpatialGraphConv)(g::GNNGraph) 
+	# GNNGraph(g, ndata = l(g, node_features(g))) # this is the code for generic GNNLayer
+	h = l(g, g.ndata.Z) # access the data Z directly, since the spatial locations S are also stored as node features
+	GNNGraph(g, ndata = (Z = h, g.ndata.S)) 
 end
 function (l::SpatialGraphConv)(g::GNNGraph, x::M) where M <: AbstractMatrix{T} where {T}
 	l(g, reshape(x, size(x, 1), 1, size(x, 2)))

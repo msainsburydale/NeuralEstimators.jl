@@ -8,7 +8,7 @@ with columns:
 - `parameter`: the name of the parameter
 - `truth`:     the true value of the parameter
 - `estimate`:  the estimated value of the parameter
-- `m`:         the sample size (number of iid replicates) for the given data set
+- `m`:         the sample size (number of exchangeable replicates) for the given data set
 - `k`:         the index of the parameter vector
 - `j`:         the index of the data set (in the case that multiple data sets are associated with each parameter vector)
 
@@ -80,7 +80,7 @@ Assesses an `estimator` (or a collection of `estimators`) based on true paramete
 
 The parameters `θ` should be given as a ``d`` × ``K`` matrix, where ``d`` is the parameter dimension and ``K`` is the number of sampled parameter vectors. 
 
-The data `Z` should be a `Vector`, with each element representing a single simulated data set. If `length(Z)` is greater than ``K``, `θ` will be recycled via horizontal concatenation: `θ = repeat(θ, outer = (1, J))`, where `J = length(Z) ÷ K` is the number of simulated data sets per parameter vector. This allows assessment of the estimator's sampling distribution under fixed parameters.
+The function is currently only designed for the case that a [DeepSet](@ref) neural network is used, in which case the data `Z` should be a `Vector`, with each element representing a simulated data set (possibly containing independent replicates). If `length(Z)` is greater than ``K``, `θ` will be recycled via horizontal concatenation: `θ = repeat(θ, outer = (1, J))`, where `J = length(Z) ÷ K` is the number of simulated data sets per parameter vector. This allows assessment of the estimator's sampling distribution under fixed parameters.
 
 The return value is of type [`Assessment`](@ref). 
 
