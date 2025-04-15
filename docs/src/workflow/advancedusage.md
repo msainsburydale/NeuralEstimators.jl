@@ -35,6 +35,24 @@ One may also regularly refresh the set $\vartheta_{\text{train}}$ of parameter v
 The above strategies are facilitated with various methods of [`train()`](@ref).
 
 
+## Input scaling 
+
+It is important to ensure that the data passed through the neural network are on a **reasonable numerical scale**, since values with very large absolute value can lead to **numerical instability** during training (e.g., exploding gradients). 
+
+A relatively simply way to achieve this is by including a transformation in the first layer of the neural network. For example, if the data have positive support, one could define the neural network with the first layer applying a log transformation:
+
+```julia
+network = Chain(z -> log.(1 + z), ...)
+```
+
+Or, if the data are not strictly positive, one may consider the following signed transformation:
+
+```julia
+network = Chain(z -> sign.(z) .* log.(1 .+ abs.(z)), ...)
+```
+
+A simple preprocessing layer or transformation pipeline such as this can make a significant difference in performance and stability. See [feature scaling](https://en.wikipedia.org/wiki/Feature_scaling) for further discussion and possible approaches. 
+
 ## Regularisation
 
 The term *regularisation* refers to a variety of techniques aimed to reduce overfitting when training a neural network, primarily by discouraging complex models.
