@@ -1311,6 +1311,7 @@ end
 
 	# Training
 	ensemble = train(ensemble, sampler, simulator, m = m, epochs = 1, verbose = verbose, use_gpu = dvc == gpu)
+	ensemble = train(ensemble, sampler, simulator, m = m, epochs = 1, verbose = verbose, use_gpu = dvc == gpu, optimiser = Flux.setup(Adam(5e-3), ensemble))
 
 	# Assessment
 	θ = sampler(1000)

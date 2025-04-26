@@ -87,6 +87,7 @@ function train end
 
 # NB to follow the naming convention, batchsize and savepath should be batch_size and save_path
 
+
 function findlr(opt)
     if opt isa Optimisers.Leaf
         return opt.rule.eta
@@ -532,6 +533,33 @@ function train(estimator::PosteriorEstimator, args...; kwargs...)
 	end
 	kwargs = merge(kwargs, (loss = (q, θ) -> -mean(q),))
 	_train(estimator, args...; kwargs...)
+end
+
+function train(ensemble::Ensemble, args...; kwargs...)
+	kwargs = (;kwargs...)
+	savepath = haskey(kwargs, :savepath) ? kwargs.savepath : nothing
+	verbose  = haskey(kwargs, :verbose)  ? kwargs.verbose : true
+	optimiser = haskey(kwargs, :optimiser) ? kwargs.optimiser : nothing
+	estimators = map(enumerate(ensemble.estimators)) do (i, estimator)
+		verbose && @info "Training estimator $i of $(length(ensemble))"
+		if !isnothing(savepath) 
+			kwargs = merge(kwargs, (savepath = joinpath(savepath, "estimator$i"),))
+		end
+		if !isnothing(optimiser) # catch errors caused by constructing the optimiser from the Ensemble object
+			lr = try findlr(optimiser) catch; 5e-4 end
+			kwargs = merge(kwargs, (optimiser = Flux.setup(Adam(lr), estimator),))
+		end
+		train(estimator, args...; kwargs...)
+	end
+	ensemble = Ensemble(estimators)
+
+	if !isnothing(savepath)
+		if !ispath(savepath) mkpath(savepath) end
+		model_state = Flux.state(cpu(ensemble)) 
+		@save joinpath(savepath, "ensemble.bson") model_state
+	end
+
+	return ensemble
 end
 
 # ---- Lower level functions ----

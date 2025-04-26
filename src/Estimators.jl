@@ -701,7 +701,7 @@ initialised with a collection of untrained `estimators`
 trained with `train()`, and then applied to observed data. In the latter case, where the ensemble is trained directly,
 if `savepath` is specified both the ensemble and component estimators will be saved.
 
-Note that `train()` currently acts sequentially on the component estimators.
+Note that `train()` currently acts sequentially on the component estimators, using the `Adam` optimiser.
 
 The ensemble components can be accessed by indexing the ensemble; the number
 of component estimators can be obtained using `length()`.
@@ -750,28 +750,6 @@ struct Ensemble{T <: NeuralEstimator} <: NeuralEstimator
 	estimators::Vector{T}
 end
 Ensemble(architecture::Function, J::Integer) = Ensemble([architecture() for j in 1:J])
-
-function train(ensemble::Ensemble, args...; kwargs...)
-	kwargs = (;kwargs...)
-	savepath = haskey(kwargs, :savepath) ? kwargs.savepath : nothing
-	verbose  = haskey(kwargs, :verbose)  ? kwargs.verbose : true
-	estimators = map(enumerate(ensemble.estimators)) do (i, estimator)
-		verbose && @info "Training estimator $i of $(length(ensemble))"
-		if !isnothing(savepath) 
-			kwargs = merge(kwargs, (savepath = joinpath(savepath, "estimator$i"),))
-		end
-		train(estimator, args...; kwargs...)
-	end
-	ensemble = Ensemble(estimators)
-
-	if !isnothing(savepath)
-		if !ispath(savepath) mkpath(savepath) end
-		model_state = Flux.state(cpu(ensemble)) 
-		@save joinpath(savepath, "ensemble.bson") model_state
-	end
-
-	return ensemble
-end
 
 function (ensemble::Ensemble)(Z; aggr = median)
 	# Compute estimate from each estimator, yielding a vector of matrices
