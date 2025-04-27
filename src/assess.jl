@@ -80,7 +80,7 @@ Assesses an `estimator` (or a collection of `estimators`) based on true paramete
 
 The parameters `θ` should be given as a ``d`` × ``K`` matrix, where ``d`` is the parameter dimension and ``K`` is the number of sampled parameter vectors. 
 
-The function is currently only designed for the case that a [DeepSet](@ref) neural network is used, in which case the data `Z` should be a `Vector`, with each element representing a simulated data set (possibly containing independent replicates). If `length(Z)` is greater than ``K``, `θ` will be recycled via horizontal concatenation: `θ = repeat(θ, outer = (1, J))`, where `J = length(Z) ÷ K` is the number of simulated data sets per parameter vector. This allows assessment of the estimator's sampling distribution under fixed parameters.
+When `Z` contain more simulated data sets than the number ``K`` of sampled parameter vectors, `θ` will be recycled via horizontal concatenation: `θ = repeat(θ, outer = (1, J))`, where `J = numobs(Z) ÷ K` is the number of simulated data sets for each parameter vector. This allows assessment of the estimator's sampling distribution under fixed parameters.
 
 The return value is of type [`Assessment`](@ref). 
 
@@ -97,8 +97,7 @@ function assess(
 	parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
 	estimator_name::Union{Nothing, String} = nothing,
 	estimator_names::Union{Nothing, String} = nothing, 
-	ξ  = nothing,
-    xi = nothing,
+	ξ  = nothing, xi = nothing,
 	use_gpu::Bool = true,
 	probs = nothing, 
 	B::Integer = 400
@@ -108,39 +107,40 @@ function assess(
 	@assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
 	if !isnothing(xi) ξ = xi end
 
-	# Extract the matrix of parameters
+	# Extract the matrix of parameters and check that the parameter names match the dimension of θ
 	θ = _extractθ(θ)
-	p, K = size(θ)
-
-	# Check the size of the test data conforms with θ 
-	m = numberreplicates(Z)
-	if !(typeof(m) <: Vector{Int}) # a vector of vectors has been given, attempt to convert Z to the correct format
-		Z = reduce(vcat, Z) 
-		m = numberreplicates(Z)
+	d, K = size(θ)
+	if θ isa NamedMatrix
+		parameter_names = names(θ, 1)
 	end
-	KJ = length(m) # NB this can be different to length(Z) when we have set-level information, in which case length(Z) = 2
-	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors in `θ`"
+	@assert length(parameter_names) == d
+
+	# Get the number of data sets and check that it conforms with the number of parameter vectors stored in θ
+	KJ = numobs(Z)
+	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors stored in `θ`"
 	J = KJ ÷ K
 	if J > 1
 		θ = repeat(θ, outer = (1, J))
 	end
-	if θ isa NamedMatrix
-		parameter_names = names(θ, 1)
+
+	# If the data are stored as a vector, get the number of replicates stored in each element 
+	if Z isa AbstractVector 
+		m = numberreplicates(Z)
+	else 
+		m = fill(1, KJ)
 	end
-	@assert length(parameter_names) == p
 
-	estimate_names = parameter_names
-
+	# Apply the estimator to the data 
 	if !isnothing(ξ)
 		runtime = @elapsed θ̂ = estimator(Z, ξ) # note that the gpu is never used in this case
 	else
 		runtime = @elapsed θ̂ = estimate(estimator, Z, use_gpu = use_gpu)
 	end
-	θ̂ = convert(Matrix, θ̂) # sometimes estimator returns vectors rather than matrices, which can mess things up
+	θ̂ = convert(Matrix, θ̂) # convert to Matrix in case estimator returns a different format (e.g., adjoint vector)
 
 	# Convert to DataFrame and add information
 	runtime = DataFrame(runtime = runtime)
-	θ̂ = DataFrame(θ̂', estimate_names)
+	θ̂ = DataFrame(θ̂', parameter_names)
 	θ̂[!, "m"] = m
 	θ̂[!, "k"] = repeat(1:K, J)
 	θ̂[!, "j"] = repeat(1:J, inner = K)
@@ -152,12 +152,9 @@ function assess(
 		runtime[!, "estimator"] .= estimator_name
 	end
 
-	# Dataframe containing the true parameters
+	# Dataframe containing the true parameters, repeated if necessary 
 	θ = convert(Matrix, θ)
 	θ = DataFrame(θ', parameter_names)
-	# Replicate θ to match the number of rows in θ̂. Note that the parameter
-	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
-	# in an outer fashion.
 	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
 	θ = stack(θ, variable_name = :parameter, value_name = :truth) # transform to long form
 
@@ -171,7 +168,7 @@ function assess(
 		# compute bootstrap intervals and convert to same format returned by IntervalEstimator
 		intervals = stackarrays(vec.(interval.(bs, probs = probs)), merge = false)
 		# convert to dataframe and merge
-		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = p)
+		estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = d)
 		intervals = DataFrame(intervals', estimate_names)
 		intervals[!, "m"] = m
 		intervals[!, "k"] = repeat(1:K, J)
@@ -195,34 +192,35 @@ function assess(
 	kwargs...
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
-	# Extract the matrix of parameters
+	# Extract the matrix of parameters and check that the parameter names match the dimension of θ
 	θ = _extractθ(θ)
-	p, K = size(θ)
-
-	# Check the size of the test data conforms with θ 
-	m = numberreplicates(Z)
-	if !(typeof(m) <: Vector{Int}) # a vector of vectors has been given, attempt to convert Z to the correct format
-		Z = reduce(vcat, Z) 
-		m = numberreplicates(Z)
+	d, K = size(θ)
+	if θ isa NamedMatrix
+		parameter_names = names(θ, 1)
 	end
-	KJ = length(m) # NB this can be different to length(Z) when we have set-level information, in which case length(Z) = 2
-	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors in `θ`"
+	@assert length(parameter_names) == d
+
+	# Get the number of data sets and check that it conforms with the number of parameter vectors stored in θ
+	KJ = numobs(Z)
+	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors stored in `θ`"
 	J = KJ ÷ K
 	if J > 1
 		θ = repeat(θ, outer = (1, J))
 	end
-	if θ isa NamedMatrix
-		parameter_names = names(θ, 1)
+
+	# If the data are stored as a vector, get the number of replicates stored in each element 
+	if Z isa AbstractVector 
+		m = numberreplicates(Z)
+	else 
+		m = fill(1, KJ)
 	end
-	@assert length(parameter_names) == p
 
-	estimate_names = parameter_names
-
+	# Obtain point estimates 
 	runtime = @elapsed θ̂ = posteriormedian(estimator, Z, N; kwargs...)
 
 	# Convert to DataFrame and add information
 	runtime = DataFrame(runtime = runtime)
-	θ̂ = DataFrame(θ̂', estimate_names)
+	θ̂ = DataFrame(θ̂', parameter_names)
 	θ̂[!, "m"] = m
 	θ̂[!, "k"] = repeat(1:K, J)
 	θ̂[!, "j"] = repeat(1:J, inner = K)
@@ -234,12 +232,9 @@ function assess(
 		runtime[!, "estimator"] .= estimator_name
 	end
 
-	# Dataframe containing the true parameters
+	# Dataframe containing the true parameters, repeated if necessary 
 	θ = convert(Matrix, θ)
 	θ = DataFrame(θ', parameter_names)
-	# Replicate θ to match the number of rows in θ̂. Note that the parameter
-	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
-	# in an outer fashion.
 	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
 	θ = stack(θ, variable_name = :parameter, value_name = :truth) # transform to long form
 
@@ -248,7 +243,6 @@ function assess(
 
 	return Assessment(df, runtime)
 end
-
 
 function assess(
 	estimator::Union{IntervalEstimator, Ensemble{<:IntervalEstimator}}, 
@@ -259,33 +253,35 @@ function assess(
 	use_gpu::Bool = true
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
-	# Extract the matrix of parameters
+	# Extract the matrix of parameters and check that the parameter names match the dimension of θ
 	θ = _extractθ(θ)
-	p, K = size(θ)
-
-	# Check the size of the test data conforms with θ 
-	m = numberreplicates(Z)
-	if !(typeof(m) <: Vector{Int}) # a vector of vectors has been given, attempt to convert Z to the correct format
-		Z = reduce(vcat, Z) 
-		m = numberreplicates(Z)
+	d, K = size(θ)
+	if θ isa NamedMatrix
+		parameter_names = names(θ, 1)
 	end
-	KJ = length(m) # NB this can be different to length(Z) when we have set-level information, in which case length(Z) = 2
-	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors in `θ`"
+	@assert length(parameter_names) == d
+
+	# Get the number of data sets and check that it conforms with the number of parameter vectors stored in θ
+	KJ = numobs(Z)
+	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors stored in `θ`"
 	J = KJ ÷ K
 	if J > 1
 		θ = repeat(θ, outer = (1, J))
 	end
-	if θ isa NamedMatrix
-		parameter_names = names(θ, 1)
+
+	# If the data are stored as a vector, get the number of replicates stored in each element 
+	if Z isa AbstractVector 
+		m = numberreplicates(Z)
+	else 
+		m = fill(1, KJ)
 	end
-	@assert length(parameter_names) == p
 
-	estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = p)
-
+	# Apply the estimator to data 
 	runtime = @elapsed θ̂ = estimate(estimator, Z, use_gpu = use_gpu)
 
 	# Convert to DataFrame and add information
 	runtime = DataFrame(runtime = runtime)
+	estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = d)
 	θ̂ = DataFrame(θ̂', estimate_names)
 	θ̂[!, "m"] = m
 	θ̂[!, "k"] = repeat(1:K, J)
@@ -298,12 +294,9 @@ function assess(
 		runtime[!, "estimator"] .= estimator_name
 	end
 
-	# Dataframe containing the true parameters
+	# Dataframe containing the true parameters, repeated if necessary 
 	θ = convert(Matrix, θ)
 	θ = DataFrame(θ', parameter_names)
-	# Replicate θ to match the number of rows in θ̂. Note that the parameter
-	# configuration, k, is the fastest running variable in θ̂, so we repeat θ
-	# in an outer fashion.
 	θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
 	θ = stack(θ, variable_name = :parameter, value_name = :truth) # transform to long form
 
@@ -326,23 +319,28 @@ function assess(
 	probs = f32(range(0.01, stop=0.99, length=100))
 	) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
-	# Extract the matrix of parameters
+	# Extract the matrix of parameters and check that the parameter names match the dimension of θ
 	θ = _extractθ(θ)
-	p, K = size(θ)
-
-	# Check the size of the test data conforms with θ
-	m = numberreplicates(Z)
-	if !(typeof(m) <: Vector{Int}) # indicates that a vector of vectors has been given
-		Z = reduce(vcat, Z) 
-		m = numberreplicates(Z)
-	end
-	@assert K == length(m) "The number of data sets in `Z` must equal the number of parameter vectors in `θ`"
-
-	# Extract the parameter names from θ if provided
+	d, K = size(θ)
 	if θ isa NamedMatrix
 		parameter_names = names(θ, 1)
 	end
-	@assert length(parameter_names) == p
+	@assert length(parameter_names) == d
+
+	# Get the number of data sets and check that it conforms with the number of parameter vectors stored in θ
+	KJ = numobs(Z)
+	@assert KJ % K == 0 "The number of data sets in `Z` must be a multiple of the number of parameter vectors stored in `θ`"
+	J = KJ ÷ K
+	if J > 1
+		θ = repeat(θ, outer = (1, J))
+	end
+
+	# If the data are stored as a vector, get the number of replicates stored in each element 
+	if Z isa AbstractVector 
+		m = numberreplicates(Z)
+	else 
+		m = fill(1, KJ)
+	end
 
 	# Get the probability levels 
 	if estimator isa Union{QuantileEstimatorDiscrete, Ensemble{<:QuantileEstimatorDiscrete}}
@@ -379,15 +377,15 @@ function assess(
 	runtime = @elapsed θ̂ = estimate(estimator, Z, set_info, use_gpu = use_gpu)
 
 	# Convert to DataFrame and add information
-	p = size(θ, 1)
+	d = size(θ, 1)
 	runtime = DataFrame(runtime = runtime)
 	df = DataFrame(
 		parameter = repeat(repeat(parameter_names, inner = n_probs), K),
 		truth = repeat(vec(θ), inner = n_probs),
-		prob = repeat(repeat(probs, outer = p), K),
+		prob = repeat(repeat(probs, outer = d), K),
 		estimate = vec(θ̂),
-		m = repeat(m, inner = n_probs*p),
-		k = repeat(1:K, inner = n_probs*p),
+		m = repeat(m, inner = n_probs*d),
+		k = repeat(1:K, inner = n_probs*d),
 		j = 1 # just for consistency with other methods
 		)
 

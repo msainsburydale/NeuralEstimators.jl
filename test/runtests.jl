@@ -1,6 +1,6 @@
 using NeuralEstimators
 import NeuralEstimators: simulate
-using NeuralEstimators: _getindices, _runondevice, _check_sizes, _extractθ, nested_eltype, rowwisenorm, triangularnumber, forward, inverse
+using NeuralEstimators: _runondevice, _check_sizes, _extractθ, nested_eltype, rowwisenorm, triangularnumber, forward, inverse
 using NeuralEstimators: ActNorm, Permutation, AffineCouplingBlock, CouplingLayer
 using CUDA
 using DataFrames
@@ -19,7 +19,7 @@ using Test
 if CUDA.functional()
 	@info "Testing on both the CPU and the GPU... "
 	CUDA.allowscalar(false)
-	devices = (CPU = cpu, GPU = gpu)
+	devices = (CPU = cpu, GPU = gpu) 
 else
 	@info "The GPU is unavailable so we will test on the CPU only... "
 	devices = (CPU = cpu,)
@@ -55,11 +55,6 @@ end
 	@testset "expandgrid" begin
 		@test expandgrid(1:2, 0:3) == [1 0; 2 0; 1 1; 2 1; 1 2; 2 2; 1 3; 2 3]
 		@test expandgrid(1:2, 1:2) == expandgrid(2)
-	end
-	@testset "_getindices" begin
-		m = (3, 4, 6)
-		v = [array(16, 16, 1, mᵢ) for mᵢ ∈ m]
-		@test _getindices(v) == [1:3, 4:7, 8:13]
 	end
 	@testset "stackarrays" begin
 		# Vector containing arrays of the same size:

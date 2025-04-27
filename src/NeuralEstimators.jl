@@ -8,7 +8,7 @@ using CSV
 using DataFrames
 using Distances
 using Flux
-using Flux: ofeltype, DataLoader, update!, glorot_uniform, onehotbatch, _match_eltype, @non_differentiable, @ignore_derivatives
+using Flux: getobs, numobs, ofeltype, DataLoader, update!, glorot_uniform, onehotbatch, _match_eltype, @non_differentiable, @ignore_derivatives
 using Folds
 using Graphs
 using GraphNeuralNetworks
@@ -23,7 +23,6 @@ using ParameterSchedulers
 using ParameterSchedulers: Stateful, next!
 using Printf
 using Random: randexp, shuffle, randperm
-using RecursiveArrayTools: VectorOfArray, convert
 using SparseArrays
 using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum, quantile

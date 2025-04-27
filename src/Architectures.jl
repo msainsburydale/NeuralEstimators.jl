@@ -21,7 +21,6 @@ struct ElementwiseAggregator
 end
 (e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
 
-
 """
 	(S::Vector{Function})(z)
 Method allows a vector of vector-valued functions to be applied to a single
@@ -220,22 +219,17 @@ end
 function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
 	if !isnothing(d.ψ)
 		if _first_N_minus_1_dims_identical(Z)
-			# Convert to a single large array and then apply the inner network
+			# Stack Z = [A₁, A₂, ...] into a single large N-dimensional array and then apply the inner network
 			ψa = d.ψ(stackarrays(Z))
 
-			# Compute the indices needed for aggregation and construct a tuple of colons
-			# used to subset all but the last dimension of ψa.
-			indices = _getindices(Z)
-			colons  = ntuple(_ -> (:), ndims(ψa) - 1)
-
+			# Compute the indices needed for aggregation (i.e., the indicies associated with each Aᵢ in the stacked array)
+			mᵢ  = size.(Z, N) # number of replicates for every element in Z
+			cs  = cumsum(mᵢ)
+			indices = [(cs[i] - mᵢ[i] + 1):cs[i] for i ∈ eachindex(Z)]
+			
 			# Construct the summary statistics
-			# NB with the new "explicit" gradient() required by Flux/Zygote, an error is
-			# caused if one uses the same variable name outside and inside a broadcast
-			# like this. For instance, if I were to name the result of the following call
-			# "t" and include a variable inside the broadcast called "t", an error would
-			# be thrown by gradient(), since "t" already appears
 			t = map(indices) do idx
-				d.a(ψa[colons..., idx])
+				d.a(getobs(ψa, idx))
 			end
 
 			if !isnothing(d.S)

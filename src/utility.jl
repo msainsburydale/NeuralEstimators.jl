@@ -107,8 +107,6 @@ function vectotriustrict(v)
 	convert(ArrayType, U)
 end
 
-
-
 # Get the non-parametrized type name: https://stackoverflow.com/a/55977768/16776594
 """
 	containertype(A::Type)
@@ -172,17 +170,13 @@ function numberreplicates(Z::G) where {G <: GNNGraph}
 	end
 end
 
-
-#TODO Recall that I set the code up to have ndata as a 3D array; with this format,
-#     non-parametric bootstrap would be exceedingly fast (since we can subset the array data, I think).
 """
 	subsetdata(Z::V, i) where {V <: AbstractArray{A}} where {A <: Any}
 	subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
 	subsetdata(Z::G, i) where {G <: AbstractGraph}
 Return replicate(s) `i` from each data set in `Z`.
 
-If the user is working with data that are not covered by the default methods,
-simply overload the function with the appropriate type for `Z`.
+If working with data that are not covered by the default methods, overload the function with the appropriate type for `Z`.
 
 For graphical data, calls
 [`getgraph()`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.getgraph-Tuple{GNNGraph,%20Int64}),
@@ -217,6 +211,20 @@ subsetdata(Z, 1:3) # extract first 3 replicates from each data set
 """
 function subsetdata end
 
+function subsetdata(Z::V, i) where {V <: AbstractVector{A}} where A
+	subsetdata.(Z, Ref(i))
+end
+
+function subsetdata(tup::Tup, i) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
+	Z = tup[1]
+	X = tup[2]
+	@assert length(Z) == length(X)
+	(subsetdata(Z, i), X) # X is not subsetted because it is set-level information
+end
+
+function subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
+	getobs(Z, i)
+end
 
 function subsetdata(Z::G, i) where {G <: AbstractGraph}
 	if typeof(i) <: Integer i = i:i end
@@ -225,6 +233,7 @@ function subsetdata(Z::G, i) where {G <: AbstractGraph}
 		GNNGraph(Z; ndata = Z.ndata[sym][:, i, :])
 	else
 		# @warn "`subsetdata()` is slow for graphical data."
+		# TODO Recall that I set the code up to have ndata as a 3D array; with this format, non-parametric bootstrap would be exceedingly fast (since we can subset the array data, I think).
 		# TODO getgraph() doesn't currently work with the GPU: see https://github.com/CarloLucibello/GraphNeuralNetworks.jl/issues/161
 		# TODO getgraph() doesn’t return duplicates. So subsetdata(Z, [1, 1]) returns just a single graph
 		# TODO can't check for CuArray (and return to GPU) because CuArray won't always be defined (no longer depend on CUDA) and we can't overload exact signatures in package extensions... it's low priority, but will be good to fix when time permits. Hopefully, the above issue with GraphNeuralNetworks.jl will get fixed, and we can then just remove the call to cpu() below
@@ -236,7 +245,7 @@ function subsetdata(Z::G, i) where {G <: AbstractGraph}
 	end
 end
 
-# ---- Test code for GNN ----
+# ---- Test code for GNN and subsetdata ----
 
 # n = 250  # number of observations in each realisation
 # m = 100  # number of replicates in each data set
@@ -258,26 +267,7 @@ end
 
 # ---- End test code ----
 
-# Wrapper to ensure that the number of dimensions in the subsetted Z is preserved
-# This causes dispatch ambiguity; instead, convert i to a range with each method
-# subsetdata(Z, i::Int) = subsetdata(Z, i:i)
 
-function subsetdata(Z::V, i) where {V <: AbstractVector{A}} where A
-	subsetdata.(Z, Ref(i))
-end
-
-function subsetdata(tup::Tup, i) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
-	Z = tup[1]
-	X = tup[2]
-	@assert length(Z) == length(X)
-	(subsetdata(Z, i), X) # X is not subsetted because it is set-level information
-end
-
-function subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
-	if typeof(i) <: Integer i = i:i end
-	colons  = ntuple(_ -> (:), N - 1)
-	Z[colons..., i]
-end
 
 function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
 	oldstd = stdout
@@ -317,41 +307,13 @@ function expandgrid(xs, ys)
 end
 expandgrid(N::Integer) = expandgrid(1:N, 1:N)
 
-
-# ---- Helper functions ----
-
 """
-	_getindices(v::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+    stackarrays(v::Vector{<:AbstractArray}; merge::Bool = true)
+Stack a vector of arrays `v` into a single higher-dimensional array.
 
-Suppose that a vector of N-dimensional arrays, v = [A₁, A₂, ...], where the size
-of the last dimension of each Aᵢ may vary, are concatenated along the dimension
-N to form one large N-dimensional array, A. Then, this function returns the
-indices of A (along dimension N) associated with each Aᵢ.
+If all arrays have the same size along the last dimension, stacks along a new final dimension. Then, if `merge = true`, merges the last two dimensions into one.
 
-# Examples
-```
-v = [rand(16, 16, 1, m) for m ∈ (3, 4, 6)]
-_getindices(v)
-```
-"""
-function _getindices(v::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-	mᵢ  = size.(v, N) # number of independent replicates for every element in v
-	cs  = cumsum(mᵢ)
-	indices = [(cs[i] - mᵢ[i] + 1):cs[i] for i ∈ eachindex(v)]
-	return indices
-end
-
-
-function _mergelastdims(X::A) where {A <: AbstractArray{T, N}} where {T, N}
-	reshape(X, size(X)[1:(end - 2)]..., :)
-end
-
-"""
-	stackarrays(v::V; merge = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-Stacks a vector of arrays `v` along the last dimension of each array, optionally merging the final dimension of the stacked array.
-
-The arrays must be of the same size for the first `N-1` dimensions. However, if
-`merge = true`, the size of the final dimension can vary.
+Alternatively, if sizes differ along the last dimension, concatenates along the last dimension.
 
 # Examples
 ```
@@ -365,28 +327,25 @@ Z = [rand(2, 3, m) for m ∈ (1, 2)];
 stackarrays(Z)
 ```
 """
-function stackarrays(v::V; merge::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+function stackarrays(v::AbstractVector{A}; merge::Bool = true) where {A <: AbstractArray}
 
-	m = size.(v, N) # last-dimension size for each array in v
+    N = ndims(v[1])  # number of dimensions of the arrays
+    lastdims = size.(v, N)  # get size along last dimension for each array
 
-	if length(unique(m)) == 1
+    if length(unique(lastdims)) == 1
+        a = cat(v...; dims = N+1)  # make a new (N+1)-dimensional array
+        if merge
+            sz = size(a)
+            a = reshape(a, ntuple(i -> sz[i], N-1)..., sz[N]*sz[N+1])  # merge last two dims
+        end
+    else
+        if merge
+            # Direct cat along last dimension
+            a = cat(v...; dims = N)
+        else
+            error("Cannot stack arrays with differing sizes along dimension $N without merging.")
+        end
+    end
 
-		# Lazy-loading via the package RecursiveArrayTools. This is much faster
-		# than cat(v...) when length(v) is large. However, this requires mᵢ = mⱼ ∀ i, j,
-		# where mᵢ denotes the size of the last dimension of the array vᵢ.
-		v = VectorOfArray(v)
-		a = convert(containertype(A), v)            # (N + 1)-dimensional array
-		if merge a = _mergelastdims(a) end  # N-dimensional array
-
-	else
-
-		if merge
-			#FIXME Really bad to splat here
-			a = cat(v..., dims = N) # N-dimensional array
-		else
-			error("Since the sizes of the arrays do not match along dimension N (the final dimension), we cannot stack the arrays along the (N + 1)th dimension; please set merge = true")
-		end
-	end
-
-	return a
+    return a
 end

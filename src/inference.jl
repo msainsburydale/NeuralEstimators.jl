@@ -1,33 +1,50 @@
 """
 	estimate(estimator, Z; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
-Applies `estimator` to batches of `Z` of size `batchsize`, which can prevent memory issues that can occur with large data sets. 
+Applies `estimator` to data `Z`.
 
-Batching will only be done if there are multiple data sets in `Z`, which will be inferred by `Z` being a vector, or a tuple whose first element is a vector.
+If given multiple data sets, the estimator is applied over minibatches of size `batchsize`, which can prevent memory issues with large data sets. 
 """
-function estimate(estimator, z, θ = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+function estimate(estimator, z, x = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
 
 	# Convert to Float32 for numerical efficiency
-	θ = f32(θ)
+	x = f32(x)
 	z = f32(z)
 
 	# Tupleise if necessary
-  	z = isnothing(θ) ? z : (z, θ)
+  	z = isnothing(x) ? z : (z, x)
 
-	# Only do batching if we have multiple data sets
-	if typeof(z) <: AbstractVector
-		minibatching = true
-		batchsize = min(length(z), batchsize)
-	elseif typeof(z) <: Tuple && typeof(z[1]) <: AbstractVector
-		# Can only batch if the number of data sets in z[1] aligns with the number of sets in z[2]:
-		K₁ = length(z[1])
-		K₂ = typeof(z[2]) <: AbstractVector ? length(z[2]) : size(z[2], 2)
-		minibatching = K₁ == K₂
-		batchsize = min(K₁, batchsize)
-	else # we dont have replicates: just apply the estimator without batching
-		minibatching = false
-	end
+	# Determine if minibatching is possible...
+	# this is complicated by the fact that DeepSets can be applied to arrays directly, in which case the data 
+	# get converted internally to a one-element vector... so treat estimators based on a DeepSet as a special case
+	if check_deepset(estimator)
+		# Only do batching if we have multiple data sets
+		if typeof(z) <: AbstractVector
+			minibatching = true
+			batchsize = min(numobs(z), batchsize)
+		elseif typeof(z) <: Tuple && typeof(z[1]) <: AbstractVector
+			# Can only batch if both elements have the same number of observations 
+			K₁ = numobs(z[1])
+			K₂ = numobs(z[2])
+			minibatching = K₁ == K₂
+			batchsize = min(K₁, batchsize)
+		else # we dont have multiple data sets: just apply the estimator without batching
+			minibatching = false
+		end
+	else 
+		# If we have tuple input, can only batch if both elements have the same number of observations 
+		if typeof(z) <: Tuple
+			K₁ = numobs(z[1])
+			K₂ = numobs(z[2])
+			minibatching = K₁ == K₂
+			batchsize = min(K₁, batchsize)
+		else 
+			minibatching = true
+			batchsize = min(numobs(z), batchsize)
+		end
+	end 
 
-	device  = _checkgpu(use_gpu, verbose = false)
+	# Check whether a GPU is available
+	device = _checkgpu(use_gpu, verbose = false)
 	estimator = estimator |> device
 
 	if !minibatching
@@ -35,7 +52,7 @@ function estimate(estimator, z, θ = nothing; batchsize::Integer = 32, use_gpu::
 		ŷ = estimator(z; kwargs...)
 		ŷ = ŷ |> cpu
 	else
-		data_loader = _DataLoader(z, batchsize, shuffle=false, partial=true)
+		data_loader = _DataLoader(z, batchsize, shuffle = false, partial = true)
 		ŷ = map(data_loader) do zᵢ
 			zᵢ = zᵢ |> device
 			ŷ = estimator(zᵢ; kwargs...)
@@ -47,6 +64,15 @@ function estimate(estimator, z, θ = nothing; batchsize::Integer = 32, use_gpu::
 
 	return ŷ
 end
+
+@inline function check_deepset(T::DataType)
+    occursin("DeepSet", string(T.name)) || any(p -> check_deepset(p), T.parameters)
+end
+@inline function check_deepset(T::Type)
+    false
+end
+@inline check_deepset(x) = check_deepset(typeof(x))
+
 
 # ---- Point estimation from estimators that allow for posterior sampling ----
 
