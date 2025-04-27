@@ -1,27 +1,4 @@
 """
-	ElementwiseAggregator(a::Function)
-
-# Examples
-```
-using Statistics: mean
-using Flux: logsumexp
-x = rand(3, 5)
-e₁ = ElementwiseAggregator(mean)
-e₂ = ElementwiseAggregator(maximum)
-e₃ = ElementwiseAggregator(logsumexp)
-e₄ = ElementwiseAggregator(sum)
-e₁(x)
-e₂(x)
-e₃(x)
-e₄(x)
-```
-"""
-struct ElementwiseAggregator
-	a::Function
-end
-(e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
-
-"""
 	(S::Vector{Function})(z)
 Method allows a vector of vector-valued functions to be applied to a single
 input `z` and then concatenated, which allows users to provide a vector of
@@ -36,7 +13,13 @@ S(1)
 ```
 """
 (S::Vector{Function})(z) = vcat([s(z) for s ∈ S]...)
-# (S::Vector)(z) = vcat([s(z) for s ∈ S]...) # can use a more general construction like this to allow for vectors of NeuralEstimators to be called in this way
+
+# NB ideally wouldn't use this, but for backwards compatability I can't remove it now
+struct ElementwiseAggregator
+	a::Function
+end
+(e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
+
 
 @doc raw"""
     DeepSet(ψ, ϕ, a = mean; S = nothing)
@@ -134,6 +117,7 @@ function DeepSet(ψ, ϕ, a::Function = mean; S = nothing)
 	DeepSet(ψ, ϕ, ElementwiseAggregator(a), S)
 end
 Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)")
+
 
 # Single data set
 function (d::DeepSet)(Z::A) where A
@@ -249,7 +233,6 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
 	end
 end
 
-
 # Multiple data sets: optimised version for graph data
 function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
 
@@ -306,14 +289,6 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 	return t
 end
 
-"""
-```
-Z = [rand(rand(1:10), rand(1:10), 1, rand(1:10)) for _ in 1:5]
-_first_N_minus_1_dims_identical(Z) # false 
-Z = [rand(16, 16, 1, rand(1:10)) for _ in 1:5]
-_first_N_minus_1_dims_identical(Z) # true
-```
-"""
 function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})
     # Get the size of the first array up to N-1 dimensions
     first_size = size(arrays[1])[1:end-1]
