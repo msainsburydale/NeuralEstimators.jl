@@ -15,8 +15,8 @@ abstract type BayesEstimator <: NeuralEstimator  end
     PointEstimator(network)
 A neural point estimator, where the neural `network` is a mapping from the sample space to the parameter space.
 """
-struct PointEstimator <: BayesEstimator
-	network 
+struct PointEstimator{N} <: BayesEstimator
+	network::N 
 end
 (estimator::PointEstimator)(Z) = estimator.network(Z)
 
@@ -75,12 +75,12 @@ estimate(estimator, Z)
 interval(estimator, Z)
 ```
 """
-struct IntervalEstimator{N, H} <: BayesEstimator
+struct IntervalEstimator{N, H, C, G} <: BayesEstimator
 	u::N 
 	v::N
-	c::Union{Function,Compress}
+	c::C
 	probs::H
-	g::Function
+	g::G
 end
 function IntervalEstimator(u, v = u, c::Union{Function, Compress} = identity; probs = [0.025, 0.975], g = exp)
 	if !isa(probs, AbstractArray)
@@ -198,11 +198,11 @@ q₁(Z, θ₋ᵢ)
 q₁(Z[1], θ₋ᵢ)
 ```
 """
-struct QuantileEstimator{V, P} <: BayesEstimator #TODO function for neat output as dxT matrix like interval() 
+struct QuantileEstimator{V, P, G, I} <: BayesEstimator #TODO function for neat output as dxT matrix like interval() 
 	v::V
 	probs::P
-	g::Union{Function, Nothing}
-	i::Union{Integer, Nothing}
+	g::G
+	i::I
 end
 function QuantileEstimator(v; probs = [0.025, 0.5, 0.975], g = Flux.softplus, i::Union{Integer, Nothing} = nothing)
 	if !isa(probs, AbstractArray)
@@ -376,9 +376,9 @@ q̂ᵢ(Z, θ₋ᵢ, τ)
 q̂ᵢ(Z[1], θ₋ᵢ, τ)
 ```
 """
-struct QuantileEstimatorContinuous{N} <: NeuralEstimator
+struct QuantileEstimatorContinuous{N, I} <: NeuralEstimator
 	network::N 
-	i::Union{Integer, Nothing}
+	i::I
 end
 function QuantileEstimatorContinuous(network; i::Union{Integer, Nothing} = nothing)
 	if !isnothing(i) @assert i > 0 end
@@ -459,9 +459,9 @@ sampleposterior(estimator, Z) # posterior draws
 posteriormean(estimator, Z)   # point estimate
 ```
 """
-struct PosteriorEstimator <: NeuralEstimator
-	q::ApproximateDistribution
-	network
+struct PosteriorEstimator{Q,N} <: NeuralEstimator
+	q::Q
+	network::N
 end
 numdistributionalparams(estimator::PosteriorEstimator) = numdistributionalparams(estimator.q)
 logdensity(estimator::PosteriorEstimator, θ, Z) = logdensity(estimator.q, f32(θ), estimator.network(f32(Z))) 
@@ -655,10 +655,10 @@ Z = [rand(n, m) for m ∈ (10, 50)]
 estimate(θ̂, Z)
 ```
 """
-struct PiecewiseEstimator <: NeuralEstimator
-	estimators
-	changepoints
-	function PiecewiseEstimator(estimators, changepoints)
+struct PiecewiseEstimator{E, C} <: NeuralEstimator
+	estimators::E
+	changepoints::C
+	function PiecewiseEstimator(estimators, changepoints) 
 		if isa(changepoints, Number)
 			changepoints = [changepoints]
 		end
@@ -668,7 +668,9 @@ struct PiecewiseEstimator <: NeuralEstimator
 		elseif !issorted(changepoints)
 			error("`changepoints` should be in ascending order")
 		else
-			new(estimators, changepoints)
+			E = typeof(estimators)
+			C = typeof(changepoints)
+			new{E,C}(estimators, changepoints)
 		end
 	end
 end

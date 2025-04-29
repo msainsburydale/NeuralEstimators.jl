@@ -82,10 +82,10 @@ subsetparameters(θ::M, indices::Integer) where {M <: AbstractMatrix} = subsetpa
 
 struct _ParameterLoader{P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
     parameters::P
-    batchsize::Integer
-    nobs::Integer
+    batchsize::I
+    nobs::I
     partial::Bool
-    imax::Integer
+    imax::I
     indices::Vector{I}
     shuffle::Bool
 end

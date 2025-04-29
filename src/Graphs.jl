@@ -212,9 +212,9 @@ h = rand(1, 30) # distances between 30 pairs of spatial locations
 w(h)
 ```
 """ 
-struct KernelWeights 
-	mu 
-	sigma 
+struct KernelWeights{T1,T2} 
+	mu::T1 
+	sigma::T2 
 end 
 function KernelWeights(h_max, n_bins::Integer) 
 	h_cutoffs = range(0, stop=h_max, length=n_bins+1) 

@@ -674,9 +674,9 @@ x = rand32(5, 64)
 l(x)
 ```
 """
-struct DensePositive
-	layer::Dense
-	g::Function
+struct DensePositive{L, G}
+	layer::L
+	g::G
 	last_only::Bool
 end
 DensePositive(layer::Dense; g::Function = Flux.relu, last_only::Bool = false) = DensePositive(layer, g, last_only)
