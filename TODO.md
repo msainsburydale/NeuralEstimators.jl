@@ -7,10 +7,10 @@ Feel free to update this file as tasks are completed, added, or changed.
 ---
 
 ### Features
-- [ ] Explicit learning of summary statistics (see [Zammit-Mangion et al. Sec 4](https://arxiv.org/pdf/2404.12484))
+- [ ] Explicit learning of summary statistics (see [Zammit-Mangion et al., 2025, Sec. 4](https://arxiv.org/pdf/2404.12484))
 - [ ] Incorporate [Bootstrap.jl](https://github.com/juliangehring/Bootstrap.jl) (possibly as an [extension](https://docs.julialang.org/en/v1/manual/code-loading/#man-extensions)) to expand bootstrap functionality 
-- [ ] Training, option to check validation risk (and save the optimal estimator) more frequently than the end of each epoch. This could avoid wasted computation when we have very large training sets.
-- [ ] Improve assessment stage with `PosteriorEstimator` and `RatioEstimator` (i.e., improve `assess(estimator::PosteriorEstimator)` and `assess(estimator::RatioEstimator)` and add corresponding diagnostics, e.g., CRPS and interval score)
+- [ ] During training, add an ption to check the validation risk (and save the estimator) more frequently than the end of each epoch. This could avoid wasted computation when we have very large training sets.
+- [ ] Improve assessment stage with `PosteriorEstimator` and `RatioEstimator`: add methods that assess the full posterior rather than point estimates, and add diagnostics (e.g., CRPS and interval score)
 - [ ] Ensemble methods with `PosteriorEstimator` and `RatioEstimator`
 - [ ] Support for [Enzyme](https://fluxml.ai/Flux.jl/dev/reference/training/enzyme/). Currently, DeepSet does not work with `Enzyme.Duplicated` due to an error about using it with nested networks
 - [ ] Support for model selection/comparison: see the [BayesFlow example](https://bayesflow.org/main/_examples/One_Sample_TTest.html) and [this paper](https://arxiv.org/pdf/2503.23156)
