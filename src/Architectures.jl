@@ -40,13 +40,10 @@ specifying the dimension of aggregation (e.g., `sum`, `mean`, `maximum`, `minimu
 
 `DeepSet` objects act on data of type `Vector{A}`, where each
 element of the vector is associated with one data set (i.e., one set of
-independent replicates), and where `A` depends on the chosen architecture for `ψ`.
-As a rule of thumb, when `A` is an array, replicates are stored in the final
-dimension. For example, with gridded spatial data and `ψ` a CNN, `A` should be
-a 4-dimensional array, with replicates stored in the 4ᵗʰ dimension. 
-Note that, when using `Flux`, the final dimension is usually the "batch"
-dimension, but batching with `DeepSet` objects is done at the data-set level 
-(i.e., sets of replicates are always kept together). 
+independent replicates), and where `A` depends on the chosen architecture for `ψ`. 
+Independent replicates within each data set are stored in the batch dimension. 
+For example, with gridded spatial data and `ψ` a CNN, `A` should be a 4-dimensional array, 
+with replicates stored in the 4ᵗʰ dimension. 
 
 For computational efficiency, 
 array data are first concatenated along their final dimension 

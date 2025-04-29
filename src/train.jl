@@ -384,25 +384,24 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	@assert epochs > 0
 	@assert stopping_epochs > 0
 
-	# Determine if we we need to subset the data.
-	# Start by assuming we will not subset the data:
+	# Determine if we need to subset the data when training a DeepSet estimator 
 	subsetbool = false
-	m = unique(numberreplicates(Z_val))
-	M = unique(numberreplicates(Z_train))
-	if length(m) == 1 && length(M) == 1 # the data need to be equally replicated in order to subset
-		M = M[1]
-		m = m[1]
-		# The number of replicates in the training data, M, need to be a
-		# multiple of the number of replicates in the validation data, m.
-		# Also, only subset the data if m ≂̸ M (the subsetting is redundant otherwise).
-		subsetbool = M % m == 0 && m != M
-
-		# Training data recycles every x epochs
-		if subsetbool
-			x = M ÷ m
-			replicates = repeat([(1:m) .+ i*m for i ∈ 0:(x - 1)], outer = ceil(Integer, epochs/x))
+	if check_deepset(estimator) 
+		m = unique(numberreplicates(Z_val))
+		M = unique(numberreplicates(Z_train))
+		if length(m) == 1 && length(M) == 1 # all data sets need to be equally replicated in order to subset
+			m, M = m[1], M[1]
+			# The number of replicates in the training data, M, need to be a
+			# multiple of the number of replicates in the validation data, m
+			# Also, only subset the data if m ≂̸ M (the subsetting is redundant otherwise)
+			subsetbool = M % m == 0 && m != M
+			# Training data recycles every x epochs
+			if subsetbool
+				x = M ÷ m
+				replicates = repeat([(1:m) .+ i*m for i ∈ 0:(x - 1)], outer = ceil(Integer, epochs/x))
+			end
 		end
-	end
+	end 
 
 	if !isnothing(savepath)
 		loss_path = joinpath(savepath, "loss_per_epoch.bson")
