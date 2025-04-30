@@ -13,7 +13,8 @@ Feel free to update this file as tasks are completed, added, or changed.
 - [ ] Improve assessment stage with `PosteriorEstimator` and `RatioEstimator` (i.e., improve `assess(estimator::PosteriorEstimator)` and `assess(estimator::RatioEstimator)` and add corresponding diagnostics, e.g., CRPS and interval score)
 - [ ] Ensemble methods with `PosteriorEstimator` and `RatioEstimator`
 - [ ] Support for [Enzyme](https://fluxml.ai/Flux.jl/dev/reference/training/enzyme/). Currently, DeepSet does not work with `Enzyme.Duplicated` due to an error about using it with nested networks
-- [ ] Support for model selection/comparison: see the [BayesFlow example](https://bayesflow.org/main/_examples/One_Sample_TTest.html) and [this paper](https://arxiv.org/pdf/2503.23156)
+- [ ] Model selection/comparison: see the [BayesFlow example](https://bayesflow.org/main/_examples/One_Sample_TTest.html) and [this paper](https://arxiv.org/pdf/2503.23156)
+- [ ] [Telescoping ratio estimation](https://arxiv.org/pdf/2006.12204)
 
 ### Documentation
 - [ ] Example: Sequence (e.g., time-series) input using recurrent neural networks (RNNs). See [Flux's in-built support for recurrence](https://fluxml.ai/Flux.jl/stable/guide/models/recurrence/). 
@@ -22,6 +23,7 @@ Feel free to update this file as tasks are completed, added, or changed.
 
 ### Testing
 - [ ] Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to avoid documentation examples from becoming outdated
+- [ ] Clean `test/runtest.jl` (including the TODO comments), and make the unit tests more systematic
 
 ### Performance 
 - [ ] Improve the efficiency of the code where possible. See the general [Julia performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/) that could apply, and the [Flux performance tips](https://fluxml.ai/Flux.jl/stable/guide/performance/). In particular, some of the custom structs in this package could be made more efficient by simply adding type parameters, as discusses in the [Flux's custom model example](https://fluxml.ai/Flux.jl/stable/tutorials/custom_layers/#Custom-Model-Example). 

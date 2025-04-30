@@ -11,9 +11,7 @@ simulate new data conditional on the parameters. If
 provided with specific sets of parameters (`θ_train` and `θ_val`) and/or data
 (`Z_train` and `Z_val`), they will be held fixed during training.
 
-In all methods, the validation parameters and data are held fixed to reduce noise when evaluating the validation risk.
-
-When the data are held fixed and the number of replicates in each element of `Z_train` is a multiple of the number of replicates in each element of `Z_val`, the training data will be recycled across epochs. For instance, if each element of `Z_train` contains 50 replicates and each element of `Z_val` contains 10 replicates, the first epoch will use the first 10 replicates of `Z_train`, the second epoch will use the next 10 replicates, and so on. Note that this recycling mechanism requires the data to be subsettable using [`subsetdata()`](@ref).
+In all methods, the validation parameters and data are held fixed.
 
 The estimator is returned on the CPU so that it can be easily saved post training. 
 
@@ -29,7 +27,7 @@ The estimator is returned on the CPU so that it can be easily saved post trainin
 - `verbose = true`: flag indicating whether information, including empirical risk values and timings, should be printed to the console during training.
 
 # Keyword arguments common to `train(estimator, sampler, simulator)` and `train(estimator, θ_train, θ_val, simulator)`:
-- `m = nothing`: arguments to the simulator (typically the number of replicates in each data set as an `Integer` or an `Integer` collection). The simulator is called as `simulator(θ, m)` if `m` is given and as `simulator(θ)` otherwise. 
+- `m = nothing`: arguments to the simulator (e.g., the number of replicates in each data set). The simulator is called as `simulator(θ, m)` if `m` is given and as `simulator(θ)` otherwise. 
 - `epochs_per_Z_refresh = 1`: the number of passes to make through the training set before the training data are refreshed.
 - `simulate_just_in_time = false`: flag indicating whether we should simulate just-in-time, in the sense that only a `batchsize` number of parameter vectors and corresponding data are in memory at a given time.
 
@@ -369,39 +367,20 @@ function _train(estimator, θ_train::P, θ_val::P, simulator;
 end
 
 function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
-		batchsize::Integer = 32,
-		epochs::Integer  = 100,
-		loss             = Flux.Losses.mae,
-		optimiser        = Flux.setup(Adam(5e-4), estimator),
-		savepath::Union{String, Nothing} = nothing,
-		stopping_epochs::Integer = 5,
-		use_gpu::Bool    = true,
-		verbose::Bool    = true, 
-		lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false)
-		) where {T, P <: Union{Tuple, AbstractMatrix, ParameterConfigurations}}
+	batchsize::Integer = 32,
+	epochs::Integer  = 100,
+	loss             = Flux.Losses.mae,
+	optimiser        = Flux.setup(Adam(5e-4), estimator),
+	savepath::Union{String, Nothing} = nothing,
+	stopping_epochs::Integer = 5,
+	use_gpu::Bool    = true,
+	verbose::Bool    = true, 
+	lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false)
+	) where {T, P <: Union{Tuple, AbstractMatrix, ParameterConfigurations}}
 
 	@assert batchsize > 0
 	@assert epochs > 0
 	@assert stopping_epochs > 0
-
-	# Determine if we need to subset the data when training a DeepSet estimator 
-	subsetbool = false
-	if check_deepset(estimator) 
-		m = unique(numberreplicates(Z_val))
-		M = unique(numberreplicates(Z_train))
-		if length(m) == 1 && length(M) == 1 # all data sets need to be equally replicated in order to subset
-			m, M = m[1], M[1]
-			# The number of replicates in the training data, M, need to be a
-			# multiple of the number of replicates in the validation data, m
-			# Also, only subset the data if m ≂̸ M (the subsetting is redundant otherwise)
-			subsetbool = M % m == 0 && m != M
-			# Training data recycles every x epochs
-			if subsetbool
-				x = M ÷ m
-				replicates = repeat([(1:m) .+ i*m for i ∈ 0:(x - 1)], outer = ceil(Integer, epochs/x))
-			end
-		end
-	end 
 
 	if !isnothing(savepath)
 		loss_path = joinpath(savepath, "loss_per_epoch.bson")
@@ -410,7 +389,7 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	end
 
 	device = _checkgpu(use_gpu, verbose = verbose)
-    estimator = estimator |> device
+	estimator = estimator |> device
 	optimiser = optimiser |> device 
 
 	verbose && print("Computing the initial validation risk...")
@@ -419,9 +398,8 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	verbose && println(" Initial validation risk = $val_risk")
 
 	verbose && print("Computing the initial training risk...")
-	Z̃ = subsetbool ? subsetdata(Z_train, 1:m) : Z_train
-	Z̃ = _constructset(estimator, Z̃, θ_train, batchsize)
-	initial_train_risk = _risk(estimator, loss, Z̃, device)
+	train_set = _constructset(estimator, Z_train, θ_train, batchsize)
+	initial_train_risk = _risk(estimator, loss, train_set, device)
 	verbose && println(" Initial training risk = $initial_train_risk")
 
 	# Initialise the loss per epoch matrix and save the initial estimator
@@ -439,10 +417,7 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 	train_time = @elapsed for epoch in 1:epochs
 
 		# For each batch update estimator and compute the training loss
-		Z̃_train = subsetbool ? subsetdata(Z_train, replicates[epoch]) : Z_train
-		train_set = _constructset(estimator, Z̃_train, θ_train, batchsize)
 		epoch_time = @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser)
-
 		epoch_time += @elapsed val_risk = _risk(estimator, loss, val_set, device)
 		loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
 		verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" findlr(optimiser))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
@@ -463,15 +438,15 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
 		if !isnothing(lr_schedule)
 			next_lr = ParameterSchedulers.next!(lr_schedule) 
-		   Optimisers.adjust!(optimiser, next_lr) 
-	    end
-    end
+		Optimisers.adjust!(optimiser, next_lr) 
+		end
+	end
 
 	# save key information
 	!isnothing(savepath) && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
 	!isnothing(savepath) && _savebestmodel(savepath)
 
-    return cpu(estimator_best)
+	return cpu(estimator_best)
 end
 
 # General fallback
@@ -808,7 +783,9 @@ function _trainmultiple(estimator; sampler = nothing, simulator = nothing, M = n
 		elseif !isnothing(simulator)
 			estimators[i] = train(estimators[i], θ_train, θ_val, simulator; m = mᵢ, kwargs...)
 		else
-			Z_valᵢ = subsetdata(Z_val, 1:mᵢ) # subset the validation data to the current sample size
+			# subset the training and validation data to the current sample size, and then train 
+			Z_trainᵢ = subsetdata(Z_train, 1:mᵢ)
+			Z_valᵢ = subsetdata(Z_val, 1:mᵢ) 
 			estimators[i] = train(estimators[i], θ_train, θ_val, Z_train, Z_valᵢ; kwargs...)
 		end
 	end

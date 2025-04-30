@@ -518,7 +518,10 @@ is the marginal likelihood, also known as the model evidence.
 For numerical stability, training is done on the log-scale using the relation 
 $\log r(\boldsymbol{Z}, \boldsymbol{\theta}) = \text{logit}(c^*(\boldsymbol{Z}, \boldsymbol{\theta}))$, 
 where $c^*(\cdot, \cdot)$ denotes the Bayes classifier as described in the [Methodology](@ref) section. 
-Hence, the neural `network` should be a mapping from $\mathcal{Z} \times \Theta$ to $\mathbb{R}$, where $\mathcal{Z}$ and $\Theta$ denote the sample and parameter spaces, respectively. 
+Hence, the neural network should be a mapping from $\mathcal{Z} \times \Theta$ to $\mathbb{R}$, 
+where $\mathcal{Z}$ and $\Theta$ denote the sample and parameter spaces, respectively. 
+The neural network must implement a method `network(::Tuple)`, where the first element 
+of the tuple contains the data sets and the second element contains the parameter matrices. 
 
 When the neural network is a [`DeepSet`](@ref), two requirements must be met. First, the number of input neurons in the first layer of
 the outer network must equal $d$ plus the number of output neurons in the final layer of the inner network. 
