@@ -1,0 +1,8 @@
+[deps]
+BenchmarkPlots = "ab8c0f59-4072-4e0d-8f91-a91e1495eb26"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
+NeuralEstimators = "38f6df31-6b4a-4144-b2af-7ace2da57606"
+PkgBenchmark = "32113eaa-f34f-5b0d-bd6c-c81e245fc73d"
