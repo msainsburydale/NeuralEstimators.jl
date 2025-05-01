@@ -20,13 +20,13 @@ d = 2        # dimension of the parameter vector θ
 w = 128      # width of each hidden layer 
 
 function sample(K)
-    μ = rand(Normal(0, 10), K)
-    σ = rand(Uniform(0, 10), K)
+    μ = rand(Normal(0, 10f0), K)
+    σ = rand(Uniform(0, 10f0), K)
     θ = vcat(μ', σ')
     return θ
 end
 
-simulate(θ, m) = [ϑ[1] .+ ϑ[2] * randn(n, m) for ϑ ∈ eachcol(θ)]
+simulate(θ, m) = [ϑ[1] .+ ϑ[2] * randn(Float32, n, m) for ϑ ∈ eachcol(θ)]
 
 SUITE = BenchmarkGroup()
 ##############################################################################################################
@@ -52,13 +52,13 @@ SUITE[:PointEstimator][:train] = @benchmarkable(
 
 SUITE[:PointEstimator][:estimate] = @benchmarkable(
     estimate($estimator, data),
-    setup = (data = simulate([5, 0.3], $m))
+    setup = (data = simulate([5, 0.3f0], $m))
 )
 
 for B ∈ [1000, 5000]
     SUITE[:PointEstimator][:bootstrap,B] = @benchmarkable(
         bootstrap($estimator, data; B = $B),
-        setup = (data = simulate([5, 0.3], $m))
+        setup = (data = simulate([5, 0.3f0], $m))
     )
 end
 
@@ -87,13 +87,13 @@ SUITE[:RatioEstimator][:train] = @benchmarkable(
 
 SUITE[:RatioEstimator][:sampleposterior] = @benchmarkable(
     sampleposterior($estimator, data),
-    setup = (data = simulate([5, 0.3], $m))
+    setup = (data = simulate([5, 0.3f0], $m))
 )
 
 SUITE[:RatioEstimator][:mlestimate] = @benchmarkable(
     mlestimate($estimator, data; θ_grid),
     setup = (
-        data = simulate([5, 0.3], $m);
+        data = simulate([5, 0.3f0], $m);
         θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'    
     )
 )
@@ -101,7 +101,7 @@ SUITE[:RatioEstimator][:mlestimate] = @benchmarkable(
 SUITE[:RatioEstimator][:posteriormean] = @benchmarkable(
     posteriormean($estimator, data; θ_grid),
     setup = (
-        data = simulate([5, 0.3], $m);
+        data = simulate([5, 0.3f0], $m);
         θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'    
     )
 )
@@ -109,7 +109,7 @@ SUITE[:RatioEstimator][:posteriormean] = @benchmarkable(
 SUITE[:RatioEstimator][:posteriormode] = @benchmarkable(
     posteriormode($estimator, data; θ_grid),
     setup = (
-        data = simulate([5, 0.3], $m);
+        data = simulate([5, 0.3f0], $m);
         θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'    
     )
 )
@@ -117,7 +117,7 @@ SUITE[:RatioEstimator][:posteriormode] = @benchmarkable(
 SUITE[:RatioEstimator][:posteriormedian] = @benchmarkable(
     posteriormedian($estimator, data; θ_grid),
     setup = (
-        data = simulate([5, 0.3], $m);
+        data = simulate([5, 0.3f0], $m);
         θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'    
     )
 )
@@ -125,7 +125,7 @@ SUITE[:RatioEstimator][:posteriormedian] = @benchmarkable(
 SUITE[:RatioEstimator][:sampleposterior] = @benchmarkable(
     sampleposterior($estimator, data; θ_grid),
     setup = (
-        data = simulate([5, 0.3], $m);
+        data = simulate([5, 0.3f0], $m);
         θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'    
     )
 )
@@ -149,22 +149,22 @@ SUITE[:PosteriorEstimator][:train] = @benchmarkable(
 
 SUITE[:PosteriorEstimator][:sampleposterior] = @benchmarkable(
     sampleposterior($estimator, data),
-    setup = (data = simulate([5, 0.3], $m))
+    setup = (data = simulate([5, 0.3f0], $m))
 )
 
 SUITE[:PosteriorEstimator][:posteriormean] = @benchmarkable(
     posteriormean($estimator, data),
-    setup = (data = simulate([5, 0.3], $m))
+    setup = (data = simulate([5, 0.3f0], $m))
 )
 
 SUITE[:PosteriorEstimator][:posteriormedian] = @benchmarkable(
     posteriormedian($estimator, data),
-    setup = (data = simulate([5, 0.3], $m))
+    setup = (data = simulate([5, 0.3f0], $m))
 )
 
 SUITE[:PosteriorEstimator][:posteriorquantile] = @benchmarkable(
     posteriorquantile($estimator, data, probs),
-    setup = (data = simulate([5, 0.3], $m); probs = [.025, .975])
+    setup = (data = simulate([5, 0.3f0], $m); probs = [.025, .975])
 )
 
 SUITE[:PosteriorEstimator][:assess] = @benchmarkable(
