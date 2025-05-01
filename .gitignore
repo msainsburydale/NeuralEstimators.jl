@@ -3,6 +3,7 @@
 *.jl.mem
 Manifest.toml
 docs/build/
+test/testing-path
 
 .Rproj.user
 .DS_Store
