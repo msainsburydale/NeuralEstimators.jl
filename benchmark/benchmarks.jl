@@ -47,7 +47,7 @@ estimator = PointEstimator(DeepSet(
 
 SUITE[:PointEstimator][:train] = @benchmarkable(
     train($estimator, $sample, simulate, epochs = 5, m = $m),
-    seconds = 30,
+    seconds = 15,
 )
 
 SUITE[:PointEstimator][:estimate] = @benchmarkable(
