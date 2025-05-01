@@ -27,8 +27,8 @@ When using a `GaussianDistribution` as the approximate distribution of a [`Poste
 the neural `network` of the [`PosteriorEstimator`](@ref) should be a mapping from the sample space to ``\mathbb{R}^{|\mathcal{K}|}``, 
 where ``\mathcal{K}`` denotes the space of ``\boldsymbol{\kappa}``. The dimension ``|\mathcal{K}|`` can be determined from an object of type `GaussianDistribution` using [`numdistributionalparams()`](@ref). Given the $|\mathcal{K}|$-dimensional real-valued outputs of the neural network, a valid covariance matrix is constructed internally using [`CovarianceMatrix`](@ref).
 """
-struct GaussianDistribution <: ApproximateDistribution
-	d::Integer
+struct GaussianDistribution{D} <: ApproximateDistribution
+	d::D
     covariancematrix::CovarianceMatrix
 end
 GaussianDistribution(d::Integer) = GaussianDistribution(d, CovarianceMatrix(d))
@@ -190,11 +190,11 @@ where $c = 1.9$ is a fixed clamping threshold. This transformation ensures that 
 
 Additional keyword arguments `kwargs` are passed to the [`MLP`](@ref) constructor when creating `κ₁` and `κ₂`. 
 """
-struct AffineCouplingBlock{M <: MLP}
+struct AffineCouplingBlock{D, M <: MLP}
     scale::M
     translate::M
-    d₁::Integer
-    d₂::Integer
+    d₁::D
+    d₂::D
  end
  
 function AffineCouplingBlock(d₁::Integer, dstar::Integer, d₂::Integer; kwargs...)
@@ -224,10 +224,10 @@ function inverse(net::AffineCouplingBlock, U, V, TZ)
      return θ
 end 
 
-struct CouplingLayer
-    d::Integer
-    d₁::Integer 
-    d₂::Integer
+struct CouplingLayer{D}
+    d::D
+    d₁::D 
+    d₂::D
     block1 
     block2
     actnorm::Union{Nothing, ActNorm}
@@ -314,9 +314,9 @@ where ``d^*`` is an appropriate number of summary statistics for the given param
 - `num_coupling_layers::Integer = 6`: number of coupling layers. 
 - `kwargs`: additional keyword arguments passed to [`AffineCouplingBlock`](@ref). 
 """
-struct NormalisingFlow <: ApproximateDistribution
-	d::Integer  
-    layers::Vector{CouplingLayer}
+struct NormalisingFlow{D} <: ApproximateDistribution
+	d::D  
+    layers::Vector{<:CouplingLayer}
 end
 
 function NormalisingFlow(d::Integer, dstar::Integer; num_coupling_layers::Integer = 6, use_act_norm::Bool = true, kwargs...)

@@ -369,10 +369,10 @@ Flux.trainable(l::Compress) =  NamedTuple()
 
 #TODO documentation and unit testing
 export TruncateSupport
-struct TruncateSupport
-	a
-	b
-	p::Integer
+struct TruncateSupport{A,B,P}
+	a::A
+	b::B
+	p::P
 end
 function (l::TruncateSupport)(θ::AbstractMatrix)
 	p = l.p
@@ -456,11 +456,11 @@ L = [LowerTriangular(cpu(vectotril(x))) for x ∈ eachcol(L)]
 L[1] * L[1]'
 ```
 """
-struct CovarianceMatrix{T <: Integer}
-  d::T       # dimension of the matrix
-  p::T       # number of free parameters in the covariance matrix, the triangular number d(d+1)÷2
-  tril_idx   # cartesian indices of lower triangle
-  diag_idx   # rows corresponding to the diagonal elements of the d×d covariance matrix   
+struct CovarianceMatrix{T1, T2, I <: Integer}
+  d::I          # dimension of the matrix
+  p::I          # number of free parameters in the covariance matrix, the triangular number d(d+1)÷2
+  tril_idx::T1   # cartesian indices of lower triangle
+  diag_idx::T2   # rows corresponding to the diagonal elements of the d×d covariance matrix   
 end
 function CovarianceMatrix(d::Integer)
 	tril_idx = tril(trues(d, d))
