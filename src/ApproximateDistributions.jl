@@ -97,9 +97,9 @@ end
     ActNorm(d::Integer)
 Activation normalisation layer (Kingma and Dhariwal, 2018) for an input of dimension `d`. 
 """
-struct ActNorm
-    scale
-    bias
+struct ActNorm{T1,T2}
+    scale::T1
+    bias::T2
 end
 
 # TODO functionality to initialise based on first batch
