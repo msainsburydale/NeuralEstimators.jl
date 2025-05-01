@@ -15,8 +15,8 @@ S(1)
 (S::Vector{Function})(z) = vcat([s(z) for s ∈ S]...)
 
 # NB ideally wouldn't use this, but for backwards compatability I can't remove it now
-struct ElementwiseAggregator
-	a::Function
+struct ElementwiseAggregator{F}
+	a::F
 end
 (e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
 
