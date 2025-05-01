@@ -55,9 +55,6 @@ SUITE[:PointEstimator][:estimate] = @benchmarkable(
     setup = (data = simulate([5, 0.3], $m))
 )
 
-SUITE = BenchmarkGroup()
-SUITE[:PointEstimator] = BenchmarkGroup()
-
 for B ∈ [1000, 5000]
     SUITE[:PointEstimator][:bootstrap,B] = @benchmarkable(
         bootstrap($estimator, data; B = $B),
@@ -374,8 +371,5 @@ for K ∈ [5, 10]
         )
     )
 end
-
-# SUITE = BenchmarkGroup()
-# SUITE[:layers] = BenchmarkGroup()
 
 results = run(SUITE) 
