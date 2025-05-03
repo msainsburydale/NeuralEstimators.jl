@@ -20,11 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
-      - name: Extract Package Name from Project.toml
-        id: extract-package-name
-        run: |
-          PACKAGE_NAME=$(grep "^name" Project.toml | sed 's/^name = "\(.*\)"$/\1/')
-          echo "::set-output name=package_name::$PACKAGE_NAME"
         with:
           version: "1.11"
       - uses: julia-actions/cache@v2
