@@ -35,12 +35,12 @@ include("loss.jl")
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
-export DeepSet, summarystatistics, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference, DensePositive 
+export DeepSet, summarystatistics, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference, DensePositive, MLP
 export vectotril, vectotriu
 include("Architectures.jl")
 
-export ApproximateDistribution, GaussianDistribution, NormalisingFlow, logdensity, numdistributionalparams
-export MLP, AffineCouplingBlock
+export ApproximateDistribution, GaussianMixture, NormalisingFlow, logdensity, numdistributionalparams
+export AffineCouplingBlock
 include("ApproximateDistributions.jl")
 
 export NeuralEstimator 

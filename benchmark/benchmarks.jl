@@ -152,6 +152,11 @@ SUITE[:PosteriorEstimator][:sampleposterior] = @benchmarkable(
     setup = (data = simulate([5, 0.3f0], $m))
 )
 
+SUITE[:PosteriorEstimator][:sampleposterior_multipledatasets] = @benchmarkable(
+    sampleposterior($estimator, data),
+    setup = (data = repeat(simulate([5, 0.3f0], $m), 500))
+)
+
 SUITE[:PosteriorEstimator][:posteriormean] = @benchmarkable(
     posteriormean($estimator, data),
     setup = (data = simulate([5, 0.3f0], $m))

@@ -757,9 +757,7 @@ function _trainmultiple(estimator; sampler = nothing, simulator = nothing, M = n
 	@assert all(M .> 0)
 	M = sort(M)
 	E = length(M)
-
-	# Create a copy of estimator each sample size
-	estimators = _deepcopyestimator(estimator, kwargs, E)
+	estimators = [deepcopy(estimator) for _ ∈ 1:E]
 
 	for i ∈ eachindex(estimators)
 		mᵢ = M[i]
@@ -815,8 +813,7 @@ function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::V, Z_val::V; 
 	kwargs = (;args...)
 	verbose = _checkargs_trainmultiple(kwargs)
 
-	# Create a copy of estimator for each sample size
-	estimators = _deepcopyestimator(estimator, kwargs, E)
+	estimators = [deepcopy(estimator) for _ ∈ 1:E]
 
 	for i ∈ eachindex(estimators)
 
@@ -859,15 +856,6 @@ function _checkargs_trainmultiple(kwargs)
 end
 
 # ---- Miscellaneous helper functions ----
-
-function _deepcopyestimator(estimator, kwargs, E)
-	# If we are using the GPU, we first need to move estimator to the GPU before copying it
-	use_gpu = haskey(kwargs, :use_gpu) ? kwargs.use_gpu : true
-	device  = _checkgpu(use_gpu, verbose = false)
-	estimator = estimator |> device
-	estimators = [deepcopy(estimator) for _ ∈ 1:E]
-	return estimators
-end
 
 # E = number of estimators
 function _modifyargs(kwargs, i, E)

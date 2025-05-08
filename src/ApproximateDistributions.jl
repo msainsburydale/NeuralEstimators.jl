@@ -1,11 +1,18 @@
-"""
+@doc raw"""
 	ApproximateDistribution
-An abstract supertype for approximate posterior distributions used in conjunction with a [`PosteriorEstimator`](@ref).
+An abstract supertype for approximate posterior distributions used in conjunction with a [`PosteriorEstimator`](@ref). 
 
-Subtypes `A <: ApproximateDistribution` should provide methods `logdensity(q::A, θ::AbstractMatrix, Z)` and `sampleposterior(q::A, Z, N::Integer)`. 
+Subtypes `A <: ApproximateDistribution` must implement the following methods: 
+ - `logdensity(q::A, θ::AbstractMatrix, tz::AbstractMatrix)` 
+    - Used during training and therefore must support automatic differentiation.
+    - `θ` is a `d × K` matrix of parameter vectors.
+    - `tz` is a `dstar × K` matrix of summary statistics obtained by applying the neural network in the `PosteriorEstimator` to a collection of `K` data sets. 
+    - Should return a `1 × K` matrix, where each entry is the log density `log q(θₖ | tₖ)` for the `k`-th data set evaluated at the `k`-th parameter vector `θ[:, k]`.
+ - `sampleposterior(q::A, tz::AbstractMatrix, N::Integer)`
+    - Used during inference and therefore does not need to be differentiable.
+    - Should return a `Vector` of length `K`, where each element is a `d × N` matrix containing `N` samples from the approximate posterior `q(θ | tₖ)` for the `k`-th data set.
 """
 abstract type ApproximateDistribution end
-
 
 @doc raw"""
     numdistributionalparams(q::ApproximateDistribution)
@@ -14,82 +21,125 @@ The number of distributional parameters (i.e., the dimension of the space ``\mat
 """
 function numdistributionalparams end
 
-# ---- GaussianDistribution ----
+# Catch the case that tz is a vector
+sampleposterior(q::ApproximateDistribution, tz::AbstractVector, N::Integer; kwargs...) = sampleposterior(q, reshape(tz, :, 1), N; kwargs...) 
+
+
+# ---- GaussianMixture ----
 
 @doc raw"""
-    GaussianDistribution <: ApproximateDistribution
-    GaussianDistribution(d::Integer)
-A Gaussian distribution for amortised posterior inference, where `d` is the dimension of the parameter vector. 
+    GaussianMixture <: ApproximateDistribution
+    GaussianMixture(d::Integer, dstar::Integer; num_components::Integer = 10, kwargs...)
+A mixture of Gaussian distributions for amortised posterior inference, where `d` is the dimension of the parameter vector. 
 
-The approximate-distribution parameters $\boldsymbol{\kappa} = (\boldsymbol{\mu}', \textrm{vech}(\boldsymbol{L})')'$ consist of a $d$-dimensional mean parameter $\boldsymbol{\mu}$ and the $d(d+1)/2$ non-zero elements of the lower Cholesky factor $\boldsymbol{L}$ of a covariance matrix, where the half-vectorisation operator $\textrm{vech}(\cdot)$ vectorises the lower triangle of its matrix argument.
+The density of the distribution is: 
+```math 
+q(\boldsymbol{\theta}; \boldsymbol{\kappa}) = \sum_{j=1}^{J} \pi_j \cdot \mathcal{N}(\boldsymbol{\theta}; \boldsymbol{\mu}_j, \boldsymbol{\Sigma}_j), 
+```
+where the parameters $\boldsymbol{\kappa}$ comprise the mixture weights $\pi_j \in [0, 1]$ subject to $\sum_{j=1}^{J} \pi_j = 1$, the mean vector $\boldsymbol{\mu}_j$ of each component, and the variance parameters of the diagonal covariance matrix $\boldsymbol{\Sigma}_j$.
 
-When using a `GaussianDistribution` as the approximate distribution of a [`PosteriorEstimator`](@ref), 
-the neural `network` of the [`PosteriorEstimator`](@ref) should be a mapping from the sample space to ``\mathbb{R}^{|\mathcal{K}|}``, 
-where ``\mathcal{K}`` denotes the space of ``\boldsymbol{\kappa}``. The dimension ``|\mathcal{K}|`` can be determined from an object of type `GaussianDistribution` using [`numdistributionalparams()`](@ref). Given the $|\mathcal{K}|$-dimensional real-valued outputs of the neural network, a valid covariance matrix is constructed internally using [`CovarianceMatrix`](@ref).
+When using a `GaussianMixture` as the approximate distribution of a [`PosteriorEstimator`](@ref), 
+the neural network should be a mapping from the sample space to ``\mathbb{R}^{d^*}``, 
+where ``d^*`` is an appropriate number of summary statistics for the parameter vector $\boldsymbol{\theta}$. The summary statistics are then mapped to the mixture parameters using a conventional multilayer perceptron ([MLP](@ref)) with approporiately chosen output activation functions (e.g., [softmax](https://fluxml.ai/Flux.jl/stable/reference/models/nnlib/#NNlib.softmax) for the mixture weights, [softplus](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#NNlib.softplus) for the variance parameters).
+
+# Keyword arguments
+- `num_components::Integer = 10`: number of components in the mixture. 
+- `kwargs`: additional keyword arguments passed to [`MLP`](@ref). 
 """
-struct GaussianDistribution{D} <: ApproximateDistribution
+struct GaussianMixture{D, M} <: ApproximateDistribution
 	d::D
-    covariancematrix::CovarianceMatrix
+    dstar::D
+    num_components::D
+    mlp::M
 end
-GaussianDistribution(d::Integer) = GaussianDistribution(d, CovarianceMatrix(d))
-numdistributionalparams(q::GaussianDistribution) = q.d + q.covariancematrix.p 
+function GaussianMixture(d::Integer, dstar::Integer; num_components::Integer = 10, kwargs...) 
+    in = dstar 
+    out = (2d + 1) * num_components
+    final_layer = Parallel(
+        vcat,
+        Chain(Dense(out, num_components), softmax),    # ∑wⱼ = 1
+        Dense(out, d * num_components, identity),      # μ ∈ ℝ
+        Dense(out, d * num_components, softplus)       # σ > 0
+    )
+    mlp = MLP(in, out; final_layer = final_layer, kwargs...)
+    GaussianMixture(d, dstar, num_components, mlp)
+end
+numdistributionalparams(q::GaussianMixture) = (2 * q.d + 1) * q.num_components
 
-#NB might be able to do this more efficiently using batched operations
-function distributionparameters(q::GaussianDistribution, κ::AbstractMatrix)
+function distributionparameters(q::GaussianMixture, κ::AbstractMatrix)
 
-    # Partition κ into components of μ and Cholesky factor L
-    μ = κ[1:q.d, :]
-    L = q.covariancematrix(κ[(q.d + 1):end, :], true)
+    end1 = q.num_components
+    end2 = end1 + q.d * q.num_components
 
-    # Convert μ to a vector of vectors and L to a vector of matrices
-    # NB re-using variable names (for something with a different type) confuses Zygote
-    # NB Zygote doesn't like eachcol()
-    K = size(κ, 2)
-    μ2 = [μ[:, k] for k in 1:K]
-    L2 = [vectotril(L[:, k]) for k in 1:K]
+    w = κ[1:end1, :]     
+    μ = κ[end1+1:end2, :]              
+    σ = κ[end2+1:end, :]  
+
+    return w, μ, σ
+end
+
+function logdensity(q::GaussianMixture, θ::AbstractMatrix, tz::AbstractMatrix)
+
+    d, K = size(θ)
+    @assert d == q.d
+    @assert K == size(tz, 2)
+
+    # Get the approximate-distribution parameters
+    w, μ, σ = distributionparameters(q, q.mlp(tz))  
+
+    # Reshape ready for broadcasting 
+    J = q.num_components
+    θ = reshape(θ, d, 1, K)  
+    μ = reshape(μ, d, J, K)
+    σ = reshape(σ, d, J, K)
     
-    return μ2, L2
+    # Compute squared Mahalanobis term: (θ - μ)^2 / σ^2
+    diff2 = @. (θ - μ)^2 / (σ^2)   # (d, J, K)
+    mahal = sum(diff2, dims=1)     # (1, J, K)
+
+    # Compute log determinant: sum over log(2πσ²)
+    log_det = sum(log.(2π .* σ.^2), dims=1) # (1, J, K)
+
+    # Log-likelihood of each component
+    log_normal = @. -0.5f0 * (log_det + mahal)   
+    log_normal = reshape(log_normal, J, K)
+
+    # Combine with log mixture weights
+    log_components = log.(w) .+ log_normal       # (J, K)
+
+    # Log-sum-exp along components
+    max_log = maximum(log_components, dims=1)   # (1, K)
+    log_densities = max_log + logsumexp(log_components .- max_log; dims = 1)  # (1, K)
+
+    return log_densities # 1xK matrix 
 end
 
-function logdensity(q::GaussianDistribution, θ::AbstractMatrix, κ::AbstractMatrix)
+function sampleposterior(q::GaussianMixture, tz::AbstractMatrix, N::Integer; use_gpu::Bool = true)
 
-    # θ = cpu(θ)
+    d = q.d
+    J = q.num_components
+    device = _checkgpu(use_gpu, verbose = false)
+    q = q |> device
+    tz = tz |> device 
+    κ_all = q.mlp(tz) |> cpu 
 
-    # Ensure dimensions match
-    @assert size(κ, 2) == size(θ, 2)
-    @assert q.d == size(θ, 1)
+    θ = map(eachcol(κ_all)) do κ
 
-    # Convert distributional parameters into appropriate form for density evaluation 
-    μ, L = distributionparameters(q, κ)
+        # Get the approximate-distribution parameters
+        κ = reshape(κ, :, 1) 
+        w, μ, σ = distributionparameters(q, κ) 
+        μ = reshape(μ, d, J)
+        σ = reshape(σ, d, J)
 
-    # Compute log densities 
-    log_densities = [logdensity(q, θ[:, k], μ[k], L[k]) for k in 1:size(θ, 2)]
+        # Sample component indices and corresponding samples
+        component_indices = wsample(1:J, vec(w), N)
+        μ[:, component_indices] .+ σ[:, component_indices] .* randn(d, N)
+    end
 
-    # Return as a matrix 
-    return reshape(log_densities, 1, :)
+    return θ 
 end
-function logdensity(q::GaussianDistribution, theta::AbstractVector, mu::AbstractVector, L::AbstractMatrix)
 
-    # Compute the difference
-    diff = theta - mu
 
-    # Compute the quadratic term: (L \ diff)' * (L \ diff)
-    z = L \ diff
-    quad_term = sum(z .* z) # equivalent to norm(z)^2
-
-    # Compute the log determinant using the Cholesky factor
-    log_det = 2 * sum(log, diag(L)) 
-
-    # Compute the log density
-    d = length(theta)
-    log_density = -0.5 * (d * log(2π) + log_det + quad_term)
-
-    return log_density
-end
-function sampleposterior(q::GaussianDistribution, κ::AbstractMatrix, N::Integer) #TODO change κ to AbstractVector?
-    μ, L = distributionparameters(q, κ)
-    μ[1] .+ L[1] * randn(q.d, N) 
-end
 
 # ---- NormalisingFlow ----
 
@@ -137,36 +187,7 @@ end
 forward(layer::Permutation, θ::AbstractMatrix) = θ[layer.permutation, :]
 inverse(layer::Permutation, U::AbstractMatrix) = U[layer.inv_permutation, :]
 
-"""
-    MLP(in::Integer, out::Integer; kwargs...)
-A traditional fully-connected multilayer perceptron (MLP) with input dimension `in` and output dimension `out`.
 
-The method `(mlp::MLP)(x, y)` concatenates `x` and `y` along their first dimension before passing the result through the neural `network`. This functionality is used in constructs such as [`AffineCouplingBlock`](@ref). 
-
-# Keyword arguments
-- `depth::Integer = 2`: the number of hidden layers.
-- `width::Integer = 128`: the width of each hidden layer.
-- `activation::Function = relu`: the (non-linear) activation function used in each hidden layer.
-- `output_activation::Function = identity`: the activation function used in the output layer.
-"""
-struct MLP{T <: Chain} # type parameter to avoid type instability
-    network::T
-end 
-function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128, activation::Function = Flux.relu, output_activation::Function = identity)
-
-    @assert depth > 0
-    @assert width > 0
-
-    layers = []
-    push!(layers, Dense(in => width, activation))
-	if depth > 1
-		push!(layers, [Dense(width => width, activation) for _ ∈ 2:depth]...)
-	end
-	push!(layers, Dense(width => out, output_activation))
-
-    return MLP(Chain(layers...))
-end 
-(mlp::MLP)(x, y) = mlp.network(cat(x, y; dims = 1))
 
 @doc raw"""
     AffineCouplingBlock(κ₁::MLP, κ₂::MLP)
@@ -209,17 +230,17 @@ const clamp_value = 1.9f0
 const softclamp_scale = 2.0f0 * clamp_value / Float32(π)
 softclamp(s) = softclamp_scale * atan.(s / clamp_value)
 
-function forward(net::AffineCouplingBlock, X, Y, TZ)
-     S = softclamp(net.scale(Y, TZ))
-     T = net.translate(Y, TZ)
+function forward(net::AffineCouplingBlock, X, Y, tz)
+     S = softclamp(net.scale(Y, tz))
+     T = net.translate(Y, tz)
      U = X .* exp.(S) .+ T
      log_det_J = sum(S, dims = 1) 
      return U, log_det_J
 end 
  
-function inverse(net::AffineCouplingBlock, U, V, TZ)
-     S = softclamp(net.scale(U, TZ))
-     T = net.translate(U, TZ)
+function inverse(net::AffineCouplingBlock, U, V, tz)
+     S = softclamp(net.scale(U, tz))
+     T = net.translate(U, tz)
      θ = (V .- T) .* exp.(-S)
      return θ
 end 
@@ -251,7 +272,7 @@ end
 
 numdistributionalparams(layer::CouplingLayer) = numdistributionalparams(layer.block1) + numdistributionalparams(layer.block2)
 
-function forward(layer::CouplingLayer, θ::AbstractMatrix, TZ::AbstractMatrix) 
+function forward(layer::CouplingLayer, θ::AbstractMatrix, tz::AbstractMatrix) 
     
     # Initialise accumulator for log determinant of Jacobian
     log_det_J = zero(similar(θ, 1, size(θ, 2)))
@@ -270,8 +291,8 @@ function forward(layer::CouplingLayer, θ::AbstractMatrix, TZ::AbstractMatrix)
     # Pass through coupling layer (two-in-one coupling block, i.e., no inactive part after a forward pass)
     θ1 = θ[1:layer.d₁, :] 
     θ2 = θ[layer.d₁+1:end, :]
-    U1, log_det_J1 = forward(layer.block1, θ1, θ2, TZ) 
-    U2, log_det_J2 = forward(layer.block2, θ2, U1, TZ) 
+    U1, log_det_J1 = forward(layer.block1, θ1, θ2, tz) 
+    U2, log_det_J2 = forward(layer.block2, θ2, U1, tz) 
     U = cat(U1, U2; dims = 1)
     log_det_J_coupling = log_det_J1 + log_det_J2 # log determinant of Jacobians from both splits
     log_det_J += log_det_J_coupling
@@ -279,13 +300,13 @@ function forward(layer::CouplingLayer, θ::AbstractMatrix, TZ::AbstractMatrix)
     return U, log_det_J
 end
 
-function inverse(layer::CouplingLayer, U::AbstractMatrix, TZ::AbstractMatrix) 
+function inverse(layer::CouplingLayer, U::AbstractMatrix, tz::AbstractMatrix) 
 
     # Split input along first axis and perform inverse coupling
     U1 = U[1:layer.d₁, :] 
     U2 = U[layer.d₁+1:end, :]
-    θ2 = inverse(layer.block2, U1, U2, TZ)
-    θ1 = inverse(layer.block1, θ2, U1, TZ)
+    θ2 = inverse(layer.block2, U1, U2, tz)
+    θ1 = inverse(layer.block1, θ2, U1, tz)
     θ = cat(θ1, θ2; dims = 1)
     
     # Inverse permutation and normalisation 
@@ -307,7 +328,7 @@ Normalising flows are diffeomorphisms (i.e., invertible, differentiable transfor
 `NormalisingFlow` uses affine coupling blocks (see [`AffineCouplingBlock`](@ref)), with activation normalisation ([Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685)) and permutations used between each block. The base distribution is taken to be a standard multivariate Gaussian distribution. 
 
 When using a `NormalisingFlow` as the approximate distribution of a [`PosteriorEstimator`](@ref), 
-the neural network of the [`PosteriorEstimator`](@ref) should be a mapping from the sample space to ``\mathbb{R}^{d^*}``, 
+the neural network should be a mapping from the sample space to ``\mathbb{R}^{d^*}``, 
 where ``d^*`` is an appropriate number of summary statistics for the given parameter vector (e.g., ``d^* = d``). The summary statistics are then mapped to the parameters of the affine coupling blocks using conventional multilayer perceptrons (see [`AffineCouplingBlock`](@ref)).
 
 # Keyword arguments
@@ -326,35 +347,35 @@ end
 
 numdistributionalparams(q::NormalisingFlow) = sum(numdistributionalparams.(q.layers))
 
-function forward(flow::NormalisingFlow, θ::AbstractMatrix, TZ::AbstractMatrix)
+function forward(flow::NormalisingFlow, θ::AbstractMatrix, tz::AbstractMatrix)
     U = θ
 
     # Initialise accumulator for log determinant of Jacobian
     log_det_J = zero(similar(θ, 1, size(θ, 2)))
     
     for layer in flow.layers
-        U, log_det = forward(layer, U, TZ) 
+        U, log_det = forward(layer, U, tz) 
         log_det_J += log_det 
     end
     return U, log_det_J
 end 
 
-function inverse(flow::NormalisingFlow, U::AbstractMatrix, TZ::AbstractMatrix)
+function inverse(flow::NormalisingFlow, U::AbstractMatrix, tz::AbstractMatrix)
     X = U
     for layer in reverse(flow.layers)
-        X = inverse(layer, X, TZ)
+        X = inverse(layer, X, tz)
     end
     return X
 end 
 
-function logdensity(flow::NormalisingFlow, θ::AbstractMatrix, TZ::AbstractMatrix)
+function logdensity(flow::NormalisingFlow, θ::AbstractMatrix, tz::AbstractMatrix)
     
     d, K = size(θ)
     @assert d == flow.d
-    @assert K == size(TZ, 2)
+    @assert K == size(tz, 2)
 
     # Apply the forward transformation from θ to U
-    U, log_det_J = forward(flow, θ, TZ)
+    U, log_det_J = forward(flow, θ, tz)
     
     # Log density using change-of-variables formula under a standard Gaussian base distribution: 
     # log(q) = log pᵤ(U) + log|J(U)| = -0.5*d*log(2π) -0.5||U||^2 + log|J(U)|
@@ -364,23 +385,54 @@ function logdensity(flow::NormalisingFlow, θ::AbstractMatrix, TZ::AbstractMatri
     return log_densities
 end
 
-function sampleposterior(flow::NormalisingFlow, TZ::AbstractMatrix, N::Integer; use_gpu::Bool = true) 
+function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer; use_gpu::Bool = true) 
 
-    @assert size(TZ, 2) == 1 
-    
-    # Sample from the base distribution (standard Gaussian) and repeat TZ to match the desired sample size
-    U = randn(Float32, flow.d, N)
-    TZ = repeat(TZ, 1, N) 
-    
-    # Determine the device, either the CPU or the GPU 
+    # Dimension of parameter vector and device 
+    d = flow.d 
     device = _checkgpu(use_gpu, verbose = false)
-    U = U |> device
-    TZ = TZ |> device
-    flow = flow |> device
+    flow = device(flow)
 
-    # Compute samples 
-    θ  = inverse(flow, U, TZ) 
+    # Sample from the flow given each summary statistic in tz 
+    θ = map(eachcol(tz)) do t
+        # Sample from base distribution 
+        U = randn(Float32, d, N) |> device 
 
-    return cpu(θ)
+        # Expand t to match sample size
+        T = repeat(reshape(t, :, 1), inner = (1, N)) |> device
+
+        # Compute and return samples 
+        inverse(flow, U, T) |> cpu 
+    end 
+
+    return θ
 end
-sampleposterior(flow::NormalisingFlow, TZ::AbstractVector, N::Integer; kwargs...) = sampleposterior(flow, reshape(TZ, :, 1), N; kwargs...) 
+
+# The following code does it all at once (I found that this isn't faster, but perhaps it can be useful at some point)
+# function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer; use_gpu::Bool = true) 
+#     # Number of data sets and dimension of parameter vector 
+#     K = size(tz, 2) 
+#     d = flow.d
+#
+#     # Sample from base distribution 
+#     U = randn(Float32, d, N * K)
+#
+#     # Repeat tz to match the desired sample size
+#     tz = repeat(tz, inner = (1, N))
+#    
+#     # Determine the device
+#     device = _checkgpu(use_gpu, verbose = false)
+#     U = device(U)
+#     tz = device(tz)
+#     flow = device(flow)
+#
+#     # Compute samples 
+#     θ = inverse(flow, U, tz) 
+#
+#     # Return to CPU
+#     θ = cpu(θ)
+#
+#     # Split into a vector 
+#     θ = [θ[:, (i-1)*N+1:i*N] for i in 1:K]  
+#
+#     return θ
+# end

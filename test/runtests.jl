@@ -514,11 +514,11 @@ end
 
 			# sampling (employs backward/inverse pass, used during inference)
 			N = 100 
-			θ̃ = sampleposterior(flow, TZ[:, 1], N; use_gpu = dvc == gpu)  #TODO add documentation that sampleposterior uses the GPU for normalising flows
-			@test size(θ̃) == (d, N)
+			samples = sampleposterior(flow, TZ, N; use_gpu = dvc == gpu) 
+			@test length(samples) == K 
+			@test size(samples[1]) == (d, N)
 		end
 	end
-	#TODO GaussianDistribution 
 end 
 
 @testset "Layers: $dvc" for dvc ∈ devices
@@ -834,12 +834,12 @@ MLE(Z, ξ) = MLE(Z) # doesn't need ξ but include it for testing
 				Z_val   = simulator(parameters, m);
 				train(estimator, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
 				train(estimator, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose)
-				trainx(estimator, sampler, simulator, [1, 2, 5]; ξ = ξ, epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
-				trainx(estimator, parameters, parameters, simulator, [1, 2, 5]; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
-				trainx(estimator, parameters, parameters, Z_train, Z_val, [1, 2, 5]; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
+				trainmultiple(estimator, sampler, simulator, [1, 2, 5]; ξ = ξ, epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
+				trainmultiple(estimator, parameters, parameters, simulator, [1, 2, 5]; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
+				trainmultiple(estimator, parameters, parameters, Z_train, Z_val, [1, 2, 5]; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
 				Z_train = [simulator(parameters, m) for m ∈ [1, 2, 5]];
 				Z_val   = [simulator(parameters, m) for m ∈ [1, 2, 5]];
-				trainx(estimator, parameters, parameters, Z_train, Z_val; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
+				trainmultiple(estimator, parameters, parameters, Z_train, Z_val; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
 			end
 
 			@testset "assess" begin
@@ -1205,7 +1205,7 @@ end
 end
 
 @testset "PosteriorEstimator" begin 
-	for approxdist in ["Flow", "Gaussian"]
+	for approxdist in [NormalisingFlow, GaussianMixture]
 		# Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
 		d = 2     # dimension of the parameter vector θ
 		n = 1     # dimension of each independent replicate of Z
@@ -1213,17 +1213,10 @@ end
 		sample(K) = rand32(d, K)
 		simulate(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(n, m) for ϑ in eachcol(θ)]
 		w = 128   
-		if approxdist == "Flow"
-			q = NormalisingFlow(d, d) 
-			ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
-			ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, d))
-			network = DeepSet(ψ, ϕ)
-		elseif approxdist == "Gaussian"
-			q = GaussianDistribution(d) 
-			ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
-			ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, numdistributionalparams(q)))
-			network = DeepSet(ψ, ϕ)
-		end
+		q = approxdist(d, d) 
+		ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
+		ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, d))
+		network = DeepSet(ψ, ϕ)
 		estimator = PosteriorEstimator(q, network)
 		estimator = train(estimator, sample, simulate, m = m, epochs = 1, verbose = false)
 		@test numdistributionalparams(estimator) == numdistributionalparams(q)

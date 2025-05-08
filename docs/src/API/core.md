@@ -14,20 +14,9 @@ ParameterConfigurations
 
 ## Simulating data
 
-The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data.
+The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. 
 
-The data are stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and the subtype `A` depends on the multivariate structure of the data. Common formats include:
-
-* **Unstructured data**: `A` is typically an $n \times m$ matrix, where:
-    * ``n`` is the dimension of each replicate (e.g., $n=1$ for univariate data, $n=2$ for bivariate data).  
-    * ``m`` is the number of independent replicates in each data set ($m$ is allowed to vary between data sets). 
-* __Data collected over a regular grid__: `A` is typically an ($N + 2$)-dimensional array, where: 
-    * The first $N$ dimensions correspond to the dimensions of the grid (e.g., $N = 1$ for time series, $N = 2$ for two-dimensional spatial grids). 
-    * The penultimate dimension stores the so-called "channels" (e.g., singleton for univariate processes, two for bivariate processes). 
-    * The final dimension stores the $m$ independent replicates. 
-* **Spatial data collected over irregular locations**: `A` is typically a [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.GNNGraph), where independent replicates (possibly with differing spatial locations) are stored as subgraphs. See the helper function [`spatialgraph()`](@ref) for constructing these graphs from matrices of spatial locations and data. 
-
-While the formats above cover many applications, the package is flexible: the data structure simply needs to align with the chosen neural-network architecture. 
+Simulated data sets are stored as mini-batches in a format amenable to the chosen neural-network architecture. For example, when constructing an estimator from data collected over a grid, one may use a generic CNN, with each data set stored in the final dimension of a four-dimensional array. When performing inference from replicated data, a [`DeepSet`](@ref) architecture may be used, where simulated data sets are stored in a vector, and conditionally independent replicates are stored as mini-batches within each element of the vector.
 
 ## Estimators
 

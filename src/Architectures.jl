@@ -21,6 +21,20 @@ end
 (e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
 
 
+# The data are stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and the subtype `A` depends on the multivariate structure of the data. Common formats include:
+
+# * **Unstructured data**: `A` is typically an $n \times m$ matrix, where:
+#     * ``n`` is the dimension of each replicate (e.g., $n=1$ for univariate data, $n=2$ for bivariate data).  
+#     * ``m`` is the number of independent replicates in each data set ($m$ is allowed to vary between data sets). 
+# * __Data collected over a regular grid__: `A` is typically an ($N + 2$)-dimensional array, where: 
+#     * The first $N$ dimensions correspond to the dimensions of the grid (e.g., $N = 1$ for time series, $N = 2$ for two-dimensional spatial grids). 
+#     * The penultimate dimension stores the so-called "channels" (e.g., singleton for univariate processes, two for bivariate processes). 
+#     * The final dimension stores the $m$ independent replicates. 
+# * **Spatial data collected over irregular locations**: `A` is typically a [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.GNNGraph), where independent replicates (possibly with differing spatial locations) are stored as subgraphs. See the helper function [`spatialgraph()`](@ref) for constructing these graphs from matrices of spatial locations and data. 
+
+# While the formats above cover many applications, the package is flexible: the data structure simply needs to align with the chosen neural-network architecture. 
+
+
 @doc raw"""
     DeepSet(ψ, ϕ, a = mean; S = nothing)
 	(ds::DeepSet)(Z::Vector{A}) where A <: Any
@@ -804,5 +818,43 @@ struct Shortcut{S}
 end
 (s::Shortcut)(mx, x) = mx + s.s(x)
 
+
+"""
+    MLP(in::Integer, out::Integer; kwargs...)
+	(mlp::MLP)(x)
+	(mlp::MLP)(x, y)
+A traditional fully-connected multilayer perceptron (MLP) with input dimension `in` and output dimension `out`.
+
+The method `(mlp::MLP)(x, y)` concatenates `x` and `y` along their first dimension before passing the result through the neural network. This functionality is used in constructs such as [`AffineCouplingBlock`](@ref). 
+
+# Keyword arguments
+- `depth::Integer = 2`: the number of hidden layers.
+- `width::Integer = 128`: the width of each hidden layer.
+- `activation::Function = relu`: the (non-linear) activation function used in each hidden layer.
+- `output_activation = identity`: the activation function used in the output layer.
+- `final_layer = nothing`: an optional final layer to append to the network. If provided, it must accept `width` inputs. When set, `output_activation` is ignored and replaced with identity. The effective depth of the network becomes `depth + 1`.
+"""
+struct MLP{T <: Chain} # type parameter to avoid type instability
+    network::T
+end 
+function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128, activation::Function = Flux.relu, output_activation = identity, final_layer = nothing)
+
+    @assert depth > 0
+    @assert width > 0
+
+    layers = []
+    push!(layers, Dense(in => width, activation))
+	if depth > 1
+		push!(layers, [Dense(width => width, activation) for _ ∈ 2:depth]...)
+	end
+	push!(layers, Dense(width => out, output_activation))
+    if !isnothing(final_layer)
+        push!(layers, final_layer) 
+    end 
+
+    return MLP(Chain(layers...))
+end 
+(mlp::MLP)(x) = mlp.network(x)
+(mlp::MLP)(x, y) = mlp.network(cat(x, y; dims = 1))
 
 
