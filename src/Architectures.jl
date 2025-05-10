@@ -16,10 +16,10 @@ S(1)
 
 # NB ideally wouldn't use this, but for backwards compatability I can't remove it now
 struct ElementwiseAggregator{F}
-	a::F
+    a::F
 end
-(e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
-
+(e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} =
+    e.a(x, dims = N)
 
 # The data are stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and the subtype `A` depends on the multivariate structure of the data. Common formats include:
 
@@ -33,7 +33,6 @@ end
 # * **Spatial data collected over irregular locations**: `A` is typically a [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.GNNGraph), where independent replicates (possibly with differing spatial locations) are stored as subgraphs. See the helper function [`spatialgraph()`](@ref) for constructing these graphs from matrices of spatial locations and data. 
 
 # While the formats above cover many applications, the package is flexible: the data structure simply needs to align with the chosen neural-network architecture. 
-
 
 @doc raw"""
     DeepSet(ψ, ϕ, a = mean; S = nothing)
@@ -118,199 +117,231 @@ ds((Z, X))
 ```
 """
 struct DeepSet{T, G, K, A}
-	ψ::T
-	ϕ::G
-	a::A
-	S::K
+    ψ::T
+    ϕ::G
+    a::A
+    S::K
 end
 function DeepSet(ψ, ϕ, a::Function = mean; S = nothing)
-	@assert !isnothing(ψ) | !isnothing(S) "At least one of `ψ` or `S` must be given"
-	DeepSet(ψ, ϕ, ElementwiseAggregator(a), S)
+    @assert !isnothing(ψ) | !isnothing(S) "At least one of `ψ` or `S` must be given"
+    DeepSet(ψ, ϕ, ElementwiseAggregator(a), S)
 end
-Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)")
-
+Base.show(io::IO, D::DeepSet) = print(
+    io,
+    "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)"
+)
 
 # Single data set
-function (d::DeepSet)(Z::A) where A
-	d.ϕ(summarystatistics(d, Z))
+function (d::DeepSet)(Z::A) where {A}
+    d.ϕ(summarystatistics(d, Z))
 end
 # Single data set with set-level covariates
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractVector{T}} where T
-	Z, x = tup
-	t = summarystatistics(d, Z)
-	u = vcat(t, x)
-	d.ϕ(u)
+function (d::DeepSet)(tup::Tup) where {Tup <:
+                                       Tuple{
+    A,
+    B
+}} where {A, B <: AbstractVector{T}} where {T}
+    Z, x = tup
+    t = summarystatistics(d, Z)
+    u = vcat(t, x)
+    d.ϕ(u)
 end
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractMatrix{T}} where T
-	Z, x = tup
-	if size(x, 2) == 1
-		# Catches the simple case that the user accidentally passed an Nx1 matrix
-		# rather than an N-dimensional vector. Also used by RatioEstimator.
-		d((Z, vec(x)))
-	else
-		# Designed for situations where we have a fixed data set and want to
-		# evaluate the object for many different set-level covariates
-		t = summarystatistics(d, Z) # only needs to be computed once
-		tx = vcat(repeat(t, 1, size(x, 2)), x) # NB ideally we'd avoid copying t so many times here, using @view
-		d.ϕ(tx) # Sanity check: stackarrays([d((Z, vec(x̃))) for x̃ in eachcol(x)])
-	end
+function (d::DeepSet)(tup::Tup) where {Tup <:
+                                       Tuple{
+    A,
+    B
+}} where {A, B <: AbstractMatrix{T}} where {T}
+    Z, x = tup
+    if size(x, 2) == 1
+        # Catches the simple case that the user accidentally passed an Nx1 matrix
+        # rather than an N-dimensional vector. Also used by RatioEstimator.
+        d((Z, vec(x)))
+    else
+        # Designed for situations where we have a fixed data set and want to
+        # evaluate the object for many different set-level covariates
+        t = summarystatistics(d, Z) # only needs to be computed once
+        tx = vcat(repeat(t, 1, size(x, 2)), x) # NB ideally we'd avoid copying t so many times here, using @view
+        d.ϕ(tx) # Sanity check: stackarrays([d((Z, vec(x̃))) for x̃ in eachcol(x)])
+    end
 end
 # Multiple data sets
-function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where A
-	# Stack into a single array before applying the outer network
-	d.ϕ(stackarrays(summarystatistics(d, Z)))
+function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A}
+    # Stack into a single array before applying the outer network
+    d.ϕ(stackarrays(summarystatistics(d, Z)))
 end
 # Multiple data sets with set-level covariates
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
-	Z, x = tup
-	t = summarystatistics(d, Z)
-	tx = vcat.(t, x)
-	d.ϕ(stackarrays(tx))
+function (d::DeepSet)(tup::Tup) where {Tup <:
+                                       Tuple{
+    V₁,
+    V₂
+}} where {
+    V₁ <: AbstractVector{A},
+    V₂ <: AbstractVector{B}
+} where {A, B <: AbstractVector{T}} where {T}
+    Z, x = tup
+    t = summarystatistics(d, Z)
+    tx = vcat.(t, x)
+    d.ϕ(stackarrays(tx))
 end
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V, M}} where {V <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
-	Z, x = tup
-	if size(x, 2) == length(Z)
-		# Catches the simple case that the user accidentally passed an NxM matrix
-		# rather than an M-dimensional vector of N-vector.
-		# Also used by RatioEstimator.
-		d((Z, eachcol(x)))
-	else
-		# Designed for situations where we have a several data sets and we want
-		# to evaluate the object for many different set-level covariates
-		[d((z, x)) for z in Z]
-	end
+function (d::DeepSet)(tup::Tup) where {Tup <:
+                                       Tuple{
+    V,
+    M
+}} where {V <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
+    Z, x = tup
+    if size(x, 2) == length(Z)
+        # Catches the simple case that the user accidentally passed an NxM matrix
+        # rather than an M-dimensional vector of N-vector.
+        # Also used by RatioEstimator.
+        d((Z, eachcol(x)))
+    else
+        # Designed for situations where we have a several data sets and we want
+        # to evaluate the object for many different set-level covariates
+        [d((z, x)) for z in Z]
+    end
 end
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{M}} where {M <: AbstractMatrix{T}} where {A, T}
-	# Multiple data sets Z, each applied over multiple set-level covariates
-	# (NB similar to above method, but the set-level covariates are allowed to be different for each data set)
-	# (This is used during training by QuantileEstimatorContinuous, where each data set is allowed multiple and different probability levels)
-	Z, X = tup
-	@assert length(Z) == length(X)
-	result = [d((Z[k], X[k])) for k ∈ eachindex(Z)]
-	reduce(hcat, vec.(permutedims.(result)))
+function (d::DeepSet)(tup::Tup) where {Tup <:
+                                       Tuple{
+    V₁,
+    V₂
+}} where {
+    V₁ <: AbstractVector{A},
+    V₂ <: AbstractVector{M}
+} where {M <: AbstractMatrix{T}} where {A, T}
+    # Multiple data sets Z, each applied over multiple set-level covariates
+    # (NB similar to above method, but the set-level covariates are allowed to be different for each data set)
+    # (This is used during training by QuantileEstimatorContinuous, where each data set is allowed multiple and different probability levels)
+    Z, X = tup
+    @assert length(Z) == length(X)
+    result = [d((Z[k], X[k])) for k ∈ eachindex(Z)]
+    reduce(hcat, vec.(permutedims.(result)))
 end
 
 # Single data set
-function summarystatistics(d::DeepSet, Z::A) where A
-	if !isnothing(d.ψ)
-		t = d.a(d.ψ(Z))
-	end
-	if !isnothing(d.S)
-		s = @ignore_derivatives d.S(Z)
-		if !isnothing(d.ψ)
-			t = vcat(t, s)
-		else
-			t = s
-		end
-	end
-	return t
+function summarystatistics(d::DeepSet, Z::A) where {A}
+    if !isnothing(d.ψ)
+        t = d.a(d.ψ(Z))
+    end
+    if !isnothing(d.S)
+        s = @ignore_derivatives d.S(Z)
+        if !isnothing(d.ψ)
+            t = vcat(t, s)
+        else
+            t = s
+        end
+    end
+    return t
 end
 # Multiple data sets: general fallback using broadcasting
-function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where A
-  	summarystatistics.(Ref(d), Z)
+function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A}
+    summarystatistics.(Ref(d), Z)
 end
 
 # Multiple data sets: optimised version for array data
-function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-	if !isnothing(d.ψ)
-		if _first_N_minus_1_dims_identical(Z)
-			# Stack Z = [A₁, A₂, ...] into a single large N-dimensional array and then apply the inner network
-			ψa = d.ψ(stackarrays(Z))
+function summarystatistics(
+    d::DeepSet,
+    Z::V
+) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+    if !isnothing(d.ψ)
+        if _first_N_minus_1_dims_identical(Z)
+            # Stack Z = [A₁, A₂, ...] into a single large N-dimensional array and then apply the inner network
+            ψa = d.ψ(stackarrays(Z))
 
-			# Compute the indices needed for aggregation (i.e., the indicies associated with each Aᵢ in the stacked array)
-			mᵢ  = size.(Z, N) # number of replicates for every element in Z
-			cs  = cumsum(mᵢ)
-			indices = [(cs[i] - mᵢ[i] + 1):cs[i] for i ∈ eachindex(Z)]
-			
-			# Construct the summary statistics
-			t = map(indices) do idx
-				d.a(getobs(ψa, idx))
-			end
+            # Compute the indices needed for aggregation (i.e., the indicies associated with each Aᵢ in the stacked array)
+            mᵢ = size.(Z, N) # number of replicates for every element in Z
+            cs = cumsum(mᵢ)
+            indices = [(cs[i] - mᵢ[i] + 1):cs[i] for i ∈ eachindex(Z)]
 
-			if !isnothing(d.S)
-				s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
-				if !isnothing(d.ψ)
-					t = vcat.(t, s)
-				else
-					t = s
-				end
-			end
-		
-			return t
-		else 
-			# Array sizes differ, so therefore cannot stack together; use simple (and slower) broadcasting method (identical to general fallback method defined above)
-			return summarystatistics.(Ref(d), Z)
-		end
-	end
+            # Construct the summary statistics
+            t = map(indices) do idx
+                d.a(getobs(ψa, idx))
+            end
+
+            if !isnothing(d.S)
+                s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
+                if !isnothing(d.ψ)
+                    t = vcat.(t, s)
+                else
+                    t = s
+                end
+            end
+
+            return t
+        else
+            # Array sizes differ, so therefore cannot stack together; use simple (and slower) broadcasting method (identical to general fallback method defined above)
+            return summarystatistics.(Ref(d), Z)
+        end
+    end
 end
 
 # Multiple data sets: optimised version for graph data
-function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
+function summarystatistics(
+    d::DeepSet,
+    Z::V
+) where {V <: AbstractVector{G}} where {G <: GNNGraph}
+    @assert isnothing(d.ψ) || typeof(d.ψ) <: GNNSummary "For graph input data, the summary network ψ should be a `GNNSummary` object"
 
-	@assert isnothing(d.ψ) || typeof(d.ψ) <: GNNSummary "For graph input data, the summary network ψ should be a `GNNSummary` object"
+    if !isnothing(d.ψ)
+        if @ignore_derivatives _first_N_minus_1_dims_identical(Z)
 
-	if !isnothing(d.ψ)
+            # For efficiency, convert Z from a vector of (super)graphs into a single
+            # supergraph before applying the neural network. Since each element of Z
+            # may itself be a supergraph (where each subgraph corresponds to an
+            # independent replicate), record the grouping of independent replicates
+            # so that they can be combined again later in the function
+            m = numberreplicates.(Z)
 
-		if @ignore_derivatives _first_N_minus_1_dims_identical(Z)
+            # Propagation and readout
+            g = @ignore_derivatives Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
+            R = d.ψ(g)
 
-			# For efficiency, convert Z from a vector of (super)graphs into a single
-			# supergraph before applying the neural network. Since each element of Z
-			# may itself be a supergraph (where each subgraph corresponds to an
-			# independent replicate), record the grouping of independent replicates
-			# so that they can be combined again later in the function
-			m = numberreplicates.(Z)
+            # Split R based on the original vector of data sets Z
+            if ndims(R) == 2
 
-			# Propagation and readout
-			g = @ignore_derivatives Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
-			R = d.ψ(g)
+                # R is a matrix, with column dimension M = sum(m), and we split R
+                # based on the original grouping specified by m
+                # NB since this only works for identical m, there is some code redundancy here I believe
+                ng = length(m)
+                cs = cumsum(m)
+                indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
+                R̃ = [R[:, idx] for idx ∈ indices]
+            elseif ndims(R) == 3
+                R̃ = [R[:, :, i] for i ∈ 1:size(R, 3)]
+            end
+        else
+            # Array sizes differ, so therefore cannot stack together; use simple (and slower) broadcasting method 
+            R̃ = d.ψ.(Z)
+        end
 
-			# Split R based on the original vector of data sets Z
-			if ndims(R) == 2
-				
-				# R is a matrix, with column dimension M = sum(m), and we split R
-				# based on the original grouping specified by m
-				# NB since this only works for identical m, there is some code redundancy here I believe
-				ng = length(m)
-				cs = cumsum(m)
-				indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
-				R̃ = [R[:, idx] for idx ∈ indices]
-			elseif ndims(R) == 3
-				R̃ = [R[:, :, i] for i ∈ 1:size(R, 3)]
-			end
-		else
-			# Array sizes differ, so therefore cannot stack together; use simple (and slower) broadcasting method 
-			R̃ = d.ψ.(Z)
-		end
+        # Now we have a vector of matrices, where each matrix corresponds to the
+        # readout vectors R₁, …, Rₘ for a given data set. Now, aggregate these
+        # readout vectors into a single summary statistic for each data set:
+        t = d.a.(R̃)
+    end
 
-		# Now we have a vector of matrices, where each matrix corresponds to the
-		# readout vectors R₁, …, Rₘ for a given data set. Now, aggregate these
-		# readout vectors into a single summary statistic for each data set:
-		t = d.a.(R̃)
-	end
+    if !isnothing(d.S)
+        s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
+        if !isnothing(d.ψ)
+            t = vcat.(t, s)
+        else
+            t = s
+        end
+    end
 
-	if !isnothing(d.S)
-		s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
-		if !isnothing(d.ψ)
-			t = vcat.(t, s)
-		else
-			t = s
-		end
-	end
-
-	return t
+    return t
 end
 
 function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})
     # Get the size of the first array up to N-1 dimensions
-    first_size = size(arrays[1])[1:end-1]
-    
+    first_size = size(arrays[1])[1:(end - 1)]
+
     # Loop over the remaining arrays and compare their first N-1 dimensions
-    for i in 2:length(arrays)
-        if size(arrays[i])[1:end-1] != first_size
+    for i = 2:length(arrays)
+        if size(arrays[i])[1:(end - 1)] != first_size
             return false  # Dimensions do not match
         end
     end
-    
+
     return true  # All arrays have the same first N-1 dimensions
 end
 
@@ -323,7 +354,7 @@ function _first_N_minus_1_dims_identical(v::AbstractVector{<:GNNGraph})
     @assert all(length(vec) == k for vec in vecs)
 
     # Split vecs into k vectors, each collecting one feature across graphs
-    arrays = [ [vec[i] for vec in vecs] for i in 1:k ]
+    arrays = [[vec[i] for vec in vecs] for i = 1:k]
 
     # Check that the dimensions match for each group of feature arrays
     return all(_first_N_minus_1_dims_identical.(arrays))
@@ -370,32 +401,34 @@ Z = randn(n, K)
 ```
 """
 struct Compress{T}
-  a::T
-  b::T
-  k::T
-  # TODO should check that b > a
+    a::T
+    b::T
+    k::T
+    # TODO should check that b > a
 end
 Compress(a, b) = Compress(float.(a), float.(b), ones(eltype(float.(a)), length(a)))
 Compress(a::Number, b::Number) = Compress([float(a)], [float(b)])
 (l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-l.k .* θ))
-Flux.trainable(l::Compress) =  NamedTuple()
-
+Flux.trainable(l::Compress) = NamedTuple()
 
 #TODO documentation and unit testing
 export TruncateSupport
-struct TruncateSupport{A,B,P}
-	a::A
-	b::B
-	p::P
+struct TruncateSupport{A, B, P}
+    a::A
+    b::B
+    p::P
 end
 function (l::TruncateSupport)(θ::AbstractMatrix)
-	p = l.p
-	m = size(θ, 1)
-	@assert m ÷ p == m/p "Number of rows in the input must be a multiple of the number of parameters in the statistical model"
-	r = m ÷ p
-	idx = repeat(1:p, inner = r)
-	y = [tuncatesupport.(θ[i:i, :], Ref(l.a[idx[i]]), Ref(l.b[idx[i]])) for i in eachindex(idx)]
-	reduce(vcat, y)
+    p = l.p
+    m = size(θ, 1)
+    @assert m ÷ p == m/p "Number of rows in the input must be a multiple of the number of parameters in the statistical model"
+    r = m ÷ p
+    idx = repeat(1:p, inner = r)
+    y = [
+        tuncatesupport.(θ[i:i, :], Ref(l.a[idx[i]]), Ref(l.b[idx[i]])) for
+        i in eachindex(idx)
+    ]
+    reduce(vcat, y)
 end
 TruncateSupport(a, b) = TruncateSupport(float.(a), float.(b), length(a))
 TruncateSupport(a::Number, b::Number) = TruncateSupport([float(a)], [float(b)], 1)
@@ -471,48 +504,51 @@ L[1] * L[1]'
 ```
 """
 struct CovarianceMatrix{T1, T2, I <: Integer}
-  d::I          # dimension of the matrix
-  p::I          # number of free parameters in the covariance matrix, the triangular number d(d+1)÷2
-  tril_idx::T1   # cartesian indices of lower triangle
-  diag_idx::T2   # rows corresponding to the diagonal elements of the d×d covariance matrix   
+    d::I          # dimension of the matrix
+    p::I          # number of free parameters in the covariance matrix, the triangular number d(d+1)÷2
+    tril_idx::T1   # cartesian indices of lower triangle
+    diag_idx::T2   # rows corresponding to the diagonal elements of the d×d covariance matrix   
 end
 function CovarianceMatrix(d::Integer)
-	tril_idx = tril(trues(d, d))
-	diag_idx = [1]
-	for i ∈ 2:d
-		push!(diag_idx, diag_idx[i-1] + d-(i-1)+1)
-	end
-	return CovarianceMatrix(d, triangularnumber(d), tril_idx, diag_idx)
+    tril_idx = tril(trues(d, d))
+    diag_idx = [1]
+    for i ∈ 2:d
+        push!(diag_idx, diag_idx[i - 1] + d-(i-1)+1)
+    end
+    return CovarianceMatrix(d, triangularnumber(d), tril_idx, diag_idx)
 end
 function (l::CovarianceMatrix)(v, cholesky_only::Bool = false)
 
-	# Extract indices 
-	diag_idx = cpu(l.diag_idx)
-	tril_idx = l.tril_idx
+    # Extract indices 
+    diag_idx = cpu(l.diag_idx)
+    tril_idx = l.tril_idx
 
-	d = l.d
-	p, K = size(v)
-	@assert p == l.p "the number of rows must be the triangular number d(d+1)÷2 = $(l.p)"
+    d = l.d
+    p, K = size(v)
+    @assert p == l.p "the number of rows must be the triangular number d(d+1)÷2 = $(l.p)"
 
-	# Ensure that diagonal elements are positive
-	L = vcat([i ∈ diag_idx ? softplus(v[i:i, :]) : v[i:i, :] for i ∈ 1:p]...) 
-	cholesky_only && return L
+    # Ensure that diagonal elements are positive
+    L = vcat([i ∈ diag_idx ? softplus(v[i:i, :]) : v[i:i, :] for i ∈ 1:p]...)
+    cholesky_only && return L
 
-	# Insert zeros so that the input v can be transformed into Cholesky factors
-	zero_mat = zero(L[1:d, :]) # NB Zygote does not like repeat()
-	x = d:-1:1      # number of rows to extract from v
-	j = cumsum(x)   # end points of the row-groups of v
-	k = j .- x .+ 1 # start point of the row-groups of v
-	L̃ = vcat(L[k[1]:j[1], :], [vcat(zero_mat[1:i.-1, :], L[k[i]:j[i], :]) for i ∈ 2:d]...)
+    # Insert zeros so that the input v can be transformed into Cholesky factors
+    zero_mat = zero(L[1:d, :]) # NB Zygote does not like repeat()
+    x = d:-1:1      # number of rows to extract from v
+    j = cumsum(x)   # end points of the row-groups of v
+    k = j .- x .+ 1 # start point of the row-groups of v
+    L̃ = vcat(
+        L[k[1]:j[1], :],
+        [vcat(zero_mat[1:(i .- 1), :], L[k[i]:j[i], :]) for i ∈ 2:d]...
+    )
 
-	# Reshape to a three-dimensional array of Cholesky factors
-	L̃ = reshape(L̃, d, d, K)
+    # Reshape to a three-dimensional array of Cholesky factors
+    L̃ = reshape(L̃, d, d, K)
 
-	# Batched multiplication and transpose to compute covariance matrices
-	Σ = L̃ ⊠ batched_transpose(L̃) # alternatively: PermutedDimsArray(L, (2,1,3)) or permutedims(L, (2, 1, 3))
+    # Batched multiplication and transpose to compute covariance matrices
+    Σ = L̃ ⊠ batched_transpose(L̃) # alternatively: PermutedDimsArray(L, (2,1,3)) or permutedims(L, (2, 1, 3))
 
-	# Extract the lower triangle of each matrix
-	return Σ[tril_idx, :]
+    # Extract the lower triangle of each matrix
+    return Σ[tril_idx, :]
 end
 (l::CovarianceMatrix)(v::AbstractVector) = l(reshape(v, :, 1))
 
@@ -588,50 +624,48 @@ L[1] * L[1]'
 ```
 """
 struct CorrelationMatrix{T <: Integer, G}
-  d::T                # dimension of the matrix
-  p::T                # number of free parameters in the correlation matrix, the triangular number T(d-1) = (`d`-1)`d`÷2
-  tril_idx_strict::G  # cartesian indices of strict lower triangle
+    d::T                # dimension of the matrix
+    p::T                # number of free parameters in the correlation matrix, the triangular number T(d-1) = (`d`-1)`d`÷2
+    tril_idx_strict::G  # cartesian indices of strict lower triangle
 end
 function CorrelationMatrix(d::Integer)
-	tril_idx_strict = tril(trues(d, d), -1)
-	return CorrelationMatrix(d, triangularnumber(d-1), tril_idx_strict)
+    tril_idx_strict = tril(trues(d, d), -1)
+    return CorrelationMatrix(d, triangularnumber(d-1), tril_idx_strict)
 end
 function (l::CorrelationMatrix)(v, cholesky_only::Bool = false)
+    d = l.d
+    p, K = size(v)
+    @assert p == l.p "the number of rows must be the triangular number T(d-1) = (d-1)d÷2 = $(l.p)"
 
-	d = l.d
-	p, K = size(v)
-	@assert p == l.p "the number of rows must be the triangular number T(d-1) = (d-1)d÷2 = $(l.p)"
+    # Insert zeros so that the input v can be transformed into Cholesky factors
+    zero_mat = zero(v[1:d, :]) # NB Zygote does not like repeat()
+    x = (d - 1):-1:0           # number of rows to extract from v
+    j = cumsum(x[1:(end - 1)])   # end points of the row-groups of v
+    k = j .- x[1:(end - 1)] .+ 1 # start points of the row-groups of v
+    L = vcat([vcat(zero_mat[1:i, :], v[k[i]:j[i], :]) for i ∈ 1:(d - 1)]...)
+    L = vcat(L, zero_mat)
 
-	# Insert zeros so that the input v can be transformed into Cholesky factors
-	zero_mat = zero(v[1:d, :]) # NB Zygote does not like repeat()
-	x = (d-1):-1:0           # number of rows to extract from v
-	j = cumsum(x[1:end-1])   # end points of the row-groups of v
-	k = j .- x[1:end-1] .+ 1 # start points of the row-groups of v
-	L = vcat([vcat(zero_mat[1:i, :], v[k[i]:j[i], :]) for i ∈ 1:d-1]...)
-	L = vcat(L, zero_mat)
+    # Reshape to a three-dimensional array of Cholesky factors
+    L = reshape(L, d, d, K)
 
-	# Reshape to a three-dimensional array of Cholesky factors
-	L = reshape(L, d, d, K)
+    # Unit diagonal
+    one_matrix = one(L[:, :, 1])
+    L = L .+ one_matrix
 
-	# Unit diagonal
-	one_matrix = one(L[:, :, 1])
-	L = L .+ one_matrix
+    # Normalise the rows
+    L = L ./ rowwisenorm(L)
 
-	# Normalise the rows
-	L = L ./ rowwisenorm(L)
+    cholesky_only && return L[l.tril_idx_strict, :]
 
-	cholesky_only && return L[l.tril_idx_strict, :]
+    # Transpose and batched multiplication to compute correlation matrices
+    R = L ⊠ batched_transpose(L) # alternatively: PermutedDimsArray(L, (2,1,3)) or permutedims(L, (2, 1, 3))
 
-	# Transpose and batched multiplication to compute correlation matrices
-	R = L ⊠ batched_transpose(L) # alternatively: PermutedDimsArray(L, (2,1,3)) or permutedims(L, (2, 1, 3))
+    # Extract the lower triangle of each matrix
+    R = R[l.tril_idx_strict, :]
 
-	# Extract the lower triangle of each matrix
-	R = R[l.tril_idx_strict, :]
-
-  return R
+    return R
 end
 (l::CorrelationMatrix)(v::AbstractVector) = l(reshape(v, :, 1))
-
 
 # # Example input data helpful for prototyping:
 # d = 4
@@ -657,15 +691,14 @@ end
 # l = CovarianceMatrix(d)
 # l(v) - l(v, true)
 
-
 # ---- Layers ----
 
 #NB this is from Flux, but I copied it here because I got an error that it wasn't defined when submitting to CRAN (think it's a recent addition to Flux)
 function _size_check(layer, x::AbstractArray, (d, n)::Pair)
-  0 < d <= ndims(x) || throw(DimensionMismatch(string("layer ", layer,
-    " expects ndims(input) >= ", d, ", but got ", summary(x))))
-  size(x, d) == n || throw(DimensionMismatch(string("layer ", layer,
-    lazy" expects size(input, $d) == $n, but got ", summary(x))))
+    0 < d <= ndims(x) || throw(DimensionMismatch(string("layer ", layer,
+        " expects ndims(input) >= ", d, ", but got ", summary(x))))
+    size(x, d) == n || throw(DimensionMismatch(string("layer ", layer,
+        lazy" expects size(input, $d) == $n, but got ", summary(x))))
 end
 @non_differentiable _size_check(::Any...)
 
@@ -689,32 +722,32 @@ l(x)
 ```
 """
 struct DensePositive{L, G}
-	layer::L
-	g::G
-	last_only::Bool
+    layer::L
+    g::G
+    last_only::Bool
 end
-DensePositive(layer::Dense; g::Function = Flux.relu, last_only::Bool = false) = DensePositive(layer, g, last_only)
+DensePositive(layer::Dense; g::Function = Flux.relu, last_only::Bool = false) =
+    DensePositive(layer, g, last_only)
 # Simple version of forward pass:
 # (d::DensePositive)(x) = d.layer.σ.(Flux.softplus(d.layer.weight) * x .+ d.layer.bias)
 # Complex version of forward pass based on Flux's Dense code:
 function (d::DensePositive)(x::AbstractVecOrMat)
-  a = d.layer # extract the underlying fully-connected layer
-  _size_check(a, x, 1 => size(a.weight, 2))
-  σ = NNlib.fast_act(a.σ, x) # replaces tanh => tanh_fast
-  xT = _match_eltype(a, x)   # fixes Float64 input
-  if d.last_only
-	  weight = hcat(a.weight[:, 1:end-1], d.g.(a.weight[:, end:end]))
-  else
-	  weight = d.g.(a.weight)
-  end
-  σ.(weight * xT .+ a.bias)
+    a = d.layer # extract the underlying fully-connected layer
+    _size_check(a, x, 1 => size(a.weight, 2))
+    σ = NNlib.fast_act(a.σ, x) # replaces tanh => tanh_fast
+    xT = _match_eltype(a, x)   # fixes Float64 input
+    if d.last_only
+        weight = hcat(a.weight[:, 1:(end - 1)], d.g.(a.weight[:, end:end]))
+    else
+        weight = d.g.(a.weight)
+    end
+    σ.(weight * xT .+ a.bias)
 end
 function (a::DensePositive)(x::AbstractArray)
-  a = d.layer # extract the underlying fully-connected layer
-  _size_check(a, x, 1 => size(a.weight, 2))
-  reshape(a(reshape(x, size(x,1), :)), :, size(x)[2:end]...)
+    a = d.layer # extract the underlying fully-connected layer
+    _size_check(a, x, 1 => size(a.weight, 2))
+    reshape(a(reshape(x, size(x, 1), :)), :, size(x)[2:end]...)
 end
-
 
 #TODO constrain a ∈ [0, 1] and b > 0
 """
@@ -755,16 +788,15 @@ f.a
 f.b
 ```
 """
-struct PowerDifference{A,B}
-	a::A
-	b::B
+struct PowerDifference{A, B}
+    a::A
+    b::B
 end
 PowerDifference() = PowerDifference([0.5f0], [2.0f0])
 PowerDifference(a::Number, b::AbstractArray) = PowerDifference([a], b)
 PowerDifference(a::AbstractArray, b::Number) = PowerDifference(a, [b])
-(f::PowerDifference)(x, y) = (abs.(f.a .* x - (1 .- f.a) .* y)).^f.b
+(f::PowerDifference)(x, y) = (abs.(f.a .* x - (1 .- f.a) .* y)) .^ f.b
 (f::PowerDifference)(tup::Tuple) = f(tup[1], tup[2])
-
 
 #TODO add further details
 #TODO Groups in ResidualBlock (i.e., allow additional arguments to Conv).
@@ -789,13 +821,12 @@ struct ResidualBlock{B}
 end
 (b::ResidualBlock)(x) = relu.(b.block(x))
 function ResidualBlock(filter, channels; stride = 1)
-
     layer = Chain(
-        Conv(filter, channels; stride = stride, pad=1, bias=false),
+        Conv(filter, channels; stride = stride, pad = 1, bias = false),
         BatchNorm(channels[2], relu),
-        Conv(filter, channels[2]=>channels[2]; pad=1, bias=false),
+        Conv(filter, channels[2]=>channels[2]; pad = 1, bias = false),
         BatchNorm(channels[2])
-        )
+    )
 
     if stride == 1 && channels[1] == channels[2]
         # dimensions match, can add input directly to output
@@ -804,11 +835,11 @@ function ResidualBlock(filter, channels; stride = 1)
         #TODO options for different dimension matching (padding vs. projection)
         # Projection connection using 1x1 convolution
         connection = Shortcut(
-                Chain(
-                    Conv((1, 1), channels; stride = stride, bias=false),
-                    BatchNorm(channels[2])
-                )
-            )
+            Chain(
+            Conv((1, 1), channels; stride = stride, bias = false),
+            BatchNorm(channels[2])
+        )
+        )
     end
 
     ResidualBlock(SkipConnection(layer, connection))
@@ -817,7 +848,6 @@ struct Shortcut{S}
     s::S
 end
 (s::Shortcut)(mx, x) = mx + s.s(x)
-
 
 """
     MLP(in::Integer, out::Integer; kwargs...)
@@ -836,25 +866,30 @@ The method `(mlp::MLP)(x, y)` concatenates `x` and `y` along their first dimensi
 """
 struct MLP{T <: Chain} # type parameter to avoid type instability
     network::T
-end 
-function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128, activation::Function = Flux.relu, output_activation = identity, final_layer = nothing)
-
+end
+function MLP(
+    in::Integer,
+    out::Integer;
+    depth::Integer = 2,
+    width::Integer = 128,
+    activation::Function = Flux.relu,
+    output_activation = identity,
+    final_layer = nothing
+)
     @assert depth > 0
     @assert width > 0
 
     layers = []
     push!(layers, Dense(in => width, activation))
-	if depth > 1
-		push!(layers, [Dense(width => width, activation) for _ ∈ 2:depth]...)
-	end
-	push!(layers, Dense(width => out, output_activation))
+    if depth > 1
+        push!(layers, [Dense(width => width, activation) for _ ∈ 2:depth]...)
+    end
+    push!(layers, Dense(width => out, output_activation))
     if !isnothing(final_layer)
-        push!(layers, final_layer) 
-    end 
+        push!(layers, final_layer)
+    end
 
     return MLP(Chain(layers...))
-end 
+end
 (mlp::MLP)(x) = mlp.network(x)
 (mlp::MLP)(x, y) = mlp.network(cat(x, y; dims = 1))
-
-

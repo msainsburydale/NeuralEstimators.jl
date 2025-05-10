@@ -60,115 +60,123 @@ The keyword arguments are:
 # See the "Missing data" section in "Advanced usage"
 ```
 """
-struct EM{F,T,S}
-	simulateconditional::F
-	MAP::T
-	θ₀::S
+struct EM{F, T, S}
+    simulateconditional::F
+    MAP::T
+    θ₀::S
 end
 EM(simulateconditional, MAP) = EM(simulateconditional, MAP, nothing)
 EM(em::EM, θ₀) = EM(em.simulateconditional, em.MAP, θ₀)
 EM(simulateconditional, MAP, θ₀::Number) = EM(simulateconditional, MAP, [θ₀])
 #TODO think it's better if this is kept simple, and designed only for *neural* EM...
 
-function (em::EM)(Z::A, θ₀ = nothing; kwargs...)  where {A <: AbstractArray{T, N}} where {T, N}
-	@warn "Data has been passed to the EM algorithm that contains no missing elements... the MAP estimator will be applied directly to the data"
-	em.MAP(Z)
+function (em::EM)(
+    Z::A,
+    θ₀ = nothing;
+    kwargs...
+) where {A <: AbstractArray{T, N}} where {T, N}
+    @warn "Data has been passed to the EM algorithm that contains no missing elements... the MAP estimator will be applied directly to the data"
+    em.MAP(Z)
 end
 
 # TODO change ϵ to tolerance (ϵ can be kept as a deprecated argument)
 function (em::EM)(
-	Z::A, θ₀ = nothing;
-	niterations::Integer = 50,
-	nsims::Integer = 1,
-	nconsecutive::Integer = 3,
-	ϵ = 0.01,
-	ξ = nothing,
-	use_ξ_in_simulateconditional::Bool = false,
-	use_ξ_in_MAP::Bool = false,
-	use_gpu::Bool = true,
-	verbose::Bool = false,
-	return_iterates::Bool = false
-	)  where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
+    Z::A, θ₀ = nothing;
+    niterations::Integer = 50,
+    nsims::Integer = 1,
+    nconsecutive::Integer = 3,
+    ϵ = 0.01,
+    ξ = nothing,
+    use_ξ_in_simulateconditional::Bool = false,
+    use_ξ_in_MAP::Bool = false,
+    use_gpu::Bool = true,
+    verbose::Bool = false,
+    return_iterates::Bool = false
+) where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
+    if isnothing(θ₀)
+        @assert !isnothing(em.θ₀) "Initial estimates θ₀ must be provided either in the `EM` object or in the function call when applying the `EM` object"
+        θ₀ = em.θ₀
+    end
 
-	if isnothing(θ₀)
-		@assert !isnothing(em.θ₀) "Initial estimates θ₀ must be provided either in the `EM` object or in the function call when applying the `EM` object"
-		θ₀ = em.θ₀
-	end
+    if !isnothing(ξ)
+        if !use_ξ_in_simulateconditional && !use_ξ_in_MAP
+            @warn "`ξ` has been provided but it will not be used because `use_ξ_in_simulateconditional` and `use_ξ_in_MAP` are both `false`"
+        end
+    end
 
-	if !isnothing(ξ)
-		if !use_ξ_in_simulateconditional && !use_ξ_in_MAP
-			@warn "`ξ` has been provided but it will not be used because `use_ξ_in_simulateconditional` and `use_ξ_in_MAP` are both `false`"
-		end
-	end
+    if use_ξ_in_simulateconditional || use_ξ_in_MAP
+        @assert !isnothing(ξ) "`ξ` must be provided since `use_ξ_in_simulateconditional` or `use_ξ_in_MAP` is true"
+    end
 
-	if use_ξ_in_simulateconditional || use_ξ_in_MAP
-		@assert !isnothing(ξ) "`ξ` must be provided since `use_ξ_in_simulateconditional` or `use_ξ_in_MAP` is true"
-	end
+    @assert !all(ismissing.(Z)) "The data `Z` consists of missing elements only"
 
-	@assert !all(ismissing.(Z))  "The data `Z` consists of missing elements only"
+    device = _checkgpu(use_gpu, verbose = verbose)
+    MAP = em.MAP |> device
 
-	device = _checkgpu(use_gpu, verbose = verbose)
-	MAP = em.MAP |> device
-
-	verbose && @show θ₀
+    verbose && @show θ₀
     θₗ = θ₀
-	θ_all = reshape(θ₀, :, 1)
-	convergence_counter = 0
-	for l ∈ 1:niterations
+    θ_all = reshape(θ₀, :, 1)
+    convergence_counter = 0
+    for l ∈ 1:niterations
 
-		# "Complete" the data by conditional simulation
-		Z̃ = use_ξ_in_simulateconditional ? em.simulateconditional(Z, θₗ, ξ, nsims = nsims) : em.simulateconditional(Z, θₗ, nsims = nsims)
-		Z̃ = Z̃ |> device
+        # "Complete" the data by conditional simulation
+        Z̃ =
+            use_ξ_in_simulateconditional ? em.simulateconditional(Z, θₗ, ξ, nsims = nsims) :
+            em.simulateconditional(Z, θₗ, nsims = nsims)
+        Z̃ = Z̃ |> device
 
-		# Apply the MAP estimator to the complete data
-		θₗ₊₁ = use_ξ_in_MAP ? MAP(Z̃, ξ) : MAP(Z̃)
+        # Apply the MAP estimator to the complete data
+        θₗ₊₁ = use_ξ_in_MAP ? MAP(Z̃, ξ) : MAP(Z̃)
 
-		# Move back to the cpu (need to do this for simulateconditional in the next iteration)
-		θₗ₊₁   = cpu(θₗ₊₁)
-		θ_all = hcat(θ_all, θₗ₊₁)
+        # Move back to the cpu (need to do this for simulateconditional in the next iteration)
+        θₗ₊₁ = cpu(θₗ₊₁)
+        θ_all = hcat(θ_all, θₗ₊₁)
 
-		# Check convergence criterion
-		if maximum(abs.(θₗ₊₁-θₗ)./abs.(θₗ)) < ϵ
-			θₗ = θₗ₊₁
-			convergence_counter += 1
-			if convergence_counter == nconsecutive
-	  			verbose && @info "The EM algorithm has converged"
-	  			break
-			end
-  		else
-			convergence_counter = 0
-		end
-		l == niterations && verbose && @warn "The EM algorithm has failed to converge"
-		θₗ = θₗ₊₁
-		verbose && @show θₗ
-	end
+        # Check convergence criterion
+        if maximum(abs.(θₗ₊₁-θₗ) ./ abs.(θₗ)) < ϵ
+            θₗ = θₗ₊₁
+            convergence_counter += 1
+            if convergence_counter == nconsecutive
+                verbose && @info "The EM algorithm has converged"
+                break
+            end
+        else
+            convergence_counter = 0
+        end
+        l == niterations && verbose && @warn "The EM algorithm has failed to converge"
+        θₗ = θₗ₊₁
+        verbose && @show θₗ
+    end
 
     return_iterates ? θ_all : θₗ
 end
 
-function (em::EM)(Z::V, θ₀::Union{Number, Vector, Matrix, Nothing} = nothing; args...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
-
-	if isnothing(θ₀)
-		@assert !isnothing(em.θ₀) "Please provide initial estimates `θ₀` in the function call or in the `EM` object."
-		θ₀ = em.θ₀
-	end
-
-	if isa(θ₀, Number)
-        θ₀ = [θ₀]  
+function (em::EM)(
+    Z::V,
+    θ₀::Union{Number, Vector, Matrix, Nothing} = nothing;
+    args...
+) where {V <:
+         AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
+    if isnothing(θ₀)
+        @assert !isnothing(em.θ₀) "Please provide initial estimates `θ₀` in the function call or in the `EM` object."
+        θ₀ = em.θ₀
     end
 
-	if isa(θ₀, Vector)
-		θ₀ = repeat(θ₀, 1, length(Z))
-	end
+    if isa(θ₀, Number)
+        θ₀ = [θ₀]
+    end
 
-	estimates = Folds.map(eachindex(Z)) do i
-		em(Z[i], θ₀[:, i]; args...)
-	end
-	estimates = reduce(hcat, estimates)
+    if isa(θ₀, Vector)
+        θ₀ = repeat(θ₀, 1, length(Z))
+    end
 
-	return estimates
+    estimates = Folds.map(eachindex(Z)) do i
+        em(Z[i], θ₀[:, i]; args...)
+    end
+    estimates = reduce(hcat, estimates)
+
+    return estimates
 end
-
 
 """
 	removedata(Z::Array, Iᵤ::Vector{T}) where T <: Union{Integer, CartesianIndex}
@@ -214,114 +222,145 @@ removedata(Z, n)
 ```
 """
 function removedata(Z::A, n::Integer;
-					fixed_pattern::Bool = false,
-					contiguous_pattern::Bool = false,
-					variable_proportion::Bool = false
-					) where {A <: AbstractArray{T, N}} where {T, N}
-	if isa(Z, Vector) Z = reshape(Z, :, 1) end
-	m = size(Z)[end]           # number of replicates
-	d = prod(size(Z)[1:end-1]) # dimension of each replicate  NB assumes a singleton channel dimension
+    fixed_pattern::Bool = false,
+    contiguous_pattern::Bool = false,
+    variable_proportion::Bool = false
+) where {A <: AbstractArray{T, N}} where {T, N}
+    if isa(Z, Vector)
+        Z = reshape(Z, :, 1)
+    end
+    m = size(Z)[end]           # number of replicates
+    d = prod(size(Z)[1:(end - 1)]) # dimension of each replicate  NB assumes a singleton channel dimension
 
-	if n == d
-		# If the user requests fully observed data, we still convert Z to
-		# an array with an eltype that allows missing data for type stability
-		Iᵤ = Int64[]
+    if n == d
+        # If the user requests fully observed data, we still convert Z to
+        # an array with an eltype that allows missing data for type stability
+        Iᵤ = Int64[]
 
-	elseif variable_proportion
+    elseif variable_proportion
+        Zstar = map(eachslice(Z; dims = N)) do z
+            # Pass number of observations between 1:n into removedata()
+            removedata(
+                reshape(z, size(z)..., 1),
+                StatsBase.sample(1:n, 1)[1],
+                fixed_pattern = fixed_pattern,
+                contiguous_pattern = contiguous_pattern,
+                variable_proportion = false
+            )
+        end
 
-		Zstar = map(eachslice(Z; dims = N)) do z
-			# Pass number of observations between 1:n into removedata()
-			removedata(
-				reshape(z, size(z)..., 1),
-				StatsBase.sample(1:n, 1)[1],
-				fixed_pattern = fixed_pattern,
-				contiguous_pattern = contiguous_pattern,
-				variable_proportion = false
-				)
-		end
+        return stackarrays(Zstar)
 
-		return stackarrays(Zstar)
+    else
 
-	else
+        # Generate the missing elements
+        if fixed_pattern
+            if contiguous_pattern
+                start = StatsBase.sample(1:(n + 1), 1)[1]
+                Iᵤ = start:(start + (d - n) - 1)
+            else
+                Iᵤ = StatsBase.sample(1:d, d-n, replace = false)
+            end
+            Iᵤ = [Iᵤ .+ (i-1) * d for i ∈ 1:m]
+        else
+            if contiguous_pattern
+                Iᵤ = map(1:m) do i
+                    start = (StatsBase.sample(1:(n + 1), 1) .+ (i - 1) * d)[1]
+                    start:(start + (d - n) - 1)
+                end
+            else
+                Iᵤ = [
+                    StatsBase.sample((1:d) .+ (i-1) * d, d - n, replace = false) for
+                    i ∈ 1:m
+                ]
+            end
+        end
+        Iᵤ = vcat(Iᵤ...)
+    end
 
-		# Generate the missing elements
-		if fixed_pattern
-			if contiguous_pattern
-				start = StatsBase.sample(1:n+1, 1)[1]
-				Iᵤ = start:(start+(d-n)-1)
-			else
-				Iᵤ = StatsBase.sample(1:d, d-n, replace = false)
-
-			end
-			Iᵤ = [Iᵤ .+ (i-1) * d for i ∈ 1:m]
-		else
-			if contiguous_pattern
-				Iᵤ = map(1:m) do i
-					start = (StatsBase.sample(1:n+1, 1) .+ (i-1) * d)[1]
-					start:(start+(d-n)-1)
-				end
-			else
-				Iᵤ = [StatsBase.sample((1:d) .+ (i-1) * d, d - n, replace = false) for i ∈ 1:m]
-			end
-		end
-		Iᵤ = vcat(Iᵤ...)
-	end
-
-	return removedata(Z, Iᵤ)
+    return removedata(Z, Iᵤ)
 end
 function removedata(Z::V, n::Integer; args...) where {V <: AbstractVector{T}} where {T}
-	removedata(reshape(Z, :, 1), n)[:]
+    removedata(reshape(Z, :, 1), n)[:]
 end
 
-function removedata(Z::A, p::F; args...) where {A <: AbstractArray{T, N}} where {T, N, F <: AbstractFloat}
-	if isa(Z, Vector) Z = reshape(Z, :, 1) end
-	d = prod(size(Z)[1:end-1]) # dimension of each replicate  NB assumes singleton channel dimension
-	p = repeat([p], d)
-	return removedata(Z, p; args...)
+function removedata(
+    Z::A,
+    p::F;
+    args...
+) where {A <: AbstractArray{T, N}} where {T, N, F <: AbstractFloat}
+    if isa(Z, Vector)
+        Z = reshape(Z, :, 1)
+    end
+    d = prod(size(Z)[1:(end - 1)]) # dimension of each replicate  NB assumes singleton channel dimension
+    p = repeat([p], d)
+    return removedata(Z, p; args...)
 end
-function removedata(Z::V, p::F; args...) where {V <: AbstractVector{T}} where {T, F <: AbstractFloat}
-	removedata(reshape(Z, :, 1), p)[:]
-end
-
-function removedata(Z::A, p::Vector{F}; prevent_complete_missing::Bool = true) where {A <: AbstractArray{T, N}} where {T, N, F <: AbstractFloat}
-	if isa(Z, Vector) Z = reshape(Z, :, 1) end
-	m = size(Z)[end]           # number of replicates
-	d = prod(size(Z)[1:end-1]) # dimension of each replicate  NB assumes singleton channel dimension
-	@assert length(p) == d "The length of `p` should equal the dimenison d of each replicate"
-
-	if all(p .== 1) prevent_complete_missing = false end
-
-	if prevent_complete_missing
-		Iᵤ = map(1:m) do _
-			complete_missing = true
-			while complete_missing
-				Iᵤ = collect(rand(length(p)) .< p) # sample from multivariate bernoulli
-				complete_missing = !(0 ∈ Iᵤ)
-			end
-			Iᵤ
-		end
-	else
-		Iᵤ = [collect(rand(length(p)) .< p) for _ ∈ 1:m]
-	end
-
-	Iᵤ = stackarrays(Iᵤ)
-	Iᵤ = findall(Iᵤ)
-
-	return removedata(Z, Iᵤ)
-end
-function removedata(Z::V, p::Vector{F}; args...) where {V <: AbstractVector{T}} where {T, F <: AbstractFloat}
-	removedata(reshape(Z, :, 1), p)[:]
+function removedata(
+    Z::V,
+    p::F;
+    args...
+) where {V <: AbstractVector{T}} where {T, F <: AbstractFloat}
+    removedata(reshape(Z, :, 1), p)[:]
 end
 
-function removedata(Z::A, Iᵤ::V) where {A <: AbstractArray{T, N}, V <: AbstractVector{I}} where {T, N, I <: Union{Integer, CartesianIndex}}
+function removedata(
+    Z::A,
+    p::Vector{F};
+    prevent_complete_missing::Bool = true
+) where {A <: AbstractArray{T, N}} where {T, N, F <: AbstractFloat}
+    if isa(Z, Vector)
+        Z = reshape(Z, :, 1)
+    end
+    m = size(Z)[end]           # number of replicates
+    d = prod(size(Z)[1:(end - 1)]) # dimension of each replicate  NB assumes singleton channel dimension
+    @assert length(p) == d "The length of `p` should equal the dimenison d of each replicate"
 
-	# Convert the Array to a type that allows missing data
-	Z₁ = convert(Array{Union{T, Missing}}, Z)
+    if all(p .== 1)
+        prevent_complete_missing = false
+    end
 
-	# Remove the data from the missing elements
-	Z₁[Iᵤ] .= missing
+    if prevent_complete_missing
+        Iᵤ = map(1:m) do _
+            complete_missing = true
+            while complete_missing
+                Iᵤ = collect(rand(length(p)) .< p) # sample from multivariate bernoulli
+                complete_missing = !(0 ∈ Iᵤ)
+            end
+            Iᵤ
+        end
+    else
+        Iᵤ = [collect(rand(length(p)) .< p) for _ ∈ 1:m]
+    end
 
-	return Z₁
+    Iᵤ = stackarrays(Iᵤ)
+    Iᵤ = findall(Iᵤ)
+
+    return removedata(Z, Iᵤ)
+end
+function removedata(
+    Z::V,
+    p::Vector{F};
+    args...
+) where {V <: AbstractVector{T}} where {T, F <: AbstractFloat}
+    removedata(reshape(Z, :, 1), p)[:]
+end
+
+function removedata(
+    Z::A,
+    Iᵤ::V
+) where {
+    A <: AbstractArray{T, N},
+    V <: AbstractVector{I}
+} where {T, N, I <: Union{Integer, CartesianIndex}}
+
+    # Convert the Array to a type that allows missing data
+    Z₁ = convert(Array{Union{T, Missing}}, Z)
+
+    # Remove the data from the missing elements
+    Z₁[Iᵤ] .= missing
+
+    return Z₁
 end
 
 """
@@ -344,28 +383,31 @@ Z = removedata(Z, 0.25)	# remove 25% of the data at random
 UW = encodedata(Z)
 ```
 """
-function encodedata(Z::A; c::T = zero(T)) where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
+function encodedata(
+    Z::A;
+    c::T = zero(T)
+) where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 
-	# Store the container type for later use
-	ArrayType = containertype(Z)
+    # Store the container type for later use
+    ArrayType = containertype(Z)
 
-	# Compute the indicator variable and the encoded data
-	W = isnotmissing.(Z)
-	U = copy(Z) # copy to avoid mutating the original data
-	U[ismissing.(U)] .= c
+    # Compute the indicator variable and the encoded data
+    W = isnotmissing.(Z)
+    U = copy(Z) # copy to avoid mutating the original data
+    U[ismissing.(U)] .= c
 
-	# Convert from eltype of U from Union{Missing, T} to T
-	U = convert(Array{T, N}, U) 
+    # Convert from eltype of U from Union{Missing, T} to T
+    U = convert(Array{T, N}, U)
 
-	# Concatenate the data and indicator variable along the appropriate dimension
-	if N <= 2
-		# Concatenate along the first dimension for 1D or 2D data
-		UW = cat(U, W; dims = 1)
-	else
-		# Concatenate along the penultimate dimension for higher-dimensional data
-		UW = cat(U, W; dims = N - 1)
-	end
+    # Concatenate the data and indicator variable along the appropriate dimension
+    if N <= 2
+        # Concatenate along the first dimension for 1D or 2D data
+        UW = cat(U, W; dims = 1)
+    else
+        # Concatenate along the penultimate dimension for higher-dimensional data
+        UW = cat(U, W; dims = N - 1)
+    end
 
-	return UW
+    return UW
 end
 isnotmissing(x) = !(ismissing(x))

@@ -24,12 +24,12 @@ samplecovariance(z)
 ```
 """
 function samplecovariance(z::A) where {A <: AbstractArray{T, N}} where {T, N}
-	@assert size(z, N) > 1 "The number of replicates, which are stored in the final dimension of the input array, should be greater than 1"
-	z = Flux.flatten(z) # convert to matrix (allows for arbitrary sized data inputs)
-	d = size(z, 1)
-	Σ̂ = cov(z, dims = 2, corrected = false)
-	tril_idx = tril(trues(d, d))
-	return Σ̂[tril_idx]
+    @assert size(z, N) > 1 "The number of replicates, which are stored in the final dimension of the input array, should be greater than 1"
+    z = Flux.flatten(z) # convert to matrix (allows for arbitrary sized data inputs)
+    d = size(z, 1)
+    Σ̂ = cov(z, dims = 2, corrected = false)
+    tril_idx = tril(trues(d, d))
+    return Σ̂[tril_idx]
 end
 samplecovariance(z::AbstractVector) = samplecovariance(reshape(z, :, 1))
 
@@ -47,12 +47,12 @@ samplecorrelation(z)
 ```
 """
 function samplecorrelation(z::A) where {A <: AbstractArray{T, N}} where {T, N}
-	@assert size(z, N) > 1 "The number of replicates, which are stored in the final dimension of the input array, should be greater than 1"
-	z = Flux.flatten(z) # convert to matrix (allows for arbitrary sized data inputs)
-	d = size(z, 1)
-	Σ̂ = cor(z, dims = 2)
-	tril_idx = tril(trues(d, d), -1)
-	return Σ̂[tril_idx]
+    @assert size(z, N) > 1 "The number of replicates, which are stored in the final dimension of the input array, should be greater than 1"
+    z = Flux.flatten(z) # convert to matrix (allows for arbitrary sized data inputs)
+    d = size(z, 1)
+    Σ̂ = cor(z, dims = 2)
+    tril_idx = tril(trues(d, d), -1)
+    return Σ̂[tril_idx]
 end
 samplecorrelation(z::AbstractVector) = samplecorrelation(reshape(z, :, 1))
 
@@ -106,8 +106,6 @@ samplecorrelation(z::AbstractVector) = samplecorrelation(reshape(z, :, 1))
 # @btime samplecorrelation(z);
 # @btime samplecor(z);
 
-
-
 #TODO clean up this documentation (e.g., don't bother with the bin notation)
 #TODO there is a more general structure that we could define, that has message(xi, xj, e) as a slot
 @doc raw"""
@@ -156,35 +154,35 @@ nv(g)
 """
 struct NeighbourhoodVariogram{T} <: GNNLayer
     h_cutoffs::T
-	# TODO inner constructor, add 0 into h_cutoffs if it is not already in there 
-end 
-function NeighbourhoodVariogram(h_max, n_bins::Integer) 
-	h_cutoffs = range(0, stop= h_max, length = n_bins+1)
-	h_cutoffs = collect(h_cutoffs)
-	NeighbourhoodVariogram(h_cutoffs)
+    # TODO inner constructor, add 0 into h_cutoffs if it is not already in there 
+end
+function NeighbourhoodVariogram(h_max, n_bins::Integer)
+    h_cutoffs = range(0, stop = h_max, length = n_bins+1)
+    h_cutoffs = collect(h_cutoffs)
+    NeighbourhoodVariogram(h_cutoffs)
 end
 function (l::NeighbourhoodVariogram)(g::GNNGraph)
-	
-	# NB in the case of a batched graph, see the comments in the method summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
-	Z = g.ndata.Z
-	h = g.graph[3]
 
-	message(xi, xj, e) = (xi - xj).^2
-	z = apply_edges(message, g, Z, Z, h) # (Zⱼ - Zᵢ)², possibly replicated 
-	z = mean(z, dims = 2) # average over the replicates 
-	z = vec(z)
+    # NB in the case of a batched graph, see the comments in the method summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
+    Z = g.ndata.Z
+    h = g.graph[3]
 
-	# Bin the distances
-	h_cutoffs = l.h_cutoffs
-	bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
-	bins_lower = h_cutoffs[1:end-1] # lower bounds of the distance bins 
-	N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
-	N = reduce(hcat, N)
+    message(xi, xj, e) = (xi - xj) .^ 2
+    z = apply_edges(message, g, Z, Z, h) # (Zⱼ - Zᵢ)², possibly replicated 
+    z = mean(z, dims = 2) # average over the replicates 
+    z = vec(z)
 
-	# Compute the average over each bin
-	N_card = sum(N, dims = 1)        # number of occurences in each distance bin 
-	N_card = N_card + (N_card .== 0) # prevent division by zero 
-	Σ = sum(z .* N, dims = 1)        # ∑(Zⱼ - Zᵢ)² in each bin
-	vec(Σ ./ 2N_card)
+    # Bin the distances
+    h_cutoffs = l.h_cutoffs
+    bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
+    bins_lower = h_cutoffs[1:(end - 1)] # lower bounds of the distance bins 
+    N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
+    N = reduce(hcat, N)
+
+    # Compute the average over each bin
+    N_card = sum(N, dims = 1)        # number of occurences in each distance bin 
+    N_card = N_card + (N_card .== 0) # prevent division by zero 
+    Σ = sum(z .* N, dims = 1)        # ∑(Zⱼ - Zᵢ)² in each bin
+    vec(Σ ./ 2N_card)
 end
-Flux.trainable(l::NeighbourhoodVariogram) =  NamedTuple()
+Flux.trainable(l::NeighbourhoodVariogram) = NamedTuple()

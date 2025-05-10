@@ -7,16 +7,21 @@ Returns the weights of the neural network saved as 'best_network.bson' in the gi
 loadbestweights(path::String) = loadweights(joinpath(path, "best_network.bson"))
 loadweights(path::String) = load(path, @__MODULE__)[:weights]
 
-
 # aliases for backwards compatability
-mapestimate = posteriormode; export mapestimate
-mlestimate = posteriormode; export mlestimate
-WeightedGraphConv = SpatialGraphConv; export WeightedGraphConv 
-simulategaussianprocess = simulategaussian; export simulategaussianprocess
-estimateinbatches = estimate; export estimateinbatches
-trainx = trainmultiple; export trainx
-_runondevice(θ̂, z, use_gpu::Bool; batchsize::Integer = 32) = estimate(θ̂, z; batchsize = batchsize, use_gpu = use_gpu)
-
+mapestimate = posteriormode;
+export mapestimate
+mlestimate = posteriormode;
+export mlestimate
+WeightedGraphConv = SpatialGraphConv;
+export WeightedGraphConv
+simulategaussianprocess = simulategaussian;
+export simulategaussianprocess
+estimateinbatches = estimate;
+export estimateinbatches
+trainx = trainmultiple;
+export trainx
+_runondevice(θ̂, z, use_gpu::Bool; batchsize::Integer = 32) =
+    estimate(θ̂, z; batchsize = batchsize, use_gpu = use_gpu)
 
 """
 Generic function that may be overloaded to implicitly define a statistical model.
@@ -49,18 +54,22 @@ simulate(parameters, m)
 simulate(parameters, m, 2)
 ```
 """
-function simulate(parameters::P, m, J::Integer; args...) where P <: Union{AbstractMatrix, ParameterConfigurations}
-	v = [simulate(parameters, m; args...) for i ∈ 1:J]
-	if typeof(v[1]) <: Tuple
-		z = vcat([v[i][1] for i ∈ eachindex(v)]...)
-		x = vcat([v[i][2] for i ∈ eachindex(v)]...)
-		v = (z, x)
-	else
-		v = vcat(v...)
-	end
-	return v
+function simulate(
+    parameters::P,
+    m,
+    J::Integer;
+    args...
+) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+    v = [simulate(parameters, m; args...) for i ∈ 1:J]
+    if typeof(v[1]) <: Tuple
+        z = vcat([v[i][1] for i ∈ eachindex(v)]...)
+        x = vcat([v[i][2] for i ∈ eachindex(v)]...)
+        v = (z, x)
+    else
+        v = vcat(v...)
+    end
+    return v
 end
-
 
 # ---- Helper function for initialising an estimator ----
 
@@ -109,89 +118,102 @@ initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (
 """
 function initialise_estimator(
     p::Integer;
-	architecture::String,
+    architecture::String,
     d::Integer = 1,
     estimator_type::String = "point",
     depth::Union{Integer, Vector{<:Integer}} = 3,
     width::Union{Integer, Vector{<:Integer}} = 32,
-	variance_stabiliser::Union{Nothing, Function} = nothing,
+    variance_stabiliser::Union{Nothing, Function} = nothing,
     activation::Function = relu,
     activation_output::Function = identity,
     kernel_size = nothing,
-	weight_by_distance::Bool = true,
-	probs = [0.025, 0.975]
-    )
+    weight_by_distance::Bool = true,
+    probs = [0.025, 0.975]
+)
 
-	# "`kernel_size` should be a vector of integer tuples: see the documentation for details"
+    # "`kernel_size` should be a vector of integer tuples: see the documentation for details"
     @assert p > 0
     @assert d > 0
-	@assert architecture ∈ ["MLP", "DNN", "CNN", "GNN"]
-	if architecture == "DNN" architecture = "MLP" end # deprecation coercion
+    @assert architecture ∈ ["MLP", "DNN", "CNN", "GNN"]
+    if architecture == "DNN"
+        architecture = "MLP"
+    end # deprecation coercion
     @assert estimator_type ∈ ["point", "interval"]
     @assert all(depth .>= 0)
     @assert length(depth) == 1 || length(depth) == 2
-	if isa(depth, Integer) depth = [depth] end
-	if length(depth) == 1 depth = repeat(depth, 2) end
+    if isa(depth, Integer)
+        depth = [depth]
+    end
+    if length(depth) == 1
+        depth = repeat(depth, 2)
+    end
     @assert all(width .> 0)
     @assert length(width) == 1 || length(width) == sum(depth)
-	if isa(width, Integer) width = [width] end
-	if length(width) == 1 width = repeat(width, sum(depth)) end
-	# henceforth, depth and width are integer vectors of length 2 and sum(depth), respectively
+    if isa(width, Integer)
+        width = [width]
+    end
+    if length(width) == 1
+        width = repeat(width, sum(depth))
+    end
+    # henceforth, depth and width are integer vectors of length 2 and sum(depth), respectively
 
-	if architecture == "CNN"
-		@assert !isnothing(kernel_size) "The argument `kernel_size` must be provided when `architecture = 'CNN'`"
-		@assert length(kernel_size) == depth[1]
-		kernel_size = coercetotuple.(kernel_size)
-	end
+    if architecture == "CNN"
+        @assert !isnothing(kernel_size) "The argument `kernel_size` must be provided when `architecture = 'CNN'`"
+        @assert length(kernel_size) == depth[1]
+        kernel_size = coercetotuple.(kernel_size)
+    end
 
-	L = sum(depth) # total number of hidden layers
+    L = sum(depth) # total number of hidden layers
 
-	# inference network
-	ϕ = []
-	if depth[2] >= 1
-		push!(ϕ, [Dense(width[l-1] => width[l], activation) for l ∈ (depth[1]+1):L]...)
-	end
-	push!(ϕ, Dense(width[L] => p, activation_output))
-	ϕ = Chain(ϕ...)
+    # inference network
+    ϕ = []
+    if depth[2] >= 1
+        push!(ϕ, [Dense(width[l - 1] => width[l], activation) for l ∈ (depth[1] + 1):L]...)
+    end
+    push!(ϕ, Dense(width[L] => p, activation_output))
+    ϕ = Chain(ϕ...)
 
-	# summary network
-	if architecture == "MLP"
-		ψ = Chain(
-			Dense(d => width[1], activation),
-			[Dense(width[l-1] => width[l], activation) for l ∈ 2:depth[1]]...
-			)
-	elseif architecture == "CNN"
-		ψ = Chain(
-			Conv(kernel_size[1], d => width[1], activation),
-			[Conv(kernel_size[l], width[l-1] => width[l], activation) for l ∈ 2:depth[1]]...,
-			Flux.flatten
-			)
-	elseif architecture == "GNN"
-		propagation = weight_by_distance ? SpatialGraphConv : GraphConv
-		ψ = GNNChain(
-			propagation(d => width[1], activation),
-			[propagation(width[l-1] => width[l], activation) for l ∈ 2:depth[1]]...,
-			GlobalPool(mean) # readout module
-			)
-	end
+    # summary network
+    if architecture == "MLP"
+        ψ = Chain(
+            Dense(d => width[1], activation),
+            [Dense(width[l - 1] => width[l], activation) for l ∈ 2:depth[1]]...
+        )
+    elseif architecture == "CNN"
+        ψ = Chain(
+            Conv(kernel_size[1], d => width[1], activation),
+            [
+                Conv(kernel_size[l], width[l - 1] => width[l], activation) for
+                l ∈ 2:depth[1]
+            ]...,
+            Flux.flatten
+        )
+    elseif architecture == "GNN"
+        propagation = weight_by_distance ? SpatialGraphConv : GraphConv
+        ψ = GNNChain(
+            propagation(d => width[1], activation),
+            [propagation(width[l - 1] => width[l], activation) for l ∈ 2:depth[1]]...,
+            GlobalPool(mean) # readout module
+        )
+    end
 
-	if !isnothing(variance_stabiliser)
-		if architecture ∈ ["MLP", "CNN"]
-			ψ = Chain(variance_stabiliser, ψ...)
-		elseif architecture == "GNN"
-			ψ = GNNChain(variance_stabiliser, ψ...)
-		end
-	end
+    if !isnothing(variance_stabiliser)
+        if architecture ∈ ["MLP", "CNN"]
+            ψ = Chain(variance_stabiliser, ψ...)
+        elseif architecture == "GNN"
+            ψ = GNNChain(variance_stabiliser, ψ...)
+        end
+    end
 
-	θ̂ = DeepSet(ψ, ϕ)
+    θ̂ = DeepSet(ψ, ϕ)
 
-	#TODO RatioEstimator, QuantileEstimatorDiscrete, QuantileEstimatorContinuous, PosteriorEstimator
-	if estimator_type == "point"
-		θ̂ = PointEstimator(θ̂)
-	elseif estimator_type == "interval"
-		θ̂ = IntervalEstimator(θ̂, θ̂; probs = probs)
-	end
+    #TODO RatioEstimator, QuantileEstimatorDiscrete, QuantileEstimatorContinuous, PosteriorEstimator
+    if estimator_type == "point"
+        θ̂ = PointEstimator(θ̂)
+    elseif estimator_type == "interval"
+        θ̂ = IntervalEstimator(θ̂, θ̂; probs = probs)
+    end
 
-	return θ̂
+    return θ̂
 end
 coercetotuple(x) = (x...,)

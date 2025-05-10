@@ -4,65 +4,72 @@ Applies `estimator` to data `Z`.
 
 If given multiple data sets, the estimator is applied over minibatches of size `batchsize`, which can prevent memory issues with large data sets. 
 """
-function estimate(estimator, z, x = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+function estimate(
+    estimator,
+    z,
+    x = nothing;
+    batchsize::Integer = 32,
+    use_gpu::Bool = true,
+    kwargs...
+)
 
-	# Convert to Float32 for numerical efficiency
-	x = f32(x)
-	z = f32(z)
+    # Convert to Float32 for numerical efficiency
+    x = f32(x)
+    z = f32(z)
 
-	# Tupleise if necessary
-  	z = isnothing(x) ? z : (z, x)
+    # Tupleise if necessary
+    z = isnothing(x) ? z : (z, x)
 
-	# Determine if minibatching is possible...
-	# this is complicated by the fact that DeepSets can be applied to arrays directly, in which case the data 
-	# get converted internally to a one-element vector... so treat estimators based on a DeepSet as a special case
-	if check_deepset(estimator)
-		# Only do batching if we have multiple data sets
-		if typeof(z) <: AbstractVector
-			minibatching = true
-			batchsize = min(numobs(z), batchsize)
-		elseif typeof(z) <: Tuple && typeof(z[1]) <: AbstractVector
-			# Can only batch if both elements have the same number of observations 
-			K₁ = numobs(z[1])
-			K₂ = numobs(z[2])
-			minibatching = K₁ == K₂
-			batchsize = min(K₁, batchsize)
-		else # we dont have multiple data sets: just apply the estimator without batching
-			minibatching = false
-		end
-	else 
-		# If we have tuple input, can only batch if both elements have the same number of observations 
-		if typeof(z) <: Tuple
-			K₁ = numobs(z[1])
-			K₂ = numobs(z[2])
-			minibatching = K₁ == K₂
-			batchsize = min(K₁, batchsize)
-		else 
-			minibatching = true
-			batchsize = min(numobs(z), batchsize)
-		end
-	end 
+    # Determine if minibatching is possible...
+    # this is complicated by the fact that DeepSets can be applied to arrays directly, in which case the data 
+    # get converted internally to a one-element vector... so treat estimators based on a DeepSet as a special case
+    if check_deepset(estimator)
+        # Only do batching if we have multiple data sets
+        if typeof(z) <: AbstractVector
+            minibatching = true
+            batchsize = min(numobs(z), batchsize)
+        elseif typeof(z) <: Tuple && typeof(z[1]) <: AbstractVector
+            # Can only batch if both elements have the same number of observations 
+            K₁ = numobs(z[1])
+            K₂ = numobs(z[2])
+            minibatching = K₁ == K₂
+            batchsize = min(K₁, batchsize)
+        else # we dont have multiple data sets: just apply the estimator without batching
+            minibatching = false
+        end
+    else
+        # If we have tuple input, can only batch if both elements have the same number of observations 
+        if typeof(z) <: Tuple
+            K₁ = numobs(z[1])
+            K₂ = numobs(z[2])
+            minibatching = K₁ == K₂
+            batchsize = min(K₁, batchsize)
+        else
+            minibatching = true
+            batchsize = min(numobs(z), batchsize)
+        end
+    end
 
-	# Check whether a GPU is available
-	device = _checkgpu(use_gpu, verbose = false)
-	estimator = estimator |> device
+    # Check whether a GPU is available
+    device = _checkgpu(use_gpu, verbose = false)
+    estimator = estimator |> device
 
-	if !minibatching
-		z = z |> device
-		ŷ = estimator(z; kwargs...)
-		ŷ = ŷ |> cpu
-	else
-		data_loader = _DataLoader(z, batchsize, shuffle = false, partial = true)
-		ŷ = map(data_loader) do zᵢ
-			zᵢ = zᵢ |> device
-			ŷ = estimator(zᵢ; kwargs...)
-			ŷ = ŷ |> cpu
-			ŷ
-		end
-		ŷ = stackarrays(ŷ)
-	end
+    if !minibatching
+        z = z |> device
+        ŷ = estimator(z; kwargs...)
+        ŷ = ŷ |> cpu
+    else
+        data_loader = _DataLoader(z, batchsize, shuffle = false, partial = true)
+        ŷ = map(data_loader) do zᵢ
+            zᵢ = zᵢ |> device
+            ŷ = estimator(zᵢ; kwargs...)
+            ŷ = ŷ |> cpu
+            ŷ
+        end
+        ŷ = stackarrays(ŷ)
+    end
 
-	return ŷ
+    return ŷ
 end
 
 @inline function check_deepset(T::DataType)
@@ -72,7 +79,6 @@ end
     false
 end
 @inline check_deepset(x) = check_deepset(typeof(x))
-
 
 # ---- Point estimation from estimators that allow for posterior sampling ----
 
@@ -89,7 +95,12 @@ See also [`posteriormedian()`](@ref), [`posteriormode()`](@ref).
 """
 posteriormean(θ::AbstractMatrix) = mean(θ; dims = 2)
 posteriormean(θ::AbstractVector{<:AbstractMatrix}) = reduce(hcat, posteriormean.(θ))
-posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormean(sampleposterior(estimator, Z, N; kwargs...))
+posteriormean(
+    estimator::Union{PosteriorEstimator, RatioEstimator},
+    Z,
+    N::Integer = 1000;
+    kwargs...
+) = posteriormean(sampleposterior(estimator, Z, N; kwargs...))
 
 """
 	posteriormedian(θ::AbstractMatrix)	
@@ -100,7 +111,12 @@ See also [`posteriormean()`](@ref), [`posteriorquantile()`](@ref).
 """
 posteriormedian(θ::AbstractMatrix) = median(θ; dims = 2)
 posteriormedian(θ::AbstractVector{<:AbstractMatrix}) = reduce(hcat, posteriormedian.(θ))
-posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormedian(sampleposterior(estimator, Z, N; kwargs...))
+posteriormedian(
+    estimator::Union{PosteriorEstimator, RatioEstimator},
+    Z,
+    N::Integer = 1000;
+    kwargs...
+) = posteriormedian(sampleposterior(estimator, Z, N; kwargs...))
 
 """
 	posteriorquantile(θ::AbstractMatrix, probs)	
@@ -111,11 +127,16 @@ The return value is a ``d`` × `length(probs)` matrix.
 
 See also [`posteriormedian()`](@ref).
 """
-function posteriorquantile(θ::AbstractMatrix, probs) 
-	mapslices(row -> quantile(row, probs), θ, dims = 2)
+function posteriorquantile(θ::AbstractMatrix, probs)
+    mapslices(row -> quantile(row, probs), θ, dims = 2)
 end
-posteriorquantile(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, probs, N::Integer = 1000; kwargs...) = posteriorquantile(sampleposterior(estimator, Z, N; kwargs...), probs)
-
+posteriorquantile(
+    estimator::Union{PosteriorEstimator, RatioEstimator},
+    Z,
+    probs,
+    N::Integer = 1000;
+    kwargs...
+) = posteriorquantile(sampleposterior(estimator, Z, N; kwargs...), probs)
 
 # ---- Posterior sampling ----
 
@@ -138,63 +159,64 @@ other sampling algorithms (e.g., MCMC) may be needed (please contact the package
 function sampleposterior end
 
 function _sampleposterior(est::RatioEstimator,
-				Z,
-				N::Integer = 1000;
-			    prior::Function = θ -> 1f0,
-				θ_grid = nothing, theta_grid = nothing,
-				# θ₀ = nothing, theta0 = nothing, # NB a basic MCMC sampler could be initialised with θ₀
-				kwargs...)
+    Z,
+    N::Integer = 1000;
+    prior::Function = θ -> 1.0f0,
+    θ_grid = nothing, theta_grid = nothing,
+    # θ₀ = nothing, theta0 = nothing, # NB a basic MCMC sampler could be initialised with θ₀
+    kwargs...)
 
-	# Check duplicated arguments that are needed so that the R interface uses ASCII characters only
-	@assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
-	# @assert isnothing(θ₀) || isnothing(theta0) "Only one of `θ₀` or `theta0` should be given"
-	if !isnothing(theta_grid) θ_grid = theta_grid end
-	# if !isnothing(theta0) θ₀ = theta0 end
+    # Check duplicated arguments that are needed so that the R interface uses ASCII characters only
+    @assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
+    # @assert isnothing(θ₀) || isnothing(theta0) "Only one of `θ₀` or `theta0` should be given"
+    if !isnothing(theta_grid)
+        θ_grid = theta_grid
+    end
+    # if !isnothing(theta0) θ₀ = theta0 end
 
-	# # Check that we have either a grid to search over or initial estimates
-	# @assert !isnothing(θ_grid) || !isnothing(θ₀) "Either `θ_grid` or `θ₀` should be given"
-	# @assert isnothing(θ_grid) || isnothing(θ₀) "Only one of `θ_grid` and `θ₀` should be given"
+    # # Check that we have either a grid to search over or initial estimates
+    # @assert !isnothing(θ_grid) || !isnothing(θ₀) "Either `θ_grid` or `θ₀` should be given"
+    # @assert isnothing(θ_grid) || isnothing(θ₀) "Only one of `θ_grid` and `θ₀` should be given"
 
-	if !isnothing(θ_grid)
-		θ_grid = f32(θ_grid) 
-		rZθ = vec(estimate(est, Z, θ_grid; kwargs...))
-		pθ  = prior.(eachcol(θ_grid))
-		density = pθ .* rZθ
-		θ = StatsBase.wsample(eachcol(θ_grid), density, N; replace = true)
-		reduce(hcat, θ)
-	end
+    if !isnothing(θ_grid)
+        θ_grid = f32(θ_grid)
+        rZθ = vec(estimate(est, Z, θ_grid; kwargs...))
+        pθ = prior.(eachcol(θ_grid))
+        density = pθ .* rZθ
+        θ = StatsBase.wsample(eachcol(θ_grid), density, N; replace = true)
+        reduce(hcat, θ)
+    end
 end
 
-function sampleposterior(est::RatioEstimator, Z, N::Integer = 1000; kwargs...) 
-	Z = f32(Z)
-	Z = [getobs(Z, i:i) for i in 1:numobs(Z)]
-	θ = _sampleposterior.(Ref(est), Z, N; kwargs...)
+function sampleposterior(est::RatioEstimator, Z, N::Integer = 1000; kwargs...)
+    Z = f32(Z)
+    Z = [getobs(Z, i:i) for i = 1:numobs(Z)]
+    θ = _sampleposterior.(Ref(est), Z, N; kwargs...)
 
-	if numobs(Z) == 1
-		θ = θ[1]
-	end 
+    if numobs(Z) == 1
+        θ = θ[1]
+    end
 
-	return θ
+    return θ
 end
 
-function sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000; kwargs...) 
-	# Determine if we are using the gpu 
-	args = (;kwargs...)
-	use_gpu = haskey(args, :use_gpu) ? args.use_gpu : true
+function sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000; kwargs...)
+    # Determine if we are using the gpu 
+    args = (; kwargs...)
+    use_gpu = haskey(args, :use_gpu) ? args.use_gpu : true
 
-	# Compute the summary statistics 
-	tz = estimate(estimator.network, Z; use_gpu = use_gpu)
+    # Compute the summary statistics 
+    tz = estimate(estimator.network, Z; use_gpu = use_gpu)
 
-	# Sample from the approximate posterior given the summary statistics 
-	θ = sampleposterior(estimator.q, tz, N; kwargs...)
+    # Sample from the approximate posterior given the summary statistics 
+    θ = sampleposterior(estimator.q, tz, N; kwargs...)
 
-	if numobs(Z) == 1
-		θ = θ[1]
-	end 
+    if numobs(Z) == 1
+        θ = θ[1]
+    end
 
-	return θ
-end 
-
+    return θ
+end
 
 # ---- Optimisation-based point estimates ----
 
@@ -215,51 +237,55 @@ posterior density is maximised by gradient descent (requires `Optim.jl` to be lo
 See also [`posteriormedian()`](@ref), [`posteriormean()`](@ref).
 """
 function posteriormode(
-	est::RatioEstimator, Z;
-	prior::Function = θ -> 1f0, penalty::Union{Function, Nothing} = nothing,
-	θ_grid = nothing, theta_grid = nothing,
-	θ₀ = nothing, theta0 = nothing,
-	kwargs...
-	)
+    est::RatioEstimator, Z;
+    prior::Function = θ -> 1.0f0, penalty::Union{Function, Nothing} = nothing,
+    θ_grid = nothing, theta_grid = nothing,
+    θ₀ = nothing, theta0 = nothing,
+    kwargs...
+)
 
-	# Check duplicated arguments that are needed so that the R interface uses ASCII characters only
-	@assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
-	@assert isnothing(θ₀) || isnothing(theta0) "Only one of `θ₀` or `theta0` should be given"
-	if !isnothing(theta_grid) θ_grid = theta_grid end
-	if !isnothing(theta0) θ₀ = theta0 end
+    # Check duplicated arguments that are needed so that the R interface uses ASCII characters only
+    @assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
+    @assert isnothing(θ₀) || isnothing(theta0) "Only one of `θ₀` or `theta0` should be given"
+    if !isnothing(theta_grid)
+        θ_grid = theta_grid
+    end
+    if !isnothing(theta0)
+        θ₀ = theta0
+    end
 
-	# Change "penalty" to "prior"
-	if !isnothing(penalty) prior = penalty end
+    # Change "penalty" to "prior"
+    if !isnothing(penalty)
+        prior = penalty
+    end
 
-	# Check that we have either a grid to search over or initial estimates
-	@assert !isnothing(θ_grid) || !isnothing(θ₀) "One of `θ_grid` or `θ₀` should be given"
-	@assert isnothing(θ_grid) || isnothing(θ₀) "Only one of `θ_grid` and `θ₀` should be given"
+    # Check that we have either a grid to search over or initial estimates
+    @assert !isnothing(θ_grid) || !isnothing(θ₀) "One of `θ_grid` or `θ₀` should be given"
+    @assert isnothing(θ_grid) || isnothing(θ₀) "Only one of `θ_grid` and `θ₀` should be given"
 
-	if !isnothing(θ_grid)
+    if !isnothing(θ_grid)
+        θ_grid = f32(θ_grid)
+        rZθ = vec(estimate(est, Z, θ_grid; kwargs...))
+        pθ = prior.(eachcol(θ_grid))
+        density = pθ .* rZθ
+        θ̂ = θ_grid[:, argmax(density), :]   # extra colon to preserve matrix output
 
-		θ_grid = f32(θ_grid)      
-		rZθ = vec(estimate(est, Z, θ_grid; kwargs...))
-		pθ  = prior.(eachcol(θ_grid))
-		density = pθ .* rZθ
-		θ̂ = θ_grid[:, argmax(density), :]   # extra colon to preserve matrix output
+    else
+        θ̂ = _optimdensity(θ₀, prior, est)
+    end
 
-	else
-		θ̂ = _optimdensity(θ₀, prior, est)
-	end
-
-	return θ̂
+    return θ̂
 end
-posteriormode(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, posteriormode.(Ref(est), Z; kwargs...))
-
+posteriormode(est::RatioEstimator, Z::AbstractVector; kwargs...) =
+    reduce(hcat, posteriormode.(Ref(est), Z; kwargs...))
 
 # Here, we define _optimdensity() for the case that Optim has not been loaded
 # For the case that Optim is loaded, _optimdensity() is overloaded in ext/NeuralEstimatorsOptimExt.jl
 # NB Julia complains if we overload functions in package extensions... to get around this, here we
 # use a slightly different function signature (omitting ::Function)
 function _optimdensity(θ₀, prior, est)
-	error("A vector of initial parameter estimates has been provided, indicating that the approximate likelihood or posterior density will be maximised by numerical optimisation; please load the Julia package `Optim` to facilitate this")
+    error("A vector of initial parameter estimates has been provided, indicating that the approximate likelihood or posterior density will be maximised by numerical optimisation; please load the Julia package `Optim` to facilitate this")
 end
-
 
 # ---- Interval constructions ----
 
@@ -279,64 +305,73 @@ contain the lower and upper bounds of the interval. The rows of this matrix can
 be named by passing a vector of strings to the keyword argument `parameter_names`. 
 """
 function interval(bs; probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 1:size(bs, 1)])
+    p, B = size(bs)
 
-	p, B = size(bs)
+    # Compute the quantiles
+    ci = mapslices(x -> quantile(x, probs), bs, dims = 2)
 
-	# Compute the quantiles
-	ci = mapslices(x -> quantile(x, probs), bs, dims = 2)
-
-	# Add labels to the confidence intervals
-	l = ci[:, 1]
-	u = ci[:, 2]
-	labelinterval(l, u, parameter_names)
+    # Add labels to the confidence intervals
+    l = ci[:, 1]
+    u = ci[:, 2]
+    labelinterval(l, u, parameter_names)
 end
 
+function interval(
+    estimator::IntervalEstimator,
+    Z;
+    parameter_names = nothing,
+    use_gpu::Bool = true
+)
+    ci = estimate(estimator, Z, use_gpu = use_gpu)
+    ci = cpu(ci)
 
-function interval(estimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu::Bool = true)
+    if typeof(estimator) <: IntervalEstimator
+        @assert size(ci, 1) % 2 == 0
+        p = size(ci, 1) ÷ 2
+    end
 
-	ci = estimate(estimator, Z, use_gpu = use_gpu)
-	ci = cpu(ci)
+    if isnothing(parameter_names)
+        parameter_names = ["θ$i" for i ∈ 1:p]
+    else
+        @assert length(parameter_names) == p
+    end
 
-	if typeof(estimator) <: IntervalEstimator
-		@assert size(ci, 1) % 2 == 0
-		p = size(ci, 1) ÷ 2
-	end
-
-	if isnothing(parameter_names)
-		parameter_names = ["θ$i" for i ∈ 1:p]
-	else
-		@assert length(parameter_names) == p
-	end
-
-	intervals = labelinterval(ci, parameter_names)
-	if length(intervals) == 1
-		intervals = intervals[1]
-	end
-	return intervals
+    intervals = labelinterval(ci, parameter_names)
+    if length(intervals) == 1
+        intervals = intervals[1]
+    end
+    return intervals
 end
 
-
-function labelinterval(l::V, u::V, parameter_names = ["θ$i" for i ∈ length(l)]) where V <: AbstractVector
-	@assert length(l) == length(u)
-	NamedArray(hcat(l, u), (parameter_names, ["lower", "upper"]))
+function labelinterval(
+    l::V,
+    u::V,
+    parameter_names = ["θ$i" for i ∈ length(l)]
+) where {V <: AbstractVector}
+    @assert length(l) == length(u)
+    NamedArray(hcat(l, u), (parameter_names, ["lower", "upper"]))
 end
 
-function labelinterval(ci::V, parameter_names = ["θ$i" for i ∈ (length(ci) ÷ 2)]) where V <: AbstractVector
-
-	@assert length(ci) % 2 == 0
-	p = length(ci) ÷ 2
-	l = ci[1:p]
-	u = ci[(p+1):end]
-	labelinterval(l, u, parameter_names)
+function labelinterval(
+    ci::V,
+    parameter_names = ["θ$i" for i ∈ (length(ci) ÷ 2)]
+) where {V <: AbstractVector}
+    @assert length(ci) % 2 == 0
+    p = length(ci) ÷ 2
+    l = ci[1:p]
+    u = ci[(p + 1):end]
+    labelinterval(l, u, parameter_names)
 end
 
-function labelinterval(ci::M, parameter_names = ["θ$i" for i ∈ (size(ci, 1) ÷ 2)]) where M <: AbstractMatrix
+function labelinterval(
+    ci::M,
+    parameter_names = ["θ$i" for i ∈ (size(ci, 1) ÷ 2)]
+) where {M <: AbstractMatrix}
+    @assert size(ci, 1) % 2 == 0
+    p = size(ci, 1) ÷ 2
+    K = size(ci, 2)
 
-	@assert size(ci, 1) % 2 == 0
-	p = size(ci, 1) ÷ 2
-	K = size(ci, 2)
-
-	[labelinterval(ci[:, k], parameter_names) for k ∈ 1:K]
+    [labelinterval(ci[:, k], parameter_names) for k ∈ 1:K]
 end
 
 # ---- Parametric bootstrap ----
@@ -361,73 +396,90 @@ block 2, `blocks` should be `[1, 1, 2, 2, 2]`. The resampling algorithm generate
 
 The return type is a ``d`` × `B` matrix, where ``d`` is the dimension of the parameter vector. 
 """
-function bootstrap(estimator, parameters::P, simulator, m::Integer; B::Integer = 400, use_gpu::Bool = true) where P <: Union{AbstractMatrix, ParameterConfigurations}
-	K = size(parameters, 2)
-	@assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
+function bootstrap(
+    estimator,
+    parameters::P,
+    simulator,
+    m::Integer;
+    B::Integer = 400,
+    use_gpu::Bool = true
+) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+    K = size(parameters, 2)
+    @assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
 
-	# simulate the data
-	v = [simulator(parameters, m) for i ∈ 1:B]
-	if typeof(v[1]) <: Tuple
-		z = vcat([v[i][1] for i ∈ eachindex(v)]...)
-		x = vcat([v[i][2] for i ∈ eachindex(v)]...)
-		v = (z, x)
-	else
-		v = vcat(v...)
-	end
+    # simulate the data
+    v = [simulator(parameters, m) for i ∈ 1:B]
+    if typeof(v[1]) <: Tuple
+        z = vcat([v[i][1] for i ∈ eachindex(v)]...)
+        x = vcat([v[i][2] for i ∈ eachindex(v)]...)
+        v = (z, x)
+    else
+        v = vcat(v...)
+    end
 
-	bs = estimate(estimator, v, use_gpu = use_gpu)
-	return bs
+    bs = estimate(estimator, v, use_gpu = use_gpu)
+    return bs
 end
 
-function bootstrap(estimator, parameters::P, Z̃; use_gpu::Bool = true) where P <: Union{AbstractMatrix, ParameterConfigurations}
-	K = size(parameters, 2)
-	@assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
-	bs = estimate(estimator, Z̃, use_gpu = use_gpu)
-	return bs
+function bootstrap(
+    estimator,
+    parameters::P,
+    Z̃;
+    use_gpu::Bool = true
+) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+    K = size(parameters, 2)
+    @assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
+    bs = estimate(estimator, Z̃, use_gpu = use_gpu)
+    return bs
 end
 
 # ---- Non-parametric bootstrapping ----
 
-function bootstrap(estimator, Z; B::Integer = 400, use_gpu::Bool = true, blocks = nothing, trim::Bool = true)
+function bootstrap(
+    estimator,
+    Z;
+    B::Integer = 400,
+    use_gpu::Bool = true,
+    blocks = nothing,
+    trim::Bool = true
+)
+    @assert !(typeof(Z) <: Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer"
 
-	
-	@assert !(typeof(Z) <: Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer"
+    # Generate B bootstrap data sets 
+    if !isnothing(blocks)
+        @assert length(blocks) == numberreplicates(Z) "The number of replicates and the length of `blocks` must match: recieved `numberreplicates(Z) = $(numberreplicates(Z))` and `length(blocks) = $(length(blocks))`"
+        m = length(blocks)
+        unique_blocks = unique(blocks)
+        block_counts = Dict(b => count(==(b), blocks) for b in unique_blocks)
+        Z̃ = map(1:B) do _
+            sampled_blocks = Int[]
+            m̃ = 0
+            while m̃ < m
+                b = rand(unique_blocks)
+                push!(sampled_blocks, b)
+                m̃ += block_counts[b]
+            end
+            idx = vcat([findall(==(b), blocks) for b in sampled_blocks]...)
+            if trim && length(idx) > m
+                idx = idx[1:m]  # trim to match original sample size
+            end
+            subsetdata(Z, idx)
+        end
+    else
+        m = numberreplicates(Z)
+        Z̃ = [subsetdata(Z, rand(1:m, m)) for _ = 1:B]
+    end
 
-	# Generate B bootstrap data sets 
-	if !isnothing(blocks)
-		@assert length(blocks) == numberreplicates(Z) "The number of replicates and the length of `blocks` must match: recieved `numberreplicates(Z) = $(numberreplicates(Z))` and `length(blocks) = $(length(blocks))`"
-		m = length(blocks)
-		unique_blocks = unique(blocks)
-		block_counts = Dict(b => count(==(b), blocks) for b in unique_blocks)
-		Z̃ = map(1:B) do _
-			sampled_blocks = Int[]
-			m̃ = 0
-			while m̃ < m
-				b = rand(unique_blocks)
-				push!(sampled_blocks, b)
-				m̃ += block_counts[b]
-			end
-			idx = vcat([findall(==(b), blocks) for b in sampled_blocks]...)
-			if trim && length(idx) > m
-				idx = idx[1:m]  # trim to match original sample size
-			end
-			subsetdata(Z, idx)
-		end	
-	else
-		m = numberreplicates(Z)
-		Z̃ = [subsetdata(Z, rand(1:m, m)) for _ in 1:B]
-	end
+    # Estimate the parameters for each bootstrap sample
+    bs = estimate(estimator, Z̃, use_gpu = use_gpu)
 
-	# Estimate the parameters for each bootstrap sample
-	bs = estimate(estimator, Z̃, use_gpu = use_gpu)
-
-	return bs
+    return bs
 end
 
 # simple wrapper to handle the common case that the user forgot to extract the
 # array from the single-element vector returned by a simulator
-function bootstrap(estimator, Z::V; args...) where {V <: AbstractVector{A}} where A
-	@assert length(Z) == 1 "bootstrap() is designed for a single data set only"
-	Z = Z[1]
-	return bootstrap(estimator, Z; args...)
+function bootstrap(estimator, Z::V; args...) where {V <: AbstractVector{A}} where {A}
+    @assert length(Z) == 1 "bootstrap() is designed for a single data set only"
+    Z = Z[1]
+    return bootstrap(estimator, Z; args...)
 end

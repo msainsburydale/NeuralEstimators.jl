@@ -1,13 +1,15 @@
-nparams(model) = length(Flux.trainables(model)) > 0 ? sum(length, Flux.trainables(model)) : 0
+nparams(model) =
+    length(Flux.trainables(model)) > 0 ? sum(length, Flux.trainables(model)) : 0
 
 # Drop fields from NamedTuple: https://discourse.julialang.org/t/filtering-keys-out-of-named-tuples/73564/8
-drop(nt::NamedTuple, key::Symbol) =  Base.structdiff(nt, NamedTuple{(key,)})
-drop(nt::NamedTuple, keys::NTuple{N,Symbol}) where {N} = Base.structdiff(nt, NamedTuple{keys})
+drop(nt::NamedTuple, key::Symbol) = Base.structdiff(nt, NamedTuple{(key,)})
+drop(nt::NamedTuple, keys::NTuple{N, Symbol}) where {N} =
+    Base.structdiff(nt, NamedTuple{keys})
 
 # Check element type of arbitrarily nested array: https://stackoverflow.com/a/41847530
 nested_eltype(x) = nested_eltype(typeof(x))
-nested_eltype(::Type{T}) where T <:AbstractArray = nested_eltype(eltype(T))
-nested_eltype(::Type{T}) where T = T
+nested_eltype(::Type{T}) where {T <: AbstractArray} = nested_eltype(eltype(T))
+nested_eltype(::Type{T}) where {T} = T
 
 # Subsetting Assessment
 Base.getindex(A::Assessment, i::Integer) = getfield(A, i)
@@ -17,7 +19,7 @@ Base.getindex(A::Assessment, s::Symbol) = getfield(A, s)
 	rowwisenorm(A)
 Computes the row-wise norm of a matrix `A`.
 """
-rowwisenorm(A) = sqrt.(sum(abs2,A; dims = 2))
+rowwisenorm(A) = sqrt.(sum(abs2, A; dims = 2))
 
 # Original discussion: https://groups.google.com/g/julia-users/c/UARlZBCNlng
 vectotri_docs = """
@@ -51,60 +53,60 @@ vectotriu(v; strict = true)
 
 "$vectotri_docs"
 function vectotril(v; strict::Bool = false)
-	if strict
-		vectotrilstrict(v)
-	else
-		ArrayType = containertype(v)
-		T = eltype(v)
-		v = cpu(v)
-		n = length(v)
-		d = (-1 + isqrt(1 + 8n)) ÷ 2
-		d*(d+1)÷2 == n || error("vectotril: length of vector is not triangular")
-		k = 0
-		L = [ i >= j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
-		convert(ArrayType, L)
-	end
+    if strict
+        vectotrilstrict(v)
+    else
+        ArrayType = containertype(v)
+        T = eltype(v)
+        v = cpu(v)
+        n = length(v)
+        d = (-1 + isqrt(1 + 8n)) ÷ 2
+        d*(d+1)÷2 == n || error("vectotril: length of vector is not triangular")
+        k = 0
+        L = [i >= j ? (k+=1; v[k]) : zero(T) for i = 1:d, j = 1:d]
+        convert(ArrayType, L)
+    end
 end
 
 "$vectotri_docs"
 function vectotriu(v; strict::Bool = false)
-	if strict
-		vectotriustrict(v)
-	else
-		ArrayType = containertype(v)
-		T = eltype(v)
-		v = cpu(v)
-		n = length(v)
-		d = (-1 + isqrt(1 + 8n)) ÷ 2
-		d*(d+1)÷2 == n || error("vectotriu: length of vector is not triangular")
-		k = 0
-		U = [ i <= j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
-		convert(ArrayType, U)
-	end
+    if strict
+        vectotriustrict(v)
+    else
+        ArrayType = containertype(v)
+        T = eltype(v)
+        v = cpu(v)
+        n = length(v)
+        d = (-1 + isqrt(1 + 8n)) ÷ 2
+        d*(d+1)÷2 == n || error("vectotriu: length of vector is not triangular")
+        k = 0
+        U = [i <= j ? (k+=1; v[k]) : zero(T) for i = 1:d, j = 1:d]
+        convert(ArrayType, U)
+    end
 end
 
 function vectotrilstrict(v)
-	ArrayType = containertype(v)
-	T = eltype(v)
-	v = cpu(v)
-	n = length(v)
-	d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
-	d*(d-1)÷2 == n || error("vectotrilstrict: length of vector is not triangular")
-	k = 0
-	L = [ i > j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
-	convert(ArrayType, L)
+    ArrayType = containertype(v)
+    T = eltype(v)
+    v = cpu(v)
+    n = length(v)
+    d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
+    d*(d-1)÷2 == n || error("vectotrilstrict: length of vector is not triangular")
+    k = 0
+    L = [i > j ? (k+=1; v[k]) : zero(T) for i = 1:d, j = 1:d]
+    convert(ArrayType, L)
 end
 
 function vectotriustrict(v)
-	ArrayType = containertype(v)
-	T = eltype(v)
-	v = cpu(v)
-	n = length(v)
-	d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
-	d*(d-1)÷2 == n || error("vectotriustrict: length of vector is not triangular")
-	k = 0
-	U = [ i < j ? (k+=1; v[k]) : zero(T) for i=1:d, j=1:d ]
-	convert(ArrayType, U)
+    ArrayType = containertype(v)
+    T = eltype(v)
+    v = cpu(v)
+    n = length(v)
+    d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
+    d*(d-1)÷2 == n || error("vectotriustrict: length of vector is not triangular")
+    k = 0
+    U = [i < j ? (k+=1; v[k]) : zero(T) for i = 1:d, j = 1:d]
+    convert(ArrayType, U)
 end
 
 # Get the non-parametrized type name: https://stackoverflow.com/a/55977768/16776594
@@ -125,8 +127,8 @@ containertype(typeof(a))
 ```
 """
 containertype(A::Type) = Base.typename(A).wrapper
-containertype(a::A) where A = containertype(A)
-containertype(::Type{A}) where A <: SubArray = containertype(A.types[1])
+containertype(a::A) where {A} = containertype(A)
+containertype(::Type{A}) where {A <: SubArray} = containertype(A.types[1])
 
 """
 	numberreplicates(Z)
@@ -138,36 +140,50 @@ data stored as an `Array` or as a `GNNGraph`.
 function numberreplicates end
 
 # fallback broadcasting method
-function numberreplicates(Z::V) where {V <: AbstractVector{A}} where A
-	numberreplicates.(Z)
+function numberreplicates(Z::V) where {V <: AbstractVector{A}} where {A}
+    numberreplicates.(Z)
 end
 
 # specific methods
-function numberreplicates(Z::A) where {A <: AbstractArray{T, N}} where {T <: Union{Number, Missing}, N}
-	size(Z, N)
+function numberreplicates(Z::A) where {A <:
+                                       AbstractArray{
+    T,
+    N
+}} where {T <: Union{Number, Missing}, N}
+    size(Z, N)
 end
-function numberreplicates(Z::V) where {V <: AbstractVector{T}} where {T <: Union{Number, Missing}}
-	numberreplicates(reshape(Z, :, 1))
+function numberreplicates(Z::V) where {V <:
+                                       AbstractVector{T}} where {T <:
+                                                                 Union{Number, Missing}}
+    numberreplicates(reshape(Z, :, 1))
 end
-function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
-	Z = tup[1]
-	X = tup[2]
-	@assert length(Z) == length(X)
-	numberreplicates(Z)
+function numberreplicates(tup::Tup) where {Tup <:
+                                           Tuple{
+    V₁,
+    V₂
+}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
+    Z = tup[1]
+    X = tup[2]
+    @assert length(Z) == length(X)
+    numberreplicates(Z)
 end
-function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, M}} where {V₁ <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
-	Z = tup[1]
-	X = tup[2]
-	@assert length(Z) == size(X, 2)
-	numberreplicates(Z)
+function numberreplicates(tup::Tup) where {Tup <:
+                                           Tuple{
+    V₁,
+    M
+}} where {V₁ <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
+    Z = tup[1]
+    X = tup[2]
+    @assert length(Z) == size(X, 2)
+    numberreplicates(Z)
 end
 function numberreplicates(Z::G) where {G <: GNNGraph}
-	x = :Z ∈ keys(Z.ndata) ? Z.ndata.Z : first(values(Z.ndata))
-	if ndims(x) == 3
-		size(x, 2)
-	else
-		Z.num_graphs
-	end
+    x = :Z ∈ keys(Z.ndata) ? Z.ndata.Z : first(values(Z.ndata))
+    if ndims(x) == 3
+        size(x, 2)
+    else
+        Z.num_graphs
+    end
 end
 
 """
@@ -211,38 +227,47 @@ subsetdata(Z, 1:3) # extract first 3 replicates from each data set
 """
 function subsetdata end
 
-function subsetdata(Z::V, i) where {V <: AbstractVector{A}} where A
-	subsetdata.(Z, Ref(i))
+function subsetdata(Z::V, i) where {V <: AbstractVector{A}} where {A}
+    subsetdata.(Z, Ref(i))
 end
 
-function subsetdata(tup::Tup, i) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
-	Z = tup[1]
-	X = tup[2]
-	@assert length(Z) == length(X)
-	(subsetdata(Z, i), X) # X is not subsetted because it is set-level information
+function subsetdata(
+    tup::Tup,
+    i
+) where {Tup <:
+         Tuple{
+    V₁,
+    V₂
+}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
+    Z = tup[1]
+    X = tup[2]
+    @assert length(Z) == length(X)
+    (subsetdata(Z, i), X) # X is not subsetted because it is set-level information
 end
 
 function subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
-	getobs(Z, i)
+    getobs(Z, i)
 end
 
 function subsetdata(Z::G, i) where {G <: AbstractGraph}
-	if typeof(i) <: Integer i = i:i end
-	sym = collect(keys(Z.ndata))[1]
-	if ndims(Z.ndata[sym]) == 3
-		GNNGraph(Z; ndata = Z.ndata[sym][:, i, :])
-	else
-		# @warn "`subsetdata()` is slow for graphical data."
-		# TODO Recall that I set the code up to have ndata as a 3D array; with this format, non-parametric bootstrap would be exceedingly fast (since we can subset the array data, I think).
-		# TODO getgraph() doesn't currently work with the GPU: see https://github.com/CarloLucibello/GraphNeuralNetworks.jl/issues/161
-		# TODO getgraph() doesn’t return duplicates. So subsetdata(Z, [1, 1]) returns just a single graph
-		# TODO can't check for CuArray (and return to GPU) because CuArray won't always be defined (no longer depend on CUDA) and we can't overload exact signatures in package extensions... it's low priority, but will be good to fix when time permits. Hopefully, the above issue with GraphNeuralNetworks.jl will get fixed, and we can then just remove the call to cpu() below
-		#flag = Z.ndata[sym] isa CuArray
-		Z = cpu(Z)
-		Z = getgraph(Z, i)
-		#if flag Z = gpu(Z) end
-		Z
-	end
+    if typeof(i) <: Integer
+        i = i:i
+    end
+    sym = collect(keys(Z.ndata))[1]
+    if ndims(Z.ndata[sym]) == 3
+        GNNGraph(Z; ndata = Z.ndata[sym][:, i, :])
+    else
+        # @warn "`subsetdata()` is slow for graphical data."
+        # TODO Recall that I set the code up to have ndata as a 3D array; with this format, non-parametric bootstrap would be exceedingly fast (since we can subset the array data, I think).
+        # TODO getgraph() doesn't currently work with the GPU: see https://github.com/CarloLucibello/GraphNeuralNetworks.jl/issues/161
+        # TODO getgraph() doesn’t return duplicates. So subsetdata(Z, [1, 1]) returns just a single graph
+        # TODO can't check for CuArray (and return to GPU) because CuArray won't always be defined (no longer depend on CUDA) and we can't overload exact signatures in package extensions... it's low priority, but will be good to fix when time permits. Hopefully, the above issue with GraphNeuralNetworks.jl will get fixed, and we can then just remove the call to cpu() below
+        #flag = Z.ndata[sym] isa CuArray
+        Z = cpu(Z)
+        Z = getgraph(Z, i)
+        #if flag Z = gpu(Z) end
+        Z
+    end
 end
 
 # ---- Test code for GNN and subsetdata ----
@@ -267,14 +292,13 @@ end
 
 # ---- End test code ----
 
-
-
 function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
-	oldstd = stdout
-	redirect_stderr(devnull)
-	data_loader = DataLoader(data, batchsize = batchsize, shuffle = shuffle, partial = partial)
-	redirect_stderr(oldstd)
-	return data_loader
+    oldstd = stdout
+    redirect_stderr(devnull)
+    data_loader =
+        DataLoader(data, batchsize = batchsize, shuffle = shuffle, partial = partial)
+    redirect_stderr(oldstd)
+    return data_loader
 end
 
 # Here, we define _checkgpu() for the case that CUDA has not been loaded (so, we will be using the CPU)
@@ -282,9 +306,11 @@ end
 # NB Julia complains if we overload functions in package extensions... to get around this, here we
 # use a slightly different function signature (omitting ::Bool)
 function _checkgpu(use_gpu; verbose::Bool = true)
-	if verbose @info "Running on CPU" end
-	device = cpu
-	return(device)
+    if verbose
+        @info "Running on CPU"
+    end
+    device = cpu
+    return (device)
 end
 
 """
@@ -328,7 +354,6 @@ stackarrays(Z)
 ```
 """
 function stackarrays(v::AbstractVector{A}; merge::Bool = true) where {A <: AbstractArray}
-
     N = ndims(v[1])  # number of dimensions of the arrays
     lastdims = size.(v, N)  # get size along last dimension for each array
 
@@ -336,7 +361,7 @@ function stackarrays(v::AbstractVector{A}; merge::Bool = true) where {A <: Abstr
         a = cat(v...; dims = N+1)  # make a new (N+1)-dimensional array
         if merge
             sz = size(a)
-            a = reshape(a, ntuple(i -> sz[i], N-1)..., sz[N]*sz[N+1])  # merge last two dims
+            a = reshape(a, ntuple(i -> sz[i], N-1)..., sz[N]*sz[N + 1])  # merge last two dims
         end
     else
         if merge

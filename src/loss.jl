@@ -1,15 +1,14 @@
 # This is an internal function used in Flux to check the size of the
 # arguments passed to a loss function
 function _check_sizes(ŷ::AbstractArray, y::AbstractArray)
-  for d in 1:max(ndims(ŷ), ndims(y))
-   size(ŷ,d) == size(y,d) || throw(DimensionMismatch(
-      "loss function expects size(ŷ) = $(size(ŷ)) to match size(y) = $(size(y))"
-    ))
-  end
+    for d = 1:max(ndims(ŷ), ndims(y))
+        size(ŷ, d) == size(y, d) || throw(DimensionMismatch(
+            "loss function expects size(ŷ) = $(size(ŷ)) to match size(y) = $(size(y))"
+        ))
+    end
 end
 _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
 @non_differentiable _check_sizes(ŷ::Any, y::Any)
-
 
 # ---- surrogates for 0-1 loss ----
 
@@ -28,21 +27,21 @@ See also [`kpowerloss()`](@ref).
 """
 function tanhloss(θ̂, θ, κ; agg = mean, joint::Bool = true)
 
-#  If `joint = true`, the L₁ norm is computed over each parameter vector, so that, with 
-# `κ` close to zero, the resulting Bayes estimator is the mode of the joint posterior distribution;
-#  otherwise, if `joint = false`, the Bayes estimator is the vector containing the modes of the
-#  marginal posterior distributions.
+    #  If `joint = true`, the L₁ norm is computed over each parameter vector, so that, with 
+    # `κ` close to zero, the resulting Bayes estimator is the mode of the joint posterior distribution;
+    #  otherwise, if `joint = false`, the Bayes estimator is the vector containing the modes of the
+    #  marginal posterior distributions.
 
-  _check_sizes(θ̂, θ)
+    _check_sizes(θ̂, θ)
 
-  d = abs.(θ̂ .- θ)
-  if joint
-     d = sum(d, dims = 1)
-  end
+    d = abs.(θ̂ .- θ)
+    if joint
+        d = sum(d, dims = 1)
+    end
 
-  L = tanh_fast(d ./ κ)
+    L = tanh_fast(d ./ κ)
 
-  return agg(L)
+    return agg(L)
 end
 
 @doc raw"""
@@ -59,35 +58,42 @@ If `safeorigin = true`, the loss function is modified to be piecewise, continuou
 
 See also [`tanhloss()`](@ref).
 """
-function kpowerloss(θ̂, θ, κ; safeorigin::Bool = true, agg = mean, ϵ = ofeltype(θ̂, 0.1), joint::Bool = true)
+function kpowerloss(
+    θ̂,
+    θ,
+    κ;
+    safeorigin::Bool = true,
+    agg = mean,
+    ϵ = ofeltype(θ̂, 0.1),
+    joint::Bool = true
+)
 
-#  If `joint = true`, the L₁ norm is computed over each parameter vector, so that, with 
-# `κ` close to zero, the resulting Bayes estimator is the mode of the joint posterior distribution;
-#  otherwise, if `joint = false`, the Bayes estimator is the vector containing the modes of the
-#  marginal posterior distributions.
+    #  If `joint = true`, the L₁ norm is computed over each parameter vector, so that, with 
+    # `κ` close to zero, the resulting Bayes estimator is the mode of the joint posterior distribution;
+    #  otherwise, if `joint = false`, the Bayes estimator is the vector containing the modes of the
+    #  marginal posterior distributions.
 
-   _check_sizes(θ̂, θ)
+    _check_sizes(θ̂, θ)
 
-   d = abs.(θ̂ .- θ)
-   if joint
-      d = sum(d, dims = 1)
-   end
+    d = abs.(θ̂ .- θ)
+    if joint
+        d = sum(d, dims = 1)
+    end
 
-   if safeorigin
-     b = d .>  ϵ
-     L = vcat(d[b] .^ κ, _safefunction.(d[.!b], κ, ϵ))
-   else
-     L = d.^κ
-   end
+    if safeorigin
+        b = d .> ϵ
+        L = vcat(d[b] .^ κ, _safefunction.(d[.!b], κ, ϵ))
+    else
+        L = d .^ κ
+    end
 
-   return agg(L)
+    return agg(L)
 end
 
 function _safefunction(d, κ, ϵ)
-  @assert d >= 0
-  ϵ^(κ - 1) * d
+    @assert d >= 0
+    ϵ^(κ - 1) * d
 end
-
 
 # ---- quantile loss ----
 
@@ -108,54 +114,51 @@ rows in `θ̂` is assumed to be ``dr``, where ``d`` is the number of parameters 
 ``r`` is the number probability levels in `τ` (i.e., the length of `τ`).
 """
 function quantileloss(θ̂, θ, τ; agg = mean)
-  _check_sizes(θ̂, θ)
-  d = θ̂ .- θ
-  b = d .> 0
-  b̃ = .!b
-  L₁ = d[b] * (1 - τ)
-  L₂ = -τ * d[b̃]
-  L = vcat(L₁, L₂)
-  agg(L)
+    _check_sizes(θ̂, θ)
+    d = θ̂ .- θ
+    b = d .> 0
+    b̃ = .!b
+    L₁ = d[b] * (1 - τ)
+    L₂ = -τ * d[b̃]
+    L = vcat(L₁, L₂)
+    agg(L)
 end
 
 function quantileloss(θ̂, θ, τ::V; agg = mean) where {T, V <: AbstractVector{T}}
+    τ = convert(containertype(θ̂), τ) # convert τ to the gpu (this line means that users don't need to manually move τ to the gpu)
 
-  τ = convert(containertype(θ̂), τ) # convert τ to the gpu (this line means that users don't need to manually move τ to the gpu)
+    # Check that the sizes match
+    @assert size(θ̂, 2) == size(θ, 2)
+    d, K = size(θ)
 
-  # Check that the sizes match
-  @assert size(θ̂, 2) == size(θ, 2)
-  d, K = size(θ)
+    if length(τ) == K # different τ for each training sample => must be training continuous quantile estimator with τ as input
+        @ignore_derivatives τ = repeat(τ', d) # just repeat τ to match the number of parameters in the statistical model
+        quantileloss(θ̂, θ, τ; agg = agg)
+    else # otherwise, we must training a discrete quantile estimator for some fixed set of probability levels
+        rd = size(θ̂, 1)
+        @assert rd % d == 0
+        r = rd ÷ d
+        @assert length(τ) == r
 
-  if length(τ) == K # different τ for each training sample => must be training continuous quantile estimator with τ as input
-    @ignore_derivatives τ = repeat(τ', d) # just repeat τ to match the number of parameters in the statistical model
-    quantileloss(θ̂, θ, τ; agg = agg)
-  else # otherwise, we must training a discrete quantile estimator for some fixed set of probability levels
+        # repeat the arrays to facilitate broadcasting and indexing
+        # note that repeat() cannot be differentiated by Zygote
+        @ignore_derivatives τ = repeat(τ, inner = (d, 1), outer = (1, K))
+        @ignore_derivatives θ = repeat(θ, r)
 
-    rd = size(θ̂, 1)
-    @assert rd % d == 0
-    r = rd ÷ d
-    @assert length(τ) == r
-
-    # repeat the arrays to facilitate broadcasting and indexing
-    # note that repeat() cannot be differentiated by Zygote
-    @ignore_derivatives τ = repeat(τ, inner = (d, 1), outer = (1, K))
-    @ignore_derivatives θ = repeat(θ, r)
-
-    quantileloss(θ̂, θ, τ; agg = agg)
-  end
+        quantileloss(θ̂, θ, τ; agg = agg)
+    end
 end
 
 #NB matrix method is only used internally, and therefore not documented 
 function quantileloss(θ̂, θ, τ::M; agg = mean) where {T, M <: AbstractMatrix{T}}
-  d = θ̂ .- θ
-  b = d .> 0
-  b̃ = .!b
-  L₁ = d[b] .* (1 .- τ[b])
-  L₂ = -τ[b̃] .* d[b̃]
-  L = vcat(L₁, L₂)
-  agg(L)
+    d = θ̂ .- θ
+    b = d .> 0
+    b̃ = .!b
+    L₁ = d[b] .* (1 .- τ[b])
+    L₂ = -τ[b̃] .* d[b̃]
+    L = vcat(L₁, L₂)
+    agg(L)
 end
-
 
 # ---- interval score ----
 
@@ -176,23 +179,21 @@ where ``d`` is the dimension of the parameter vector to make inference on. The f
 and second sets of ``d`` rows will be used as `l` and `u`, respectively.
 """
 function intervalscore(l, u, θ, α; agg = mean)
+    b₁ = θ .< l
+    b₂ = θ .> u
 
-  b₁ = θ .< l
-  b₂ = θ .> u
+    S = u - l
+    S = S + b₁ .* (2 / α) .* (l .- θ)
+    S = S + b₂ .* (2 / α) .* (θ .- u)
 
-  S = u - l
-  S = S + b₁ .* (2 / α) .* (l .- θ)
-  S = S + b₂ .* (2 / α) .* (θ .- u)
-
-  agg(S)
+    agg(S)
 end
 
 function intervalscore(θ̂, θ, α; agg = mean)
+    @assert size(θ̂, 1) % 2 == 0
+    d = size(θ̂, 1) ÷ 2
+    l = θ̂[1:d, :]
+    u = θ̂[(d + 1):end, :]
 
-  @assert size(θ̂, 1) % 2 == 0
-  d = size(θ̂, 1) ÷ 2
-  l = θ̂[1:d, :]
-  u = θ̂[(d+1):end, :]
-
-  intervalscore(l, u, θ, α, agg = agg)
+    intervalscore(l, u, θ, α, agg = agg)
 end

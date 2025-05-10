@@ -4,7 +4,7 @@
 using BenchmarkTools
 using Distributions: Normal
 using Distributions: Uniform
-using Flux 
+using Flux
 using NeuralEstimators
 using NeuralEstimators: ActNorm
 using NeuralEstimators: CouplingLayer
@@ -20,8 +20,8 @@ d = 2        # dimension of the parameter vector θ
 w = 128      # width of each hidden layer 
 
 function sample(K)
-    μ = rand(Normal(0, 10f0), K)
-    σ = rand(Uniform(0, 10f0), K)
+    μ = rand(Normal(0, 10.0f0), K)
+    σ = rand(Uniform(0, 10.0f0), K)
     θ = vcat(μ', σ')
     return θ
 end
@@ -41,7 +41,7 @@ final_layer = Parallel(
 )
 
 estimator = PointEstimator(DeepSet(
-    Chain(Dense(n, w, relu), Dense(w, d, relu)), 
+    Chain(Dense(n, w, relu), Dense(w, d, relu)),
     Chain(Dense(d, w, relu), final_layer)
 ))
 
@@ -56,7 +56,7 @@ SUITE[:PointEstimator][:estimate] = @benchmarkable(
 )
 
 for B ∈ [1000, 5000]
-    SUITE[:PointEstimator][:bootstrap,B] = @benchmarkable(
+    SUITE[:PointEstimator][:bootstrap, B] = @benchmarkable(
         bootstrap($estimator, data; B = $B),
         setup = (data = simulate([5, 0.3f0], $m))
     )
@@ -66,7 +66,7 @@ SUITE[:PointEstimator][:assess] = @benchmarkable(
     assess($estimator, prior_samples, data),
     seconds = 10,
     setup = (
-        prior_samples = sample(1000); 
+        prior_samples = sample(1000);
         data = simulate(prior_samples, $m)
     )
 )
@@ -76,7 +76,7 @@ SUITE[:PointEstimator][:assess] = @benchmarkable(
 SUITE[:RatioEstimator] = BenchmarkGroup()
 
 estimator = RatioEstimator(DeepSet(
-    Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu)), 
+    Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu)),
     Chain(Dense(w + d, w, relu), Dense(w, w, relu), Dense(w, 1))
 ))
 
@@ -94,7 +94,7 @@ SUITE[:RatioEstimator][:mlestimate] = @benchmarkable(
     mlestimate($estimator, data; θ_grid),
     setup = (
         data = simulate([5, 0.3f0], $m);
-        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'    
+        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
     )
 )
 
@@ -102,7 +102,7 @@ SUITE[:RatioEstimator][:posteriormean] = @benchmarkable(
     posteriormean($estimator, data; θ_grid),
     setup = (
         data = simulate([5, 0.3f0], $m);
-        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'    
+        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
     )
 )
 
@@ -110,7 +110,7 @@ SUITE[:RatioEstimator][:posteriormode] = @benchmarkable(
     posteriormode($estimator, data; θ_grid),
     setup = (
         data = simulate([5, 0.3f0], $m);
-        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'    
+        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
     )
 )
 
@@ -118,7 +118,7 @@ SUITE[:RatioEstimator][:posteriormedian] = @benchmarkable(
     posteriormedian($estimator, data; θ_grid),
     setup = (
         data = simulate([5, 0.3f0], $m);
-        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'    
+        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
     )
 )
 
@@ -126,7 +126,7 @@ SUITE[:RatioEstimator][:sampleposterior] = @benchmarkable(
     sampleposterior($estimator, data; θ_grid),
     setup = (
         data = simulate([5, 0.3f0], $m);
-        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'    
+        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
     )
 )
 ##############################################################################################################
@@ -135,11 +135,11 @@ SUITE[:RatioEstimator][:sampleposterior] = @benchmarkable(
 SUITE[:PosteriorEstimator] = BenchmarkGroup()
 
 estimator = PosteriorEstimator(
-    NormalisingFlow(d, 2 * d), 
+    NormalisingFlow(d, 2 * d),
     DeepSet(
         Chain(Dense(n, w, relu), Dense(w, w, relu)),
         Chain(Dense(w, w, relu), Dense(w, 2 * d))
-    )   
+    )
 )
 
 SUITE[:PosteriorEstimator][:train] = @benchmarkable(
@@ -169,14 +169,14 @@ SUITE[:PosteriorEstimator][:posteriormedian] = @benchmarkable(
 
 SUITE[:PosteriorEstimator][:posteriorquantile] = @benchmarkable(
     posteriorquantile($estimator, data, probs),
-    setup = (data = simulate([5, 0.3f0], $m); probs = [.025, .975])
+    setup = (data = simulate([5, 0.3f0], $m); probs = [0.025, 0.975])
 )
 
 SUITE[:PosteriorEstimator][:assess] = @benchmarkable(
     assess($estimator, prior_samples, data),
     seconds = 10,
     setup = (
-        prior_samples = sample(1000); 
+        prior_samples = sample(1000);
         data = simulate(prior_samples, $m)
     )
 )
@@ -218,7 +218,7 @@ SUITE[:layers][:compress] = @benchmarkable(
 )
 
 for m ∈ [10, 100]
-    SUITE[:layers][:deepset,m] = @benchmarkable(
+    SUITE[:layers][:deepset, m] = @benchmarkable(
         deepset(data),
         setup = (
             d = 4;
@@ -228,44 +228,44 @@ for m ∈ [10, 100]
                 Chain(Dense(n, w, $relu), Dense(w, w, $relu)),
                 Chain(Dense(w, w, $relu), Dense(w, 2 * d))
             );
-            data = [rand32(n, $m)] 
+            data = [rand32(n, $m)]
         )
     )
 end
 
 for K ∈ [5, 10]
-    SUITE[:layers][:AffineCouplingBlock][:foward,K] = @benchmarkable(
+    SUITE[:layers][:AffineCouplingBlock][:foward, K] = @benchmarkable(
         forward(layer, θ2, θ1, TZ),
         setup = (
             d₁ = 100;
-            dstar = 50; 
+            dstar = 50;
             d₂ = 100;
-            θ1  = rand32(d₁, $K);
-            θ2  = rand32(d₁, $K);
-            TZ  = rand32(dstar, $K);
+            θ1 = rand32(d₁, $K);
+            θ2 = rand32(d₁, $K);
+            TZ = rand32(dstar, $K);
             layer = AffineCouplingBlock(d₁, dstar, d₂);
         )
     )
 end
 
 for K ∈ [5, 10]
-    SUITE[:layers][:AffineCouplingBlock][:inverse,K] = @benchmarkable(
+    SUITE[:layers][:AffineCouplingBlock][:inverse, K] = @benchmarkable(
         inverse(layer, θ1, U2[1], TZ),
         setup = (
             d₁ = 100;
             dstar = 50;
             d₂ = 100;
-            θ1  = rand32(d₁, $K);
-            θ2  = rand32(d₁, $K);
-            TZ  = rand32(dstar, $K);
+            θ1 = rand32(d₁, $K);
+            θ2 = rand32(d₁, $K);
+            TZ = rand32(dstar, $K);
             layer = AffineCouplingBlock(d₁, dstar, d₂);
-            U2 = forward(layer, θ2, θ1, TZ); 
+            U2 = forward(layer, θ2, θ1, TZ);
         )
     )
 end
 
 for K ∈ [5, 10]
-    SUITE[:layers][:CouplingLayer][:forward,K] = @benchmarkable(
+    SUITE[:layers][:CouplingLayer][:forward, K] = @benchmarkable(
         forward(layer, θ, TZ),
         setup = (
             d = 100;
@@ -278,7 +278,7 @@ for K ∈ [5, 10]
 end
 
 for K ∈ [5, 10]
-    SUITE[:layers][:CouplingLayer][:inverse,K] = @benchmarkable(
+    SUITE[:layers][:CouplingLayer][:inverse, K] = @benchmarkable(
         inverse(layer, U[1], TZ),
         setup = (
             d = 100;
@@ -286,13 +286,13 @@ for K ∈ [5, 10]
             θ = rand32(d, $K);
             TZ = rand32(dstar, $K);
             layer = CouplingLayer(d, dstar);
-            U = forward(layer, θ, TZ); 
+            U = forward(layer, θ, TZ);
         )
     )
 end
 
 for K ∈ [5, 10]
-    SUITE[:layers][:NormalisingFlow][:forward,K] = @benchmarkable(
+    SUITE[:layers][:NormalisingFlow][:forward, K] = @benchmarkable(
         forward(layer, θ, TZ),
         setup = (
             d = 100;
@@ -305,7 +305,7 @@ for K ∈ [5, 10]
 end
 
 for K ∈ [5, 10]
-    SUITE[:layers][:NormalisingFlow][:inverse,K] = @benchmarkable(
+    SUITE[:layers][:NormalisingFlow][:inverse, K] = @benchmarkable(
         inverse(layer, U[1], TZ),
         setup = (
             d = 100;
@@ -319,7 +319,7 @@ for K ∈ [5, 10]
 end
 
 for K ∈ [5, 10]
-    SUITE[:layers][:NormalisingFlow][:logdensity,K] = @benchmarkable(
+    SUITE[:layers][:NormalisingFlow][:logdensity, K] = @benchmarkable(
         logdensity(layer, θ, TZ),
         setup = (
             d = 100;
@@ -332,7 +332,7 @@ for K ∈ [5, 10]
 end
 
 for K ∈ [5, 10]
-    SUITE[:layers][:Permutation][:forward,K] = @benchmarkable(
+    SUITE[:layers][:Permutation][:forward, K] = @benchmarkable(
         forward(layer, θ),
         setup = (
             d = 100;
@@ -343,7 +343,7 @@ for K ∈ [5, 10]
 end
 
 for K ∈ [5, 10]
-    SUITE[:layers][:Permutation][:inverse,K] = @benchmarkable(
+    SUITE[:layers][:Permutation][:inverse, K] = @benchmarkable(
         inverse(layer, U),
         setup = (
             d = 100;
@@ -355,7 +355,7 @@ for K ∈ [5, 10]
 end
 
 for K ∈ [5, 10]
-    SUITE[:layers][:ActNorm][:forward,K] = @benchmarkable(
+    SUITE[:layers][:ActNorm][:forward, K] = @benchmarkable(
         forward(layer, θ),
         setup = (
             d = 100;
@@ -366,7 +366,7 @@ for K ∈ [5, 10]
 end
 
 for K ∈ [5, 10]
-    SUITE[:layers][:ActNorm][:inverse,K] = @benchmarkable(
+    SUITE[:layers][:ActNorm][:inverse, K] = @benchmarkable(
         inverse(layer, U[1]),
         setup = (
             d = 100;
@@ -377,4 +377,4 @@ for K ∈ [5, 10]
     )
 end
 
-results = run(SUITE) 
+results = run(SUITE)

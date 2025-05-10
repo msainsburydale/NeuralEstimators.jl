@@ -8,7 +8,7 @@ abstract type NeuralEstimator end
 	BayesEstimator <: NeuralEstimator
 An abstract supertype for neural Bayes estimators.
 """
-abstract type BayesEstimator <: NeuralEstimator  end
+abstract type BayesEstimator <: NeuralEstimator end
 
 """
 	PointEstimator <: BayesEstimator
@@ -16,7 +16,7 @@ abstract type BayesEstimator <: NeuralEstimator  end
 A neural point estimator, where the neural `network` is a mapping from the sample space to the parameter space.
 """
 struct PointEstimator{N} <: BayesEstimator
-	network::N 
+    network::N
 end
 (estimator::PointEstimator)(Z) = estimator.network(Z)
 
@@ -76,25 +76,32 @@ interval(estimator, Z)
 ```
 """
 struct IntervalEstimator{N, H, C, G} <: BayesEstimator
-	u::N 
-	v::N
-	c::C
-	probs::H
-	g::G
+    u::N
+    v::N
+    c::C
+    probs::H
+    g::G
 end
-function IntervalEstimator(u, v = u, c::Union{Function, Compress} = identity; probs = [0.025, 0.975], g = exp)
-	if !isa(probs, AbstractArray)
+function IntervalEstimator(
+    u,
+    v = u,
+    c::Union{Function, Compress} = identity;
+    probs = [0.025, 0.975],
+    g = exp
+)
+    if !isa(probs, AbstractArray)
         probs = [probs]
     end
-    @assert all(0 .< probs .< 1) 
-	IntervalEstimator(deepcopy(u), deepcopy(v), c, probs, g)
-end 
-IntervalEstimator(u, c::Union{Function, Compress}; kwargs...) = IntervalEstimator(deepcopy(u), deepcopy(u), c; kwargs...)
+    @assert all(0 .< probs .< 1)
+    IntervalEstimator(deepcopy(u), deepcopy(v), c, probs, g)
+end
+IntervalEstimator(u, c::Union{Function, Compress}; kwargs...) =
+    IntervalEstimator(deepcopy(u), deepcopy(u), c; kwargs...)
 Flux.trainable(est::IntervalEstimator) = (u = est.u, v = est.v)
 function (est::IntervalEstimator)(Z)
-	bₗ = est.u(Z)                # lower bound
-	bᵤ = bₗ .+ est.g.(est.v(Z))  # upper bound
-	vcat(est.c(bₗ), est.c(bᵤ))
+    bₗ = est.u(Z)                # lower bound
+    bᵤ = bₗ .+ est.g.(est.v(Z))  # upper bound
+    vcat(est.c(bₗ), est.c(bᵤ))
 end
 
 @doc raw"""
@@ -199,50 +206,56 @@ q₁(Z[1], θ₋ᵢ)
 ```
 """
 struct QuantileEstimator{V, P, G, I} <: BayesEstimator #TODO function for neat output as dxT matrix like interval() 
-	v::V
-	probs::P
-	g::G
-	i::I
+    v::V
+    probs::P
+    g::G
+    i::I
 end
-function QuantileEstimator(v; probs = [0.025, 0.5, 0.975], g = Flux.softplus, i::Union{Integer, Nothing} = nothing)
-	if !isa(probs, AbstractArray)
+function QuantileEstimator(
+    v;
+    probs = [0.025, 0.5, 0.975],
+    g = Flux.softplus,
+    i::Union{Integer, Nothing} = nothing
+)
+    if !isa(probs, AbstractArray)
         probs = [probs]
     end
-    @assert all(0 .< probs .< 1) 
-	if !isnothing(i) @assert i > 0 end
-	QuantileEstimator(deepcopy.(repeat([v], length(probs))), probs, g, i)
+    @assert all(0 .< probs .< 1)
+    if !isnothing(i)
+        @assert i > 0
+    end
+    QuantileEstimator(deepcopy.(repeat([v], length(probs))), probs, g, i)
 end
-Flux.trainable(est::QuantileEstimator) = (v = est.v, )
+Flux.trainable(est::QuantileEstimator) = (v = est.v,)
 function (est::QuantileEstimator)(input) # input might be Z, or a tuple (Z, θ₋ᵢ)
 
-	# Apply each neural network to Z
-	v = map(est.v) do v
-		v(input)
-	end
+    # Apply each neural network to Z
+    v = map(est.v) do v
+        v(input)
+    end
 
-	# If g is specified, impose monotonicity
-	if isnothing(est.g)
-		q = v
-	else
-		gv = broadcast.(est.g, v[2:end])
-		q = cumsum([v[1], gv...])
-	end
+    # If g is specified, impose monotonicity
+    if isnothing(est.g)
+        q = v
+    else
+        gv = broadcast.(est.g, v[2:end])
+        q = cumsum([v[1], gv...])
+    end
 
-	# Convert to matrix
-	reduce(vcat, q)
+    # Convert to matrix
+    reduce(vcat, q)
 end
 # user-level convenience methods (not used internally) for full conditional estimation
 function (est::QuantileEstimator)(Z, θ₋ᵢ::Vector)
-	i = est.i
-	@assert !isnothing(i) "slot i must be specified when approximating a full conditional"
-	if isa(Z, Vector) # repeat θ₋ᵢ to match the number of data sets
-		θ₋ᵢ = [θ₋ᵢ for _ in eachindex(Z)]
-	end
-	est((Z, θ₋ᵢ))  # "Tupleise" the input and apply the estimator
+    i = est.i
+    @assert !isnothing(i) "slot i must be specified when approximating a full conditional"
+    if isa(Z, Vector) # repeat θ₋ᵢ to match the number of data sets
+        θ₋ᵢ = [θ₋ᵢ for _ in eachindex(Z)]
+    end
+    est((Z, θ₋ᵢ))  # "Tupleise" the input and apply the estimator
 end
 (est::QuantileEstimator)(Z, θ₋ᵢ::Number) = est(Z, [θ₋ᵢ])
 const QuantileEstimatorDiscrete = QuantileEstimator # alias
-
 
 # function posterior(Z; μ₀ = 0, σ₀ = 1, σ² = 1)
 # 	μ̃ = (1/σ₀^2 + length(Z)/σ²)^-1 * (μ₀/σ₀^2 + sum(Z)/σ²)
@@ -377,44 +390,54 @@ q̂ᵢ(Z[1], θ₋ᵢ, τ)
 ```
 """
 struct QuantileEstimatorContinuous{N, I} <: NeuralEstimator
-	network::N 
-	i::I
+    network::N
+    i::I
 end
 function QuantileEstimatorContinuous(network; i::Union{Integer, Nothing} = nothing)
-	if !isnothing(i) @assert i > 0 end
-	QuantileEstimatorContinuous(network, i)
+    if !isnothing(i)
+        @assert i > 0
+    end
+    QuantileEstimatorContinuous(network, i)
 end
 # core method (used internally)
 (est::QuantileEstimatorContinuous)(tup::Tuple) = est.network(tup)
 # user-level convenience functions (not used internally)
 function (est::QuantileEstimatorContinuous)(Z, τ)
-	if !isnothing(est.i)
-		error("To estimate the τ-quantile of the full conditional θᵢ|Z,θ₋ᵢ the call should be of the form estimator(Z, θ₋ᵢ, τ)")
-	end
-	est((Z, τ)) # "Tupleise" input and pass to Tuple method
+    if !isnothing(est.i)
+        error("To estimate the τ-quantile of the full conditional θᵢ|Z,θ₋ᵢ the call should be of the form estimator(Z, θ₋ᵢ, τ)")
+    end
+    est((Z, τ)) # "Tupleise" input and pass to Tuple method
 end
 function (est::QuantileEstimatorContinuous)(Z, τ::Number)
-	est(Z, [τ])
+    est(Z, [τ])
 end
-function (est::QuantileEstimatorContinuous)(Z::V, τ::Number) where V <: AbstractVector{A} where A
-	est(Z, repeat([[τ]],  length(Z)))
+function (est::QuantileEstimatorContinuous)(
+    Z::V,
+    τ::Number
+) where {V <: AbstractVector{A}} where {A}
+    est(Z, repeat([[τ]], length(Z)))
 end
 # user-level convenience functions (not used internally) for full conditional estimation
 function (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Matrix)
-	i = est.i
-	@assert !isnothing(i) "slot i must be specified when approximating a full conditional"
-	if size(θ₋ᵢ, 2) != size(τ, 2)
-		@assert size(θ₋ᵢ, 2) == 1 "size(θ₋ᵢ, 2)=$(size(θ₋ᵢ, 2)) and size(τ, 2)=$(size(τ, 2)) do not match"
-		θ₋ᵢ = repeat(θ₋ᵢ, outer = (1, size(τ, 2)))
-	end
-	θ₋ᵢτ = vcat(θ₋ᵢ, τ) # combine parameters and probability level into single pxK matrix
-	q = est((Z, θ₋ᵢτ))  # "Tupleise" the input and pass to tuple method
-	if !isa(q, Vector) q = [q] end
-	reduce(hcat, permutedims.(q))
+    i = est.i
+    @assert !isnothing(i) "slot i must be specified when approximating a full conditional"
+    if size(θ₋ᵢ, 2) != size(τ, 2)
+        @assert size(θ₋ᵢ, 2) == 1 "size(θ₋ᵢ, 2)=$(size(θ₋ᵢ, 2)) and size(τ, 2)=$(size(τ, 2)) do not match"
+        θ₋ᵢ = repeat(θ₋ᵢ, outer = (1, size(τ, 2)))
+    end
+    θ₋ᵢτ = vcat(θ₋ᵢ, τ) # combine parameters and probability level into single pxK matrix
+    q = est((Z, θ₋ᵢτ))  # "Tupleise" the input and pass to tuple method
+    if !isa(q, Vector)
+        q = [q]
+    end
+    reduce(hcat, permutedims.(q))
 end
-(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Vector) = est(Z, θ₋ᵢ, permutedims(reduce(vcat, τ)))
-(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Number) = est(Z, θ₋ᵢ, repeat([τ], size(θ₋ᵢ, 2)))
-(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Vector, τ::Vector) = est(Z, reshape(θ₋ᵢ, :, 1), permutedims(τ))
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Vector) =
+    est(Z, θ₋ᵢ, permutedims(reduce(vcat, τ)))
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Matrix, τ::Number) =
+    est(Z, θ₋ᵢ, repeat([τ], size(θ₋ᵢ, 2)))
+(est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Vector, τ::Vector) =
+    est(Z, reshape(θ₋ᵢ, :, 1), permutedims(τ))
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Vector, τ::Number) = est(Z, θ₋ᵢ, [τ])
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Number) = est(Z, [θ₋ᵢ], τ)
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Vector) = est(Z, [θ₋ᵢ], τ)
@@ -459,12 +482,14 @@ sampleposterior(estimator, Z) # posterior draws
 posteriormean(estimator, Z)   # point estimate
 ```
 """
-struct PosteriorEstimator{Q,N} <: NeuralEstimator
-	q::Q
-	network::N
+struct PosteriorEstimator{Q, N} <: NeuralEstimator
+    q::Q
+    network::N
 end
-numdistributionalparams(estimator::PosteriorEstimator) = numdistributionalparams(estimator.q)
-logdensity(estimator::PosteriorEstimator, θ, Z) = logdensity(estimator.q, f32(θ), estimator.network(f32(Z))) 
+numdistributionalparams(estimator::PosteriorEstimator) =
+    numdistributionalparams(estimator.q)
+logdensity(estimator::PosteriorEstimator, θ, Z) =
+    logdensity(estimator.q, f32(θ), estimator.network(f32(Z)))
 (estimator::PosteriorEstimator)(Zθ::Tuple) = logdensity(estimator, Zθ[2], Zθ[1]) # internal method only used during training # TODO not ideal that we assume an ordering here
 
 @doc raw"""
@@ -538,17 +563,17 @@ posteriormode(r̂, z; θ₀ = θ₀)                   # posterior mode
 ```
 """
 struct RatioEstimator{N} <: NeuralEstimator
-	network::N 
+    network::N
 end
 function (estimator::RatioEstimator)(Z, θ; kwargs...)
-	estimator((Z, θ); kwargs...) # "Tupleise" the input and pass to Tuple method
+    estimator((Z, θ); kwargs...) # "Tupleise" the input and pass to Tuple method
 end
 function (estimator::RatioEstimator)(Zθ::Tuple; classifier::Bool = false)
-	c = σ(estimator.network(Zθ))
-	if typeof(c) <: AbstractVector
-		c = reduce(vcat, c)
-	end
-	classifier ? c : c ./ (1 .- c)
+    c = σ(estimator.network(Zθ))
+    if typeof(c) <: AbstractVector
+        c = reduce(vcat, c)
+    end
+    classifier ? c : c ./ (1 .- c)
 end
 
 # # Estimate ratio for many data sets and parameter vectors
@@ -621,36 +646,39 @@ estimate(θ̂, Z)
 ```
 """
 struct PiecewiseEstimator{E, C} <: NeuralEstimator
-	estimators::E
-	changepoints::C
-	function PiecewiseEstimator(estimators, changepoints) 
-		if isa(changepoints, Number)
-			changepoints = [changepoints]
-		end
-		@assert all(isinteger.(changepoints)) "`changepoints` should contain integers"
-		if length(changepoints) != length(estimators) - 1
-			error("The length of `changepoints` should be one fewer than the number of `estimators`")
-		elseif !issorted(changepoints)
-			error("`changepoints` should be in ascending order")
-		else
-			E = typeof(estimators)
-			C = typeof(changepoints)
-			new{E,C}(estimators, changepoints)
-		end
-	end
+    estimators::E
+    changepoints::C
+    function PiecewiseEstimator(estimators, changepoints)
+        if isa(changepoints, Number)
+            changepoints = [changepoints]
+        end
+        @assert all(isinteger.(changepoints)) "`changepoints` should contain integers"
+        if length(changepoints) != length(estimators) - 1
+            error("The length of `changepoints` should be one fewer than the number of `estimators`")
+        elseif !issorted(changepoints)
+            error("`changepoints` should be in ascending order")
+        else
+            E = typeof(estimators)
+            C = typeof(changepoints)
+            new{E, C}(estimators, changepoints)
+        end
+    end
 end
 function (estimator::PiecewiseEstimator)(Z)
-	changepoints = [estimator.changepoints..., Inf]
-	m = numberreplicates(Z)
-	θ̂ = map(eachindex(Z)) do i
-		# find which estimator to use and then apply it
-		mᵢ = m[i]
-		j = findfirst(mᵢ .<= changepoints)
-		estimator.estimators[j](Z[[i]])
-	end
-	return stackarrays(θ̂)
+    changepoints = [estimator.changepoints..., Inf]
+    m = numberreplicates(Z)
+    θ̂ = map(eachindex(Z)) do i
+        # find which estimator to use and then apply it
+        mᵢ = m[i]
+        j = findfirst(mᵢ .<= changepoints)
+        estimator.estimators[j](Z[[i]])
+    end
+    return stackarrays(θ̂)
 end
-Base.show(io::IO, estimator::PiecewiseEstimator) = print(io, "\nPiecewise estimator with $(length(estimator.estimators)) estimators and sample size change-points: $(estimator.changepoints)")
+Base.show(io::IO, estimator::PiecewiseEstimator) = print(
+    io,
+    "\nPiecewise estimator with $(length(estimator.estimators)) estimators and sample size change-points: $(estimator.changepoints)"
+)
 
 """
 	Ensemble <: NeuralEstimator
@@ -714,28 +742,30 @@ ensemble(Z)
 ```
 """
 struct Ensemble{T <: NeuralEstimator} <: NeuralEstimator
-	estimators::Vector{T}
+    estimators::Vector{T}
 end
-Ensemble(architecture::Function, J::Integer) = Ensemble([architecture() for j in 1:J])
+Ensemble(architecture::Function, J::Integer) = Ensemble([architecture() for j = 1:J])
 
 function (ensemble::Ensemble)(Z; aggr = median)
-	# Compute estimate from each estimator, yielding a vector of matrices
-	# NB can be done in parallel, but I think the overhead may outweigh the benefit
-	θ̂ = [estimator(Z) for estimator in ensemble.estimators]
+    # Compute estimate from each estimator, yielding a vector of matrices
+    # NB can be done in parallel, but I think the overhead may outweigh the benefit
+    θ̂ = [estimator(Z) for estimator in ensemble.estimators]
 
-	# Stack matrices along a new third dimension
-	θ̂ = stackarrays(θ̂, merge = false) # equivalent to: θ̂ = cat(θ̂...; dims = 3)
-	
-	# aggregate elementwise 
-	θ̂ = mapslices(aggr, cpu(θ̂); dims = 3) # NB mapslices doesn't work on the GPU, so transfer to CPU 
-	θ̂ = dropdims(θ̂; dims = 3)
+    # Stack matrices along a new third dimension
+    θ̂ = stackarrays(θ̂, merge = false) # equivalent to: θ̂ = cat(θ̂...; dims = 3)
 
-	return θ̂
+    # aggregate elementwise 
+    θ̂ = mapslices(aggr, cpu(θ̂); dims = 3) # NB mapslices doesn't work on the GPU, so transfer to CPU 
+    θ̂ = dropdims(θ̂; dims = 3)
+
+    return θ̂
 end
 
 Base.getindex(e::Ensemble, i::Integer) = e.estimators[i]
-Base.getindex(e::Ensemble, indices::AbstractVector{<:Integer}) = Ensemble(e.estimators[indices])
+Base.getindex(e::Ensemble, indices::AbstractVector{<:Integer}) =
+    Ensemble(e.estimators[indices])
 Base.getindex(e::Ensemble, indices::UnitRange{<:Integer}) = Ensemble(e.estimators[indices])
 Base.length(e::Ensemble) = length(e.estimators)
 Base.eachindex(e::Ensemble) = eachindex(e.estimators)
-Base.show(io::IO, ensemble::Ensemble) = print(io, "\nEnsemble with $(length(ensemble.estimators)) component estimators")
+Base.show(io::IO, ensemble::Ensemble) =
+    print(io, "\nEnsemble with $(length(ensemble.estimators)) component estimators")
