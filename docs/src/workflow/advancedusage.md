@@ -37,7 +37,7 @@ The above strategies are facilitated with various methods of [`train()`](@ref).
 
 ## Feature scaling 
 
-It is important to ensure that the data passed through the neural network are on a **reasonable numerical scale**, since values with very large absolute value can lead to **numerical instability** during training (e.g., exploding gradients). 
+It is important to ensure that the data passed through the neural network are on a reasonable numerical scale, since values with very large absolute value can lead to numerical instability during training (e.g., exploding gradients). 
 
 A relatively simply way to achieve this is by including a transformation in the first layer of the neural network. For example, if the data have positive support, one could define the neural network with the first layer applying a log transformation:
 
@@ -104,56 +104,136 @@ For an example of incorporating expert summary statistics, see [Irregular spatia
 
 ## Variable sample sizes
 
-A neural estimator in the Deep Set representation can be applied to data sets of arbitrary size. However, even when the neural Bayes estimator approximates the true Bayes estimator arbitrarily well, it is conditional on the number of replicates, $m$, and is not necessarily a Bayes estimator for $m^* \ne m$. Denote a data set comprising $m$ replicates as $\boldsymbol{Z}^{(m)} \equiv (\boldsymbol{Z}_1', \dots, \boldsymbol{Z}_m')'$. There are at least two (non-mutually exclusive) approaches one could adopt if data sets with varying $m$ are envisaged, which we describe below.
+A neural estimator based on the [DeepSet](@ref) representation can be applied to data sets of arbitrary sample size $m$. However, the posterior distribution, and summaries derived from it, typically depends on $m$, and neural estimators must account for this dependence if data sets with varying $m$ are envisaged. 
 
-### Piecewise estimators
+!!! note "Aggregation functions and variable sample sizes"
+    When the sample size is $m$ fixed, the choice of aggregation function used in the [DeepSet](@ref) representation is typically driven by considerations of numerical stability. For example, mean aggregation is often preferred over sum to avoid exploding gradients when $m$ is large. However, not all functions that perform well for fixed sample sizes preserve the ability of the network to generalise across different sample sizes. Specifically, the mean aggregation function, while numerically stable, discards information about $m$. 
 
-If data sets with varying $m$ are envisaged, one could train $l$ estimators for different sample sizes, or groups thereof (e.g., a small-sample estimator and a large-sample estimator). For example, for sample-size changepoints $m_1$, $m_2$, $\dots$, $m_{l-1}$, one could construct a piecewise neural Bayes estimator,
-```math
-\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}; \boldsymbol{\gamma}^*)
-=
-\begin{cases}
-\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}; \boldsymbol{\gamma}^*_{\tilde{m}_1}) & m \leq m_1,\\
-\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}; \boldsymbol{\gamma}^*_{\tilde{m}_2}) & m_1 < m \leq m_2,\\
-\quad \vdots \\
-\hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}; \boldsymbol{\gamma}^*_{\tilde{m}_l}) & m > m_{l-1},
-\end{cases}
-```
-where $\boldsymbol{\gamma}^* \equiv (\boldsymbol{\gamma}^*_{\tilde{m}_1}, \dots, \boldsymbol{\gamma}^*_{\tilde{m}_{l-1}})$, and $\boldsymbol{\gamma}^*_{\tilde{m}}$ are the neural-network parameters optimised for sample size $\tilde{m}$ chosen so that $\hat{\boldsymbol{\theta}}(\cdot; \boldsymbol{\gamma}^*_{\tilde{m}})$ is near-optimal over the range of sample sizes in which it is applied. This approach works well in practice and is less computationally burdensome than it first appears when used in conjunction with the technique known as pre-training (see [Sainsbury-Dale at al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522), Sec 2.3.3), which is facilitated with [`trainmultiple()`](@ref). 
+	One has several options when designing a neural network to accomodate variable sample sizes. 
+	- Use sum aggregation. This is effective with small to moderate values $m$, but can lead to exploding gradients when $m$ becomes large. 
+    - Use mean aggregation with $m$ explicitly input to the neural network. This can be done by supplying [`logsamplesize`](@ref) or [`invsqrtsamplesize`](@ref) as an [expert summary statistic](@ref "Expert summary statistics") when constructing the [DeepSet](@ref). 
+    - Use a hybrid aggregation that maintains numerical stability while implicitly encoding $m$. For example, `weightedsum(X; dims) = logsamplesize(X) .* mean(X; dims)`. Since $m$ is not explicitly provided to the network in this approach, it may be beneficial to combine it with the previous strategy. 
 
-Piecewise estimators are implemented using the type [`PiecewiseEstimator`](@ref). 
+Let a data set consisting of $m$ conditionally independent replicates be denoted by $\boldsymbol{Z}^{(m)} \equiv (\boldsymbol{Z}_1', \dots, \boldsymbol{Z}_m')'$. If data sets with varying $m$ are envisaged, a generally applicable approach is to treat the sample size as a random variable, $M$, with support over a set of positive integers. One then places a distribution on $M$ (e.g., discrete uniform) that is sampled from when simulating data during the training phase. 
 
-### Training with variable sample sizes
+Treating the sample size as random is an effective approach that only requires minor modifications to the workflow for fixed sample sizes. Specifically, the following pseudocode illustrates how one may modify a general data simulator to train under a range of sample sizes, with the distribution of $M$ defined by passing any object that can be sampled using `rand(M, K)` (e.g., the integer range `1:30`):
 
-Alternatively, one could treat the sample size as a random variable, $M$, with support over a set of positive integers, $\mathcal{M}$, in which case the Bayes risk becomes
-```math
-\sum_{m \in \mathcal{M}}
-\textrm{Pr}(M=m)\left(
-\int_\Theta \int_{\mathcal{Z}^m}  L(\boldsymbol{\theta}, \hat{\boldsymbol{\theta}}(\boldsymbol{Z}^{(m)}))p(\boldsymbol{Z}^{(m)} \mid \boldsymbol{\theta})\pi(\boldsymbol{\theta}) \textrm{d}\boldsymbol{Z}^{(m)} \textrm{d} \boldsymbol{\theta}
-\right).
-```
-This approach does not materially alter the workflow, except that one must also sample the number of replicates before simulating the data during the training phase.
+```julia 
+# Method that allows M to be an object that can be sampled from
+function simulate(θ, M)
+	# Number of parameter vectors 
+	K = size(θ, 2)
 
-The following pseudocode illustrates how one may modify a general data simulator to train under a range of sample sizes, with the distribution of $M$ defined by passing any object that can be sampled using `rand(m, K)` (e.g., an integer range like `1:30`, or an integer-valued distribution from [Distributions.jl](https://juliastats.org/Distributions.jl/stable/univariate/)):
-
-```julia
-# Method that allows m to be an object that can be sampled from
-function simulate(parameters, m)
-	# Number of parameter vectors stored in parameters
-	K = size(parameters, 2)
-
-	# Generate K sample sizes from the prior distribution for M
-	m̃ = rand(m, K)
+	# Generate K sample sizes from the distribution for M
+	m = rand(M, K)
 
 	# Pseudocode for data simulation
-	Z = [<simulate m̃[k] realisations from the model> for k ∈ 1:K]
+	Z = [<simulate m[k] realisations from the model given θ[:, k]> for k ∈ 1:K]
 
 	return Z
 end
 
-# Method that allows an integer to be passed for m
+# Wrapper that allows a single fixed integer sample size
 simulate(parameters, m::Integer) = simulate(parameters, range(m, m))
 ```
+
+The following simple example illustrates this approach using a conjugate Gaussian model. Specifically, we assume a Gaussian likelihood with unknown mean $\mu$, known variance $\sigma^2$, and a Gaussian prior with mean $\mu_0$ and variance $\sigma_0^2$. 
+
+```julia
+using NeuralEstimators, Flux
+using DataFrames
+using Distributions
+using Plots
+using StatsPlots
+
+n = 1  # dimension of each data replicate 
+d = 1  # dimension of the parameter vector θ
+σ = 2  # known standard deviation of the data 
+μ₀ = 1 # prior mean 
+σ₀ = 2 # prior standard deviation 
+
+function sample(K)
+    θ = rand(Normal(μ₀, σ₀), 1, K)
+    return θ
+end
+
+function simulate(θ, M)
+    Z = [ϑ .+  σ * randn(n, rand(M)) for ϑ ∈ eachcol(θ)]
+    return Z
+end
+simulate(θ, m::Integer) = simulate(θ, range(m, m))
+
+# Approximate distribution based on dstar summary statistics 
+dstar = 2d 
+q = GaussianMixture(d, dstar)
+
+# Neural network mapping data to summary statistics of the same dimension used in q, 
+# using default mean aggreation with log(m) as an "expert summary statistic"
+w = 128 
+S(Z) = log.(samplesize(Z))
+ψ = Chain(
+	Dense(n, w, relu), 
+	Dense(w, w, relu), 
+	Dense(w, w, relu)
+	)
+ϕ = Chain(
+	Dense(w + 1, w, relu), # input dimension w + 1 to accommodate "expert summary statistic"
+	Dense(w, w, relu), 
+	Dense(w, dstar)
+	)
+network = DeepSet(ψ, ϕ; S = S)
+
+# Initialise the neural posterior estimator
+estimator = PosteriorEstimator(q, network)
+
+# Train the estimator with the sample size randomly sampled between 2 and 25
+estimator = train(estimator, sample, simulate; K = 30_000, m = 2:25) 
+```
+
+Since the posterior is available in closed form for this example, we can directly compare the standard deviation of the neural posterior to the analytic posterior standard deviation as a function of the sample size $m$. Importantly, the analytic posterior standard deviation is deterministic; it depends only on $\sigma_0$, $\sigma$, and $m$, and not on the observed data. However, we do not expect a neural network to capture this behavior exactly, especially when trained on finite data. As such, some sampling variability in the estimated posterior standard deviation is expected, even when the true value is constant for a given $m$:
+
+
+```julia
+# Closed-form expression for the posterior standard deviation
+analyticstd(σ₀, σ, m) = sqrt(1 / (1 / σ₀^2 + m / σ^2))
+
+# Simulate data and return posterior standard deviation from estimator
+function simulate_neural_std(estimator, m)
+    μ = sample(1)
+    Z = simulate(μ, m)  
+    post_samples = sampleposterior(estimator, Z)
+    return std(post_samples, corrected = false)
+end
+
+# Sample sizes to evaluate
+m_range = [2, 10, 25]
+
+# Estimate posterior std dev for many data sets
+neural_std = map(m_range) do m 
+    mapreduce(_ -> simulate_neural_std(estimator, m), vcat, 1:1000) 
+end
+df = DataFrame(
+	neural_std = reduce(vcat, neural_std),
+	m = repeat(m_range, inner = 1000)
+)
+
+# Boxplot: neural posterior std dev by sample size
+@df df boxplot(:m, :neural_std;
+    xlabel = "Number of replicates (m)",
+    ylabel = "Neural posterior std. dev.",
+    label = "Neural posterior std. dev."
+)
+
+# Overlay analytic posterior std. dev.
+true_std = [analyticstd(σ₀, σ, m) for m in m_range]
+scatter!(m_range, true_std;
+    color = :red,
+    markershape = :circle,
+    label = "Analytic posterior std. dev.",
+    legend = :topright
+)
+```
+![Neural](../assets/figures/variablem_posterior_std.png)
 
 
 ## Missing data

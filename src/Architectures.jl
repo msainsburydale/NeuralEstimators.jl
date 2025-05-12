@@ -14,7 +14,6 @@ S(1)
 """
 (S::Vector{Function})(z) = vcat([s(z) for s ∈ S]...)
 
-# NB ideally wouldn't use this, but for backwards compatability I can't remove it now
 struct ElementwiseAggregator{F}
 	a::F
 end
@@ -50,13 +49,13 @@ where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates of data,
 function. 
 
 The function `a` must operate on arrays and have a keyword argument `dims` for 
-specifying the dimension of aggregation (e.g., `sum`, `mean`, `maximum`, `minimum`, `logsumexp`).
+specifying the dimension of aggregation (e.g., `mean`, `sum`, `maximum`, `minimum`, `logsumexp`).
 
 `DeepSet` objects act on data of type `Vector{A}`, where each
 element of the vector is associated with one data set (i.e., one set of
 independent replicates), and where `A` depends on the chosen architecture for `ψ`. 
 Independent replicates within each data set are stored in the batch dimension. 
-For example, with gridded spatial data and `ψ` a CNN, `A` should be a 4-dimensional array, 
+For example, data collected over a two-dimensional grid and `ψ` a CNN, `A` should be a 4-dimensional array, 
 with replicates stored in the 4ᵗʰ dimension. 
 
 For computational efficiency, 
@@ -89,7 +88,7 @@ contains a vector of data sets and the second element contains a vector of
 set-level inputs (i.e., one vector for each data set).
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux
 
 # Two data sets containing 3 and 4 replicates
@@ -98,7 +97,7 @@ n = 10 # dimension of each replicate
 Z = [rand32(n, m) for m ∈ (3, 4)]
 
 # Construct DeepSet object
-S = samplesize
+S = logsamplesize
 dₛ = 1   # dimension of expert summary statistic
 dₜ = 16  # dimension of neural summary statistic
 w  = 32  # width of hidden layers
@@ -128,7 +127,6 @@ function DeepSet(ψ, ϕ, a::Function = mean; S = nothing)
 	DeepSet(ψ, ϕ, ElementwiseAggregator(a), S)
 end
 Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)")
-
 
 # Single data set
 function (d::DeepSet)(Z::A) where A

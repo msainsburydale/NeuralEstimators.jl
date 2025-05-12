@@ -1,14 +1,22 @@
-#TODO samplemean, samplequantile (this will have to be marginal quantiles), measures of multivariate skewness and kurtosis (https://www.jstor.org/stable/2334770). See what Gerber did.
-
 """
-	samplesize(Z::AbstractArray)
+	samplesize(Z)
+Computes the number of independent replicates in the data set `Z`. 
 
-Computes the sample size of a set of independent realisations `Z`.
-
-Note that this function is a wrapper around [`numberreplicates`](@ref), but this
-function returns the number of replicates as the eltype of `Z`, rather than as an integer.
+Note that this function is a wrapper around [`numberreplicates`](@ref) with return type equal to the eltype of `Z`.
 """
 samplesize(Z) = eltype(Z)(numberreplicates(Z))
+
+"""
+	logsamplesize(Z)
+Computes the log of the number of independent replicates in the data set `Z`. 
+"""
+logsamplesize(Z) = log.(samplesize(Z))
+
+"""
+	invsqrtsamplesize(Z)
+Computes the inverse of the square root of the number of independent replicates in the data set `Z`. 
+"""
+invsqrtsamplesize(Z) = 1 ./ (sqrt.(samplesize(Z)))
 
 """
 	samplecovariance(Z::AbstractArray)

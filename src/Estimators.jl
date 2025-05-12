@@ -569,13 +569,12 @@ end
 
 @doc raw"""
 	PiecewiseEstimator <: NeuralEstimator
-	PiecewiseEstimator(estimators, changepoints)
+	PiecewiseEstimator(estimators::Vector{BayesEstimator}, changepoints::Vector{Integer})
 Creates a piecewise estimator
 ([Sainsbury-Dale et al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522), Sec. 2.2.2)
-from a collection of `estimators` and sample-size `changepoints`.
+from a collection of neural Bayes `estimators` and sample-size `changepoints`.
 
-Specifically, with $l$ estimators and sample-size changepoints
-$m_1 < m_2 < \dots < m_{l-1}$, the piecewise etimator takes the form,
+This allows different estimators to be applied to different ranges of sample sizes. For instance, you may wish to use one estimator for small samples and another for larger ones. Given changepoints $m_1 < m_2 < \dots < m_{l-1}$, the piecewise estimator selects from $l$ trained estimators based on the observed sample size $m$ as follows:
 ```math
 \hat{\boldsymbol{\theta}}(\boldsymbol{Z})
 =
@@ -586,13 +585,9 @@ $m_1 < m_2 < \dots < m_{l-1}$, the piecewise etimator takes the form,
 \hat{\boldsymbol{\theta}}_l(\boldsymbol{Z}) & m > m_{l-1}.
 \end{cases}
 ```
-For example, given an estimator ``\hat{\boldsymbol{\theta}}_1(\cdot)`` trained for small
-sample sizes (e.g., ``m \leq 30``) and an estimator ``\hat{\boldsymbol{\theta}}_2(\cdot)``
-trained for moderate-to-large sample sizes (e.g., ``m > 30``), one may construct a
-`PiecewiseEstimator` that dispatches ``\hat{\boldsymbol{\theta}}_1(\cdot)`` if
-``m \leq 30`` and ``\hat{\boldsymbol{\theta}}_2(\cdot)`` otherwise.
+where $\hat{\boldsymbol{\theta}}_1(\cdot)$ is a neural Bayes estimator trained to be near-optimal over the range of sample sizes in which it is applied. 
 
-See also [`trainmultiple()`](@ref).
+Although this strategy requires training multiple neural networks, it is computationally efficient in practice when combined with pre-training (see [Sainsbury-Dale at al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522), Sec 2.3.3), which can be automated using [`trainmultiple()`](@ref). 
 
 # Examples
 ```julia
