@@ -1,7 +1,8 @@
 """
-	(S::Vector{Function})(z)
-Method allows a vector of vector-valued functions to be applied to a single
-input `z` and then concatenated, which allows users to provide a vector of
+	(S::AbstractVector)(z)
+	(S::Tuple)(z)
+Method allows a collection of vector-valued functions to be applied to a single
+input `z` and then concatenated, which allows users to provide a collection of
 functions as a user-defined summary statistic in [`DeepSet`](@ref) objects.
 
 Examples
@@ -12,7 +13,12 @@ S = [f, g]
 S(1)
 ```
 """
-(S::Vector{Function})(z) = vcat([s(z) for s ∈ S]...)
+function (S::AbstractVector)(z)
+    reduce(vcat, [s(z) for s in S])
+end
+function (S::Tuple)(z)
+    reduce(vcat, [s(z) for s in S])
+end
 
 struct ElementwiseAggregator{F}
 	a::F
