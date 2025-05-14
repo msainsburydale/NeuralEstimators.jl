@@ -534,7 +534,8 @@ function train(ensemble::Ensemble, args...; kwargs...)
             lr = try
                 findlr(optimiser)
             catch
-                ; 5e-4
+                ;
+                5e-4
             end
             kwargs = merge(kwargs, (optimiser = Flux.setup(Adam(lr), estimator),))
         end
