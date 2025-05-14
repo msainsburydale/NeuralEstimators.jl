@@ -42,41 +42,36 @@ using `indices`. All other fields are left unchanged. To modify this default
 behaviour, overload `subsetparameters`.
 """
 function subsetparameters(parameters::P, indices) where {P <: ParameterConfigurations}
+    K = size(parameters, 2)
+    @assert maximum(indices) <= K
 
-	K = size(parameters, 2)
-	@assert maximum(indices) <= K
-
-	fields = [getfield(parameters, name) for name ∈ fieldnames(P)]
-	fields = map(fields) do field
-
-		try
-			N = ndims(field)
-			if size(field, N) == K
-				colons  = ntuple(_ -> (:), N - 1)
-				field[colons..., indices]
-			else
-				field
-			end
-		catch
-			field
-		end
-
-	end
-	return P(fields...)
+    fields = [getfield(parameters, name) for name ∈ fieldnames(P)]
+    fields = map(fields) do field
+        try
+            N = ndims(field)
+            if size(field, N) == K
+                colons = ntuple(_ -> (:), N - 1)
+                field[colons..., indices]
+            else
+                field
+            end
+        catch
+            field
+        end
+    end
+    return P(fields...)
 end
 
 function subsetparameters(parameters::M, indices) where {M <: AbstractMatrix}
+    K = size(parameters, 2)
+    @assert maximum(indices) <= K
 
-	K = size(parameters, 2)
-	@assert maximum(indices) <= K
-
-	return parameters[:, indices]
+    return parameters[:, indices]
 end
 
 # wrapper that allows for indices to be a single Integer
 subsetparameters(θ::P, indices::Integer) where {P <: ParameterConfigurations} = subsetparameters(θ, indices:indices)
 subsetparameters(θ::M, indices::Integer) where {M <: AbstractMatrix} = subsetparameters(θ, indices:indices)
-
 
 # ---- _ParameterLoader: Analogous to DataLoader for ParameterConfigurations objects ----
 
@@ -93,7 +88,9 @@ end
 function _ParameterLoader(parameters::P; batchsize::Integer = 1, shuffle::Bool = false, partial::Bool = false) where {P <: ParameterConfigurations}
     @assert batchsize > 0
     K = size(parameters, 2)
-    if K <= batchsize batchsize = K end
+    if K <= batchsize
+        batchsize = K
+    end
     imax = partial ? K : K - batchsize + 1 # imax ≡ the largest index that we go to
     _ParameterLoader(parameters, batchsize, K, partial, imax, [1:K;], shuffle)
 end
@@ -105,14 +102,14 @@ end
         shuffle!(d.indices)
     end
     nexti = min(i + d.batchsize, d.nobs)
-    indices = d.indices[i+1:nexti]
-	batch = subsetparameters(d.parameters, indices)
+    indices = d.indices[(i + 1):nexti]
+    batch = subsetparameters(d.parameters, indices)
 
-	try
-		batch = subsetparameters(d.parameters, indices)
-	catch
-		error("The default method for `subsetparameters` has failed; please see `?subsetparameters` for details.")
-	end
+    try
+        batch = subsetparameters(d.parameters, indices)
+    catch
+        error("The default method for `subsetparameters` has failed; please see `?subsetparameters` for details.")
+    end
 
     return (batch, nexti)
 end

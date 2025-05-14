@@ -26,7 +26,7 @@ using Random: randexp, shuffle, randperm
 using SparseArrays
 using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum, quantile
-using StatsBase 
+using StatsBase
 using StatsBase: wsample, sample
 
 export tanhloss, kpowerloss, intervalscore, quantileloss
@@ -43,10 +43,10 @@ export ApproximateDistribution, GaussianMixture, NormalisingFlow, logdensity, nu
 export AffineCouplingBlock
 include("ApproximateDistributions.jl")
 
-export NeuralEstimator 
+export NeuralEstimator
 export BayesEstimator, PosteriorEstimator, RatioEstimator
 export PointEstimator, IntervalEstimator, QuantileEstimatorContinuous, QuantileEstimatorDiscrete, QuantileEstimator
-export Ensemble, PiecewiseEstimator 
+export Ensemble, PiecewiseEstimator
 include("Estimators.jl")
 
 export sampleposterior, posteriormean, posteriormedian, posteriormode, posteriorquantile, bootstrap, interval, estimate
@@ -78,7 +78,7 @@ export EM, removedata, encodedata
 include("missingdata.jl")
 
 # Backwards compatability and deprecations:
-export loadbestweights, loadweights, simulate, trainx, mapestimate, initialise_estimator 
+export loadbestweights, loadweights, simulate, trainx, mapestimate, initialise_estimator
 include("deprecated.jl")
 
 end

@@ -52,50 +52,50 @@ g = spatialgraph(S, Z)
 """
 function spatialgraph(S::AbstractMatrix; stationary = true, isotropic = true, kwargs...)
 
-	# Determine neighbourhood based on keyword arguments 
-	kwargs = (;kwargs...)
-	k = haskey(kwargs, :k) ? kwargs.k : 30
-	r = haskey(kwargs, :r) ? kwargs.r : 0.15
-	random = haskey(kwargs, :random) ? kwargs.random : false
+    # Determine neighbourhood based on keyword arguments 
+    kwargs = (; kwargs...)
+    k = haskey(kwargs, :k) ? kwargs.k : 30
+    r = haskey(kwargs, :r) ? kwargs.r : 0.15
+    random = haskey(kwargs, :random) ? kwargs.random : false
 
-	if !isotropic 
-		error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
-	end
-	if !stationary 
-		error("Nonstationarity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
-	end
+    if !isotropic
+        error("Anistropy is not currently implemented (although it is documented in anticipation of future functionality); please contact the package maintainer")
+    end
+    if !stationary
+        error("Nonstationarity is not currently implemented (although it is documented anticipation of future functionality); please contact the package maintainer")
+    end
 
-	S = f32(S)
-	A = adjacencymatrix(S; k = k, r = r, random = random) 
-	S = permutedims(S) # need final dimension to be n-dimensional
-	GNNGraph(A, ndata = (S = S,), edata = permutedims(A.nzval))
+    S = f32(S)
+    A = adjacencymatrix(S; k = k, r = r, random = random)
+    S = permutedims(S) # need final dimension to be n-dimensional
+    GNNGraph(A, ndata = (S = S,), edata = permutedims(A.nzval))
 end
 spatialgraph(S::AbstractVector; kwargs...) = batch(spatialgraph.(S; kwargs...)) # spatial locations varying between replicates
 
 # Wrappers that allow data to be passed into an already-constructed graph
 # (useful for partial simulation on the fly with the parameters held fixed)
 spatialgraph(g::GNNGraph, Z) = GNNGraph(g, ndata = (g.ndata..., Z = reshapeZ(Z)))
-reshapeZ(Z::V) where V <: AbstractVector{A} where A <: AbstractArray = stackarrays(reshapeZ.(Z))
+reshapeZ(Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray} = stackarrays(reshapeZ.(Z))
 reshapeZ(Z::AbstractVector) = reshapeZ(reshape(Z, length(Z), 1))
 reshapeZ(Z::AbstractMatrix) = reshapeZ(reshape(Z, 1, size(Z)...))
-function reshapeZ(Z::A) where A <: AbstractArray{T, 3} where {T}
-	# Z is given as a three-dimensional array, with
-	# Dimension 1: q, dimension of the response variable (e.g., singleton with univariate data)
-	# Dimension 2: n, number of spatial locations
-	# Dimension 3: m, number of replicates
-	# Permute dimensions 2 and 3 since GNNGraph requires final dimension to be n-dimensional
-	permutedims(f32(Z), (1, 3, 2))
+function reshapeZ(Z::A) where {A <: AbstractArray{T, 3}} where {T}
+    # Z is given as a three-dimensional array, with
+    # Dimension 1: q, dimension of the response variable (e.g., singleton with univariate data)
+    # Dimension 2: n, number of spatial locations
+    # Dimension 3: m, number of replicates
+    # Permute dimensions 2 and 3 since GNNGraph requires final dimension to be n-dimensional
+    permutedims(f32(Z), (1, 3, 2))
 end
-function reshapeZ(Z::V) where V <: AbstractVector{M} where M <: AbstractMatrix{T} where T 
-	# method for multidimensional processes with spatial locations varying between replicates
-	z = reduce(hcat, Z)
-	reshape(z, size(z, 1), 1, size(z, 2))
-end 
+function reshapeZ(Z::V) where {V <: AbstractVector{M}} where {M <: AbstractMatrix{T}} where {T}
+    # method for multidimensional processes with spatial locations varying between replicates
+    z = reduce(hcat, Z)
+    reshape(z, size(z, 1), 1, size(z, 2))
+end
 
 # Wrapper that allows Z to be included at construction time
-function spatialgraph(S, Z; kwargs...) 
-	g = spatialgraph(S; kwargs...)
-	spatialgraph(g, Z)
+function spatialgraph(S, Z; kwargs...)
+    g = spatialgraph(S; kwargs...)
+    spatialgraph(g, Z)
 end
 
 # NB Not documenting for now, but spatialgraph is set up for multivariate data. Eventually, we will write:
@@ -171,24 +171,23 @@ h = rand(1, 30) # distances between 30 pairs of spatial locations
 w(h)
 ```
 """
-struct IndicatorWeights{T} 
+struct IndicatorWeights{T}
     h_cutoffs::T
-end 
-function IndicatorWeights(h_max, n_bins::Integer) 
-	h_cutoffs = range(0, stop=h_max, length=n_bins+1)
-	h_cutoffs = collect(h_cutoffs)
-	IndicatorWeights(h_cutoffs)
 end
-function (l::IndicatorWeights)(h::M) where M <: AbstractMatrix{T} where T
-	h_cutoffs = l.h_cutoffs
-	bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
-	bins_lower = h_cutoffs[1:end-1] # lower bounds of the distance bins 
-	N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
-	N = reduce(vcat, N)
-	f32(N)
+function IndicatorWeights(h_max, n_bins::Integer)
+    h_cutoffs = range(0, stop = h_max, length = n_bins+1)
+    h_cutoffs = collect(h_cutoffs)
+    IndicatorWeights(h_cutoffs)
 end
-Flux.trainable(l::IndicatorWeights) =  NamedTuple()
-
+function (l::IndicatorWeights)(h::M) where {M <: AbstractMatrix{T}} where {T}
+    h_cutoffs = l.h_cutoffs
+    bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
+    bins_lower = h_cutoffs[1:(end - 1)] # lower bounds of the distance bins 
+    N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
+    N = reduce(vcat, N)
+    f32(N)
+end
+Flux.trainable(l::IndicatorWeights) = NamedTuple()
 
 @doc raw"""
 	KernelWeights(h_max, n_bins::Integer)
@@ -211,29 +210,28 @@ w = KernelWeights(h_max, n_bins)
 h = rand(1, 30) # distances between 30 pairs of spatial locations 
 w(h)
 ```
-""" 
-struct KernelWeights{T1,T2} 
-	mu::T1 
-	sigma::T2 
-end 
-function KernelWeights(h_max, n_bins::Integer) 
-	h_cutoffs = range(0, stop=h_max, length=n_bins+1) 
-	h_cutoffs = collect(h_cutoffs)
-	mu = [(h_cutoffs[i] + h_cutoffs[i+1]) / 2 for i in 1:n_bins] # midpoints of the intervals 
-	sigma = [(h_cutoffs[i+1] - h_cutoffs[i]) / 4 for i in 1:n_bins] # std dev so that 95% of mass is within the bin 
-	mu = f32(mu)
-	sigma = f32(sigma)
-	KernelWeights(mu, sigma) 
-end 
-function (l::KernelWeights)(h::M) where M <: AbstractMatrix{T} where T 
-	mu = l.mu 
-	sigma = l.sigma 
-	N = [exp.(-(h .- mu[i:i]).^2 ./ (2 * sigma[i:i].^2)) for i in eachindex(mu)] # Gaussian kernel for each bin (NB avoid scalar indexing by i:i)
-	N = reduce(vcat, N) 
-	f32(N) 
-end 
+"""
+struct KernelWeights{T1, T2}
+    mu::T1
+    sigma::T2
+end
+function KernelWeights(h_max, n_bins::Integer)
+    h_cutoffs = range(0, stop = h_max, length = n_bins+1)
+    h_cutoffs = collect(h_cutoffs)
+    mu = [(h_cutoffs[i] + h_cutoffs[i + 1]) / 2 for i = 1:n_bins] # midpoints of the intervals 
+    sigma = [(h_cutoffs[i + 1] - h_cutoffs[i]) / 4 for i = 1:n_bins] # std dev so that 95% of mass is within the bin 
+    mu = f32(mu)
+    sigma = f32(sigma)
+    KernelWeights(mu, sigma)
+end
+function (l::KernelWeights)(h::M) where {M <: AbstractMatrix{T}} where {T}
+    mu = l.mu
+    sigma = l.sigma
+    N = [exp.(-(h .- mu[i:i]) .^ 2 ./ (2 * sigma[i:i] .^ 2)) for i in eachindex(mu)] # Gaussian kernel for each bin (NB avoid scalar indexing by i:i)
+    N = reduce(vcat, N)
+    f32(N)
+end
 Flux.trainable(l::KernelWeights) = NamedTuple()
-
 
 # ---- GraphConv ----
 
@@ -262,7 +260,7 @@ l = GraphConv(d => 16)
 l(g)
 ```
 """
-function (l::GraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
+function (l::GraphConv)(g::GNNGraph, x::A) where {A <: AbstractArray{T, 3}} where {T}
     check_num_nodes(g, x)
     m = GraphNeuralNetworks.propagate(copy_xj, g, l.aggr, xj = x)
     l.σ.(l.weight1 ⊠ x .+ l.weight2 ⊠ m .+ l.bias) # ⊠ is shorthand for batched_mul
@@ -334,105 +332,103 @@ l = SpatialGraphConv(1 => 10)
 l(g)
 ```
 """
-struct SpatialGraphConv{W<:AbstractMatrix, A, B,C, F} <: GNNLayer
-	Γ1::W
+struct SpatialGraphConv{W <: AbstractMatrix, A, B, C, F} <: GNNLayer
+    Γ1::W
     Γ2::W
-	b::B
+    b::B
     w::A
-	f::C
-	g::F
+    f::C
+    g::F
 end
 function SpatialGraphConv(
-	ch::Pair{Int,Int},
-	g = relu;
-	init = glorot_uniform,
-	bias::Bool = true,
-	w = nothing,
-	f = nothing,
-	w_out::Union{Integer, Nothing} = nothing, 
-	w_width::Integer = 128
-	)
+    ch::Pair{Int, Int},
+    g = relu;
+    init = glorot_uniform,
+    bias::Bool = true,
+    w = nothing,
+    f = nothing,
+    w_out::Union{Integer, Nothing} = nothing,
+    w_width::Integer = 128
+)
+    in, out = ch
 
-	in, out = ch
+    # Spatial weighting function
+    if isnothing(w)
+        # Options for w:
+        # 1. Scalar output 
+        # 2. Vector output with scalar input features, in which case the scalar features will be repeated to be of appropriate dimension 
+        # 3. Vector output with vector input features, in which case the output dimension of w and the input dimension of the feature vectors must match 
+        if isnothing(w_out)
+            w_out = in
+        else
+            @assert in == 1 || w_out == in "With vector-valued input features, the output of w must either be scalar or a vector of the same dimension as the input features"
+        end
+        w = Chain(
+            Dense(1 => w_width, g, init = init),
+            Dense(w_width => w_out, g, init = init)
+        )
+    else
+        @assert !isnothing(w_out) "Since you have specified the weight function w(), please also specify its output dimension `w_out`"
+    end
 
-	# Spatial weighting function
-	if isnothing(w) 
-		# Options for w:
-		# 1. Scalar output 
-		# 2. Vector output with scalar input features, in which case the scalar features will be repeated to be of appropriate dimension 
-		# 3. Vector output with vector input features, in which case the output dimension of w and the input dimension of the feature vectors must match 
-		if isnothing(w_out)
-			w_out = in
-		else 
-			@assert in == 1 || w_out == in "With vector-valued input features, the output of w must either be scalar or a vector of the same dimension as the input features"
-		end 
-		w = Chain(
-				Dense(1 => w_width, g, init = init),
-				Dense(w_width => w_out, g, init = init)
-			)	
-	else 
-		@assert !isnothing(w_out) "Since you have specified the weight function w(), please also specify its output dimension `w_out`"
-	end
+    # Function of Z
+    if isnothing(f)
+        f = PowerDifference([0.5f0], [2.0f0])
+    end
 
-	# Function of Z
-	if isnothing(f)
-		f = PowerDifference([0.5f0], [2.0f0])
-	end
+    # Weight matrices 
+    Γ1 = init(out, in)
+    Γ2 = init(out, w_out)
 
-	# Weight matrices 
-	Γ1 = init(out, in)
-	Γ2 = init(out, w_out)
-
-	# Bias vector
-	b = bias ? Flux.create_bias(Γ1, true, out) : false
+    # Bias vector
+    b = bias ? Flux.create_bias(Γ1, true, out) : false
 
     SpatialGraphConv(Γ1, Γ2, b, w, f, g)
 end
 
-function (l::SpatialGraphConv)(g::GNNGraph) 
-	# GNNGraph(g, ndata = l(g, node_features(g))) # this is the code for generic GNNLayer
-	h = l(g, g.ndata.Z) # access the data Z directly, since the spatial locations S are also stored as node features
-	GNNGraph(g, ndata = (Z = h, g.ndata.S)) 
+function (l::SpatialGraphConv)(g::GNNGraph)
+    # GNNGraph(g, ndata = l(g, node_features(g))) # this is the code for generic GNNLayer
+    h = l(g, g.ndata.Z) # access the data Z directly, since the spatial locations S are also stored as node features
+    GNNGraph(g, ndata = (Z = h, g.ndata.S))
 end
-function (l::SpatialGraphConv)(g::GNNGraph, x::M) where M <: AbstractMatrix{T} where {T}
-	l(g, reshape(x, size(x, 1), 1, size(x, 2)))
+function (l::SpatialGraphConv)(g::GNNGraph, x::M) where {M <: AbstractMatrix{T}} where {T}
+    l(g, reshape(x, size(x, 1), 1, size(x, 2)))
 end
-function (l::SpatialGraphConv)(g::GNNGraph, x::A) where A <: AbstractArray{T, 3} where {T}
-
+function (l::SpatialGraphConv)(g::GNNGraph, x::A) where {A <: AbstractArray{T, 3}} where {T}
     check_num_nodes(g, x)
 
-	# Number of independent replicates
-	m = size(x, 2)
+    # Number of independent replicates
+    m = size(x, 2)
 
-	# Extract spatial information (typically the spatial distance between neighbours)
-	s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3]) 
+    # Extract spatial information (typically the spatial distance between neighbours)
+    s = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3])
 
-	# Coerce to matrix
-	if isa(s, AbstractVector)
-		s = permutedims(s)
-	end
+    # Coerce to matrix
+    if isa(s, AbstractVector)
+        s = permutedims(s)
+    end
 
-	# Compute spatial weights and normalise over the neigbhourhoods 
-	# Three options for w:
-	# 1. Scalar output 
-	# 2. Vector output with scalar input features, in which case the scalar features will be repeated to be of appropriate dimension 
-	# 3. Vector output with vector input features, in which case the dimensionalities must match 
-	w = l.w(s) 
+    # Compute spatial weights and normalise over the neigbhourhoods 
+    # Three options for w:
+    # 1. Scalar output 
+    # 2. Vector output with scalar input features, in which case the scalar features will be repeated to be of appropriate dimension 
+    # 3. Vector output with vector input features, in which case the dimensionalities must match 
+    w = l.w(s)
 
-	w̃ = normalise_edge_neighbors(g, w) # Sanity check: aggregate_neighbors(g, +, w̃) # zeros and ones 
-	
-	# Coerce to three-dimensional array, repeated to match the number of independent replicates
-	w̃ = coerce3Darray(w̃, m)
+    w̃ = normalise_edge_neighbors(g, w) # Sanity check: aggregate_neighbors(g, +, w̃) # zeros and ones 
 
-	# Compute spatially-weighted sum of input features over each neighbourhood 
-	#msg = apply_edges((l, xi, xj, w̃) -> w̃ .* l.f(xi, xj), g, l, x, x, w̃)
-	msg = apply_edges((xi, xj, w̃) -> w̃ .* l.f(xi, xj), g, x, x, w̃)
-	h̄ = aggregate_neighbors(g, +, msg) # sum over each neighbourhood individually 
+    # Coerce to three-dimensional array, repeated to match the number of independent replicates
+    w̃ = coerce3Darray(w̃, m)
 
-	l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h̄ .+ l.b) # ⊠ is shorthand for batched_mul  #NB any missingness will cause the feature vector to be entirely missing
+    # Compute spatially-weighted sum of input features over each neighbourhood 
+    #msg = apply_edges((l, xi, xj, w̃) -> w̃ .* l.f(xi, xj), g, l, x, x, w̃)
+    msg = apply_edges((xi, xj, w̃) -> w̃ .* l.f(xi, xj), g, x, x, w̃)
+    h̄ = aggregate_neighbors(g, +, msg) # sum over each neighbourhood individually 
+
+    l.g.(l.Γ1 ⊠ x .+ l.Γ2 ⊠ h̄ .+ l.b) # ⊠ is shorthand for batched_mul  #NB any missingness will cause the feature vector to be entirely missing
 end
 function Base.show(io::IO, l::SpatialGraphConv)
-    in_channel  = size(l.Γ1, ndims(l.Γ1))
+    in_channel = size(l.Γ1, ndims(l.Γ1))
     out_channel = size(l.Γ1, ndims(l.Γ1)-1)
     print(io, "SpatialGraphConv(", in_channel, " => ", out_channel)
     l.g == identity || print(io, ", ", l.g)
@@ -441,13 +437,13 @@ function Base.show(io::IO, l::SpatialGraphConv)
 end
 
 function coerce3Darray(x, m)
-	if isa(x, AbstractVector)
-		x = permutedims(x)
-	end
-	if isa(x, AbstractMatrix)
-		x = reshape(x, size(x, 1), 1, size(x, 2))
-	end
-	x = repeat(x, 1, m, 1)  
+    if isa(x, AbstractVector)
+        x = permutedims(x)
+    end
+    if isa(x, AbstractMatrix)
+        x = reshape(x, size(x, 1), 1, size(x, 2))
+    end
+    x = repeat(x, 1, m, 1)
 end
 
 """
@@ -473,7 +469,7 @@ Normalise the edge features `e` to sum to one over each node's neighborhood,
 ```
 """
 function normalise_edge_neighbors(g::AbstractGNNGraph, e)
-	@assert size(e)[end] == g.num_edges
+    @assert size(e)[end] == g.num_edges
     s, t = edge_index(g)
     den = gather(scatter(+, e, t), t)
     return e ./ (den .+ eps(eltype(e)))
@@ -531,27 +527,27 @@ ds([g₁, g₂, g₃])      # vector of graphs, corresponding to multiple data s
 ```
 """
 struct GNNSummary{F, G}
-	propagation::F   # propagation module
-	readout::G       # readout module
+    propagation::F   # propagation module
+    readout::G       # readout module
 end
 Base.show(io::IO, D::GNNSummary) = print(io, "\nThe propagation and readout modules of a graph neural network (GNN), with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)")
 
 function (ψ::GNNSummary)(g::GNNGraph)
 
-	# Propagation module
-	h = ψ.propagation(g)
-	Z = :Z ∈ keys(h.ndata) ? h.ndata.Z : first(values(h.ndata))
+    # Propagation module
+    h = ψ.propagation(g)
+    Z = :Z ∈ keys(h.ndata) ? h.ndata.Z : first(values(h.ndata))
 
-	# Readout module, computes a fixed-length vector (a summary statistic) for each replicate
-	# R is a matrix with:
-	# nrows = number of summary statistics
-	# ncols = number of independent replicates
-	R = ψ.readout(h, Z)
+    # Readout module, computes a fixed-length vector (a summary statistic) for each replicate
+    # R is a matrix with:
+    # nrows = number of summary statistics
+    # ncols = number of independent replicates
+    R = ψ.readout(h, Z)
 
-	# Reshape from three-dimensional array to matrix 
-	R = reshape(R, size(R, 1), :) #NB not ideal to do this here, I think, makes the output of summarystatistics() quite confusing. (keep in mind the behaviour of summarystatistics on a vector of graphs and a single graph) 
+    # Reshape from three-dimensional array to matrix 
+    R = reshape(R, size(R, 1), :) #NB not ideal to do this here, I think, makes the output of summarystatistics() quite confusing. (keep in mind the behaviour of summarystatistics on a vector of graphs and a single graph) 
 
-	return R
+    return R
 end
 
 # ---- Adjacency matrices ----
@@ -625,170 +621,165 @@ adjacencymatrix(D, r, k)
 adjacencymatrix(D, r, k; random = false)
 ```
 """
-function adjacencymatrix(M::Matrix; k::Union{Integer, Nothing} = nothing, r::Union{F, Nothing} = nothing, kwargs...) where F <: AbstractFloat
-	# convenience keyword-argument function, used internally by spatialgraph()
-	if isnothing(r) & isnothing(k)
-		error("One of k or r must be set")
-	elseif isnothing(r) 
-		adjacencymatrix(M, k; kwargs...)
-	elseif isnothing(k)
-		adjacencymatrix(M, r)
-	else
-		adjacencymatrix(M, r, k; kwargs...)
-	end
+function adjacencymatrix(M::Matrix; k::Union{Integer, Nothing} = nothing, r::Union{F, Nothing} = nothing, kwargs...) where {F <: AbstractFloat}
+    # convenience keyword-argument function, used internally by spatialgraph()
+    if isnothing(r) & isnothing(k)
+        error("One of k or r must be set")
+    elseif isnothing(r)
+        adjacencymatrix(M, k; kwargs...)
+    elseif isnothing(k)
+        adjacencymatrix(M, r)
+    else
+        adjacencymatrix(M, r, k; kwargs...)
+    end
 end
 
-function adjacencymatrix(M::Mat, r::F, k::Integer; random::Bool = true) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
+function adjacencymatrix(M::Mat, r::F, k::Integer; random::Bool = true) where {Mat <: AbstractMatrix{T}} where {T, F <: AbstractFloat}
+    @assert k > 0
+    @assert r > 0
 
-	@assert k > 0
-	@assert r > 0
+    if !random
+        A = adjacencymatrix(M, r)
+        A = subsetneighbours(A, k)
+        A = dropzeros!(A) # remove self loops
+        return A
+    end
 
-	if !random
-		A = adjacencymatrix(M, r) 
-		A = subsetneighbours(A, k)
-		A = dropzeros!(A) # remove self loops
-		return A 
-	end 
+    I = Int64[]
+    J = Int64[]
+    V = T[]
+    n = size(M, 1)
+    m = size(M, 2)
 
-	I = Int64[]
-	J = Int64[]
-	V = T[]
-	n = size(M, 1)
-	m = size(M, 2)
-
-	for i ∈ 1:n
-		sᵢ = M[i, :]
-		kᵢ = 0
-		iter = shuffle(collect(1:n)) # shuffle to prevent weighting observations based on their ordering in M
-		for j ∈ iter
-			if i != j # add self loops after construction, to ensure consistent number of neighbours
-				if m == n # square matrix, so assume M is a distance matrix
-					dᵢⱼ = M[i, j]
-				else  # rectangular matrix, so assume S is a matrix of spatial locations
-					sⱼ  = M[j, :]
-					dᵢⱼ = norm(sᵢ - sⱼ)
-				end
-				if dᵢⱼ <= r
-					push!(I, i)
-					push!(J, j)
-					push!(V, dᵢⱼ)
-					kᵢ += 1
-				end
-			end
-			if kᵢ == k 
-				break 
-			end
-		end
-	end
-	A = sparse(J,I,V,n,n)
-	A = dropzeros!(A) # remove self loops 
-	return A
+    for i ∈ 1:n
+        sᵢ = M[i, :]
+        kᵢ = 0
+        iter = shuffle(collect(1:n)) # shuffle to prevent weighting observations based on their ordering in M
+        for j ∈ iter
+            if i != j # add self loops after construction, to ensure consistent number of neighbours
+                if m == n # square matrix, so assume M is a distance matrix
+                    dᵢⱼ = M[i, j]
+                else  # rectangular matrix, so assume S is a matrix of spatial locations
+                    sⱼ = M[j, :]
+                    dᵢⱼ = norm(sᵢ - sⱼ)
+                end
+                if dᵢⱼ <= r
+                    push!(I, i)
+                    push!(J, j)
+                    push!(V, dᵢⱼ)
+                    kᵢ += 1
+                end
+            end
+            if kᵢ == k
+                break
+            end
+        end
+    end
+    A = sparse(J, I, V, n, n)
+    A = dropzeros!(A) # remove self loops 
+    return A
 end
-adjacencymatrix(M::Mat, k::Integer, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat} = adjacencymatrix(M, r, k)
+adjacencymatrix(M::Mat, k::Integer, r::F) where {Mat <: AbstractMatrix{T}} where {T, F <: AbstractFloat} = adjacencymatrix(M, r, k)
 
-function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Bool = false, combined::Bool = false) where Mat <: AbstractMatrix{T} where T
+function adjacencymatrix(M::Mat, k::Integer; maxmin::Bool = false, moralise::Bool = false, combined::Bool = false) where {Mat <: AbstractMatrix{T}} where {T}
+    @assert k > 0
 
-	@assert k > 0
+    if combined
+        a1 = adjacencymatrix(M, k; maxmin = false, combined = false)
+        a2 = adjacencymatrix(M, k; maxmin = true, combined = false)
+        A = a1 + (a1 .!= a2) .* a2
+        return A
+    end
 
-	if combined 
-		a1 = adjacencymatrix(M, k; maxmin = false, combined = false)
-		a2 = adjacencymatrix(M, k; maxmin = true, combined = false) 
-		A = a1 + (a1 .!= a2) .* a2 
-		return A 
-	end
+    I = Int64[]
+    J = Int64[]
+    V = T[]
+    n = size(M, 1)
+    m = size(M, 2)
 
-	I = Int64[]
-	J = Int64[]
-	V = T[]
-	n = size(M, 1)
-	m = size(M, 2)
+    if m == n # square matrix, so assume M is a distance matrix
+        D = M
+    else      # otherwise, M is a matrix of spatial locations
+        S = M
+        # S = S + 50 * eps(T) * rand(T, size(S, 1), size(S, 2)) # add some random noise to break ties
+    end
 
-	if m == n # square matrix, so assume M is a distance matrix
-		D = M
-	else      # otherwise, M is a matrix of spatial locations
-		S = M
-		# S = S + 50 * eps(T) * rand(T, size(S, 1), size(S, 2)) # add some random noise to break ties
-	end
+    if k >= n # more neighbours than observations: return a dense adjacency matrix
+        if m != n
+            D = pairwise(Euclidean(), S')
+        end
+        A = sparse(D)
+    elseif !maxmin
+        k += 1 # each location neighbours itself, so increase k by 1
+        for i ∈ 1:n
+            if m == n
+                d = D[i, :]
+            else
+                # Compute distances between sᵢ and all other locations
+                d = colwise(Euclidean(), S', S[i, :])
+            end
 
-	if k >= n # more neighbours than observations: return a dense adjacency matrix
-		if m != n
-			D = pairwise(Euclidean(), S')
-		end
-		A = sparse(D)
-	elseif !maxmin
-		k += 1 # each location neighbours itself, so increase k by 1
-		for i ∈ 1:n
+            # Find the neighbours of s
+            j, v = findneighbours(d, k)
 
-			if m == n
-				d = D[i, :]
-			else
-				# Compute distances between sᵢ and all other locations
-				d = colwise(Euclidean(), S', S[i, :])
-			end
+            push!(I, repeat([i], inner = k)...)
+            push!(J, j...)
+            push!(V, v...)
+        end
+        A = sparse(J, I, V, n, n) # NB the neighbours of location i are stored in the column A[:, i]
+    else
+        @assert m != n "`adjacencymatrix` with maxmin-ordering requires a matrix of spatial locations, not a distance matrix"
+        ord = ordermaxmin(S)          # calculate ordering
+        Sord = S[ord, :]               # re-order locations
+        NNarray = findorderednn(Sord, k)  # find k nearest neighbours/"parents"
+        R = builddag(NNarray, T)          # build DAG
+        A = moralise ? R' * R : R        # moralise
 
-			# Find the neighbours of s
-			j, v = findneighbours(d, k)
- 
-			push!(I, repeat([i], inner = k)...)
-			push!(J, j...)
-			push!(V, v...)
-		end
-		A = sparse(J,I,V,n,n) # NB the neighbours of location i are stored in the column A[:, i]
-	else
-		@assert m != n "`adjacencymatrix` with maxmin-ordering requires a matrix of spatial locations, not a distance matrix"
-		ord     = ordermaxmin(S)          # calculate ordering
-		Sord    = S[ord, :]               # re-order locations
-		NNarray = findorderednn(Sord, k)  # find k nearest neighbours/"parents"
-		R = builddag(NNarray, T)          # build DAG
-		A = moralise ?  R' * R : R        # moralise
+        # Add distances to A
+        # NB This is memory inefficient, especially for large n; only optimise if we find that this approach works well and this is a bottleneck
+        D = pairwise(Euclidean(), Sord')
+        I, J, V = findnz(A)
+        indices = collect(zip(I, J))
+        indices = CartesianIndex.(indices)
+        A.nzval .= D[indices]
 
-		# Add distances to A
-		# NB This is memory inefficient, especially for large n; only optimise if we find that this approach works well and this is a bottleneck
-		D = pairwise(Euclidean(), Sord')
-		I, J, V = findnz(A)
-		indices = collect(zip(I,J))  
-		indices = CartesianIndex.(indices)
-		A.nzval .= D[indices]
-
-		# "unorder" back to the original ordering
-		# Sanity check: Sord[sortperm(ord), :] == S
-		# Sanity check: D[sortperm(ord), sortperm(ord)] == pairwise(Euclidean(), S')
-		A = A[sortperm(ord), sortperm(ord)]
-	end
-	A = dropzeros!(A) # remove self loops 
-	return A
+        # "unorder" back to the original ordering
+        # Sanity check: Sord[sortperm(ord), :] == S
+        # Sanity check: D[sortperm(ord), sortperm(ord)] == pairwise(Euclidean(), S')
+        A = A[sortperm(ord), sortperm(ord)]
+    end
+    A = dropzeros!(A) # remove self loops 
+    return A
 end
 
 ## helper functions
-deletecol!(A,cind) = SparseArrays.fkeep!((i,j,v) -> j != cind, A)
+deletecol!(A, cind) = SparseArrays.fkeep!((i, j, v) -> j != cind, A)
 findnearest(A::AbstractArray, x) = argmin(abs.(A .- x))
 findnearest(V::SparseVector, q) = V.nzind[findnearest(V.nzval, q)] # efficient version for SparseVector that doesn't materialise a dense array
-function subsetneighbours(A, k) 
+function subsetneighbours(A, k)
+    τ = [i/k for i ∈ 0:k] # probability levels (k+1 values)
+    n = size(A, 1)
 
-	τ = [i/k for i ∈ 0:k] # probability levels (k+1 values)
-	n = size(A, 1)
-
-	# drop self loops 
-	dropzeros!(A)
-	for j ∈ 1:n 
-		Aⱼ = A[:, j] # neighbours of node j 
-		if nnz(Aⱼ) > k+1 # if there are fewer than k+1 neighbours already, we don't need to do anything 
-			# compute the empirical τ-quantiles of the nonzero entries in Aⱼ
-			quantiles = quantile(nonzeros(Aⱼ), τ) 
-			# zero-out previous neighbours in Aⱼ
-			deletecol!(A, j) 
-			# find the entries in Aⱼ that are closest to the empirical quantiles 
-			for q ∈ quantiles
-				i = findnearest(Aⱼ, q)
-				v = Aⱼ[i]
-				A[i, j] = v
-			end 
-		end
-	end
-	A = dropzeros!(A) # remove self loops 
-	return A
+    # drop self loops 
+    dropzeros!(A)
+    for j ∈ 1:n
+        Aⱼ = A[:, j] # neighbours of node j 
+        if nnz(Aⱼ) > k+1 # if there are fewer than k+1 neighbours already, we don't need to do anything 
+            # compute the empirical τ-quantiles of the nonzero entries in Aⱼ
+            quantiles = quantile(nonzeros(Aⱼ), τ)
+            # zero-out previous neighbours in Aⱼ
+            deletecol!(A, j)
+            # find the entries in Aⱼ that are closest to the empirical quantiles 
+            for q ∈ quantiles
+                i = findnearest(Aⱼ, q)
+                v = Aⱼ[i]
+                A[i, j] = v
+            end
+        end
+    end
+    A = dropzeros!(A) # remove self loops 
+    return A
 end
-
 
 # Number of neighbours 
 
@@ -820,7 +811,6 @@ end
 # e = exp.(-d ./ ρ)
 # sum(e)
 
-
 # using NeuralEstimators, Distances, SparseArrays
 # import NeuralEstimators: adjacencymatrix, ordermaxmin, findorderednn, builddag, findneighbours
 # n = 5000
@@ -835,100 +825,99 @@ end
 # @elapsed NNarray = findorderednn(Sord, k) # 9 seconds... this is the bottleneck
 # @elapsed R = builddag(NNarray)  # 0.02 seconds
 
-function adjacencymatrix(M::Mat, r::F) where Mat <: AbstractMatrix{T} where {T, F <: AbstractFloat}
+function adjacencymatrix(M::Mat, r::F) where {Mat <: AbstractMatrix{T}} where {T, F <: AbstractFloat}
+    @assert r > 0
 
-	@assert r > 0
+    n = size(M, 1)
+    m = size(M, 2)
 
-	n = size(M, 1)
-	m = size(M, 2)
+    if m == n # square matrix, so assume M is a distance matrix, D:
+        D = M
+        A = D .< r # bit-matrix specifying which locations are within a disc or r
 
-	if m == n # square matrix, so assume M is a distance matrix, D:
-		D = M
-		A = D .< r # bit-matrix specifying which locations are within a disc or r
+        # replace non-zero elements of A with the corresponding distance in D
+        indices = copy(A)
+        A = convert(Matrix{T}, A)
+        A[indices] = D[indices]
 
-		# replace non-zero elements of A with the corresponding distance in D
-		indices = copy(A)
-		A = convert(Matrix{T}, A)
-		A[indices] = D[indices]
+        # convert to sparse matrix
+        A = sparse(A)
+    else
+        S = M
+        I = Int64[]
+        J = Int64[]
+        V = T[]
+        for i ∈ 1:n
+            # Compute distances between s and all other locations
+            s = S[i, :]
+            d = colwise(Euclidean(), S', s)
 
-		# convert to sparse matrix
-		A = sparse(A)
-	else
-		S = M
-		I = Int64[]
-		J = Int64[]
-		V = T[]
-		for i ∈ 1:n
-			# Compute distances between s and all other locations
-			s = S[i, :]
-			d = colwise(Euclidean(), S', s)
+            # Find the r-neighbours of s
+            j = d .< r
+            j = findall(j)
+            push!(I, repeat([i], inner = length(j))...)
+            push!(J, j...)
+            push!(V, d[j]...)
+        end
+        A = sparse(I, J, V, n, n)
+    end
 
-			# Find the r-neighbours of s
-			j = d .< r
-			j = findall(j)
-			push!(I, repeat([i], inner = length(j))...)
-			push!(J, j...)
-			push!(V, d[j]...)
-		end
-		A = sparse(I,J,V,n,n)
-	end
+    A = dropzeros!(A) # remove self loops
 
-	A = dropzeros!(A) # remove self loops
-
-	return A
+    return A
 end
 
 function findneighbours(d, k::Integer)
-	V = partialsort(d, 1:k)
-	J = [findall(v .== d) for v ∈ V]
-	J = reduce(vcat, J)
-	J = unique(J)
-	J = J[1:k] # in the event of ties, there can be too many elements in J, so use only the first 1:k
-    return J, V 
+    V = partialsort(d, 1:k)
+    J = [findall(v .== d) for v ∈ V]
+    J = reduce(vcat, J)
+    J = unique(J)
+    J = J[1:k] # in the event of ties, there can be too many elements in J, so use only the first 1:k
+    return J, V
 end
 
 # TODO this function is much, much slower than the R version... need to optimise. Might be splat penalty; try reduce(hcat, .)
 function getknn(S, s, k; args...)
-  tree = KDTree(S; args...)
-  nn_index, nn_dist = knn(tree, s, k, true)
-  nn_index = hcat(nn_index...) |> permutedims # nn_index = stackarrays(nn_index, merge = false)'
-  nn_dist  = hcat(nn_dist...)  |> permutedims # nn_dist  = stackarrays(nn_dist, merge = false)'
-  nn_index, nn_dist
+    tree = KDTree(S; args...)
+    nn_index, nn_dist = knn(tree, s, k, true)
+    nn_index = hcat(nn_index...) |> permutedims # nn_index = stackarrays(nn_index, merge = false)'
+    nn_dist = hcat(nn_dist...) |> permutedims # nn_dist  = stackarrays(nn_dist, merge = false)'
+    nn_index, nn_dist
 end
 
 function ordermaxmin(S)
 
-  # get number of locs
-  n = size(S, 1)
-  k = isqrt(n)
-  # k is number of neighbors to search over
-  # get the past and future nearest neighbors
-  NNall = getknn(S', S', k)[1]
-  # pick a random ordering
-  index_in_position = [sample(1:n, n, replace = false)..., repeat([missing],1*n)...]
-  position_of_index = sortperm(index_in_position[1:n])
-  # loop over the first n/4 locations
-  # move an index to the end if it is a
-  # near neighbor of a previous location
-  curlen = n
-  nmoved = 0
-  for j ∈ 2:2n
-	nneigh = round(min(k, n /(j-nmoved+1)))
-    nneigh = Int(nneigh)
-   if !ismissing(index_in_position[j])
-      neighbors = NNall[index_in_position[j], 1:nneigh]
-      if minimum(skipmissing(position_of_index[neighbors])) < j
-        nmoved += 1
-        curlen += 1
-        position_of_index[ index_in_position[j] ] = curlen
-        rassign(index_in_position, curlen, index_in_position[j])
-        index_in_position[j] = missing
-    	end
-  	end
-  end
-  ord = collect(skipmissing(index_in_position))
+    # get number of locs
+    n = size(S, 1)
+    k = isqrt(n)
+    # k is number of neighbors to search over
+    # get the past and future nearest neighbors
+    NNall = getknn(S', S', k)[1]
+    # pick a random ordering
+    index_in_position = [sample(1:n, n, replace = false)..., repeat([missing], 1*n)...]
+    position_of_index = sortperm(index_in_position[1:n])
+    # loop over the first n/4 locations
+    # move an index to the end if it is a
+    # near neighbor of a previous location
+    curlen = n
+    nmoved = 0
+    for j ∈ 2:2n
+        nneigh = round(min(k, n / (j-nmoved+1)))
+        nneigh = Int(nneigh)
+        if !ismissing(index_in_position[j])
+            neighbors = NNall[index_in_position[j], 1:nneigh]
+            if minimum(skipmissing(position_of_index[neighbors])) < j
+                nmoved += 1
+                curlen += 1
+                position_of_index[index_in_position[j]] = curlen
+                rassign(index_in_position, curlen, index_in_position[j])
+                index_in_position[j] = missing
+            end
+        end
+    end
+    ord = collect(skipmissing(index_in_position))
 
-  return ord
+    return ord
 end
 
 # rowMins(X) = vec(mapslices(minimum, X, dims = 2))
@@ -946,80 +935,79 @@ end
 # end
 
 function rassign(v::AbstractVector, index::Integer, x)
-	@assert index > 0
-	if index <= length(v)
-		v[index] = x
-	elseif index == length(v)+1
-		push!(v, x)
-	else
-		v = [v..., fill(missing, index - length(v) - 1)..., x]
-	end
-	return v
+    @assert index > 0
+    if index <= length(v)
+        v[index] = x
+    elseif index == length(v)+1
+        push!(v, x)
+    else
+        v = [v..., fill(missing, index - length(v) - 1)..., x]
+    end
+    return v
 end
 
 function findorderednnbrute(S, k::Integer)
-  # find the k+1 nearest neighbors to S[j,] in S[1:j,]
-  # by convention, this includes S[j,], which is distance 0
-  n = size(S, 1)
-  k = min(k,n-1)
-  NNarray = Matrix{Union{Integer, Missing}}(missing, n, k+1)
-  for j ∈ 1:n
-	d = colwise(Euclidean(), S[1:j, :]', S[j, :])
-    NNarray[j, 1:min(k+1,j)] = sortperm(d)[1:min(k+1,j)]
-  end
-  return NNarray
+    # find the k+1 nearest neighbors to S[j,] in S[1:j,]
+    # by convention, this includes S[j,], which is distance 0
+    n = size(S, 1)
+    k = min(k, n-1)
+    NNarray = Matrix{Union{Integer, Missing}}(missing, n, k+1)
+    for j ∈ 1:n
+        d = colwise(Euclidean(), S[1:j, :]', S[j, :])
+        NNarray[j, 1:min(k + 1, j)] = sortperm(d)[1:min(k + 1, j)]
+    end
+    return NNarray
 end
 
 function findorderednn(S, k::Integer)
 
-  # number of locations
-  n = size(S, 1)
-  k = min(k,n-1)
-  mult = 2
+    # number of locations
+    n = size(S, 1)
+    k = min(k, n-1)
+    mult = 2
 
-  # to store the nearest neighbor indices
-  NNarray = Matrix{Union{Integer, Missing}}(missing, n, k+1)
+    # to store the nearest neighbor indices
+    NNarray = Matrix{Union{Integer, Missing}}(missing, n, k+1)
 
-  # find neighbours of first mult*k+1 locations by brute force
-  maxval = min( mult*k + 1, n )
-  NNarray[1:maxval, :] = findorderednnbrute(S[1:maxval, :],k)
+    # find neighbours of first mult*k+1 locations by brute force
+    maxval = min(mult*k + 1, n)
+    NNarray[1:maxval, :] = findorderednnbrute(S[1:maxval, :], k)
 
-  query_inds = min( maxval+1, n):n
-  data_inds = 1:n
-  ksearch = k
-  while length(query_inds) > 0
-    ksearch = min(maximum(query_inds), 2ksearch)
-    data_inds = 1:min(maximum(query_inds), n)
-	NN = getknn(S[data_inds, :]', S[query_inds, :]', ksearch)[1]
+    query_inds = min(maxval + 1, n):n
+    data_inds = 1:n
+    ksearch = k
+    while length(query_inds) > 0
+        ksearch = min(maximum(query_inds), 2ksearch)
+        data_inds = 1:min(maximum(query_inds), n)
+        NN = getknn(S[data_inds, :]', S[query_inds, :]', ksearch)[1]
 
-    less_than_l = hcat([NN[l, :] .<= query_inds[l] for l ∈ 1:size(NN, 1)]...) |> permutedims
-	sum_less_than_l = vec(mapslices(sum, less_than_l, dims = 2))
-    ind_less_than_l = findall(sum_less_than_l .>= k+1)
-	NN_k = hcat([NN[l,:][less_than_l[l,:]][1:(k+1)] for l ∈ ind_less_than_l]...) |> permutedims
-    NNarray[query_inds[ind_less_than_l], :] = NN_k
+        less_than_l = hcat([NN[l, :] .<= query_inds[l] for l ∈ 1:size(NN, 1)]...) |> permutedims
+        sum_less_than_l = vec(mapslices(sum, less_than_l, dims = 2))
+        ind_less_than_l = findall(sum_less_than_l .>= k+1)
+        NN_k = hcat([NN[l, :][less_than_l[l, :]][1:(k + 1)] for l ∈ ind_less_than_l]...) |> permutedims
+        NNarray[query_inds[ind_less_than_l], :] = NN_k
 
-    query_inds = query_inds[Not(ind_less_than_l)]
-  end
+        query_inds = query_inds[Not(ind_less_than_l)]
+    end
 
-  return NNarray
+    return NNarray
 end
 
 function builddag(NNarray, T = Float32)
-  n, k = size(NNarray)
-  I = [1]
-  J = [1]
-  V = T[1] 
-  for j in 2:n
-    i = NNarray[j, :]
-    i = collect(skipmissing(i))
-    push!(J, repeat([j], length(i))...)
-    push!(I, i...)
-	push!(V, repeat([1], length(i))...)
-  end
-  R = sparse(I,J,V,n,n)
-  return R
+    n, k = size(NNarray)
+    I = [1]
+    J = [1]
+    V = T[1]
+    for j = 2:n
+        i = NNarray[j, :]
+        i = collect(skipmissing(i))
+        push!(J, repeat([j], length(i))...)
+        push!(I, i...)
+        push!(V, repeat([1], length(i))...)
+    end
+    R = sparse(I, J, V, n, n)
+    return R
 end
-
 
 # n=100
 # S = rand(n, 2)
@@ -1030,7 +1018,6 @@ end
 # R = builddag(NNarray)             # build the DAG
 # Q = R' * R                        # moralise
 
-
 # To remove dependence on Distributions, here we define a sampler from 
 # the Poisson distribution, equivalent to rand(Poisson(λ))
 function rpoisson(λ)
@@ -1038,14 +1025,14 @@ function rpoisson(λ)
     p = exp(-λ)              # Initial probability value
     cumulative_prob = p      # Start the cumulative probability
     u = rand()               # Generate a uniform random number between 0 and 1
-    
+
     # Keep adding terms to the cumulative probability until it exceeds u
     while u > cumulative_prob
         k += 1
         p *= λ / k           # Update the probability for the next value of k
         cumulative_prob += p  # Update the cumulative probability
     end
-    
+
     return k
 end
 
@@ -1085,57 +1072,57 @@ plots = map(eachindex(λ)) do i
 end
 ```
 """
-function maternclusterprocess(; λ = 10, μ = 10, r = 0.1, xmin = 0, xmax = 1, ymin = 0, ymax = 1, unit_bounding_box::Bool=false)
+function maternclusterprocess(; λ = 10, μ = 10, r = 0.1, xmin = 0, xmax = 1, ymin = 0, ymax = 1, unit_bounding_box::Bool = false)
 
-	#Extended simulation windows parameters
-	rExt=r #extension parameter -- use cluster radius
-	xminExt=xmin-rExt
-	xmaxExt=xmax+rExt
-	yminExt=ymin-rExt
-	ymaxExt=ymax+rExt
-	#rectangle dimensions
-	xDeltaExt=xmaxExt-xminExt
-	yDeltaExt=ymaxExt-yminExt
-	areaTotalExt=xDeltaExt*yDeltaExt #area of extended rectangle
+    #Extended simulation windows parameters
+    rExt=r #extension parameter -- use cluster radius
+    xminExt=xmin-rExt
+    xmaxExt=xmax+rExt
+    yminExt=ymin-rExt
+    ymaxExt=ymax+rExt
+    #rectangle dimensions
+    xDeltaExt=xmaxExt-xminExt
+    yDeltaExt=ymaxExt-yminExt
+    areaTotalExt=xDeltaExt*yDeltaExt #area of extended rectangle
 
-	#Simulate Poisson point process
-	# numbPointsParent=rand(Poisson(areaTotalExt*λ)) #Poisson number of points
-	numbPointsParent=rpoisson(areaTotalExt*λ) #Poisson number of points
+    #Simulate Poisson point process
+    # numbPointsParent=rand(Poisson(areaTotalExt*λ)) #Poisson number of points
+    numbPointsParent=rpoisson(areaTotalExt*λ) #Poisson number of points
 
-	#x and y coordinates of Poisson points for the parent
-	xxParent=xminExt.+xDeltaExt*rand(numbPointsParent)
-	yyParent=yminExt.+yDeltaExt*rand(numbPointsParent)
+    #x and y coordinates of Poisson points for the parent
+    xxParent=xminExt .+ xDeltaExt*rand(numbPointsParent)
+    yyParent=yminExt .+ yDeltaExt*rand(numbPointsParent)
 
-	#Simulate Poisson point process for the daughters (ie final poiint process)
-	# numbPointsDaughter=rand(Poisson(μ),numbPointsParent)
-	numbPointsDaughter=[rpoisson(μ) for _ in 1:numbPointsParent]
-	numbPoints=sum(numbPointsDaughter) #total number of points
+    #Simulate Poisson point process for the daughters (ie final poiint process)
+    # numbPointsDaughter=rand(Poisson(μ),numbPointsParent)
+    numbPointsDaughter=[rpoisson(μ) for _ = 1:numbPointsParent]
+    numbPoints=sum(numbPointsDaughter) #total number of points
 
-	#Generate the (relative) locations in polar coordinates by
-	#simulating independent variables.
-	theta=2*pi*rand(numbPoints) #angular coordinates
-	rho=r*sqrt.(rand(numbPoints)) #radial coordinates
+    #Generate the (relative) locations in polar coordinates by
+    #simulating independent variables.
+    theta=2*pi*rand(numbPoints) #angular coordinates
+    rho=r*sqrt.(rand(numbPoints)) #radial coordinates
 
-	#Convert polar to Cartesian coordinates
-	xx0=rho.*cos.(theta)
-	yy0=rho.*sin.(theta)
+    #Convert polar to Cartesian coordinates
+    xx0=rho .* cos.(theta)
+    yy0=rho .* sin.(theta)
 
-	#replicate parent points (ie centres of disks/clusters)
-	xx=vcat(fill.(xxParent, numbPointsDaughter)...)
-	yy=vcat(fill.(yyParent, numbPointsDaughter)...)
+    #replicate parent points (ie centres of disks/clusters)
+    xx=vcat(fill.(xxParent, numbPointsDaughter)...)
+    yy=vcat(fill.(yyParent, numbPointsDaughter)...)
 
-	#Shift centre of disk to (xx0,yy0)
-	xx=xx.+xx0
-	yy=yy.+yy0
+    #Shift centre of disk to (xx0,yy0)
+    xx=xx .+ xx0
+    yy=yy .+ yy0
 
-	#thin points if outside the simulation window
-	booleInside=((xx.>=xmin).&(xx.<=xmax).&(yy.>=ymin).&(yy.<=ymax))
-	xx=xx[booleInside]
-	yy=yy[booleInside]
+    #thin points if outside the simulation window
+    booleInside=((xx .>= xmin) .& (xx .<= xmax) .& (yy .>= ymin) .& (yy .<= ymax))
+    xx=xx[booleInside]
+    yy=yy[booleInside]
 
-	S = hcat(xx, yy)
+    S = hcat(xx, yy)
 
-	unit_bounding_box ? unitboundingbox(S) : S
+    unit_bounding_box ? unitboundingbox(S) : S
 end
 
 """
@@ -1147,7 +1134,7 @@ unitboundingbox(S)
 ```
 """
 function unitboundingbox(S::Matrix)
-	Δs = maximum(S; dims = 1) -  minimum(S; dims = 1)
-	r = maximum(Δs) 
-	S/r # note that we would multiply range estimates by r
+    Δs = maximum(S; dims = 1) - minimum(S; dims = 1)
+    r = maximum(Δs)
+    S/r # note that we would multiply range estimates by r
 end
