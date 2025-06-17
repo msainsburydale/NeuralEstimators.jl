@@ -39,7 +39,7 @@ NeuralEstimatorsMetalExt = "Metal"
 NeuralEstimatorsPlotExt = ["AlgebraOfGraphics", "CairoMakie", "ColorSchemes"]
 
 [compat]
-AlgebraOfGraphics = "0.8, 0.9, 0.10"
+AlgebraOfGraphics = "0.8, 0.9, 0.10, 0.11"
 BSON = "0.3"
 CSV = "0.10"
 CUDA = "4, 5"
