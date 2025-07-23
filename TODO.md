@@ -7,6 +7,7 @@ Feel free to update this file as tasks are completed, added, or changed.
 ---
 
 ### Features
+- [ ] Functionality to resume training.
 - [ ] Explicit learning of summary statistics (see [Zammit-Mangion et al., 2025, Sec. 4](https://arxiv.org/pdf/2404.12484))
 - [ ] Incorporate [Bootstrap.jl](https://github.com/juliangehring/Bootstrap.jl) (possibly as an [extension](https://docs.julialang.org/en/v1/manual/code-loading/#man-extensions)) to expand bootstrap functionality 
 - [ ] During training, add an ption to check the validation risk (and save the estimator) more frequently than the end of each epoch. This could avoid wasted computation when we have very large training sets.
