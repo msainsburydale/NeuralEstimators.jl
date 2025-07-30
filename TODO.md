@@ -1,8 +1,6 @@
 # TODO List
 
-A checklist of planned tasks, improvements, and ideas for the package.
-
-Feel free to update this file as tasks are completed, added, or changed.
+A checklist of planned tasks, improvements, and ideas for the package. Feel free to update this file as tasks are completed, added, or changed.
 
 ---
 

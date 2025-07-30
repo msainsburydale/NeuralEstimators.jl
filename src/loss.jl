@@ -16,14 +16,12 @@ _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
     tanhloss(θ̂, θ, κ; agg = mean)
 For `κ` > 0, computes the loss function given in [Sainsbury-Dale et al. (2025; Eqn. 14)](https://arxiv.org/abs/2501.04330), namely,
 ```math
-L(\hat{\boldsymbol{\theta}}, \boldsymbol{\theta}) = \tanh\big\|\hat{\boldsymbol{\theta}} - \boldsymbol{\theta}\|_1/\kappa\big),
+L(\hat{\boldsymbol{\theta}}, \boldsymbol{\theta}) = \tanh\big(\big\|\hat{\boldsymbol{\theta}} - \boldsymbol{\theta}\|_1/\kappa\big),
 ```
 which yields the 0-1 loss function in the limit `κ` → 0. 
 
 Compared with the [`kpowerloss()`](@ref), which may also be used as a continuous approximation of the 0--1 loss function, the gradient of
 this loss is bounded as ``\|\hat{\boldsymbol{\theta}} - \boldsymbol{\theta}\|_1 \to 0``, which can improve numerical stability during training. 
-
-See also [`kpowerloss()`](@ref).
 """
 function tanhloss(θ̂, θ, κ; agg = mean, joint::Bool = true)
 

@@ -292,10 +292,8 @@ function _train(estimator, θ_train::P, θ_val::P, simulator;
     val_risk = _risk(estimator, loss, val_set, device)
     verbose && println(" Initial validation risk = $val_risk")
 
-    # Initialise the loss per epoch matrix (NB just using validation for both for now)
+    # Initialise the loss per epoch matrix and save the initial estimator
     loss_per_epoch = [val_risk val_risk;]
-
-    # Save initial estimator
     !isnothing(savepath) && _savestate(estimator, savepath, 0)
 
     # If provided, convert the learning-rate schedule to an iterable
