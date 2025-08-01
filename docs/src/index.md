@@ -95,7 +95,7 @@ If you encounter a bug or have a suggestion, please consider [opening an issue](
 julia --project=. -e "using Pkg; Pkg.test()"
 ```
 
-### Papers using NeuralEstimators
+## Papers using NeuralEstimators
 
 - **Likelihood-free parameter estimation with neural Bayes estimators** [[paper]](https://doi.org/10.1080/00031305.2023.2249522) [[code]](https://github.com/msainsburydale/NeuralBayesEstimators)
 
@@ -107,6 +107,6 @@ julia --project=. -e "using Pkg; Pkg.test()"
 
 - **Neural parameter estimation with incomplete data** [[paper]](https://arxiv.org/abs/2501.04330)[[code]](https://github.com/msainsburydale/NeuralIncompleteData)
 
-- **Neural Bayes inference for complex bivariate extremal dependence models** [[paper]](https://arxiv.org/abs/2503.23156)[[code]]( https://github.com/lidiamandre/NBE_classifier_depmodels)
+- **Neural Bayes inference for complex bivariate extremal dependence models** [[paper]](https://arxiv.org/abs/2503.23156)[[code]](https://github.com/lidiamandre/NBE_classifier_depmodels)
 
 - **Fast likelihood-free parameter estimation for Lévy processes** [[paper]](https://www.arxiv.org/abs/2505.01639)
