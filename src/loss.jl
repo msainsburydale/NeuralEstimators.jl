@@ -13,33 +13,38 @@ _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
 # ---- surrogates for 0-1 loss ----
 
 @doc raw"""
-    tanhloss(θ̂, θ, κ; agg = mean)
+    tanhloss(θ̂, θ, κ; joint::Bool = true, scale_by_parameter_dim::Bool = true)
 For `κ` > 0, computes the loss function given in [Sainsbury-Dale et al. (2025; Eqn. 14)](https://arxiv.org/abs/2501.04330), namely,
 ```math
 L(\hat{\boldsymbol{\theta}}, \boldsymbol{\theta}) = \tanh\big(\big\|\hat{\boldsymbol{\theta}} - \boldsymbol{\theta}\|_1/\kappa\big),
 ```
-which yields the 0-1 loss function in the limit `κ` → 0. 
+which yields the 0-1 loss function in the limit `κ` → 0.
+
+If `joint = true` (default), the L₁ norm is computed over each parameter vector, so that with `κ` close to zero, the resulting Bayes estimator approximates the mode of the joint posterior distribution. Otherwise, if `joint = false`, the loss function is computed as 
+```math
+L(\hat{\boldsymbol{\theta}}, \boldsymbol{\theta}) = \sum_{i=1}^d \tanh\big(|\hat{\theta}_i - \theta_i|/\kappa\big),
+```
+where $d$ denotes the dimension of the parameter vector $\boldsymbol{\theta}$. In this case, with `κ` close to zero, the resulting Bayes estimator approximates the vector containing the modes of the marginal posterior distributions.
 
 Compared with the [`kpowerloss()`](@ref), which may also be used as a continuous approximation of the 0--1 loss function, the gradient of
 this loss is bounded as ``\|\hat{\boldsymbol{\theta}} - \boldsymbol{\theta}\|_1 \to 0``, which can improve numerical stability during training. 
 """
-function tanhloss(θ̂, θ, κ; agg = mean, joint::Bool = true)
-
-    #  If `joint = true`, the L₁ norm is computed over each parameter vector, so that, with 
-    # `κ` close to zero, the resulting Bayes estimator is the mode of the joint posterior distribution;
-    #  otherwise, if `joint = false`, the Bayes estimator is the vector containing the modes of the
-    #  marginal posterior distributions.
-
+function tanhloss(θ̂, θ, κ; joint::Bool = true, scale_by_parameter_dim::Bool = true)
     _check_sizes(θ̂, θ)
 
-    d = abs.(θ̂ .- θ)
+    T = eltype(θ)
+    κ = T(κ)
+    p = size(θ, 1)
+    scale = scale_by_parameter_dim ? sqrt(T(p)) : one(T)
+
+    d = @. abs(θ̂ - θ)
+
     if joint
-        d = sum(d, dims = 1)
+        d = sum(d, dims = 1) ./ scale
     end
 
-    L = tanh_fast(d ./ κ)
-
-    return agg(L)
+    L = tanh_fast.(d ./ κ)
+    return mean(L)
 end
 
 @doc raw"""

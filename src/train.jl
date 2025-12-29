@@ -687,11 +687,12 @@ function _risk(estimator::RatioEstimator, loss, set::DataLoader, device, optimis
     for (input, output) in set
         input, output = input |> device, output |> device
         k = size(output)[end]
+        loss_fn = est -> Flux.logitbinarycrossentropy(est.network(input), output)
         if !isnothing(optimiser)
-            ls, ∇ = Flux.withgradient(estimator -> Flux.logitbinarycrossentropy(estimator.network(input), output), estimator)
+            ls, ∇ = Flux.withgradient(loss_fn, estimator)
             Flux.update!(optimiser, estimator, ∇[1])
         else
-            ls = Flux.logitbinarycrossentropy(estimator.network(input), output)
+            ls = loss_fn(estimator)
         end
         # Convert average loss to a sum and add to total
         sum_loss += ls * k
@@ -700,6 +701,7 @@ function _risk(estimator::RatioEstimator, loss, set::DataLoader, device, optimis
 
     return cpu(sum_loss/K)
 end
+
 
 function _risk(estimator::QuantileEstimatorContinuous, loss, set::DataLoader, device, optimiser = nothing)
     sum_loss = 0.0f0

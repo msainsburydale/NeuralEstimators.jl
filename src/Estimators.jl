@@ -472,6 +472,7 @@ numdistributionalparams(estimator::PosteriorEstimator) = numdistributionalparams
 logdensity(estimator::PosteriorEstimator, θ, Z) = logdensity(estimator.q, f32(θ), estimator.network(f32(Z)))
 (estimator::PosteriorEstimator)(Zθ::Tuple) = logdensity(estimator, Zθ[2], Zθ[1]) # internal method only used during training # TODO not ideal that we assume an ordering here
 
+#TODO maybe its better to not have a tuple, and just allow the arguments to be passed as normal... Just have to change DeepSet definition to allow two arguments in some places (this is more natural). Can easily allow backwards compat in this case too. 
 @doc raw"""
 	RatioEstimator <: NeuralEstimator
 	RatioEstimator(network)
@@ -487,12 +488,12 @@ $\log r(\boldsymbol{Z}, \boldsymbol{\theta}) = \text{logit}(c^*(\boldsymbol{Z}, 
 where $c^*(\cdot, \cdot)$ denotes the Bayes classifier as described in the [Methodology](@ref) section. 
 Hence, the neural network should be a mapping from $\mathcal{Z} \times \Theta$ to $\mathbb{R}$, 
 where $\mathcal{Z}$ and $\Theta$ denote the sample and parameter spaces, respectively. 
-The neural network must implement a method `network(::Tuple)`, where the first element 
-of the tuple contains the data sets and the second element contains the parameter matrices. 
 
-When the neural network is a [`DeepSet`](@ref), two requirements must be met. First, the number of input neurons in the first layer of
-the outer network must equal $d$ plus the number of output neurons in the final layer of the inner network. 
-Second, the number of output neurons in the final layer of the outer network must be one.
+
+!!! note "Network input"
+    The neural network must implement a method `network(::Tuple)`, where the first element of the tuple contains the data sets and the second element contains the parameter matrices.  
+
+When the neural network is a [`DeepSet`](@ref) (which implements the above method), two requirements must be met. First, the number of input neurons in the first layer of the outer network must equal $d$ plus the number of output neurons in the final layer of the inner network. Second, the number of output neurons in the final layer of the outer network must be one.
 
 When applying the estimator to data `Z`, by default the likelihood-to-evidence ratio
 $r(\boldsymbol{Z}, \boldsymbol{\theta})$ is returned (setting the keyword argument

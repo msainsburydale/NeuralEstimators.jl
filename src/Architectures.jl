@@ -847,3 +847,4 @@ function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128
 end
 (mlp::MLP)(x) = mlp.network(x)
 (mlp::MLP)(x, y) = mlp.network(cat(x, y; dims = 1))
+(mlp::MLP)(xy::Tuple) = mlp(xy[1], xy[2])
