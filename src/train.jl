@@ -627,7 +627,7 @@ function _constructset(estimator::RatioEstimator, Z, θ::P, batchsize) where {P 
         Z = hcat(Z, Z̃)
     else # general combine along the observation dimension... 
         # NB most of the scenarios are covered above, so the following isn't really tested
-        Z = getobs(joinobs(Z, Z̃), 1:2K) 
+        Z = getobs(joinobs(Z, Z̃), 1:2K)
     end
 
     # Create class labels for output
@@ -701,7 +701,6 @@ function _risk(estimator::RatioEstimator, loss, set::DataLoader, device, optimis
 
     return cpu(sum_loss/K)
 end
-
 
 function _risk(estimator::QuantileEstimatorContinuous, loss, set::DataLoader, device, optimiser = nothing)
     sum_loss = 0.0f0
