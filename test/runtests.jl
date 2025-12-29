@@ -1354,7 +1354,7 @@ end
         return Z
     end
 
-    function simulateconditional(Z::M, θ, ξ; nsims::Integer = 1) where {M <: AbstractMatrix{Union{Missing, T}}} where {T}
+    function simulateconditional(Z::M, θ; nsims::Integer = 1, ξ) where {M <: AbstractMatrix{Union{Missing, T}}} where {T}
 
         # Save the original dimensions
         dims = size(Z)
@@ -1429,8 +1429,8 @@ end
     neuralem = EM(simulateconditional, neuralMAPestimator)
     θ₀ = [0.15, 0.15]# initial estimate, the prior mean
     H = 5
-    θ̂ = neuralem(Z, θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
-    θ̂2 = neuralem([Z, Z], θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
+    θ̂ = neuralem(Z, θ₀, nsims = H, ξ = ξ).estimate
+    θ̂2 = neuralem([Z, Z], θ₀, nsims = H, ξ = ξ)
 
     @test size(θ̂) == (2, 1)
     @test size(θ̂2) == (2, 2)
@@ -1439,14 +1439,12 @@ end
     @test_throws Exception neuralem(Z)
     @test_throws Exception neuralem([Z, Z])
     neuralem = EM(simulateconditional, neuralMAPestimator, θ₀)
-    neuralem(Z, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
-    neuralem([Z, Z], ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
+    neuralem(Z, nsims = H, ξ = ξ)
+    neuralem([Z, Z], nsims = H, ξ = ξ)
 
     ## Test edge cases (no missingness and complete missingness)
     Z = simulate(θ, 1)[1]# simulate a single gridded field
-    @test_warn "Data has been passed to the EM algorithm that contains no missing elements... the MAP estimator will be applied directly to the data" neuralem(Z, θ₀, ξ = ξ, nsims = H)
-    Z = Z[:, :]
+    @test_logs (:warn,) neuralem(Z, θ₀, ξ = ξ, nsims = H)
     Z = removedata(Z, 1.0)
-    @test_throws Exception neuralem(Z, θ₀, ξ = ξ, nsims = H, use_ξ_in_simulateconditional = true)
-    @test_throws Exception neuralem(Z, θ₀, nsims = H, use_ξ_in_simulateconditional = true)
+    @test_throws Exception neuralem(Z, θ₀, nsims = H, ξ = ξ)
 end

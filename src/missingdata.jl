@@ -1,63 +1,121 @@
 @doc raw"""
     EM(simulateconditional::Function, MAP::Union{Function, NeuralEstimator}, θ₀ = nothing)
-Implements the (Bayesian) Monte Carlo expectation-maximisation (EM) algorithm,
-with ``l``th iteration
+
+Implements a (Bayesian) Monte Carlo expectation-maximization (EM) algorithm for 
+parameter estimation with missing data. The algorithm iteratively simulates missing 
+data conditional on current parameter estimates, then updates parameters using a 
+(neural) maximum a posteriori (MAP) estimator.
+
+The ``l``th iteration is given by:
 
 ```math
 \boldsymbol{\theta}^{(l)} =
 \underset{\boldsymbol{\theta}}{\mathrm{arg\,max}}
-\sum_{h = 1}^H \ell(\boldsymbol{\theta};  \boldsymbol{Z}_1,  \boldsymbol{Z}_2^{(lh)}) + H\log \pi(\boldsymbol{\theta})
+\sum_{h = 1}^H \ell(\boldsymbol{\theta};  \boldsymbol{Z}_1,  \boldsymbol{Z}_2^{(l, h)}) + H\log \pi(\boldsymbol{\theta})
 ```
 
-where $\ell(\cdot)$ is the complete-data log-likelihood function, $\boldsymbol{Z} \equiv (\boldsymbol{Z}_1', \boldsymbol{Z}_2')'$
-denotes the complete data with $\boldsymbol{Z}_1$ and $\boldsymbol{Z}_2$ the observed and missing components,
-respectively, $\boldsymbol{Z}_2^{(lh)}$, $h = 1, \dots, H$, is simulated from the
-distribution of $\boldsymbol{Z}_2 \mid \boldsymbol{Z}_1, \boldsymbol{\theta}^{(l-1)}$, and
-$\pi(\boldsymbol{\theta})$ denotes the prior density.
+where ``\ell((\boldsymbol{\theta};  \boldsymbol{Z}_1,  \boldsymbol{Z}_2)`` denotes the complete-data log-likelihood function, 
+``\boldsymbol{Z} \equiv (\boldsymbol{Z}_1', \boldsymbol{Z}_2')'`` denotes the complete 
+data with ``\boldsymbol{Z}_1`` and ``\boldsymbol{Z}_2`` the observed and missing 
+components respectively, ``\boldsymbol{Z}_2^{(l, h)}``, ``h = 1, \dots, H``, are simulated 
+from the distribution of ``\boldsymbol{Z}_2 \mid \boldsymbol{Z}_1, \boldsymbol{\theta}^{(l-1)}``, and 
+``\pi(\boldsymbol{\theta})`` is the prior density (which can be viewed as a penalty function).
+
+The algorithm monitors convergence by computing:
+
+```math
+\max_i \left| \frac{\bar{\theta}_i^{(l+1)} - \bar{\theta}_i^{(l)}}{|\bar{\theta}_i^{(l)}| + \epsilon} \right|
+```
+
+where ``\bar{\theta}^{(l)}`` is the average of parameter estimates from iteration 
+`burnin+1` to iteration ``l``, and ``\epsilon`` is machine precision. Convergence is 
+declared when this quantity is less than `tol` for `nconsecutive` consecutive iterations (see keyword arguments below).
 
 # Fields
 
-The function `simulateconditional` should have a signature of the form,
+- `simulateconditional::Function`: Function for simulating missing data conditional on 
+  observed data and current parameter estimates. Must have signature:
+  ```julia
+  simulateconditional(Z::AbstractArray{Union{Missing, T}}, θ; nsims = 1, kwargs...)
+  ```
+  Returns completed data in the format expected by `MAP` (e.g., 4D array for CNNs).
 
-	simulateconditional(Z::A, θ; nsims = 1) where {A <: AbstractArray{Union{Missing, T}}} where T
+- `MAP::NeuralEstimator`: MAP estimator applied to completed data. 
 
-The output of `simulateconditional` should be the completed-data `Z`, and it should be
-returned in whatever form is appropriate to be passed to the MAP estimator as `MAP(Z)`. For example, if the data are gridded and
-the `MAP` is a neural MAP estimator based on a CNN architecture, then `Z` should
-be returned as a four-dimensional array.
-
-The field `MAP` can be a function (to facilitate the conventional Monte Carlo EM algorithm) or a
-`NeuralEstimator` (to facilitate the so-called neural EM algorithm).
-
-The starting values `θ₀` may be provided during initialisation (as a vector),
-or when applying the `EM` object to data (see below). The starting values
-given in a function call take precedence over those stored in the object.
+- `θ₀`: Optional initial parameter values (vector). Can also be provided when calling 
+  the `EM` object.
 
 # Methods
 
-Once constructed, objects of type `EM` can be applied to data via the methods,
+Once constructed, objects of type `EM` can be applied to data via the following methods (corresponding to single or multiple data sets, respectively):
 
 	(em::EM)(Z::A, θ₀::Union{Nothing, Vector} = nothing; ...) where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 	(em::EM)(Z::V, θ₀::Union{Nothing, Vector, Matrix} = nothing; ...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
 
 where `Z` is the complete data containing the observed data and `Missing` values.
-Note that the second method caters for the case that one has multiple data sets.
-The keyword arguments are:
 
-- `nsims = 1`: the number $H$ of conditional simulations in each iteration.
-- `niterations = 50`: the maximum number of iterations.
-- `nconsecutive = 3`: the number of consecutive iterations for which the convergence criterion must be met.
-- `ϵ = 0.01`: tolerance used to assess convergence; the algorithm halts if the relative change in parameter values in successive iterations is less than `ϵ`.
-- `return_iterates::Bool`: if `true`, the estimate at each iteration of the algorithm is returned; otherwise, only the final estimate is returned.
-- `ξ = nothing`: model information needed for conditional simulation (e.g., distance matrices) or in the MAP estimator.
-- `use_ξ_in_simulateconditional::Bool = false`: if set to `true`, the conditional simulator is called as `simulateconditional(Z, θ, ξ; nsims = nsims)`.
-- `use_ξ_in_MAP::Bool = false`: if set to `true`, the MAP estimator is called as `MAP(Z, ξ)`.
-- `use_gpu::Bool = true`
-- `verbose::Bool = false`
+For multiple datasets, `θ₀` can be a vector (same initial values for all) or a matrix 
+with one column per dataset.
+
+# Keyword Arguments
+
+- `niterations::Integer = 50`: Maximum number of EM iterations.
+- `nsims::Union{Integer, Vector{<:Integer}} = 1`: Number of conditional simulations per 
+  iteration. Can be fixed (scalar) or varying (vector of length `niterations`).
+- `burnin::Integer = 1`: Number of initial iterations to discard before averaging 
+  parameter estimates for convergence assessment.
+- `nconsecutive::Integer = 3`: Number of consecutive iterations meeting the convergence 
+  criterion required to halt.
+- `tol = 0.01`: Convergence tolerance. Algorithm stops if the relative change in 
+  post-burnin averaged parameters is less than `tol` for `nconsecutive` iterations.
+- `use_gpu::Bool = true`: Whether to use a GPU (if available) for MAP estimation.
+- `verbose::Bool = false`: Whether to print iteration details.
+- `kwargs...`: Additional arguments passed to `simulateconditional`.
+
+# Returns
+
+For a single data set, returns a named tuple containing:
+- `estimate`: Final parameter estimate (post-burnin average).
+- `iterates`: Matrix of all parameter estimates across iterations (each column is one iteration).
+- `burnin`: The burnin value used.
+
+For multiple data set, returns a matrix with one column per dataset.
+
+# Notes
+
+- If `Z` contains no missing values, the MAP estimator is applied directly (after 
+  passing through `simulateconditional` to ensure correct format).
+- When using a GPU, data are moved to the GPU for MAP estimation and back to the CPU 
+  for conditional simulation.
 
 # Examples
-```
-# See the "Missing data" section in "Advanced usage"
+
+```julia
+# Below we give a pseudocode example; see the "Missing data" section in "Advanced usage" for a concrete example.
+
+# Define conditional simulation function
+function sim_conditional(Z, θ; nsims = 1)
+    # Your implementation here
+    # Returns completed data in format suitable for MAP estimator
+end
+
+# Define or load MAP estimator
+MAP_estimator = ... # Neural MAP estimator
+
+# Create EM object
+em = EM(sim_conditional, MAP_estimator, θ₀ = [1.0, 2.0])
+
+# Apply to data with missing values
+Z = ... # Array with Missing entries
+result = em(Z, niterations = 100, nsims = 5, tol = 0.001, verbose = true)
+
+# Access results
+θ_final = result.estimate
+θ_sequence = result.iterates
+
+# Multiple datasets
+Z_list = [Z1, Z2, Z3]
+estimates = em(Z_list, θ₀ = [1.0, 2.0])  # Matrix with 3 columns
 ```
 """
 struct EM{F, T, S}
@@ -68,84 +126,123 @@ end
 EM(simulateconditional, MAP) = EM(simulateconditional, MAP, nothing)
 EM(em::EM, θ₀) = EM(em.simulateconditional, em.MAP, θ₀)
 EM(simulateconditional, MAP, θ₀::Number) = EM(simulateconditional, MAP, [θ₀])
-#TODO think it's better if this is kept simple, and designed only for *neural* EM...
 
 function (em::EM)(Z::A, θ₀ = nothing; kwargs...) where {A <: AbstractArray{T, N}} where {T, N}
     @warn "Data has been passed to the EM algorithm that contains no missing elements... the MAP estimator will be applied directly to the data"
     em.MAP(Z)
 end
 
-# TODO change ϵ to tolerance (ϵ can be kept as a deprecated argument)
 function (em::EM)(
     Z::A, θ₀ = nothing;
     niterations::Integer = 50,
-    nsims::Integer = 1,
+    nsims::Union{Integer, AbstractVector{<:Integer}} = 1,
+    burnin::Integer = 5,              
     nconsecutive::Integer = 3,
-    ϵ = 0.01,
-    ξ = nothing,
-    use_ξ_in_simulateconditional::Bool = false,
-    use_ξ_in_MAP::Bool = false,
+    tol = 0.01,
     use_gpu::Bool = true,
     verbose::Bool = false,
-    return_iterates::Bool = false
+    kwargs...
 ) where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
+
+    @assert burnin < niterations
+    @assert burnin >= 0
+    
+    # Validate nsims
+    if isa(nsims, AbstractVector)
+        @assert length(nsims) == niterations "When nsims is a vector, its length must equal niterations ($(niterations))"
+        @assert all(nsims .> 0) "All elements of nsims must be positive"
+    else
+        @assert nsims > 0 "nsims must be positive"
+    end
+
     if isnothing(θ₀)
         @assert !isnothing(em.θ₀) "Initial estimates θ₀ must be provided either in the `EM` object or in the function call when applying the `EM` object"
         θ₀ = em.θ₀
     end
-
-    if !isnothing(ξ)
-        if !use_ξ_in_simulateconditional && !use_ξ_in_MAP
-            @warn "`ξ` has been provided but it will not be used because `use_ξ_in_simulateconditional` and `use_ξ_in_MAP` are both `false`"
-        end
+    @assert !all(ismissing.(Z)) "The data consist of missing elements only: we cannot make inference without any information"
+    
+    if isa(θ₀, Number)
+        θ₀ = [θ₀]
     end
-
-    if use_ξ_in_simulateconditional || use_ξ_in_MAP
-        @assert !isnothing(ξ) "`ξ` must be provided since `use_ξ_in_simulateconditional` or `use_ξ_in_MAP` is true"
-    end
-
-    @assert !all(ismissing.(Z)) "The data `Z` consists of missing elements only"
 
     device = _checkgpu(use_gpu, verbose = verbose)
     MAP = em.MAP |> device
 
+    if !any(ismissing.(Z))
+        verbose && @warn """
+        Data passed to the EM algorithm contains no missing values.
+        The MAP estimator will be applied directly to the data, but the data
+        will first be passed through the conditional simulation function to
+        ensure correct dimensions.
+
+        (Tip: your conditional simulation function should handle complete-data cases explicitly.)
+        """
+        # Use first element of nsims vector if provided, otherwise use scalar
+        nsims_current = isa(nsims, AbstractVector) ? nsims[1] : nsims
+        Z = em.simulateconditional(Z, θ₀, nsims = nsims_current, kwargs...)
+        Z = convert(Array{nonmissingtype(eltype(Z))}, Z)
+        Z = Z |> device
+        return (estimate = MAP(Z), ) #NB return as named tuple for type stability
+    end
+
     verbose && @show θ₀
     θₗ = θ₀
-    θ_all = reshape(θ₀, :, 1)
+    θ_all = reshape(θ₀, :, 1) 
     convergence_counter = 0
+    barθₗ = nothing
     for l ∈ 1:niterations
 
-        # "Complete" the data by conditional simulation
-        Z̃ = use_ξ_in_simulateconditional ? em.simulateconditional(Z, θₗ, ξ, nsims = nsims) : em.simulateconditional(Z, θₗ, nsims = nsims)
+        # Get current nsims value (either from vector or use scalar)
+        nsims_current = isa(nsims, AbstractVector) ? nsims[l] : nsims
+        
+        # Complete the data by conditional simulation
+        Z̃ = em.simulateconditional(Z, θₗ; nsims = nsims_current, kwargs...)
         Z̃ = Z̃ |> device
 
         # Apply the MAP estimator to the complete data
-        θₗ₊₁ = use_ξ_in_MAP ? MAP(Z̃, ξ) : MAP(Z̃)
+        θₗ₊₁ = MAP(Z̃)
 
-        # Move back to the cpu (need to do this for simulateconditional in the next iteration)
+        # Move back to the cpu for conditional simulation in the next iteration
         θₗ₊₁ = cpu(θₗ₊₁)
         θ_all = hcat(θ_all, θₗ₊₁)
 
-        # Check convergence criterion
-        if maximum(abs.(θₗ₊₁-θₗ) ./ abs.(θₗ)) < ϵ
-            θₗ = θₗ₊₁
-            convergence_counter += 1
-            if convergence_counter == nconsecutive
-                verbose && @info "The EM algorithm has converged"
-                break
+        # Compute post burn-in mean and check convergence
+        if l > burnin
+            barθₗ₊₁ = mean(θ_all[:, burnin+1:end]; dims=2)
+
+            if l > (burnin + 1) && maximum(abs.(barθₗ₊₁-barθₗ) ./ (abs.(barθₗ) .+ eps())) < tol
+                convergence_counter += 1
+                if convergence_counter == nconsecutive
+                    verbose && @info "The EM algorithm has converged"
+                    break
+                end
+            else
+                convergence_counter = 0
             end
-        else
-            convergence_counter = 0
+            barθₗ = barθₗ₊₁
         end
-        l == niterations && verbose && @warn "The EM algorithm has failed to converge"
+
+        if l == niterations 
+            verbose && @warn "The EM algorithm has failed to converge"
+        end
+
         θₗ = θₗ₊₁
-        verbose && @show θₗ
+
+        if verbose
+            @show l
+            @show nsims_current
+            @show θₗ
+            if l > burnin
+                @show barθₗ
+            end
+        end
     end
 
-    return_iterates ? θ_all : θₗ
+    return (estimate = barθₗ, burnin = burnin, iterates = θ_all)
 end
 
-function (em::EM)(Z::V, θ₀::Union{Number, Vector, Matrix, Nothing} = nothing; args...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
+# Helper function for applying the EM algorithm to many data sets at once
+function (em::EM)(Z::V, θ₀::Union{Number, Vector, Matrix, Nothing} = nothing; kwargs...) where {V <: AbstractVector{A}} where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
     if isnothing(θ₀)
         @assert !isnothing(em.θ₀) "Please provide initial estimates `θ₀` in the function call or in the `EM` object."
         θ₀ = em.θ₀
@@ -160,7 +257,7 @@ function (em::EM)(Z::V, θ₀::Union{Number, Vector, Matrix, Nothing} = nothing;
     end
 
     estimates = Folds.map(eachindex(Z)) do i
-        em(Z[i], θ₀[:, i]; args...)
+        em(Z[i], θ₀[:, i]; kwargs...).estimate
     end
     estimates = reduce(hcat, estimates)
 

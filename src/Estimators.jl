@@ -670,8 +670,7 @@ if `savepath` is specified both the ensemble and component estimators will be sa
 
 Note that `train()` currently acts sequentially on the component estimators, using the `Adam` optimiser.
 
-The ensemble components can be accessed by indexing the ensemble; the number
-of component estimators can be obtained using `length()`.
+The ensemble components can be accessed by indexing the ensemble; the number of component estimators can be obtained using `length()`.
 
 See also [`Parallel`](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.Parallel), which can be used to mimic ensemble methods with an appropriately chosen `connection`. 
 
