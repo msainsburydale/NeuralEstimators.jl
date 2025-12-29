@@ -609,20 +609,26 @@ function _constructset(estimator::QuantileEstimatorContinuous, Zτ, θ::P, batch
 
     _DataLoader((input, output), batchsize)
 end
+
 function _constructset(estimator::RatioEstimator, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
     Z = f32(Z)
     θ = f32(_extractθ(θ))
 
-    # Size of data set
-    K = length(Z)
-
     # Create independent pairs
-    θ̃ = subsetparameters(θ, shuffle(1:K))
-    Z̃ = Z # NB memory inefficient to replicate the data in this way, would be better to use a view or similar
+    K = numobs(Z)
+    θ̃ = subsetparameters(θ, shuffle(1:K)) #NB can use getobs here instead of subsetparameters
+    Z̃ = Z # NB memory inefficient to replicate the data in this way
 
     # Combine dependent and independent pairs
-    Z = vcat(Z, Z̃)
     θ = hcat(θ, θ̃)
+    if Z isa AbstractVector
+        Z = vcat(Z, Z̃)
+    elseif Z isa AbstractMatrix
+        Z = hcat(Z, Z̃)
+    else # general combine along the observation dimension... 
+        # NB most of the scenarios are covered above, so the following isn't really tested
+        Z = getobs(joinobs(Z, Z̃), 1:2K) 
+    end
 
     # Create class labels for output
     labels = [:dependent, :independent]
@@ -630,8 +636,8 @@ function _constructset(estimator::RatioEstimator, Z, θ::P, batchsize) where {P 
 
     # Shuffle everything in case batching isn't shuffled properly downstrean
     idx = shuffle(1:2K)
-    Z = Z[idx]
-    θ = θ[:, idx]
+    Z = getobs(Z, idx)
+    θ = getobs(θ, idx)
     output = output[1:1, idx]
 
     # Combine data and parameters into a single tuple
@@ -639,6 +645,7 @@ function _constructset(estimator::RatioEstimator, Z, θ::P, batchsize) where {P 
 
     _DataLoader((input, output), batchsize)
 end
+
 function _constructset(estimator::PosteriorEstimator, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
     Z = f32(Z)
     θ = f32(_extractθ(θ))
