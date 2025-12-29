@@ -656,10 +656,8 @@ Base.show(io::IO, estimator::PiecewiseEstimator) = print(io, "\nPiecewise estima
 	Ensemble <: NeuralEstimator
 	Ensemble(estimators)
 	Ensemble(architecture::Function, J::Integer)
-	(ensemble::Ensemble)(Z; aggr = median)
-Defines an ensemble of `estimators` which,
-when applied to data `Z`, returns the median
-(or another summary defined by `aggr`) of the individual estimates (see, e.g., [Sainsbury-Dale et al., 2025, Sec. S3](https://doi.org/10.48550/arXiv.2501.04330)).
+	(ensemble::Ensemble)(Z; aggr = mean)
+Defines an ensemble of `estimators` which, when applied to data `Z`, returns the mean (or another summary defined by `aggr`) of the individual estimates (see, e.g., [Sainsbury-Dale et al., 2025, Sec. S5](https://doi.org/10.48550/arXiv.2501.04330)).
 
 The ensemble can be initialised with a collection of trained `estimators` and then
 applied immediately to observed data. Alternatively, the ensemble can be
@@ -717,19 +715,22 @@ struct Ensemble{T <: NeuralEstimator} <: NeuralEstimator
 end
 Ensemble(architecture::Function, J::Integer) = Ensemble([architecture() for j = 1:J])
 
-function (ensemble::Ensemble)(Z; aggr = median)
-    # Compute estimate from each estimator, yielding a vector of matrices
-    # NB can be done in parallel, but I think the overhead may outweigh the benefit
-    θ̂ = [estimator(Z) for estimator in ensemble.estimators]
+function (ensemble::Ensemble)(Z; aggr = mean)
+    # Collect each estimator’s output
+    θ̂s = [estimator(Z) for estimator in ensemble.estimators]
 
-    # Stack matrices along a new third dimension
-    θ̂ = stackarrays(θ̂, merge = false) # equivalent to: θ̂ = cat(θ̂...; dims = 3)
+    # Stack into 3D array (d × n × m) where m = number of estimators
+    θ̂ = stackarrays(θ̂s, merge = false)
 
-    # aggregate elementwise 
-    θ̂ = mapslices(aggr, cpu(θ̂); dims = 3) # NB mapslices doesn't work on the GPU, so transfer to CPU 
-    θ̂ = dropdims(θ̂; dims = 3)
+    # Aggregate elementwise
+    if aggr === mean
+        θ̂ = mean(θ̂; dims = 3)
+    else
+        #NB mapslices doesn't work with Zygote, so use mean as the default
+        θ̂ = mapslices(aggr, cpu(θ̂); dims = 3)
+    end
 
-    return θ̂
+    return dropdims(θ̂; dims = 3)
 end
 
 Base.getindex(e::Ensemble, i::Integer) = e.estimators[i]
