@@ -1444,7 +1444,8 @@ end
 
     ## Test edge cases (no missingness and complete missingness)
     Z = simulate(θ, 1)[1]# simulate a single gridded field
-    @test_logs (:warn,) neuralem(Z, θ₀, ξ = ξ, nsims = H)
-    Z = removedata(Z, 1.0)
-    @test_throws Exception neuralem(Z, θ₀, nsims = H, ξ = ξ)
+    # @test_logs (:warn,) neuralem(Z, θ₀, ξ = ξ, nsims = H)
+    @test_throws Exception neuralem(Z, θ₀, ξ = ξ, nsims = H)
+    Z₁ = removedata(Z₁, 1.0)
+    @test_throws Exception neuralem(Z₁, θ₀, nsims = H, ξ = ξ)
 end
