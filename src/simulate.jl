@@ -346,18 +346,18 @@ heatmaps = heatmap.(grids, legend = false, aspect_ratio=1)
 Plots.plot(heatmaps...)
 ```
 """
-function simulatepotts(grid::AbstractMatrix{I}, β; nsims::Integer=1, num_iterations::Integer=2000, burn::Integer=num_iterations, thin::Integer=10, mask=nothing) where {I<:Integer}
+function simulatepotts(grid::AbstractMatrix{I}, β; nsims::Integer = 1, num_iterations::Integer = 2000, burn::Integer = num_iterations, thin::Integer = 10, mask = nothing) where {I <: Integer}
     β = β[1]  # unwrap if β was passed as a container
 
     @assert burn <= num_iterations
     if burn < num_iterations || nsims > 1
-        Z₀ = simulatepotts(grid, β; num_iterations=burn, mask=mask)
+        Z₀ = simulatepotts(grid, β; num_iterations = burn, mask = mask)
         nsims == 1 && (nsims = (num_iterations - burn) ÷ thin)
         Z_chain = Vector{typeof(grid)}(undef, nsims)
         Z_chain[1] = Z₀
-        
-        @inbounds for i in 2:nsims
-            Z_chain[i] = simulatepotts(copy(Z_chain[i-1]), β; num_iterations=thin, mask=mask)
+
+        @inbounds for i = 2:nsims
+            Z_chain[i] = simulatepotts(copy(Z_chain[i - 1]), β; num_iterations = thin, mask = mask)
         end
         return Z_chain
     end
@@ -366,32 +366,32 @@ function simulatepotts(grid::AbstractMatrix{I}, β; nsims::Integer=1, num_iterat
     states = unique(skipmissing(grid))
     num_states = length(states)
     state_to_idx = Dict(s => i for (i, s) in enumerate(states))
-    
+
     # Precompute chequerboard patterns
-    chequerboard1 = [(i+j) % 2 == 0 for i in 1:nrows, j in 1:ncols]
+    chequerboard1 = [(i+j) % 2 == 0 for i = 1:nrows, j = 1:ncols]
     chequerboard2 = .!chequerboard1
-    
+
     if !isnothing(mask)
         @assert size(grid) == size(mask)
         chequerboard1 = chequerboard1 .&& mask
         chequerboard2 = chequerboard2 .&& mask
     end
-    
+
     chequerboards = if sum(chequerboard1) == 0
         (chequerboard2,)
     elseif sum(chequerboard2) == 0
         (chequerboard1,)
-    else 
+    else
         (chequerboard1, chequerboard2)
     end
 
     # Precompute neighbor offsets as CartesianIndex
-    neighbor_offsets = CartesianIndex.([(0,1), (1,0), (0,-1), (-1,0)])
+    neighbor_offsets = CartesianIndex.([(0, 1), (1, 0), (0, -1), (-1, 0)])
     n = zeros(Int, num_states)
     probs = zeros(Float64, num_states)
     cum_probs = zeros(Float64, num_states)
 
-    @inbounds for _ in 1:num_iterations
+    @inbounds for _ = 1:num_iterations
         for chequerboard in chequerboards
             for ci in findall(chequerboard)
 
@@ -403,21 +403,21 @@ function simulatepotts(grid::AbstractMatrix{I}, β; nsims::Integer=1, num_iterat
                     state = grid[ni]
                     n[state_to_idx[state]] += 1
                 end
-                
+
                 # Calculate probabilities
                 max_n = maximum(n)
                 if max_n == 0  # All neighbors same or no neighbors
                     grid[ci] = rand(states)
                     continue
                 end
-                
+
                 # Compute unnormalized probabilities with log-sum-exp trick
                 log_probs = β .* n
                 max_log_prob = maximum(log_probs)
                 probs = exp.(log_probs .- max_log_prob)
                 sum_probs = sum(probs)
                 probs ./= sum_probs
-                
+
                 # Sample new state
                 u = rand()
                 cumsum!(cum_probs, probs)
@@ -458,9 +458,7 @@ function simulatepotts(Z::A, β; kwargs...) where {A <: AbstractArray{T, N}} whe
     Z = reshape(Z, dims[1:(end - 1)]..., :)
 end
 
-
 function initializepotts(nrows::Integer, ncols::Integer, num_states::Integer, β; β_crit = log(1 + sqrt(num_states)))
-  
     if β < β_crit
         # Random initialization for high temperature
         grid = rand(1:num_states, nrows, ncols)
@@ -474,7 +472,7 @@ function initializepotts(nrows::Integer, ncols::Integer, num_states::Integer, β
         grid = grid[1:nrows, 1:ncols] # trim to exact dimensions
 
         # Add small random perturbations
-        for i in 1:nrows, j in 1:ncols
+        for i = 1:nrows, j = 1:ncols
             if rand() < 0.05
                 grid[i, j] = rand(1:num_states)
             end
@@ -487,7 +485,7 @@ end
 function initializepotts(grid::AbstractMatrix{Union{Missing, I}}, mask, β) where {I <: Integer}
 
     # Avoid mutating input
-    grid = copy(grid)  
+    grid = copy(grid)
     mask = copy(mask)
 
     # Early return if no missing values
@@ -506,18 +504,18 @@ function initializepotts(grid::AbstractMatrix{Union{Missing, I}}, mask, β) wher
         # Low temperature: iterative neighbor-based fill
 
         # Pre-allocate neighbor arrays and offsets
-        neigh_offsets = CartesianIndex.([(-1,0), (1,0), (0,-1), (0,1)])
+        neigh_offsets = CartesianIndex.([(-1, 0), (1, 0), (0, -1), (0, 1)])
         neigh_buf = Vector{Int}(undef, 4)  # max 4 neighbors
         counts = zeros(Int, num_states)
-        
+
         changed = true
         iterations = 0
         max_iterations = sum_mask * 2  # safety net
-        
+
         while changed && any(mask) && iterations < max_iterations
             changed = false
             iterations += 1
-            
+
             # Process all missing cells in each iteration
             for idx in findall(mask)
                 count = 0
@@ -526,26 +524,26 @@ function initializepotts(grid::AbstractMatrix{Union{Missing, I}}, mask, β) wher
                     ni = idx + offset
                     checkbounds(Bool, grid, ni) || continue
                     @inbounds !mask[ni] || continue
-                    @inbounds neigh_buf[count+=1] = grid[ni]
+                    @inbounds neigh_buf[count += 1] = grid[ni]
                 end
-                
+
                 if count > 0
                     # Count neighbor states
                     fill!(counts, 0)
-                    @inbounds for i in 1:count
+                    @inbounds for i = 1:count
                         s = neigh_buf[i]
                         counts[s] += 1
                     end
-                    
+
                     # Find modes
                     maxcount = maximum(@view counts[1:num_states])
                     n_modes = 0
-                    @inbounds for s in 1:num_states
+                    @inbounds for s = 1:num_states
                         if counts[s] == maxcount
-                            neigh_buf[n_modes+=1] = s
+                            neigh_buf[n_modes += 1] = s
                         end
                     end
-                    
+
                     # Random tie-break
                     @inbounds grid[idx] = neigh_buf[rand(1:n_modes)]
                     mask[idx] = false
@@ -553,13 +551,13 @@ function initializepotts(grid::AbstractMatrix{Union{Missing, I}}, mask, β) wher
                 end
             end
         end
-        
+
         # Fill any remaining missing values randomly
         remaining = sum(mask)
         if remaining > 0
             @inbounds grid[mask] .= rand(1:num_states, remaining)
         end
     end
-    
+
     return convert(Matrix{I}, grid)
 end
