@@ -131,17 +131,16 @@ function (em::EM)(
     Z::A, θ₀ = nothing;
     niterations::Integer = 50,
     nsims::Union{Integer, AbstractVector{<:Integer}} = 1,
-    burnin::Integer = 1,              
+    burnin::Integer = 1,
     nconsecutive::Integer = 3,
     tol = 0.01,
     use_gpu::Bool = true,
     verbose::Bool = false,
     kwargs...
 ) where {A <: AbstractArray{Union{Missing, T}, N}} where {T, N}
-
     @assert burnin < niterations
     @assert burnin >= 0
-    
+
     # Validate nsims
     if isa(nsims, AbstractVector)
         @assert length(nsims) == niterations "When nsims is a vector, its length must equal niterations ($(niterations))"
@@ -155,7 +154,7 @@ function (em::EM)(
         θ₀ = em.θ₀
     end
     @assert !all(ismissing.(Z)) "The data consist of missing elements only: we cannot make inference without any information"
-    
+
     if isa(θ₀, Number)
         θ₀ = [θ₀]
     end
@@ -179,19 +178,19 @@ function (em::EM)(
         Z = em.simulateconditional(Z, θ₀, nsims = nsims_current, kwargs...)
         Z = convert(Array{nonmissingtype(eltype(Z))}, Z)
         Z = Z |> device
-        return (estimate = MAP(Z), ) #NB return as named tuple for type stability
+        return (estimate = MAP(Z),) #NB return as named tuple for type stability
     end
 
     verbose && @show θ₀
     θₗ = θ₀
-    θ_all = reshape(θ₀, :, 1) 
+    θ_all = reshape(θ₀, :, 1)
     convergence_counter = 0
     barθₗ = nothing
     for l ∈ 1:niterations
 
         # Get current nsims value (either from vector or use scalar)
         nsims_current = isa(nsims, AbstractVector) ? nsims[l] : nsims
-        
+
         # Complete the data by conditional simulation
         Z̃ = em.simulateconditional(Z, θₗ; nsims = nsims_current, kwargs...)
         Z̃ = Z̃ |> device
@@ -205,7 +204,7 @@ function (em::EM)(
 
         # Compute post burn-in mean and check convergence
         if l > burnin
-            barθₗ₊₁ = mean(θ_all[:, burnin+1:end]; dims=2)
+            barθₗ₊₁ = mean(θ_all[:, (burnin + 1):end]; dims = 2)
 
             if l > (burnin + 1) && maximum(abs.(barθₗ₊₁-barθₗ) ./ (abs.(barθₗ) .+ eps())) < tol
                 convergence_counter += 1
@@ -219,7 +218,7 @@ function (em::EM)(
             barθₗ = barθₗ₊₁
         end
 
-        if l == niterations 
+        if l == niterations
             verbose && @warn "The EM algorithm has failed to converge"
         end
 
