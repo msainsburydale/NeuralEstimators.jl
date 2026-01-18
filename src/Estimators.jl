@@ -485,20 +485,17 @@ is the marginal likelihood, also known as the model evidence.
 
 For numerical stability, training is done on the log-scale using the relation 
 $\log r(\boldsymbol{Z}, \boldsymbol{\theta}) = \text{logit}(c^*(\boldsymbol{Z}, \boldsymbol{\theta}))$, 
-where $c^*(\cdot, \cdot)$ denotes the Bayes classifier as described in the [Methodology](@ref) section. 
+where $c^*(\cdot, \cdot)$ denotes the Bayes classifier as described in the [methodology](@ref "Neural ratio estimators") section. 
 Hence, the neural network should be a mapping from $\mathcal{Z} \times \Theta$ to $\mathbb{R}$, 
 where $\mathcal{Z}$ and $\Theta$ denote the sample and parameter spaces, respectively. 
-
 
 !!! note "Network input"
     The neural network must implement a method `network(::Tuple)`, where the first element of the tuple contains the data sets and the second element contains the parameter matrices.  
 
 When the neural network is a [`DeepSet`](@ref) (which implements the above method), two requirements must be met. First, the number of input neurons in the first layer of the outer network must equal $d$ plus the number of output neurons in the final layer of the inner network. Second, the number of output neurons in the final layer of the outer network must be one.
 
-When applying the estimator to data `Z`, by default the likelihood-to-evidence ratio
-$r(\boldsymbol{Z}, \boldsymbol{\theta})$ is returned (setting the keyword argument
-`classifier = true` will yield class probability estimates). The estimated ratio
-can then be used in various Bayesian
+When applying the estimator to data, the log of the likelihood-to-evidence ratio is returned. 
+The estimated ratio can then be used in various Bayesian
 (e.g., [Hermans et al., 2020](https://proceedings.mlr.press/v119/hermans20a.html))
 or frequentist
 (e.g., [Walchessen et al., 2024](https://doi.org/10.1016/j.spasta.2024.100848))
@@ -527,19 +524,19 @@ r̂ = RatioEstimator(network)
 # Train the estimator
 r̂ = train(r̂, sample, simulate, m = m)
 
-# Inference with "observed" data (grid-based optimisation and sampling)
+# Generate "observed" data 
 θ = sample(1)
-z = simulate(θ, m)[1]
+z = simulate(θ, 200)[1]
+
+# Grid-based optimization and sampling
 θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'  # fine gridding of the parameter space
-r̂(z, θ_grid)                                   # likelihood-to-evidence ratios over grid
-mlestimate(r̂, z; θ_grid = θ_grid)              # maximum-likelihood estimate
+estimate(r̂, z, θ_grid)                         # log of likelihood-to-evidence ratios
 posteriormode(r̂, z; θ_grid = θ_grid)           # posterior mode 
 sampleposterior(r̂, z; θ_grid = θ_grid)         # posterior samples
 
-# Inference with "observed" data (gradient-based optimisation using Optim.jl)
+# Gradient-based optimization
 using Optim
 θ₀ = [0.5, 0.5]                                # initial estimate
-mlestimate(r̂, z; θ₀ = θ₀)                      # maximum-likelihood estimate
 posteriormode(r̂, z; θ₀ = θ₀)                   # posterior mode 
 ```
 """
@@ -549,29 +546,42 @@ end
 function (estimator::RatioEstimator)(Z, θ; kwargs...)
     estimator((Z, θ); kwargs...) # "Tupleise" the input and pass to Tuple method
 end
-function (estimator::RatioEstimator)(Zθ::Tuple; classifier::Bool = false)
-    c = σ(estimator.network(Zθ))
-    if typeof(c) <: AbstractVector
-        c = reduce(vcat, c)
+function (estimator::RatioEstimator)(Zθ::Tuple)
+    logr = estimator.network(Zθ)
+    if typeof(logr) <: AbstractVector
+        logr = reduce(vcat, logr)
     end
-    classifier ? c : c ./ (1 .- c)
+    return logr
 end
+
+# function (estimator::RatioEstimator)(Zθ::Tuple; classifier::Bool = false)
+#     c = σ(estimator.network(Zθ))
+#     if typeof(c) <: AbstractVector
+#         c = reduce(vcat, c)
+#     end
+#     classifier ? c : c ./ (1 .- c)
+# end
+
+# function (estimator::RatioEstimator)(Zθ::Tuple; return_log_ratio::Bool = true, return_classifier::Bool = false)
+#     log_ratio = estimator.network(Zθ)
+#     if return_log_ratio
+#         return log_ratio
+#     end
+
+#     c = σ(log_ratio)
+#     if typeof(c) <: AbstractVector
+#         c = reduce(vcat, c)
+#     end
+
+#     return_classifier ? c : c ./ (1 .- c)
+# end
 
 # # Estimate ratio for many data sets and parameter vectors
 # θ = sample(1000)
 # Z = simulate(θ, m)
-# r̂(Z, θ)                                   # likelihood-to-evidence ratios
-# r̂(Z, θ; classifier = true)                # class probabilities
+# r̂(Z, θ)                                   # log of the likelihood-to-evidence ratios
 
-# # Inference with multiple data sets
-# θ = sample(10)
-# z = simulate(θ, m)
-# r̂(z, θ_grid)                                       # likelihood-to-evidence ratios
-# mlestimate(r̂, z; θ_grid = θ_grid)                  # maximum-likelihood estimates
-# mlestimate(r̂, z; θ₀ = θ₀)                          # maximum-likelihood estimates
-# samples = sampleposterior(r̂, z; θ_grid = θ_grid)   # posterior samples
-# θ̄ = reduce(hcat, mean.(samples; dims = 2))         # posterior means
-# interval.(samples; probs = [0.05, 0.95])           # posterior credible intervals
+
 
 @doc raw"""
 	PiecewiseEstimator <: NeuralEstimator

@@ -1,8 +1,8 @@
 """
-	estimate(estimator, Z; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+	estimate(estimator, Z, X = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
 Applies `estimator` to data `Z`.
 
-If given multiple data sets, the estimator is applied over minibatches of size `batchsize`, which can prevent memory issues with large data sets. 
+If `X` is provided, the estimator will be applied to the tuple `(Z, X)`. 
 """
 function estimate(estimator, z, x = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
 
@@ -117,17 +117,17 @@ posteriorquantile(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, probs
 
 # ---- Posterior sampling ----
 
-#TODO document use_gpu 
+#TODO document use_gpu and other keyword arguments
 @doc raw"""
 	sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000)
-	sampleposterior(estimator::RatioEstimator, Z, N::Integer = 1000; θ_grid, prior::Function = θ -> 1f0)
+	sampleposterior(estimator::RatioEstimator, Z, N::Integer = 1000; θ_grid, logprior::Function = θ -> 0f0)
 Samples from the approximate posterior distribution implied by `estimator`.
 
 The positional argument `N` controls the size of the posterior sample.
 
 If `Z` represents a single data set as determined by `Flux.numobs()`, returns a $d$ × `N` matrix of posterior samples, where $d$ is the dimension of the parameter vector. Otherwise, if `Z` contains multiple data sets, a vector of matrices will be returned. 
 
-When using a `RatioEstimator`, the prior distribution $p(\boldsymbol{\theta})$ is controlled through the keyword argument `prior` (by default, a uniform prior is used). The sampling algorithm is based on a fine-gridding of the
+When using a `RatioEstimator`, the prior distribution $p(\boldsymbol{\theta})$ is controlled through the keyword argument `logprior` (by default, a uniform prior is used). The sampling algorithm is based on a fine-gridding of the
 parameter space, specified through the keyword argument `θ_grid`. The approximate posterior density is 
 evaluated over this grid, which is then used to draw samples. This is effective when making inference with a
 small number of parameters. For models with a large number of parameters,
@@ -135,13 +135,16 @@ other sampling algorithms (e.g., MCMC) may be needed (please contact the package
 """
 function sampleposterior end
 
-function _sampleposterior(est::RatioEstimator,
+function sampleposterior(
+    est::RatioEstimator,
     Z,
     N::Integer = 1000;
-    prior::Function = θ -> 1.0f0,
+    logprior::Function = θ -> 0f0,
     θ_grid = nothing, theta_grid = nothing,
     # θ₀ = nothing, theta0 = nothing, # NB a basic MCMC sampler could be initialised with θ₀
     kwargs...)
+
+    Z = f32(Z)
 
     # Check duplicated arguments that are needed so that the R interface uses ASCII characters only
     @assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
@@ -157,25 +160,14 @@ function _sampleposterior(est::RatioEstimator,
 
     if !isnothing(θ_grid)
         θ_grid = f32(θ_grid)
-        rZθ = vec(estimate(est, Z, θ_grid; kwargs...))
-        pθ = prior.(eachcol(θ_grid))
-        density = pθ .* rZθ
-        θ = StatsBase.wsample(eachcol(θ_grid), density, N; replace = true)
+        logrZθ = vec(estimate(est, Z, θ_grid; kwargs...))
+        logpθ = logprior.(eachcol(θ_grid))
+        logdensity = logpθ .+ logrZθ
+        θ = StatsBase.wsample(eachcol(θ_grid), exp.(logdensity), N; replace = true)
         reduce(hcat, θ)
     end
 end
 
-function sampleposterior(est::RatioEstimator, Z, N::Integer = 1000; kwargs...)
-    Z = f32(Z)
-    Z = [getobs(Z, i:i) for i = 1:numobs(Z)]
-    θ = _sampleposterior.(Ref(est), Z, N; kwargs...)
-
-    if numobs(Z) == 1
-        θ = θ[1]
-    end
-
-    return θ
-end
 
 function sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000; kwargs...)
     # Determine if we are using the gpu 
@@ -200,7 +192,7 @@ end
 # TODO density evaluation with PosteriorEstimator would allow us to use these grid and gradient-based methods for computing the posterior mode
 
 @doc raw"""
-	posteriormode(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, prior::Function = θ -> 1, use_gpu = true)
+	posteriormode(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, logprior::Function = θ -> 0f0, use_gpu = true)
 Computes the (approximate) posterior mode (maximum a posteriori estimate) given data $\boldsymbol{Z}$,
 ```math
 \underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta}),
@@ -215,7 +207,7 @@ See also [`posteriormedian()`](@ref), [`posteriormean()`](@ref).
 """
 function posteriormode(
     est::RatioEstimator, Z;
-    prior::Function = θ -> 1.0f0, penalty::Union{Function, Nothing} = nothing,
+    logprior::Function = θ -> 0f0, penalty::Union{Function, Nothing} = nothing,
     θ_grid = nothing, theta_grid = nothing,
     θ₀ = nothing, theta0 = nothing,
     kwargs...
@@ -233,7 +225,7 @@ function posteriormode(
 
     # Change "penalty" to "prior"
     if !isnothing(penalty)
-        prior = penalty
+        logprior = penalty
     end
 
     # Check that we have either a grid to search over or initial estimates
@@ -242,13 +234,12 @@ function posteriormode(
 
     if !isnothing(θ_grid)
         θ_grid = f32(θ_grid)
-        rZθ = vec(estimate(est, Z, θ_grid; kwargs...))
-        pθ = prior.(eachcol(θ_grid))
-        density = pθ .* rZθ
-        θ̂ = θ_grid[:, argmax(density), :]   # extra colon to preserve matrix output
-
+        logrZθ = vec(estimate(est, Z, θ_grid; kwargs...))
+        logpθ = logprior.(eachcol(θ_grid))
+        logdensity = logpθ .+ logrZθ
+        θ̂ = θ_grid[:, argmax(logdensity), :]   # extra colon to preserve matrix output
     else
-        θ̂ = _optimdensity(θ₀, prior, est)
+        θ̂ = _optimdensity(θ₀, logprior, est)
     end
 
     return θ̂
@@ -259,7 +250,7 @@ posteriormode(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, 
 # For the case that Optim is loaded, _optimdensity() is overloaded in ext/NeuralEstimatorsOptimExt.jl
 # NB Julia complains if we overload functions in package extensions... to get around this, here we
 # use a slightly different function signature (omitting ::Function)
-function _optimdensity(θ₀, prior, est)
+function _optimdensity(θ₀, logprior, est)
     error("A vector of initial parameter estimates has been provided, indicating that the approximate likelihood or posterior density will be maximised by numerical optimisation; please load the Julia package `Optim` to facilitate this")
 end
 

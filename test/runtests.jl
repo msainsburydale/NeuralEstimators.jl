@@ -1173,24 +1173,15 @@ end
     # Train the estimator
     r̂ = train(r̂, prior, simulate, m = m, epochs = 1, verbose = false)
 
-    # Inference with "observed" data set
+    # Inference with "observed" data
     θ = prior(1)
     z = simulate(θ, m)[1]
-    θ₀ = [0.5, 0.5]                           # initial estimate
-    # mlestimate(r̂, z;  θ₀ = θ₀)                # maximum-likelihood estimate (requires Optim.jl to be loaded)
-    # mapestimate(r̂, z; θ₀ = θ₀)                # maximum-a-posteriori estimate (requires Optim.jl to be loaded)
-    θ_grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
-    θ_grid = Float32.(θ_grid)
-    r̂(z, θ_grid)                              # likelihood-to-evidence ratios over grid
-    mlestimate(r̂, z; θ_grid = θ_grid)        # maximum-likelihood estimate
+    θ_grid = Float32.(expandgrid(0:0.01:1, 0:0.01:1)')  # fine gridding of the parameter space
+    estimate(r̂, z, θ_grid)                    # likelihood-to-evidence ratios over grid
+    mlestimate(r̂, z; θ_grid = θ_grid)         # maximum-likelihood estimate
     mapestimate(r̂, z; θ_grid = θ_grid)        # maximum-a-posteriori estimate
-    sampleposterior(r̂, z; θ_grid = θ_grid)    # posterior samples
-
-    # Estimate ratio for many data sets and parameter vectors
-    θ = prior(1000)
-    Z = simulate(θ, m)
-    @test all(r̂(Z, θ) .>= 0)                          # likelihood-to-evidence ratios
-    @test all(0 .<= r̂(Z, θ; classifier = true) .<= 1) # class probabilities
+    samples = sampleposterior(r̂, z; θ_grid = θ_grid)    # posterior samples
+    @test size(samples) == (2, 1000)
 end
 
 @testset "PosteriorEstimator" begin

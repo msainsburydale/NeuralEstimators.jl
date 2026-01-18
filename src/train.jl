@@ -651,7 +651,7 @@ function _constructset(estimator::PosteriorEstimator, Z, θ::P, batchsize) where
     θ = f32(_extractθ(θ))
 
     input = (Z, θ) # combine data and parameters into a single tuple
-    output = θ # irrelevant what we use here, just a placeholder
+    output = θ     # irrelevant what we use here, just a placeholder
 
     _DataLoader((input, output), batchsize)
 end
@@ -779,8 +779,8 @@ function _trainmultiple(estimator; sampler = nothing, simulator = nothing, M = n
 
     @assert all(M .> 0)
     M = sort(M)
-    E = length(M)
-    estimators = [deepcopy(estimator) for _ ∈ 1:E]
+    num_estimators = length(M)
+    estimators = [deepcopy(estimator) for _ ∈ 1:num_estimators]
 
     for i ∈ eachindex(estimators)
         mᵢ = M[i]
@@ -796,7 +796,7 @@ function _trainmultiple(estimator; sampler = nothing, simulator = nothing, M = n
         if haskey(kwargs, :savepath) && !isnothing(kwargs.savepath)
             kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
         end
-        kwargs = _modifyargs(kwargs, i, E)
+        kwargs = _modifyargs(kwargs, i, num_estimators)
 
         # Train the estimator, dispatching based on the given arguments
         if !isnothing(sampler)
@@ -829,12 +829,12 @@ function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::V, Z_val::V; 
 
     @assert !(typeof(estimator) <: Vector) # check that estimator is not a vector of estimators, which is common error if one calls trainmultiple() on the output of a previous call to trainmultiple()
 
-    E = length(Z_train) # number of estimators
+    num_estimators = length(Z_train) # number of estimators
 
     kwargs = (; args...)
     verbose = _checkargs_trainmultiple(kwargs)
 
-    estimators = [deepcopy(estimator) for _ ∈ 1:E]
+    estimators = [deepcopy(estimator) for _ ∈ 1:num_estimators]
 
     for i ∈ eachindex(estimators)
 
@@ -861,7 +861,7 @@ function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::V, Z_val::V; 
         if haskey(kwargs, :savepath) && !isnothing(kwargs.savepath)
             kwargs = merge(kwargs, (savepath = kwargs.savepath * "_m$(mᵢ)",))
         end
-        kwargs = _modifyargs(kwargs, i, E)
+        kwargs = _modifyargs(kwargs, i, num_estimators)
 
         # Train the estimator for the current sample size
         estimators[i] = train(estimators[i], θ_train, θ_val, Z_trainᵢ, Z_valᵢ; kwargs...)
@@ -878,13 +878,12 @@ end
 
 # ---- Miscellaneous helper functions ----
 
-# E = number of estimators
-function _modifyargs(kwargs, i, E)
+function _modifyargs(kwargs, i, num_estimators)
     for arg ∈ [:epochs, :batchsize, :stopping_epochs]
         if haskey(kwargs, arg)
             field = getfield(kwargs, arg)
             if typeof(field) <: Vector # this check is needed because there is no method length(::Adam)
-                @assert length(field) ∈ (1, E)
+                @assert length(field) ∈ (1, num_estimators)
                 if length(field) > 1
                     kwargs = merge(kwargs, NamedTuple{(arg,)}(field[i]))
                 end
@@ -903,12 +902,12 @@ function _checkargs(batchsize, epochs, stopping_epochs, epochs_per_Z_refresh)
     @assert epochs_per_Z_refresh > 0
 end
 
-function _savestate(estimator, savepath, epoch = "")
+function _savestate(estimator, savepath, epoch = ""; file_name = "network")
     if !ispath(savepath)
         mkpath(savepath)
     end
     model_state = Flux.state(cpu(estimator))
-    file_name = epoch == "" ? "network.bson" : "network_epoch$epoch.bson"
+    file_name = epoch == "" ? "$(file_name).bson" : "$(file_name)_epoch$epoch.bson"
     network_path = joinpath(savepath, file_name)
     @save network_path model_state
 end

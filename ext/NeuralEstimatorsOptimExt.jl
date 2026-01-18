@@ -4,10 +4,10 @@ using NeuralEstimators
 using Optim
 import NeuralEstimators: _optimdensity
 
-function _optimdensity(θ₀, prior::Function, est)
+function _optimdensity(θ₀, logprior::Function, est)
     θ₀ = Float32.(θ₀)       # convert for efficiency and to avoid warnings
 
-    objective(θ) = -first(prior(θ) * est(Z, θ)) # closure that will be minimised
+    objective(θ) = -first(logprior(θ) + est(Z, θ)) # closure that will be minimised
 
     # Gradient using reverse-mode automatic differentiation with Zygote
     # ∇objective(θ) = gradient(θ -> objective(θ), θ)[1]
