@@ -289,6 +289,19 @@ function _checkgpu(use_gpu; verbose::Bool = true)
     return (device)
 end
 
+
+# Here, we define _manualgc() for the case that CUDA has not been loaded (so, we will be using the CPU)
+# For the case that CUDA is loaded, the function is overloaded in ext/NeuralEstimatorsCUDAExt.jl
+# NB Julia complains if we overload functions in package extensions... to get around this, here we
+# use a slightly different function signature (omitting ::Bool)
+function _forcegc(verbose)
+    if verbose
+        @info "Forcing garbage collection..."
+    end
+    GC.gc(true)
+    return nothing
+end
+
 """
     expandgrid(xs, ys)
 Generates a grid of all possible combinations of the elements from two input vectors, `xs` and `ys`. 

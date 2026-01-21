@@ -106,7 +106,10 @@ function findlr(opt)
     return nothing
 end
 
-function _train(estimator, sampler, simulator;
+function _train(
+    estimator, 
+    sampler, 
+    simulator;
     m = nothing,
     ξ = nothing, xi = nothing,
     epochs_per_θ_refresh::Integer = 1, epochs_per_theta_refresh::Integer = 1,
@@ -187,6 +190,9 @@ function _train(estimator, sampler, simulator;
     local min_val_risk = val_risk # minimum validation loss, monitored for early stopping
     local early_stopping_counter = 0
     train_time = @elapsed for epoch ∈ 1:epochs
+
+        GC.gc(false)
+
         if store_entire_train_set
 
             # Simulate new training data if needed
@@ -196,14 +202,14 @@ function _train(estimator, sampler, simulator;
                 if epoch == 1 || (epoch % epochs_per_θ_refresh) == 0
                     verbose && print("Refreshing the training parameters...")
                     θ_train = nothing
-                    @sync gc()
+                    GC.gc(false)
                     t = @elapsed θ_train = isnothing(ξ) ? sampler(K) : sampler(K, ξ)
                     verbose && println(" Finished in $(round(t, digits = 3)) seconds")
                 end
 
                 verbose && print("Refreshing the training data...")
                 train_set = nothing
-                @sync gc()
+                GC.gc(false)
                 t = @elapsed train_set = _constructset(estimator, simulator, θ_train, m, batchsize)
                 verbose && println(" Finished in $(round(t, digits = 3)) seconds")
             end
@@ -245,12 +251,16 @@ function _train(estimator, sampler, simulator;
             Optimisers.adjust!(optimiser, next_lr)
         end
     end
+    estimator_best = cpu(estimator_best)
 
     # save key information and the best estimator
     !isnothing(savepath) && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
     !isnothing(savepath) && _savebestmodel(savepath)
 
-    return cpu(estimator_best)
+    # force garbage collection
+    _forcegc(verbose)
+
+    return estimator_best
 end
 
 function _train(estimator, θ_train::P, θ_val::P, simulator;
@@ -312,13 +322,16 @@ function _train(estimator, θ_train::P, θ_val::P, simulator;
     local min_val_risk = val_risk
     local early_stopping_counter = 0
     train_time = @elapsed for epoch = 1:epochs
+
+        GC.gc(false)
+
         sim_time = 0.0
         if store_entire_train_set
             # Simulate new training data if needed
             if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
                 verbose && print("Simulating training data...")
                 train_set = nothing
-                @sync gc()
+                GC.gc(false)
                 sim_time = @elapsed train_set = _constructset(estimator, simulator, θ_train, m, batchsize)
                 verbose && println(" Finished in $(round(sim_time, digits = 3)) seconds")
             end
@@ -364,12 +377,16 @@ function _train(estimator, θ_train::P, θ_val::P, simulator;
             Optimisers.adjust!(optimiser, next_lr)
         end
     end
+    estimator_best = cpu(estimator_best)
 
     # save key information and save the best estimator as best_network.bson.
     !isnothing(savepath) && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
     !isnothing(savepath) && _savebestmodel(savepath)
 
-    return cpu(estimator_best)
+    # force garbage collection
+    _forcegc(verbose)
+
+    return estimator_best
 end
 
 function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
@@ -425,6 +442,8 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     local early_stopping_counter = 0
     train_time = @elapsed for epoch = 1:epochs
 
+        GC.gc(false)
+
         # For each batch update estimator and compute the training loss
         epoch_time = @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser)
         epoch_time += @elapsed val_risk = _risk(estimator, loss, val_set, device)
@@ -450,12 +469,16 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
             Optimisers.adjust!(optimiser, next_lr)
         end
     end
+    estimator_best = cpu(estimator_best)
 
     # save key information
     !isnothing(savepath) && _saveinfo(loss_per_epoch, train_time, savepath, verbose = verbose)
     !isnothing(savepath) && _savebestmodel(savepath)
 
-    return cpu(estimator_best)
+    # force garbage collection
+    _forcegc(verbose)
+
+    return estimator_best
 end
 
 # General fallback

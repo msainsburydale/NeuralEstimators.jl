@@ -3,7 +3,7 @@ module NeuralEstimatorsCUDAExt
 using NeuralEstimators
 using CUDA
 using Flux: gpu, cpu
-import NeuralEstimators: _checkgpu
+import NeuralEstimators: _checkgpu, _forcegc
 
 function _checkgpu(use_gpu::Bool; verbose::Bool = true)
     if use_gpu && CUDA.functional()
@@ -20,6 +20,14 @@ function _checkgpu(use_gpu::Bool; verbose::Bool = true)
     end
 
     return (device)
+end
+
+function _forcegc(verbose::Bool)
+    if verbose
+        @info "Forcing garbage collection..."
+    end
+    GC.gc(true); CUDA.reclaim()
+    return nothing
 end
 
 end
