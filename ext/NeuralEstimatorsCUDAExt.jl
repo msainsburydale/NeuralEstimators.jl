@@ -26,7 +26,10 @@ function _forcegc(verbose::Bool)
     if verbose
         @info "Forcing garbage collection..."
     end
-    GC.gc(true); CUDA.reclaim()
+    GC.gc(true)
+    if CUDA.functional()
+        CUDA.reclaim()
+    end
     return nothing
 end
 

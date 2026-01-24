@@ -426,10 +426,13 @@ end
 
 @doc raw"""
 	PosteriorEstimator <: NeuralEstimator
-	PosteriorEstimator(q::ApproximateDistribution, network)
+	PosteriorEstimator(network, q::ApproximateDistribution)
+    PosteriorEstimator(network, d::Integer, dstar::Integer = d; q::ApproximateDistribution = NormalisingFlow, kwargs...)
 A neural estimator that approximates the posterior distribution $p(\boldsymbol{\theta} \mid \boldsymbol{Z})$, based on a neural `network` and an approximate distribution `q` (see the available in-built [Approximate distributions](@ref)). 
 
-The neural `network` is a mapping from the sample space to a space determined by the chosen approximate distribution `q`. Often, the output space is the space $\mathcal{K}$ of the approximate-distribution parameters $\boldsymbol{\kappa}$. However, for certain distributions (notably, [`NormalisingFlow`](@ref)), the neural network outputs summary statistics of suitable dimension (e.g., the dimension $d$ of the parameter vector), which are then transformed into parameters of the approximate distribution using conventional multilayer perceptrons (see [`NormalisingFlow`](@ref)). 
+The neural `network` is a mapping from the sample space to a space determined by the chosen approximate distribution `q`. Often, the output space is the space $\mathcal{K}$ of the approximate-distribution parameters $\boldsymbol{\kappa}$. However, for certain distributions (notably, [`NormalisingFlow`](@ref)), the neural network outputs summary statistics of suitable dimension (e.g., the dimension $d$ of the parameter vector), which are then transformed into parameters of the approximate distribution using conventional multilayer perceptrons (see [`NormalisingFlow`](@ref)).
+
+The convenience constructor `PosteriorEstimator(network, d::Integer, dstar::Integer = d)` builds the approximate distribution automatically, with the keyword arguments passed onto the approximate-distribution constructor.  
 
 # Examples
 ```julia
@@ -452,7 +455,7 @@ w = 128
 network = DeepSet(ψ, ϕ)
 
 # Initialise the estimator
-estimator = PosteriorEstimator(q, network)
+estimator = PosteriorEstimator(network, q)
 
 # Train the estimator
 estimator = train(estimator, sample, simulate, m = m)
@@ -471,6 +474,32 @@ end
 numdistributionalparams(estimator::PosteriorEstimator) = numdistributionalparams(estimator.q)
 logdensity(estimator::PosteriorEstimator, θ, Z) = logdensity(estimator.q, f32(θ), estimator.network(f32(Z)))
 (estimator::PosteriorEstimator)(Zθ::Tuple) = logdensity(estimator, Zθ[2], Zθ[1]) # internal method only used during training # TODO not ideal that we assume an ordering here
+
+# Convenience constructor
+function PosteriorEstimator(network, d::Integer, dstar::Integer = d; q = NormalisingFlow, kwargs...)
+
+    # Convert string to type if needed
+    q = if q isa String
+        # Get the type from the string name
+        getfield(@__MODULE__, Symbol(q))
+    else
+        q
+    end
+
+    # Distribution used to approximate the posterior 
+    q = q(d, dstar; kwargs...) 
+
+    # Initialise the estimator
+    return PosteriorEstimator(q, network)
+end
+
+# Constructor for consistent argument ordering
+function PosteriorEstimator(network, q::A) where A <: ApproximateDistribution
+    return PosteriorEstimator(q, network)
+end
+
+
+
 
 #TODO maybe its better to not have a tuple, and just allow the arguments to be passed as normal... Just have to change DeepSet definition to allow two arguments in some places (this is more natural). Can easily allow backwards compat in this case too. 
 @doc raw"""

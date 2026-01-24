@@ -1197,6 +1197,7 @@ end
         ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
         ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, d))
         network = DeepSet(ψ, ϕ)
+        estimator = PosteriorEstimator(network, d; q = approxdist) # convenience constructor
         estimator = PosteriorEstimator(q, network)
         estimator = train(estimator, sample, simulate, m = m, epochs = 1, verbose = false)
         @test numdistributionalparams(estimator) == numdistributionalparams(q)
