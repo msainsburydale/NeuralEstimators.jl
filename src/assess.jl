@@ -1,27 +1,67 @@
 """
-	Assessment(df::DataFrame, runtime::DataFrame)
+	Assessment
 A type for storing the output of `assess()`. The field `runtime` contains the
 total time taken for each estimator. The field `df` is a long-form `DataFrame`
 with columns:
 
-- `estimator`: the name of the estimator
 - `parameter`: the name of the parameter
 - `truth`:     the true value of the parameter
 - `estimate`:  the estimated value of the parameter
-- `m`:         the sample size (number of exchangeable replicates) for the given data set
 - `k`:         the index of the parameter vector
-- `j`:         the index of the data set (in the case that multiple data sets are associated with each parameter vector)
+- `j`:         the index of the data set (only relevant in the case that multiple data sets are associated with each parameter vector)
 
 If the estimator is an [`IntervalEstimator`](@ref), the column `estimate` will be replaced by the columns `lower` and `upper`, containing the lower and upper bounds of the interval, respectively.
 
 If the estimator is a [`QuantileEstimator`](@ref), there will also be a column `prob` indicating the probability level of the corresponding quantile estimate.
+
+If the estimator is a [`PosteriorEstimator`](@ref), in addition to the fields listed above, the field `samples` stores the posterior samples as a long-form `DataFrame` with the columns `parameter`, `truth`, `k`, `j` (as given above), as well as:
+- `draw`: the index of the draw within the posterior samples
+- `value`: the value of the posterior sample for a given parameter and draw.
 
 Use `merge()` to combine assessments from multiple estimators of the same type or `join()` to combine assessments from a [`PointEstimator`](@ref) and an [`IntervalEstimator`](@ref).
 """
 struct Assessment
     df::DataFrame
     runtime::DataFrame
+    samples::Union{DataFrame, Nothing}
 end
+Assessment(df, runtime) = Assessment(df, runtime, nothing)
+
+# -------------------------------------------------------------------------
+# Convert posterior samples to long-form DataFrame
+#
+# The resulting `samples_df` contains the posterior draws for each parameter
+# and dataset in a tidy format, suitable for diagnostics, coverage checks,
+# SBC, or plotting.
+#
+# Columns of `samples_df`:
+#
+# - `:value`      :: Float64  
+#      The actual posterior sample value for a given parameter and draw.
+#
+# - `:parameter`  :: String  
+#      The name of the parameter (from `parameter_names`) corresponding
+#      to each row in `:value`.
+#
+# - `:sample`     :: Int  
+#      Index of the draw within the posterior samples (1 to N).
+#
+# - `:k`          :: Int  
+#      Index of the parameter vector within the batch (1 to K).  
+#      This is relevant when multiple parameter vectors are repeated in Z.
+#
+# - `:j`          :: Int  
+#      Index of the replicate dataset (1 to J).  
+#      Each `k` is repeated across J datasets if multiple replicates exist.
+#
+# - `:estimator`  :: String (optional)  
+#      Name of the estimator used to generate the posterior samples.
+#
+# Each row corresponds to a single posterior draw for one parameter, one
+# dataset replicate, and one parameter vector. The DataFrame is in long form.
+# -------------------------------------------------------------------------
+
+#TODO merge() and join() with posterior samples 
 
 function merge(assessment::Assessment, assessments::Assessment...)
     df = assessment.df
@@ -82,7 +122,7 @@ The parameters `θ` should be given as a ``d`` × ``K`` matrix, where ``d`` is t
 
 When `Z` contain more simulated data sets than the number ``K`` of sampled parameter vectors, `θ` will be recycled via horizontal concatenation: `θ = repeat(θ, outer = (1, J))`, where `J = numobs(Z) ÷ K` is the number of simulated data sets for each parameter vector. This allows assessment of the estimator's sampling distribution under fixed parameters.
 
-The return value is of type [`Assessment`](@ref). 
+The return value is of type [`Assessment`](@ref).
 
 # Keyword arguments
 - `parameter_names::Vector{String}`: names of the parameters (sensible defaults provided). 
@@ -193,6 +233,7 @@ function assess(
     estimator_name::Union{Nothing, String} = nothing,
     estimator_names::Union{Nothing, String} = nothing,
     N::Integer = 1000,
+    pointsummary::Function = mean, # TODO document this... just needs to be a summary function that transforms a vector of samples into a single number (acts on the marginals) 
     kwargs...
 ) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
@@ -211,43 +252,65 @@ function assess(
     if J > 1
         θ = repeat(θ, outer = (1, J))
     end
+    θ = convert(Matrix, θ)
 
-    # If the data are stored as a vector, get the number of replicates stored in each element 
-    if Z isa AbstractVector
-        m = numberreplicates(Z)
-    else
-        m = fill(1, KJ)
-    end
+    # Posterior samples 
+    runtime = @elapsed samples = sampleposterior(estimator, Z, N; kwargs...)
 
     # Obtain point estimates 
-    runtime = @elapsed θ̂ = posteriormedian(estimator, Z, N; kwargs...)
+    estimates = reduce(hcat, map.(pointsummary, eachrow.(samples)))
 
     # Convert to DataFrame and add information
     runtime = DataFrame(runtime = runtime)
-    θ̂ = DataFrame(θ̂', parameter_names)
-    θ̂[!, "m"] = m
-    θ̂[!, "k"] = repeat(1:K, J)
-    θ̂[!, "j"] = repeat(1:J, inner = K)
+    estimates = DataFrame(estimates', parameter_names)
+    estimates[!, "k"] = repeat(1:K, J)
+    estimates[!, "j"] = repeat(1:J, inner = K)
 
     # Add estimator name if it was provided
-    if !isnothing(estimator_names)
+    if !isnothing(estimator_names) # deprecation coercion
         estimator_name = estimator_names
-    end # deprecation coercion
+    end 
     if !isnothing(estimator_name)
         θ̂[!, "estimator"] .= estimator_name
         runtime[!, "estimator"] .= estimator_name
     end
 
     # Dataframe containing the true parameters, repeated if necessary 
-    θ = convert(Matrix, θ)
-    θ = DataFrame(θ', parameter_names)
-    θ = repeat(θ, outer = nrow(θ̂) ÷ nrow(θ))
-    θ = stack(θ, variable_name = :parameter, value_name = :truth) # transform to long form
+    θ_df = DataFrame(θ', parameter_names)
+    θ_df = repeat(θ_df, outer = nrow(estimates) ÷ nrow(θ_df))
+    θ_df = stack(θ_df, variable_name = :parameter, value_name = :truth) # transform to long form
 
     # Merge true parameters and estimates
-    df = _merge(θ, θ̂)
+    non_measure_vars = [:k, :j]
+    if "estimator" ∈ names(estimates)
+        push!(non_measure_vars, :estimator)
+    end
+    estimates = stack(estimates, Not(non_measure_vars), variable_name = :parameter, value_name = :estimate)
+    estimates[!, :truth] = θ_df[:, :truth]
 
-    return Assessment(df, runtime)
+    # Convert posterior samples to long form DataFrame 
+    sample_dfs = Vector{DataFrame}(undef, length(samples))
+    for (idx, S) in enumerate(samples)
+        d, N = size(S)
+
+        df_s = DataFrame(
+            parameter = repeat(parameter_names, inner = N),
+            truth = repeat(θ[:, idx], inner = N),
+            draw = repeat(1:N, outer = d), 
+            value = vec(S')
+        )
+        df_s[!, "k"] .= ((idx - 1) % K) + 1
+        df_s[!, "j"] .= ((idx - 1) ÷ K) + 1
+
+        if !isnothing(estimator_name)
+            df_s[!, "estimator"] .= estimator_name
+        end
+
+        sample_dfs[idx] = df_s
+    end
+    samples_df = vcat(sample_dfs...)
+
+    return Assessment(estimates, runtime, samples_df)
 end
 
 function assess(
@@ -460,6 +523,7 @@ function assess(
     return assessment
 end
 
+#TODO remove this function
 function _merge(θ, θ̂)
     non_measure_vars = [:m, :k, :j]
     if "estimator" ∈ names(θ̂)

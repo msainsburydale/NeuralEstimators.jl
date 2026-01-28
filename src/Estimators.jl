@@ -441,7 +441,7 @@ using NeuralEstimators, Flux
 # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
 d = 2     # dimension of the parameter vector θ
 n = 1     # dimension of each independent replicate of Z
-m = 30    # number of independent replicates in each data set
+m = 50    # number of independent replicates in each data set
 sample(K) = rand32(d, K)
 simulate(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(n, m) for ϑ in eachcol(θ)]
 
@@ -459,6 +459,11 @@ estimator = PosteriorEstimator(network, q)
 
 # Train the estimator
 estimator = train(estimator, sample, simulate, m = m)
+
+# Assess the estimator
+θ_test = sample(500)
+Z_test = simulate(θ_test, m);
+assessment = assess(estimator, θ_test, Z_test)
 
 # Inference with observed data 
 θ = [0.8f0 0.1f0]'

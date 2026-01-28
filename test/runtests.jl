@@ -1201,11 +1201,11 @@ end
         estimator = PosteriorEstimator(q, network)
         estimator = train(estimator, sample, simulate, m = m, epochs = 1, verbose = false)
         @test numdistributionalparams(estimator) == numdistributionalparams(q)
-        θ = [0.8f0 0.1f0]'
+        θ = sample(10)
         Z = simulate(θ, m)
         sampleposterior(estimator, Z) # posterior draws 
         posteriormean(estimator, Z)   # point estimate
-        posteriorquantile(estimator, Z, [0.1, 0.5])   # quantiles 
+        posteriorquantile(estimator, [Z[1]], [0.1, 0.5])   # quantiles (function only works for a single data set)
         assessment = assess(estimator, θ, Z)
     end
 end

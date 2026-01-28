@@ -103,7 +103,7 @@ posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Inte
 
 """
 	posteriorquantile(θ::AbstractMatrix, probs)	
-	posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, probs, N::Integer = 1000; kwargs...)	
+	posteriorquantile(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, probs, N::Integer = 1000; kwargs...)	
 Computes the vector of marginal posterior quantiles with (a collection of) probability levels `probs`, $_doc_string
 
 The return value is a ``d`` × `length(probs)` matrix. 
