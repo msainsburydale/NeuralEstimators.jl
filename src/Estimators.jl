@@ -492,19 +492,16 @@ function PosteriorEstimator(network, d::Integer, dstar::Integer = d; q = Normali
     end
 
     # Distribution used to approximate the posterior 
-    q = q(d, dstar; kwargs...) 
+    q = q(d, dstar; kwargs...)
 
     # Initialise the estimator
     return PosteriorEstimator(q, network)
 end
 
 # Constructor for consistent argument ordering
-function PosteriorEstimator(network, q::A) where A <: ApproximateDistribution
+function PosteriorEstimator(network, q::A) where {A <: ApproximateDistribution}
     return PosteriorEstimator(q, network)
 end
-
-
-
 
 #TODO maybe its better to not have a tuple, and just allow the arguments to be passed as normal... Just have to change DeepSet definition to allow two arguments in some places (this is more natural). Can easily allow backwards compat in this case too. 
 @doc raw"""
@@ -614,8 +611,6 @@ end
 # θ = sample(1000)
 # Z = simulate(θ, m)
 # r̂(Z, θ)                                   # log of the likelihood-to-evidence ratios
-
-
 
 @doc raw"""
 	PiecewiseEstimator <: NeuralEstimator

@@ -289,7 +289,6 @@ function _checkgpu(use_gpu; verbose::Bool = true)
     return (device)
 end
 
-
 # Here, we define _manualgc() for the case that CUDA has not been loaded (so, we will be using the CPU)
 # For the case that CUDA is loaded, the function is overloaded in ext/NeuralEstimatorsCUDAExt.jl
 # NB Julia complains if we overload functions in package extensions... to get around this, here we

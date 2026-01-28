@@ -269,7 +269,7 @@ function assess(
     # Add estimator name if it was provided
     if !isnothing(estimator_names) # deprecation coercion
         estimator_name = estimator_names
-    end 
+    end
     if !isnothing(estimator_name)
         θ̂[!, "estimator"] .= estimator_name
         runtime[!, "estimator"] .= estimator_name
@@ -296,7 +296,7 @@ function assess(
         df_s = DataFrame(
             parameter = repeat(parameter_names, inner = N),
             truth = repeat(θ[:, idx], inner = N),
-            draw = repeat(1:N, outer = d), 
+            draw = repeat(1:N, outer = d),
             value = vec(S')
         )
         df_s[!, "k"] .= ((idx - 1) % K) + 1

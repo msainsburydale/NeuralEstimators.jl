@@ -139,11 +139,10 @@ function sampleposterior(
     est::RatioEstimator,
     Z,
     N::Integer = 1000;
-    logprior::Function = θ -> 0f0,
+    logprior::Function = θ -> 0.0f0,
     θ_grid = nothing, theta_grid = nothing,
     # θ₀ = nothing, theta0 = nothing, # NB a basic MCMC sampler could be initialised with θ₀
     kwargs...)
-
     Z = f32(Z)
 
     # Check duplicated arguments that are needed so that the R interface uses ASCII characters only
@@ -167,7 +166,6 @@ function sampleposterior(
         reduce(hcat, θ)
     end
 end
-
 
 function sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000; kwargs...)
     # Determine if we are using the gpu 
@@ -207,7 +205,7 @@ See also [`posteriormedian()`](@ref), [`posteriormean()`](@ref).
 """
 function posteriormode(
     est::RatioEstimator, Z;
-    logprior::Function = θ -> 0f0, penalty::Union{Function, Nothing} = nothing,
+    logprior::Function = θ -> 0.0f0, penalty::Union{Function, Nothing} = nothing,
     θ_grid = nothing, theta_grid = nothing,
     θ₀ = nothing, theta0 = nothing,
     kwargs...
