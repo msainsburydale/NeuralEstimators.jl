@@ -107,8 +107,8 @@ function findlr(opt)
 end
 
 function _train(
-    estimator, 
-    sampler, 
+    estimator,
+    sampler,
     simulator;
     m = nothing,
     ξ = nothing, xi = nothing,
@@ -190,7 +190,6 @@ function _train(
     local min_val_risk = val_risk # minimum validation loss, monitored for early stopping
     local early_stopping_counter = 0
     train_time = @elapsed for epoch ∈ 1:epochs
-
         GC.gc(false)
 
         if store_entire_train_set
@@ -322,7 +321,6 @@ function _train(estimator, θ_train::P, θ_val::P, simulator;
     local min_val_risk = val_risk
     local early_stopping_counter = 0
     train_time = @elapsed for epoch = 1:epochs
-
         GC.gc(false)
 
         sim_time = 0.0
@@ -441,7 +439,6 @@ function _train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     local min_val_risk = val_risk
     local early_stopping_counter = 0
     train_time = @elapsed for epoch = 1:epochs
-
         GC.gc(false)
 
         # For each batch update estimator and compute the training loss
