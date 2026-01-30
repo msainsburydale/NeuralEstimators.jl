@@ -1,24 +1,17 @@
 module NeuralEstimators
 
-using Base: @propagate_inbounds, @kwdef
+using Base: @propagate_inbounds
 using Base.GC: gc
 import Base: join, merge, show, size, summary, getindex, length, eachindex
 using BSON: @save, load
 using CSV
 using DataFrames
-using Distances
 using Flux
 using Flux: getobs, numobs, ofeltype, DataLoader, update!, glorot_uniform, onehotbatch, _match_eltype, @non_differentiable, @ignore_derivatives
-using Folds
-using Graphs
-using GraphNeuralNetworks
-using GraphNeuralNetworks: check_num_nodes
-import GraphNeuralNetworks: GraphConv
+using Folds #NB Folds not needed in workshop 
 using InvertedIndices
 using LinearAlgebra
 using NamedArrays
-using NearestNeighbors: KDTree, knn
-using NNlib: scatter, gather
 using ParameterSchedulers
 using ParameterSchedulers: Stateful, next!
 using Printf
@@ -35,8 +28,7 @@ include("loss.jl")
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
 
-export DeepSet, summarystatistics, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference, DensePositive, MLP
-export vectotril, vectotriu
+export DeepSet, summarystatistics, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference, DensePositive, MLP, vectotril, vectotriu
 include("Architectures.jl")
 
 export ApproximateDistribution, GaussianMixture, NormalisingFlow, logdensity, numdistributionalparams
@@ -52,8 +44,8 @@ include("Estimators.jl")
 export sampleposterior, posteriormean, posteriormedian, posteriormode, posteriorquantile, bootstrap, interval, estimate
 include("inference.jl")
 
-export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights, KernelWeights, PowerDifference
-include("Graphs.jl")
+# export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights, KernelWeights, PowerDifference, NeighbourhoodVariogram
+# include("Graphs.jl")
 
 export simulategaussian, simulatepotts, simulateschlather
 export matern, maternchols, paciorek, scaledlogistic, scaledlogit
@@ -71,7 +63,7 @@ include("assess.jl")
 export stackarrays, expandgrid, numberreplicates, nparams, samplesize, drop, containertype, rowwisenorm
 include("utility.jl")
 
-export samplesize, logsamplesize, invsqrtsamplesize, samplecorrelation, samplecovariance, NeighbourhoodVariogram
+export samplesize, logsamplesize, invsqrtsamplesize, samplecorrelation, samplecovariance 
 include("summarystatistics.jl")
 
 export EM, removedata, encodedata

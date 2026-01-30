@@ -132,8 +132,7 @@ containertype(::Type{A}) where {A <: SubArray} = containertype(A.types[1])
 	numberreplicates(Z)
 
 Generic function that returns the number of replicates in a given object.
-Default implementations are provided for commonly used data formats, namely,
-data stored as an `Array` or as a `GNNGraph`.
+Default implementations are provided for commonly used data formats.
 """
 function numberreplicates end
 
@@ -161,14 +160,7 @@ function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, M}} where {V₁ <:
     @assert length(Z) == size(X, 2)
     numberreplicates(Z)
 end
-function numberreplicates(Z::G) where {G <: GNNGraph}
-    x = :Z ∈ keys(Z.ndata) ? Z.ndata.Z : first(values(Z.ndata))
-    if ndims(x) == 3
-        size(x, 2)
-    else
-        Z.num_graphs
-    end
-end
+
 
 """
 	subsetdata(Z::V, i) where {V <: AbstractArray{A}} where {A <: Any}
@@ -226,46 +218,7 @@ function subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
     getobs(Z, i)
 end
 
-function subsetdata(Z::G, i) where {G <: AbstractGraph}
-    if typeof(i) <: Integer
-        i = i:i
-    end
-    sym = collect(keys(Z.ndata))[1]
-    if ndims(Z.ndata[sym]) == 3
-        GNNGraph(Z; ndata = Z.ndata[sym][:, i, :])
-    else
-        # @warn "`subsetdata()` is slow for graphical data."
-        # TODO Recall that I set the code up to have ndata as a 3D array; with this format, non-parametric bootstrap would be exceedingly fast (since we can subset the array data, I think).
-        # TODO getgraph() doesn't currently work with the GPU: see https://github.com/CarloLucibello/GraphNeuralNetworks.jl/issues/161
-        # TODO getgraph() doesn’t return duplicates. So subsetdata(Z, [1, 1]) returns just a single graph
-        # TODO can't check for CuArray (and return to GPU) because CuArray won't always be defined (no longer depend on CUDA) and we can't overload exact signatures in package extensions... it's low priority, but will be good to fix when time permits. Hopefully, the above issue with GraphNeuralNetworks.jl will get fixed, and we can then just remove the call to cpu() below
-        #flag = Z.ndata[sym] isa CuArray
-        Z = cpu(Z)
-        Z = getgraph(Z, i)
-        #if flag Z = gpu(Z) end
-        Z
-    end
-end
 
-# ---- Test code for GNN and subsetdata ----
-
-# n = 250  # number of observations in each realisation
-# m = 100  # number of replicates in each data set
-# d = 1    # dimension of the response variable
-# K = 1000  # number of data sets
-#
-# # Array data
-# Z = [rand(n, d, m) for k ∈ 1:K]
-# @elapsed subsetdata(Z_array, 1:3) # ≈ 0.03 seconds
-#
-# # Graphical data
-# e = 100 # number of edges
-# Z = [batch([rand_graph(n, e, ndata = rand(d, n)) for _ ∈ 1:m]) for k ∈ 1:K]
-# @elapsed subsetdata(Z, 1:3) # ≈ 2.5 seconds
-#
-# # Graphical data: efficient storage
-# Z2 = [rand_graph(n, e, ndata = rand(d, m, n)) for k ∈ 1:K]
-# @elapsed subsetdata(Z2, 1:3) # ≈ 0.13 seconds
 
 # ---- End test code ----
 

@@ -7,8 +7,8 @@ using DataFrames
 using Distances
 using Flux
 using Flux: batch, DataLoader, mae, mse
-using Graphs
-using GraphNeuralNetworks
+# using Graphs
+# using GraphNeuralNetworks
 using LinearAlgebra
 using Random: seed!
 using SparseArrays: nnz
@@ -104,126 +104,126 @@ end
 
     @test isnothing(_check_sizes(1, 1))
 
-    @testset "maternclusterprocess" begin
-        S = maternclusterprocess()
-        @test size(S, 2) == 2
-        S = maternclusterprocess(unit_bounding_box = true)
-        @test size(S, 2) == 2
-    end
+    # @testset "maternclusterprocess" begin
+    #     S = maternclusterprocess()
+    #     @test size(S, 2) == 2
+    #     S = maternclusterprocess(unit_bounding_box = true)
+    #     @test size(S, 2) == 2
+    # end
 
-    @testset "adjacencymatrix" begin
-        n = 100
-        d = 2
-        S = rand(Float32, n, d)
-        k = 5
-        r = 0.3
+    # @testset "adjacencymatrix" begin
+    #     n = 100
+    #     d = 2
+    #     S = rand(Float32, n, d)
+    #     k = 5
+    #     r = 0.3
 
-        # Memory efficient constructors (avoids constructing the full distance matrix D)
-        A₁ = adjacencymatrix(S, k)
-        A₂ = adjacencymatrix(S, r)
-        @test eltype(A₁) == Float32
-        @test eltype(A₂) == Float32
-        A = adjacencymatrix(S, k, maxmin = true)
-        @test eltype(A) == Float32
-        A = adjacencymatrix(S, k, maxmin = true, moralise = true)
-        @test eltype(A) == Float32
-        A = adjacencymatrix(S, k, maxmin = true, combined = true)
-        @test eltype(A) == Float32
+    #     # Memory efficient constructors (avoids constructing the full distance matrix D)
+    #     A₁ = adjacencymatrix(S, k)
+    #     A₂ = adjacencymatrix(S, r)
+    #     @test eltype(A₁) == Float32
+    #     @test eltype(A₂) == Float32
+    #     A = adjacencymatrix(S, k, maxmin = true)
+    #     @test eltype(A) == Float32
+    #     A = adjacencymatrix(S, k, maxmin = true, moralise = true)
+    #     @test eltype(A) == Float32
+    #     A = adjacencymatrix(S, k, maxmin = true, combined = true)
+    #     @test eltype(A) == Float32
 
-        # Construct from full distance matrix D
-        D = pairwise(Euclidean(), S, S, dims = 1)
-        Ã₁ = adjacencymatrix(D, k)
-        Ã₂ = adjacencymatrix(D, r)
-        @test eltype(Ã₁) == Float32
-        @test eltype(Ã₂) == Float32
+    #     # Construct from full distance matrix D
+    #     D = pairwise(Euclidean(), S, S, dims = 1)
+    #     Ã₁ = adjacencymatrix(D, k)
+    #     Ã₂ = adjacencymatrix(D, r)
+    #     @test eltype(Ã₁) == Float32
+    #     @test eltype(Ã₂) == Float32
 
-        # Test that the matrices are the same irrespective of which method was used
-        @test Ã₁ ≈ A₁
-        @test Ã₂ ≈ A₂
+    #     # Test that the matrices are the same irrespective of which method was used
+    #     @test Ã₁ ≈ A₁
+    #     @test Ã₂ ≈ A₂
 
-        # Randomly selecting k nodes within a node's neighbourhood disc
-        seed!(1);
-        A₃ = adjacencymatrix(S, k, r)
-        @test A₃.n == A₃.m == n
-        @test length(adjacencymatrix(S, k, 0.02).nzval) < k*n
-        seed!(1);
-        Ã₃ = adjacencymatrix(D, k, r)
-        @test Ã₃ ≈ A₃
+    #     # Randomly selecting k nodes within a node's neighbourhood disc
+    #     seed!(1);
+    #     A₃ = adjacencymatrix(S, k, r)
+    #     @test A₃.n == A₃.m == n
+    #     @test length(adjacencymatrix(S, k, 0.02).nzval) < k*n
+    #     seed!(1);
+    #     Ã₃ = adjacencymatrix(D, k, r)
+    #     @test Ã₃ ≈ A₃
 
-        # Test that the number of neighbours is correct
-        f(A) = collect(mapslices(nnz, A; dims = 1))
-        @test all(f(adjacencymatrix(S, k)) .== k)
-        @test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k)
-        @test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k)
-        @test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k)
-        @test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1)
-        @test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k)
-        @test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+1)
+    #     # Test that the number of neighbours is correct
+    #     f(A) = collect(mapslices(nnz, A; dims = 1))
+    #     @test all(f(adjacencymatrix(S, k)) .== k)
+    #     @test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k)
+    #     @test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k)
+    #     @test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k)
+    #     @test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1)
+    #     @test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k)
+    #     @test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+1)
 
-        # Gridded locations (useful for checking functionality in the event of ties)
-        pts = range(0, 1, length = 10)
-        S = expandgrid(pts, pts)
-        @test all(f(adjacencymatrix(S, k)) .== k)
-        @test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k)
-        @test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k)
-        @test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k)
-        @test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1)
-        @test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k)
-        @test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+1)
+    #     # Gridded locations (useful for checking functionality in the event of ties)
+    #     pts = range(0, 1, length = 10)
+    #     S = expandgrid(pts, pts)
+    #     @test all(f(adjacencymatrix(S, k)) .== k)
+    #     @test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k)
+    #     @test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k)
+    #     @test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k)
+    #     @test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1)
+    #     @test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k)
+    #     @test all(f(adjacencymatrix(S, 2.0, k; random = false)) .== k+1)
 
-        # Check that k > n doesn't cause an error
-        n = 3
-        d = 2
-        S = rand(n, d)
-        adjacencymatrix(S, k)
-        adjacencymatrix(S, r, k)
-        D = pairwise(Euclidean(), S, S, dims = 1)
-        adjacencymatrix(D, k)
-        adjacencymatrix(D, r, k)
-    end
+    #     # Check that k > n doesn't cause an error
+    #     n = 3
+    #     d = 2
+    #     S = rand(n, d)
+    #     adjacencymatrix(S, k)
+    #     adjacencymatrix(S, r, k)
+    #     D = pairwise(Euclidean(), S, S, dims = 1)
+    #     adjacencymatrix(D, k)
+    #     adjacencymatrix(D, r, k)
+    # end
 
-    @testset "spatialgraph" begin
-        # Number of replicates, and spatial dimension
-        m = 5  # number of replicates
-        d = 2  # spatial dimension
+    # @testset "spatialgraph" begin
+    #     # Number of replicates, and spatial dimension
+    #     m = 5  # number of replicates
+    #     d = 2  # spatial dimension
 
-        # Spatial locations fixed for all replicates
-        n = 1000
-        S = rand(n, d)
-        Z = rand(n, m)
-        g = spatialgraph(S)
-        @test g.num_nodes == n
-        g = spatialgraph(g, Z)
-        g = spatialgraph(S, Z)
+    #     # Spatial locations fixed for all replicates
+    #     n = 1000
+    #     S = rand(n, d)
+    #     Z = rand(n, m)
+    #     g = spatialgraph(S)
+    #     @test g.num_nodes == n
+    #     g = spatialgraph(g, Z)
+    #     g = spatialgraph(S, Z)
 
-        # Spatial locations varying between replicates
-        n = rand(500:1000, m)
-        S = rand.(n, d)
-        Z = rand.(n)
-        g = spatialgraph(S)
-        @test g.num_nodes == sum(n)
-        g = spatialgraph(g, Z)
-        g = spatialgraph(S, Z)
+    #     # Spatial locations varying between replicates
+    #     n = rand(500:1000, m)
+    #     S = rand.(n, d)
+    #     Z = rand.(n)
+    #     g = spatialgraph(S)
+    #     @test g.num_nodes == sum(n)
+    #     g = spatialgraph(g, Z)
+    #     g = spatialgraph(S, Z)
 
-        # Mutlivariate processes: spatial locations fixed for all replicates
-        q = 2 # bivariate spatial process
-        n = 1000
-        S = rand(n, d)
-        Z = rand(q, n, m)
-        g = spatialgraph(S)
-        @test g.num_nodes == n
-        g = spatialgraph(g, Z)
-        g = spatialgraph(S, Z)
+    #     # Mutlivariate processes: spatial locations fixed for all replicates
+    #     q = 2 # bivariate spatial process
+    #     n = 1000
+    #     S = rand(n, d)
+    #     Z = rand(q, n, m)
+    #     g = spatialgraph(S)
+    #     @test g.num_nodes == n
+    #     g = spatialgraph(g, Z)
+    #     g = spatialgraph(S, Z)
 
-        # Mutlivariate processes: spatial locations varying between replicates
-        n = rand(500:1000, m)
-        S = rand.(n, d)
-        Z = rand.(q, n)
-        g = spatialgraph(S)
-        @test g.num_nodes == sum(n)
-        g = spatialgraph(g, Z)
-        g = spatialgraph(S, Z)
-    end
+    #     # Mutlivariate processes: spatial locations varying between replicates
+    #     n = rand(500:1000, m)
+    #     S = rand.(n, d)
+    #     Z = rand.(q, n)
+    #     g = spatialgraph(S)
+    #     @test g.num_nodes == sum(n)
+    #     g = spatialgraph(g, Z)
+    #     g = spatialgraph(S, Z)
+    # end
 
     @testset "missingdata" begin
 
@@ -391,21 +391,21 @@ end
     @test_throws Exception samplecovariance(z)
     @test_throws Exception samplecorrelation(z)
 
-    # neighbourhood variogram
-    θ = 0.1                                 # true range parameter
-    n = 100                                 # number of spatial locations
-    S = rand(n, 2)                          # spatial locations
-    D = pairwise(Euclidean(), S, dims = 1)  # distance matrix
-    Σ = exp.(-D ./ θ)                       # covariance matrix
-    L = cholesky(Symmetric(Σ)).L            # Cholesky factor
-    m = 5                                   # number of independent replicates
-    Z = L * randn(n, m)                     # simulated data
-    r = 0.15                                # radius of neighbourhood set
-    g = spatialgraph(S, Z, r = r) |> dvc
-    nv = NeighbourhoodVariogram(r, 10) |> dvc
-    nv(g)
-    @test length(nv(g)) == 10
-    @test all(nv(g) .>= 0)
+    # # neighbourhood variogram
+    # θ = 0.1                                 # true range parameter
+    # n = 100                                 # number of spatial locations
+    # S = rand(n, 2)                          # spatial locations
+    # D = pairwise(Euclidean(), S, dims = 1)  # distance matrix
+    # Σ = exp.(-D ./ θ)                       # covariance matrix
+    # L = cholesky(Symmetric(Σ)).L            # Cholesky factor
+    # m = 5                                   # number of independent replicates
+    # Z = L * randn(n, m)                     # simulated data
+    # r = 0.15                                # radius of neighbourhood set
+    # g = spatialgraph(S, Z, r = r) |> dvc
+    # nv = NeighbourhoodVariogram(r, 10) |> dvc
+    # nv(g)
+    # @test length(nv(g)) == 10
+    # @test all(nv(g) .>= 0)
 end
 
 @testset "Loss functions: $dvc" for dvc ∈ devices
@@ -541,49 +541,49 @@ end
         testbackprop(l, z, dvc)
     end
 
-    @testset "SpatialGraphConv" begin
-        n = 100
-        m = 5
-        S = rand(n, 2)
-        Z = rand(n, m)
-        g = spatialgraph(S, Z)
-        ch = 10
-        l = SpatialGraphConv(1 => ch)
-        l = l |> dvc
-        g = g |> dvc
-        y = l(g)
-        @test size(y.ndata.Z) == (ch, m, n)
-        # Back propagation
-        pars = deepcopy(trainables(l))
-        optimiser = Flux.setup(Flux.Adam(), l)
-        ∇ = Flux.gradient(l -> mae(l(g).ndata.Z, similar(y.ndata.Z)), l)
-        Flux.update!(optimiser, l, ∇[1])
-        @test trainables(l) != pars
+    # @testset "SpatialGraphConv" begin
+    #     n = 100
+    #     m = 5
+    #     S = rand(n, 2)
+    #     Z = rand(n, m)
+    #     g = spatialgraph(S, Z)
+    #     ch = 10
+    #     l = SpatialGraphConv(1 => ch)
+    #     l = l |> dvc
+    #     g = g |> dvc
+    #     y = l(g)
+    #     @test size(y.ndata.Z) == (ch, m, n)
+    #     # Back propagation
+    #     pars = deepcopy(trainables(l))
+    #     optimiser = Flux.setup(Flux.Adam(), l)
+    #     ∇ = Flux.gradient(l -> mae(l(g).ndata.Z, similar(y.ndata.Z)), l)
+    #     Flux.update!(optimiser, l, ∇[1])
+    #     @test trainables(l) != pars
 
-        # GNNSummary
-        propagation = GNNChain(SpatialGraphConv(1 => ch), SpatialGraphConv(ch => ch))
-        readout = GlobalPool(mean)
-        ψ = GNNSummary(propagation, readout)
-        ψ = ψ |> dvc
-        g = g |> dvc
-        y = ψ(g)
-        @test size(y) == (ch, m)
-        testbackprop(ψ, g, dvc)
-    end
+    #     # GNNSummary
+    #     propagation = GNNChain(SpatialGraphConv(1 => ch), SpatialGraphConv(ch => ch))
+    #     readout = GlobalPool(mean)
+    #     ψ = GNNSummary(propagation, readout)
+    #     ψ = ψ |> dvc
+    #     g = g |> dvc
+    #     y = ψ(g)
+    #     @test size(y) == (ch, m)
+    #     testbackprop(ψ, g, dvc)
+    # end
 
-    @testset "Spatial weight functions: $Weights" for Weights ∈ [IndicatorWeights, KernelWeights]
-        n = 30
-        h = rand(1, n)
-        n_bins = 10
-        w = Weights(1, n_bins)
-        w = w |> dvc
-        h = h |> dvc
-        y = w(h)
-        @test size(y) == (n_bins, n)
-        # Spatial weight functions do not have trainable parameters: avoid warnings by testing back prop with a simple chain
-        l = Chain(w, Dense(n_bins, 10))
-        testbackprop(l, h, dvc)
-    end
+    # @testset "Spatial weight functions: $Weights" for Weights ∈ [IndicatorWeights, KernelWeights]
+    #     n = 30
+    #     h = rand(1, n)
+    #     n_bins = 10
+    #     w = Weights(1, n_bins)
+    #     w = w |> dvc
+    #     h = h |> dvc
+    #     y = w(h)
+    #     @test size(y) == (n_bins, n)
+    #     # Spatial weight functions do not have trainable parameters: avoid warnings by testing back prop with a simple chain
+    #     l = Chain(w, Dense(n_bins, 10))
+    #     testbackprop(l, h, dvc)
+    # end
 end
 
 @testset "Output layers: $dvc" for dvc ∈ devices
@@ -668,26 +668,26 @@ end
     end
 end
 
-@testset "GNN: $dvc" for dvc ∈ devices
-    r = 1     # dimension of response variable
-    nₕ = 32    # dimension of node feature vectors
-    propagation = GNNChain(GraphConv(r => nₕ), GraphConv(nₕ => nₕ))
-    readout = GlobalPool(mean)
-    ψ = GNNSummary(propagation, readout)
-    d = 3     # output dimension 
-    w = 64    # width of hidden layer
-    ϕ = Chain(Dense(nₕ, w, relu), Dense(w, d))
-    ds = DeepSet(ψ, ϕ) |> dvc
-    g₁ = rand_graph(11, 30, ndata = rand32(r, 11)) |> dvc
-    g₂ = rand_graph(13, 40, ndata = rand32(r, 13)) |> dvc
-    g₃ = batch([g₁, g₂]) |> dvc
-    est1 = ds(g₁)                # single graph 
-    est2 = ds(g₃)                # graph with subgraphs corresponding to independent replicates
-    est3 = ds([g₁, g₂, g₃])      # vector of graphs, corresponding to multiple data sets 
-    @test size(est1) == (d, 1)
-    @test size(est2) == (d, 1)
-    @test size(est3) == (d, 3)
-end
+# @testset "GNN: $dvc" for dvc ∈ devices
+#     r = 1     # dimension of response variable
+#     nₕ = 32    # dimension of node feature vectors
+#     propagation = GNNChain(GraphConv(r => nₕ), GraphConv(nₕ => nₕ))
+#     readout = GlobalPool(mean)
+#     ψ = GNNSummary(propagation, readout)
+#     d = 3     # output dimension 
+#     w = 64    # width of hidden layer
+#     ϕ = Chain(Dense(nₕ, w, relu), Dense(w, d))
+#     ds = DeepSet(ψ, ϕ) |> dvc
+#     g₁ = rand_graph(11, 30, ndata = rand32(r, 11)) |> dvc
+#     g₂ = rand_graph(13, 40, ndata = rand32(r, 13)) |> dvc
+#     g₃ = batch([g₁, g₂]) |> dvc
+#     est1 = ds(g₁)                # single graph 
+#     est2 = ds(g₃)                # graph with subgraphs corresponding to independent replicates
+#     est3 = ds([g₁, g₂, g₃])      # vector of graphs, corresponding to multiple data sets 
+#     @test size(est1) == (d, 1)
+#     @test size(est2) == (d, 1)
+#     @test size(est3) == (d, 3)
+# end
 
 @testset "DeepSet: $dvc" for dvc ∈ devices
     # Test 
@@ -701,7 +701,7 @@ end
     dₜ = 16    # dimension of neural summary statistic
     for S in (nothing, samplesize)
         for dₓ in (0, 2) # dimension of set-level inputs 
-            for data in ("unstructured", "grid", "graph")
+            for data in ("unstructured", "grid") #, "graph")
                 dₛ = isnothing(S) ? 0 : 1 # dimension of expert summary statistic
                 if data == "unstructured"
                     Z = [rand32(n, m) for m ∈ M]
@@ -709,11 +709,11 @@ end
                 elseif data == "grid"
                     Z = [rand32(10, 10, 1, m) for m ∈ M]
                     ψ = Chain(Conv((5, 5), 1 => dₜ), GlobalMeanPool(), Flux.flatten)
-                elseif data == "graph"
-                    Z = [spatialgraph(rand(100, 2), rand(100, m)) for m ∈ (4, 4)] #TODO doesn't work for variable number of replicates i.e., m ∈ M; also, this can break when n is taken to be small like n=5 (run it many times and you will eventually see ERROR: AssertionError: DataStore: data[e] has 1 observations, but n = 0)
-                    propagation = GNNChain(SpatialGraphConv(1 => 16), SpatialGraphConv(16 => dₜ))
-                    readout = GlobalPool(mean)
-                    ψ = GNNSummary(propagation, readout)
+                # elseif data == "graph"
+                #     Z = [spatialgraph(rand(100, 2), rand(100, m)) for m ∈ (4, 4)] #TODO doesn't work for variable number of replicates i.e., m ∈ M; also, this can break when n is taken to be small like n=5 (run it many times and you will eventually see ERROR: AssertionError: DataStore: data[e] has 1 observations, but n = 0)
+                #     propagation = GNNChain(SpatialGraphConv(1 => 16), SpatialGraphConv(16 => dₜ))
+                #     readout = GlobalPool(mean)
+                #     ψ = GNNSummary(propagation, readout)
                 end
                 ϕ = Chain(Dense(dₜ + dₛ + dₓ, w, relu), Dense(w, d)) # outer network
                 ds = DeepSet(ψ, ϕ; S = S)
@@ -1216,11 +1216,11 @@ end
     p = 2
     initialise_estimator(p, architecture = "DNN")
     initialise_estimator(p, architecture = "MLP")
-    initialise_estimator(p, architecture = "GNN")
+    # initialise_estimator(p, architecture = "GNN")
     initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)])
 
     @test typeof(initialise_estimator(p, architecture = "MLP", estimator_type = "interval")) <: IntervalEstimator
-    @test typeof(initialise_estimator(p, architecture = "GNN", estimator_type = "interval")) <: IntervalEstimator
+    # @test typeof(initialise_estimator(p, architecture = "GNN", estimator_type = "interval")) <: IntervalEstimator
     @test typeof(initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)], estimator_type = "interval")) <: IntervalEstimator
 
     @test_throws Exception initialise_estimator(0, architecture = "MLP")

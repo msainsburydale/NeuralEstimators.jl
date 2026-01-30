@@ -12,8 +12,6 @@ mapestimate = posteriormode;
 export mapestimate
 mlestimate = posteriormode;
 export mlestimate
-WeightedGraphConv = SpatialGraphConv;
-export WeightedGraphConv
 simulategaussianprocess = simulategaussian;
 export simulategaussianprocess
 estimateinbatches = estimate;
@@ -179,20 +177,20 @@ function initialise_estimator(
             [Conv(kernel_size[l], width[l - 1] => width[l], activation) for l ∈ 2:depth[1]]...,
             Flux.flatten
         )
-    elseif architecture == "GNN"
-        propagation = weight_by_distance ? SpatialGraphConv : GraphConv
-        ψ = GNNChain(
-            propagation(d => width[1], activation),
-            [propagation(width[l - 1] => width[l], activation) for l ∈ 2:depth[1]]...,
-            GlobalPool(mean) # readout module
-        )
+    # elseif architecture == "GNN"
+    #     propagation = weight_by_distance ? SpatialGraphConv : GraphConv
+    #     ψ = GNNChain(
+    #         propagation(d => width[1], activation),
+    #         [propagation(width[l - 1] => width[l], activation) for l ∈ 2:depth[1]]...,
+    #         GlobalPool(mean) # readout module
+    #     )
     end
 
     if !isnothing(variance_stabiliser)
         if architecture ∈ ["MLP", "CNN"]
             ψ = Chain(variance_stabiliser, ψ...)
-        elseif architecture == "GNN"
-            ψ = GNNChain(variance_stabiliser, ψ...)
+        # elseif architecture == "GNN"
+        #     ψ = GNNChain(variance_stabiliser, ψ...)
         end
     end
 
