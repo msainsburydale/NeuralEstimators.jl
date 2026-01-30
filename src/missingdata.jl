@@ -254,7 +254,7 @@ function (em::EM)(Z::V, θ₀::Union{Number, Vector, Matrix, Nothing} = nothing;
 
     θ₀ = cpu(θ₀)
 
-    estimates = Folds.map(eachindex(Z)) do i
+    estimates = map(eachindex(Z)) do i
         em(Z[i], θ₀[:, i]; kwargs...).estimate
     end
     estimates = reduce(hcat, estimates)

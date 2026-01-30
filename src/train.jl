@@ -941,8 +941,8 @@ function _saveinfo(loss_per_epoch, train_time, savepath::String; verbose::Bool =
 
     # Save quantities of interest
     @save joinpath(savepath, "loss_per_epoch.bson") loss_per_epoch
-    CSV.write(joinpath(savepath, "loss_per_epoch.csv"), Tables.table(loss_per_epoch), header = false)
-    CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
+    # CSV.write(joinpath(savepath, "loss_per_epoch.csv"), Tables.table(loss_per_epoch), header = false)
+    # CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
 end
 
 """

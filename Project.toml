@@ -5,11 +5,8 @@ authors = ["Matthew Sainsbury-Dale <msainsburydale@gmail.com> and contributors"]
 
 [deps]
 BSON = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
-CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
-Folds = "41a02a25-b8f0-4f67-bc48-60067656b558"
 InvertedIndices = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NamedArrays = "86f7a689-2022-50b4-a561-43c23ac3c673"
@@ -37,14 +34,11 @@ NeuralEstimatorsPlotExt = ["AlgebraOfGraphics", "CairoMakie", "ColorSchemes"]
 [compat]
 AlgebraOfGraphics = "0.8, 0.9, 0.10, 0.11, 0.12"
 BSON = "0.3"
-CSV = "0.10"
 CUDA = "4, 5"
 CairoMakie = "0.12, 0.13, 0.14, 0.15"
 ColorSchemes = "2, 3"
 DataFrames = "1"
-Distances = "0.10, 0.11"
 Flux = "0.16"
-Folds = "0.2"
 InvertedIndices = "1"
 Metal = "1"
 NamedArrays = "0.9, 0.10"

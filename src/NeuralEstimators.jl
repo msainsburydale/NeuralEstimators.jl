@@ -4,11 +4,9 @@ using Base: @propagate_inbounds
 using Base.GC: gc
 import Base: join, merge, show, size, summary, getindex, length, eachindex
 using BSON: @save, load
-using CSV
 using DataFrames
 using Flux
 using Flux: getobs, numobs, ofeltype, DataLoader, update!, glorot_uniform, onehotbatch, _match_eltype, @non_differentiable, @ignore_derivatives
-using Folds #NB Folds not needed in workshop 
 using InvertedIndices
 using LinearAlgebra
 using NamedArrays
@@ -19,6 +17,8 @@ using Random: randexp, shuffle, randperm
 using SparseArrays
 using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum, quantile
+
+#TODO might want remove
 using StatsBase
 using StatsBase: wsample, sample
 
