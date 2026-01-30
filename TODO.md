@@ -30,6 +30,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - [ ] Improve the efficiency of the code where possible. See the general [Julia performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/) that could apply, and the [Flux performance tips](https://fluxml.ai/Flux.jl/stable/guide/performance/). In particular, some of the custom structs in this package could be made more efficient by simply adding type parameters, as discusses in the [Flux's custom model example](https://fluxml.ai/Flux.jl/stable/tutorials/custom_layers/#Custom-Model-Example). 
 
 ### Refactoring
+- [ ] Refactor code so that all methods for a given estimator class are in a single file (this will be much clearer, making contributing and long-term maintenance easier)
 - [ ] Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl
 - [ ] For long term stability, it might be better to use Plots.jl, rather than AlgebraOfGraphics.jl and CairoMakie.jl
 
