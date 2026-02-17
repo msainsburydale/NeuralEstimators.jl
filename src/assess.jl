@@ -271,7 +271,7 @@ function assess(
         estimator_name = estimator_names
     end
     if !isnothing(estimator_name)
-        θ̂[!, "estimator"] .= estimator_name
+        estimates[!, "estimator"] .= estimator_name
         runtime[!, "estimator"] .= estimator_name
     end
 
