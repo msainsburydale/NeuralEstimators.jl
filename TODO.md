@@ -5,13 +5,15 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ---
 
 ### Features
-- [ ] Functionality to resume training.
+- [ ] Support for [Lux.jl](https://lux.csail.mit.edu/stable/).
+- [ ] Better functionality to resume training.
 - [ ] Option to check the validation risk (and save the estimator) more frequently than the end of each epoch, to avoid wasted computation with very large training sets.
 - [ ] Explicit learning of summary statistics (see [Zammit-Mangion et al., 2025, Sec. 4](https://arxiv.org/pdf/2404.12484))
 - [ ] Incorporate [Bootstrap.jl](https://github.com/juliangehring/Bootstrap.jl) (possibly as an [extension](https://docs.julialang.org/en/v1/manual/code-loading/#man-extensions)) to expand bootstrap functionality 
 - [ ] Improve assessment stage with `PosteriorEstimator` and `RatioEstimator`: add methods that assess the full posterior rather than point estimates, and add diagnostics (e.g., CRPS and interval score)
 - [ ] Ensemble methods with `PosteriorEstimator` and `RatioEstimator`
 - [ ] Support for [Enzyme](https://fluxml.ai/Flux.jl/dev/reference/training/enzyme/). Currently, DeepSet does not work with `Enzyme.Duplicated` due to an error about using it with nested networks
+- [ ] Model misspecification detection. 
 - [ ] Model selection/comparison: see the [BayesFlow example](https://bayesflow.org/main/_examples/One_Sample_TTest.html) and [this paper](https://arxiv.org/pdf/2503.23156)
 - [ ] [Telescopic ratio estimation](https://arxiv.org/pdf/2006.12204)
 - [ ] Parameter bounds when doing posterior inference (see [#38](https://github.com/msainsburydale/NeuralEstimators.jl/issues/38)).
