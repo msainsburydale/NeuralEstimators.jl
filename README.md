@@ -10,11 +10,15 @@
 [R-repo-img]: https://img.shields.io/badge/R-interface-blue.svg
 [R-repo-url]: https://github.com/msainsburydale/NeuralEstimators
 
-`NeuralEstimators` facilitates a suite of neural methods for parameter inference in scenarios where simulation from the model is feasible. These methods are **likelihood-free** and **amortised**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches. 
+`NeuralEstimators` facilitates neural methods for simulation-based parameter inference. These methods are **likelihood-free** and **amortised**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches. 
 
-The package supports neural Bayes estimators, which transform data into point summaries of the posterior distribution; neural posterior estimators, which perform approximate posterior inference via KL-divergence minimisation; and neural ratio estimators, which approximate the likelihood-to-evidence ratio and thereby enable frequentist or Bayesian inference through various downstream algorithms, such as MCMC sampling. 
+The package supports: 
 
-See the [documentation](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) to get started!
+ - Neural Bayes estimators (NBEs), which transform data into functionals of the posterior distribution;
+ - Neural posterior estimators (NPEs), which perform approximate posterior inference via KL-divergence minimisation; and 
+ - Neural ratio estimators (NREs), which approximate the likelihood-to-evidence ratio and thereby enable frequentist or Bayesian inference through various downstream algorithms.
+
+See the [documentation](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) to get started, and the step-by-step introductory [notebook tutorial](http://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/src/tutorials/introduction.ipynb) (runnable in [Google Colab](https://colab.research.google.com/)) for a worked example.
 
 
 ### Installation 
