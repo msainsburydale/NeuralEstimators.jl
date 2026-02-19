@@ -42,12 +42,7 @@ A convenient interface for `R` users is available on [CRAN](https://CRAN.R-proje
 
 ### Contributing
 
-To get started, see [CONTRIBUTING.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/CONTRIBUTING.md) for an overview of the code structure. A list of planned improvements is available in [TODO.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/TODO.md), and instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/README.md). 
-
-When adding functionality to the package, please include unit tests in [test/runtests.jl](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/test/runtests.jl). You can run the test suite locally by executing the following command from the root folder:
-```bash
-julia --project=. -e "using Pkg; Pkg.test()"
-```
+To get started, see [CONTRIBUTING.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/CONTRIBUTING.md) for an overview of the code structure, development workflow, and how to submit contributions. A list of planned improvements is available in [TODO.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/TODO.md), and instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/README.md). 
 
 If you encounter a bug or have a suggestion, please feel free to [open an issue](https://github.com/msainsburydale/NeuralEstimators.jl/issues) or submit a pull request.
 
