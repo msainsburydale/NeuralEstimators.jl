@@ -481,199 +481,15 @@ end
 # General fallback
 train(args...; kwargs...) = _train(args...; kwargs...)
 
-# Wrapper functions for specific types of neural estimators
-function train(estimator::Union{IntervalEstimator, QuantileEstimatorDiscrete}, args...; kwargs...)
-
-    # Get the keyword arguments
-    kwargs = (; kwargs...)
-
-    # Define the loss function based on the given probabiltiy levels
-    τ = f32(estimator.probs)
-    # Determine if we need to move τ to the GPU
-    use_gpu = haskey(kwargs, :use_gpu) ? kwargs.use_gpu : true
-    device = _checkgpu(use_gpu, verbose = false)
-    τ = device(τ)
-    # Define the loss function
-    qloss = (estimator, θ) -> quantileloss(estimator, θ, τ)
-
-    # Notify the user if "loss" is in the keyword arguments
-    if haskey(kwargs, :loss)
-        @info "The keyword argument `loss` is not required when training a $(typeof(estimator)), since in this case the quantile loss is always used"
-    end
-    # Add our quantile loss to the list of keyword arguments
-    kwargs = merge(kwargs, (loss = qloss,))
-
-    # Train the estimator
-    _train(estimator, args...; kwargs...)
-end
-
-function train(estimator::QuantileEstimatorContinuous, args...; kwargs...)
-    # We define the loss function in the method _risk(estimator::QuantileEstimatorContinuous)
-    # Here, just notify the user if they've assigned a loss function
-    kwargs = (; kwargs...)
-    if haskey(kwargs, :loss)
-        @info "The keyword argument `loss` is not required when training a $(typeof(estimator)), since in this case the quantile loss is always used"
-    end
-    _train(estimator, args...; kwargs...)
-end
-
-function train(estimator::RatioEstimator, args...; kwargs...)
-
-    # Get the keyword arguments and assign the loss function
-    kwargs = (; kwargs...)
-    if haskey(kwargs, :loss)
-        @info "The keyword argument `loss` is not required when training a $(typeof(estimator)), since in this case the binary cross-entropy loss is always used"
-    end
-    _train(estimator, args...; kwargs...)
-end
-
-function train(estimator::PosteriorEstimator, args...; kwargs...)
-
-    # Get the keyword arguments and assign the loss function
-    kwargs = (; kwargs...)
-    if haskey(kwargs, :loss)
-        @info "The keyword argument `loss` is not required when training a $(typeof(estimator)), since in this case the KL divergence is always used"
-    end
-    kwargs = merge(kwargs, (loss = (q, θ) -> -mean(q),))
-    _train(estimator, args...; kwargs...)
-end
-
-function train(ensemble::Ensemble, args...; kwargs...)
-    kwargs = (; kwargs...)
-    savepath = haskey(kwargs, :savepath) ? kwargs.savepath : nothing
-    verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
-    optimiser = haskey(kwargs, :optimiser) ? kwargs.optimiser : nothing
-    estimators = map(enumerate(ensemble.estimators)) do (i, estimator)
-        verbose && @info "Training estimator $i of $(length(ensemble))"
-        if !isnothing(savepath)
-            kwargs = merge(kwargs, (savepath = joinpath(savepath, "estimator$i"),))
-        end
-        if !isnothing(optimiser) # catch errors caused by constructing the optimiser from the Ensemble object
-            lr = try
-                findlr(optimiser)
-            catch
-                ;
-                5e-4
-            end
-            kwargs = merge(kwargs, (optimiser = Flux.setup(Adam(lr), estimator),))
-        end
-        train(estimator, args...; kwargs...)
-    end
-    ensemble = Ensemble(estimators)
-
-    if !isnothing(savepath)
-        if !ispath(savepath)
-            mkpath(savepath)
-        end
-        model_state = Flux.state(cpu(ensemble))
-        @save joinpath(savepath, "ensemble.bson") model_state
-    end
-
-    return ensemble
-end
-
-# ---- Lower level functions ----
-
 # Wrapper function that constructs a set of input and outputs (usually simulated data and corresponding true parameters)
-function _constructset(estimator, simulator::Function, θ::P, m, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-    Z = isnothing(m) ? simulator(θ) : simulator(θ, m)
-    _constructset(estimator, Z, θ, batchsize)
-end
 function _constructset(estimator, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
     Z = f32(Z)
     θ = f32(_extractθ(θ))
     _DataLoader((Z, θ), batchsize)
 end
-function _constructset(estimator::QuantileEstimatorDiscrete, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-    Z = f32(Z)
-    θ = f32(_extractθ(θ))
-
-    i = estimator.i
-    if isnothing(i)
-        input = Z
-        output = θ
-    else
-        @assert size(θ, 1) >= i "The number of parameters in the model (size(θ, 1) = $(size(θ, 1))) must be at least as large as the value of i stored in the estimator (estimator.i = $(estimator.i))"
-        θᵢ = θ[i:i, :]
-        θ₋ᵢ = θ[Not(i), :]
-        input = (Z, θ₋ᵢ) # "Tupleise" the input
-        output = θᵢ
-    end
-
-    _DataLoader((input, output), batchsize)
-end
-function _constructset(estimator::QuantileEstimatorContinuous, Zτ, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-    θ = f32(_extractθ(θ))
-    Z, τ = Zτ
-    Z = f32(Z)
-    τ = f32(τ)
-
-    i = estimator.i
-    if isnothing(i)
-        input = (Z, τ)
-        output = θ
-    else
-        @assert size(θ, 1) >= i "The number of parameters in the model (size(θ, 1) = $(size(θ, 1))) must be at least as large as the value of i stored in the estimator (estimator.i = $(estimator.i))"
-        θᵢ = θ[i:i, :]
-        θ₋ᵢ = θ[Not(i), :]
-        # Combine each θ₋ᵢ with the corresponding vector of
-        # probability levels, which requires repeating θ₋ᵢ appropriately
-        θ₋ᵢτ = map(eachindex(τ)) do k
-            τₖ = τ[k]
-            θ₋ᵢₖ = repeat(θ₋ᵢ[:, k:k], inner = (1, length(τₖ)))
-            vcat(θ₋ᵢₖ, τₖ')
-        end
-        input = (Z, θ₋ᵢτ)   # "Tupleise" the input
-        output = θᵢ
-    end
-
-    _DataLoader((input, output), batchsize)
-end
-
-function _constructset(estimator::RatioEstimator, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-    Z = f32(Z)
-    θ = f32(_extractθ(θ))
-
-    # Create independent pairs
-    K = numobs(Z)
-    θ̃ = subsetparameters(θ, shuffle(1:K)) #NB can use getobs here instead of subsetparameters
-    Z̃ = Z # NB memory inefficient to replicate the data in this way
-
-    # Combine dependent and independent pairs
-    θ = hcat(θ, θ̃)
-    if Z isa AbstractVector
-        Z = vcat(Z, Z̃)
-    elseif Z isa AbstractMatrix
-        Z = hcat(Z, Z̃)
-    else # general combine along the observation dimension... 
-        # NB most of the scenarios are covered above, so the following isn't really tested
-        Z = getobs(joinobs(Z, Z̃), 1:2K)
-    end
-
-    # Create class labels for output
-    labels = [:dependent, :independent]
-    output = onehotbatch(repeat(labels, inner = K), labels)[1:1, :]
-
-    # Shuffle everything in case batching isn't shuffled properly downstrean
-    idx = shuffle(1:2K)
-    Z = getobs(Z, idx)
-    θ = getobs(θ, idx)
-    output = output[1:1, idx]
-
-    # Combine data and parameters into a single tuple
-    input = (Z, θ)
-
-    _DataLoader((input, output), batchsize)
-end
-
-function _constructset(estimator::PosteriorEstimator, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-    Z = f32(Z)
-    θ = f32(_extractθ(θ))
-
-    input = (Z, θ) # combine data and parameters into a single tuple
-    output = θ     # irrelevant what we use here, just a placeholder
-
-    _DataLoader((input, output), batchsize)
+function _constructset(estimator, simulator::Function, θ::P, m, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+    Z = isnothing(m) ? simulator(θ) : simulator(θ, m)
+    _constructset(estimator, Z, θ, batchsize)
 end
 
 # Computes the risk function in a memory-safe manner, optionally updating the
@@ -701,64 +517,7 @@ function _risk(estimator, loss, set::DataLoader, device, optimiser = nothing)
     return cpu(sum_loss/K)
 end
 
-function _risk(estimator::RatioEstimator, loss, set::DataLoader, device, optimiser = nothing)
-    sum_loss = 0.0f0
-    K = 0
-    for (input, output) in set
-        input, output = input |> device, output |> device
-        k = size(output)[end]
-        loss_fn = est -> Flux.logitbinarycrossentropy(est.network(input), output)
-        if !isnothing(optimiser)
-            ls, ∇ = Flux.withgradient(loss_fn, estimator)
-            Flux.update!(optimiser, estimator, ∇[1])
-        else
-            ls = loss_fn(estimator)
-        end
-        # Convert average loss to a sum and add to total
-        sum_loss += ls * k
-        K += k
-    end
 
-    return cpu(sum_loss/K)
-end
-
-function _risk(estimator::QuantileEstimatorContinuous, loss, set::DataLoader, device, optimiser = nothing)
-    sum_loss = 0.0f0
-    K = 0
-    for (input, output) in set
-        k = size(output)[end]
-        input, output = input |> device, output |> device
-
-        if isnothing(estimator.i)
-            Z, τ = input
-            input1 = Z
-            input2 = permutedims.(τ)
-            input = (input1, input2)
-            τ = reduce(hcat, τ)                # reduce from vector of vectors to matrix
-        else
-            Z, θ₋ᵢτ = input
-            τ = [x[end, :] for x ∈ θ₋ᵢτ] # extract probability levels
-            τ = reduce(hcat, τ)          # reduce from vector of vectors to matrix
-        end
-
-        # Repeat τ and θ to facilitate broadcasting and indexing
-        # Note that repeat() cannot be differentiated by Zygote
-        p = size(output, 1)
-        @ignore_derivatives τ = repeat(τ, inner = (p, 1))
-        @ignore_derivatives output = repeat(output, inner = (size(τ, 1) ÷ p, 1))
-
-        if !isnothing(optimiser)
-            ls, ∇ = Flux.withgradient(estimator -> quantileloss(estimator(input), output, τ), estimator)
-            Flux.update!(optimiser, estimator, ∇[1])
-        else
-            ls = quantileloss(estimator(input), output, τ)
-        end
-        # Convert average loss to a sum and add to total
-        sum_loss += ls * k
-        K += k
-    end
-    return cpu(sum_loss/K)
-end
 
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 
@@ -827,7 +586,7 @@ function _trainmultiple(estimator; sampler = nothing, simulator = nothing, M = n
             # subset the training and validation data to the current sample size, and then train 
             Z_trainᵢ = subsetdata(Z_train, 1:mᵢ)
             Z_valᵢ = subsetdata(Z_val, 1:mᵢ)
-            estimators[i] = train(estimators[i], θ_train, θ_val, Z_train, Z_valᵢ; kwargs...)
+            estimators[i] = train(estimators[i], θ_train, θ_val, Z_trainᵢ, Z_valᵢ; kwargs...)
         end
     end
     return estimators

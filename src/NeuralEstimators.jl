@@ -30,7 +30,7 @@ using StatsBase
 using StatsBase: wsample, sample
 
 export tanhloss, kpowerloss, intervalscore, quantileloss
-include("loss.jl")
+include("losses.jl")
 
 export ParameterConfigurations, subsetparameters
 include("Parameters.jl")
@@ -41,13 +41,31 @@ include("Architectures.jl")
 
 export ApproximateDistribution, GaussianMixture, NormalisingFlow, logdensity, numdistributionalparams
 export AffineCouplingBlock
-include("ApproximateDistributions.jl")
+include(joinpath("ApproximateDistributions", "ApproximateDistributions.jl"))
+for file in sort(readdir(joinpath(@__DIR__, "ApproximateDistributions")))
+    endswith(file, ".jl") || continue
+    file != "ApproximateDistributions.jl" || continue
+    include(joinpath("ApproximateDistributions", file))
+end
+
+export train, trainmultiple
+include("train.jl")
+
+export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
+include("assess.jl")
 
 export NeuralEstimator
 export BayesEstimator, PosteriorEstimator, RatioEstimator
 export PointEstimator, IntervalEstimator, QuantileEstimatorContinuous, QuantileEstimatorDiscrete, QuantileEstimator
 export Ensemble, PiecewiseEstimator
-include("Estimators.jl")
+include(joinpath("Estimators", "Estimators.jl"))
+include(joinpath("Estimators", "Ensemble.jl"))
+for file in sort(readdir(joinpath(@__DIR__, "Estimators")))
+    endswith(file, ".jl") || continue
+    file != "Estimators.jl" || continue
+    file != "Ensemble.jl" || continue
+    include(joinpath("Estimators", file))
+end
 
 export sampleposterior, posteriormean, posteriormedian, posteriormode, posteriorquantile, bootstrap, interval, estimate
 include("inference.jl")
@@ -55,20 +73,7 @@ include("inference.jl")
 export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights, KernelWeights, PowerDifference
 include("Graphs.jl")
 
-export simulategaussian, simulatepotts, simulateschlather
-export matern, maternchols, paciorek, scaledlogistic, scaledlogit
-include("simulate.jl")
-
-export gaussiandensity, schlatherbivariatedensity
-include("densities.jl")
-
-export train, trainmultiple, subsetdata
-include("train.jl")
-
-export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
-include("assess.jl")
-
-export stackarrays, expandgrid, numberreplicates, nparams, samplesize, drop, containertype, rowwisenorm
+export stackarrays, expandgrid, numberreplicates, nparams, samplesize, drop, containertype, rowwisenorm, subsetdata
 include("utility.jl")
 
 export samplesize, logsamplesize, invsqrtsamplesize, samplecorrelation, samplecovariance, NeighbourhoodVariogram
@@ -76,6 +81,12 @@ include("summarystatistics.jl")
 
 export EM, removedata, encodedata
 include("missingdata.jl")
+
+# Some simulators and density functions that are useful to have but not needed in generic workflows
+export simulategaussian, simulatepotts, simulateschlather
+export matern, maternchols, paciorek, scaledlogistic, scaledlogit
+export gaussiandensity, schlatherbivariatedensity
+include("modelspecificfunctions.jl")
 
 # Backwards compatability and deprecations:
 export loadbestweights, loadweights, simulate, trainx, mapestimate, initialise_estimator

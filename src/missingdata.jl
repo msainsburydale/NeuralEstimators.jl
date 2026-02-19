@@ -262,10 +262,11 @@ function (em::EM)(Z::V, θ₀::Union{Number, Vector, Matrix, Nothing} = nothing;
     return estimates
 end
 
+#TODO I think this function is a little niche and not particularly general... 
 """
 	removedata(Z::Array, Iᵤ::Vector{T}) where T <: Union{Integer, CartesianIndex}
 	removedata(Z::Array, p::Union{Float, Vector{Float}}; prevent_complete_missing = true)
-	removedata(Z::Array, n::Integer; fixed_pattern = false, contiguous_pattern = false, variable_proportion = false)
+	removedata(Z::Array, n::Integer; fixed_pattern = false, contiguous_pattern = false)
 Replaces elements of `Z` with `missing`.
 
 The simplest method accepts a vector `Iᵤ` that specifes the indices
@@ -283,10 +284,7 @@ effective values of `p`).
 Second, if an integer `n` is provided, all replicates will contain
 `n` observations after the data are removed. If `fixed_pattern = true`, the
 missingness pattern is fixed for all replicates. If `contiguous_pattern = true`,
-the data will be removed in a contiguous block based on a randomly selected starting index. If `variable_proportion = true`,
-the proportion of missingness will vary across replicates, with each replicate containing
-between 1 and `n` observations after data removal, sampled uniformly (note that
-`variable_proportion` overrides `fixed_pattern`).
+the data will be removed in a contiguous block based on a randomly selected starting index. 
 
 The return type is `Array{Union{T, Missing}}`.
 
@@ -307,8 +305,7 @@ removedata(Z, n)
 """
 function removedata(Z::A, n::Integer;
     fixed_pattern::Bool = false,
-    contiguous_pattern::Bool = false,
-    variable_proportion::Bool = false
+    contiguous_pattern::Bool = false
 ) where {A <: AbstractArray{T, N}} where {T, N}
     if isa(Z, Vector)
         Z = reshape(Z, :, 1)
@@ -320,20 +317,6 @@ function removedata(Z::A, n::Integer;
         # If the user requests fully observed data, we still convert Z to
         # an array with an eltype that allows missing data for type stability
         Iᵤ = Int64[]
-
-    elseif variable_proportion
-        Zstar = map(eachslice(Z; dims = N)) do z
-            # Pass number of observations between 1:n into removedata()
-            removedata(
-                reshape(z, size(z)..., 1),
-                StatsBase.sample(1:n, 1)[1],
-                fixed_pattern = fixed_pattern,
-                contiguous_pattern = contiguous_pattern,
-                variable_proportion = false
-            )
-        end
-
-        return stackarrays(Zstar)
 
     else
 
