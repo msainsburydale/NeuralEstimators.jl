@@ -161,19 +161,11 @@ function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, M}} where {V₁ <:
     @assert length(Z) == size(X, 2)
     numberreplicates(Z)
 end
-function numberreplicates(Z::G) where {G <: GNNGraph}
-    x = :Z ∈ keys(Z.ndata) ? Z.ndata.Z : first(values(Z.ndata))
-    if ndims(x) == 3
-        size(x, 2)
-    else
-        Z.num_graphs
-    end
-end
 
 """
 	subsetdata(Z::V, i) where {V <: AbstractArray{A}} where {A <: Any}
 	subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
-	subsetdata(Z::G, i) where {G <: AbstractGraph}
+	subsetdata(Z::G, i) where {G <: GNNGraph}
 Return replicate(s) `i` from each data set in `Z`.
 
 If working with data that are not covered by the default methods, overload the function with the appropriate type for `Z`.
@@ -226,26 +218,7 @@ function subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
     getobs(Z, i)
 end
 
-function subsetdata(Z::G, i) where {G <: AbstractGraph}
-    if typeof(i) <: Integer
-        i = i:i
-    end
-    sym = collect(keys(Z.ndata))[1]
-    if ndims(Z.ndata[sym]) == 3
-        GNNGraph(Z; ndata = Z.ndata[sym][:, i, :])
-    else
-        # @warn "`subsetdata()` is slow for graphical data."
-        # TODO Recall that I set the code up to have ndata as a 3D array; with this format, non-parametric bootstrap would be exceedingly fast (since we can subset the array data, I think).
-        # TODO getgraph() doesn't currently work with the GPU: see https://github.com/CarloLucibello/GraphNeuralNetworks.jl/issues/161
-        # TODO getgraph() doesn’t return duplicates. So subsetdata(Z, [1, 1]) returns just a single graph
-        # TODO can't check for CuArray (and return to GPU) because CuArray won't always be defined (no longer depend on CUDA) and we can't overload exact signatures in package extensions... it's low priority, but will be good to fix when time permits. Hopefully, the above issue with GraphNeuralNetworks.jl will get fixed, and we can then just remove the call to cpu() below
-        #flag = Z.ndata[sym] isa CuArray
-        Z = cpu(Z)
-        Z = getgraph(Z, i)
-        #if flag Z = gpu(Z) end
-        Z
-    end
-end
+
 
 # ---- Test code for GNN and subsetdata ----
 

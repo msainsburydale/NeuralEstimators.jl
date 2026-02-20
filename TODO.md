@@ -28,8 +28,8 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - [ ] Document the plot() extension in the API section. 
 
 ### Testing
-- [ ] Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to avoid documentation examples from becoming outdated.
-- [ ] Clean `test/runtest.jl` (including the TODO comments), and make the unit tests more systematic.
+- [ ] Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
+- [ ] Clean `test/runtest.jl` and make the unit tests more systematic.
 - [ ] Mirror the `src/` structure where possible (e.g., tests for `Architectures.jl` in `test/test_architectures.jl`).
 
 ### Performance 
@@ -37,7 +37,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ### Refactoring
 - [ ] Clarify the sections on "Adding a New Estimator" and "Adding a New Approximate Distribution" in [CONTRIBUTING.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/CONTRIBUTING.md) (also clean the latter approach if possible).
-- [ ] Remove GraphNeuralNetworks.jl and related packages as dependencies to reduce installation time (ideally, make the GNN functionality an [extension](https://docs.julialang.org/en/v1/manual/code-loading/#man-extensions)).
 - [ ] Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl.
 - [ ] For long term stability, it might be better to use Plots.jl, rather than AlgebraOfGraphics.jl and CairoMakie.jl. Or, try to only use CairoMakie.jl (i.e., remove AlgebraOfGraphics.jl).
 

@@ -8,17 +8,11 @@ using CSV
 using DataFrames
 using Distances
 using Flux
-using Flux: getobs, numobs, ofeltype, DataLoader, update!, glorot_uniform, onehotbatch, _match_eltype, @non_differentiable, @ignore_derivatives
+using Flux: getobs, numobs, ofeltype, DataLoader, update!, onehotbatch, _match_eltype, @non_differentiable, @ignore_derivatives
 using Folds
-using Graphs
-using GraphNeuralNetworks
-using GraphNeuralNetworks: check_num_nodes
-import GraphNeuralNetworks: GraphConv
 using InvertedIndices
 using LinearAlgebra
 using NamedArrays
-using NearestNeighbors: KDTree, knn
-using NNlib: scatter, gather
 using ParameterSchedulers
 using ParameterSchedulers: Stateful, next!
 using Printf
@@ -70,25 +64,26 @@ end
 export sampleposterior, posteriormean, posteriormedian, posteriormode, posteriorquantile, bootstrap, interval, estimate
 include("inference.jl")
 
-export adjacencymatrix, spatialgraph, maternclusterprocess, SpatialGraphConv, GNNSummary, IndicatorWeights, KernelWeights, PowerDifference
-include("Graphs.jl")
-
 export stackarrays, expandgrid, numberreplicates, nparams, samplesize, drop, containertype, rowwisenorm, subsetdata
 include("utility.jl")
 
-export samplesize, logsamplesize, invsqrtsamplesize, samplecorrelation, samplecovariance, NeighbourhoodVariogram
+export samplesize, logsamplesize, invsqrtsamplesize, samplecorrelation, samplecovariance
 include("summarystatistics.jl")
 
 export EM, removedata, encodedata
 include("missingdata.jl")
 
-# Some simulators and density functions that are useful to have but not needed in generic workflows
+# Functions, function stubs, structs, and exports related to the functionality in the extension ext/NeuralEstimatorsGNNExt.jl
+export spatialgraph, GNNSummary, SpatialGraphConv, IndicatorWeights, KernelWeights, PowerDifference, NeighbourhoodVariogram, adjacencymatrix, maternclusterprocess
+include("Graphs.jl")
+
+# Simulators and density functions that are useful to have but not needed in generic workflows
 export simulategaussian, simulatepotts, simulateschlather
 export matern, maternchols, paciorek, scaledlogistic, scaledlogit
 export gaussiandensity, schlatherbivariatedensity
 include("modelspecificfunctions.jl")
 
-# Backwards compatability and deprecations:
+# Backwards compatability and deprecations
 export loadbestweights, loadweights, simulate, trainx, mapestimate, initialise_estimator
 include("deprecated.jl")
 

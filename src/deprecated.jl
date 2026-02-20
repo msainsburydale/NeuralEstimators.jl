@@ -12,8 +12,6 @@ mapestimate = posteriormode;
 export mapestimate
 mlestimate = posteriormode;
 export mlestimate
-WeightedGraphConv = SpatialGraphConv;
-export WeightedGraphConv
 simulategaussianprocess = simulategaussian;
 export simulategaussianprocess
 estimateinbatches = estimate;
@@ -88,8 +86,8 @@ one to specify the type of their data (either "unstructured", "gridded", or
 "irregular_spatial").
 
 # Keyword arguments
-- `architecture::String`: for unstructured multivariate data, one may use a fully-connected multilayer perceptron (`"MLP"`); for data collected over a grid, a convolutional neural network (`"CNN"`); and for graphical or irregular spatial data, a graphical neural network (`"GNN"`).
-- `d::Integer = 1`: for unstructured multivariate data (i.e., when `architecture = "MLP"`), the dimension of the data (e.g., `d = 3` for trivariate data); otherwise, if `architecture ∈ ["CNN", "GNN"]`, the argument `d` controls the number of input channels (e.g., `d = 1` for univariate spatial processes).
+- `architecture::String`: for unstructured multivariate data, one may use a fully-connected multilayer perceptron (`"MLP"`); for data collected over a grid, a convolutional neural network (`"CNN"`). 
+- `d::Integer = 1`: for unstructured multivariate data (i.e., when `architecture = "MLP"`), the dimension of the data (e.g., `d = 3` for trivariate data); otherwise, if `architecture = "CNN"`, the argument `d` controls the number of input channels (e.g., `d = 1` for univariate spatial processes).
 - `estimator_type::String = "point"`: the type of estimator; either `"point"` or `"interval"`.
 - `depth = 3`: the number of hidden layers; either a single integer or an integer vector of length two specifying the depth of the inner (summary) and outer (inference) network of the DeepSets framework.
 - `width = 32`: a single integer or an integer vector of length `sum(depth)` specifying the width (or number of convolutional filters/channels) in each hidden layer.
@@ -97,15 +95,13 @@ one to specify the type of their data (either "unstructured", "gridded", or
 - `activation_output::Function = identity`: the activation function of the output layer.
 - `variance_stabiliser::Union{Nothing, Function} = nothing`: a function that will be applied directly to the input, usually to stabilise the variance.
 - `kernel_size = nothing`: (applicable only to CNNs) a vector of length `depth[1]` containing integer tuples of length `D`, where `D` is the dimension of the convolution (e.g., `D = 2` for two-dimensional convolution).
-- `weight_by_distance::Bool = true`: (applicable only to GNNs) flag indicating whether the estimator will weight by spatial distance; if true, a `SpatialGraphConv` layer is used in the propagation module; otherwise, a regular `GraphConv` layer is used.
 - `probs = [0.025, 0.975]`: (applicable only if `estimator_type = "interval"`) probability levels defining the lower and upper endpoints of the posterior credible interval.
 
 # Examples
 ```
-## MLP, GNN, 1D CNN, and 2D CNN for a statistical model with two parameters:
+## MLP, 1D CNN, and 2D CNN for a statistical model with two parameters:
 p = 2
 initialise_estimator(p, architecture = "MLP")
-initialise_estimator(p, architecture = "GNN")
 initialise_estimator(p, architecture = "CNN", kernel_size = [10, 5, 3])
 initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)])
 ```
@@ -121,14 +117,13 @@ function initialise_estimator(
     activation::Function = relu,
     activation_output::Function = identity,
     kernel_size = nothing,
-    weight_by_distance::Bool = true,
     probs = [0.025, 0.975]
 )
 
     # "`kernel_size` should be a vector of integer tuples: see the documentation for details"
     @assert p > 0
     @assert d > 0
-    @assert architecture ∈ ["MLP", "DNN", "CNN", "GNN"]
+    @assert architecture ∈ ["MLP", "DNN", "CNN"]
     if architecture == "DNN"
         architecture = "MLP"
     end # deprecation coercion
@@ -179,20 +174,11 @@ function initialise_estimator(
             [Conv(kernel_size[l], width[l - 1] => width[l], activation) for l ∈ 2:depth[1]]...,
             Flux.flatten
         )
-    elseif architecture == "GNN"
-        propagation = weight_by_distance ? SpatialGraphConv : GraphConv
-        ψ = GNNChain(
-            propagation(d => width[1], activation),
-            [propagation(width[l - 1] => width[l], activation) for l ∈ 2:depth[1]]...,
-            GlobalPool(mean) # readout module
-        )
     end
 
     if !isnothing(variance_stabiliser)
         if architecture ∈ ["MLP", "CNN"]
             ψ = Chain(variance_stabiliser, ψ...)
-        elseif architecture == "GNN"
-            ψ = GNNChain(variance_stabiliser, ψ...)
         end
     end
 

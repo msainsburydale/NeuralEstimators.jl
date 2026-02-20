@@ -230,7 +230,7 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
             end
 
             if !isnothing(d.S)
-                s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
+                s = @ignore_derivatives d.S.(Z) 
                 if !isnothing(d.ψ)
                     t = vcat.(t, s)
                 else
@@ -246,59 +246,7 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
     end
 end
 
-# Multiple data sets: optimised version for graph data
-function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
-    @assert isnothing(d.ψ) || typeof(d.ψ) <: GNNSummary "For graph input data, the summary network ψ should be a `GNNSummary` object"
 
-    if !isnothing(d.ψ)
-        if @ignore_derivatives _first_N_minus_1_dims_identical(Z)
-
-            # For efficiency, convert Z from a vector of (super)graphs into a single
-            # supergraph before applying the neural network. Since each element of Z
-            # may itself be a supergraph (where each subgraph corresponds to an
-            # independent replicate), record the grouping of independent replicates
-            # so that they can be combined again later in the function
-            m = numberreplicates.(Z)
-
-            # Propagation and readout
-            g = @ignore_derivatives Flux.batch(Z) # NB batch() causes array mutation, so do not attempt to compute derivatives through this call
-            R = d.ψ(g)
-
-            # Split R based on the original vector of data sets Z
-            if ndims(R) == 2
-
-                # R is a matrix, with column dimension M = sum(m), and we split R
-                # based on the original grouping specified by m
-                # NB since this only works for identical m, there is some code redundancy here I believe
-                ng = length(m)
-                cs = cumsum(m)
-                indices = [(cs[i] - m[i] + 1):cs[i] for i ∈ 1:ng]
-                R̃ = [R[:, idx] for idx ∈ indices]
-            elseif ndims(R) == 3
-                R̃ = [R[:, :, i] for i ∈ 1:size(R, 3)]
-            end
-        else
-            # Array sizes differ, so therefore cannot stack together; use simple (and slower) broadcasting method 
-            R̃ = d.ψ.(Z)
-        end
-
-        # Now we have a vector of matrices, where each matrix corresponds to the
-        # readout vectors R₁, …, Rₘ for a given data set. Now, aggregate these
-        # readout vectors into a single summary statistic for each data set:
-        t = d.a.(R̃)
-    end
-
-    if !isnothing(d.S)
-        s = @ignore_derivatives d.S.(Z) # NB any expert summary statistics S are applied to the original data sets directly (so, if Z[i] is a supergraph, all subgraphs are independent replicates from the same data set)
-        if !isnothing(d.ψ)
-            t = vcat.(t, s)
-        else
-            t = s
-        end
-    end
-
-    return t
-end
 
 function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})
     # Get the size of the first array up to N-1 dimensions
@@ -314,20 +262,7 @@ function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})
     return true  # All arrays have the same first N-1 dimensions
 end
 
-function _first_N_minus_1_dims_identical(v::AbstractVector{<:GNNGraph})
-    # For each graph, extract the node features as a vector
-    vecs = [[x.ndata[k] for k in keys(x.ndata)] for x in v]
 
-    # Assume all graphs have the same keys (same number of features)
-    k = length(vecs[1])
-    @assert all(length(vec) == k for vec in vecs)
-
-    # Split vecs into k vectors, each collecting one feature across graphs
-    arrays = [[vec[i] for vec in vecs] for i = 1:k]
-
-    # Check that the dimensions match for each group of feature arrays
-    return all(_first_N_minus_1_dims_identical.(arrays))
-end
 
 # ---- Activation functions -----
 

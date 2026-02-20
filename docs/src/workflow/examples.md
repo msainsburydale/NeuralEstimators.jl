@@ -341,7 +341,7 @@ q = 10       # output dimension of the spatial weights
 w = KernelWeights(h_max, q)
 
 # Propagation module
-propagation = GNNChain(
+propagation = Chain(
 	SpatialGraphConv(1 => q, relu, w = w, w_out = q),
 	SpatialGraphConv(q => q, relu, w = w, w_out = q)
 )
