@@ -1,10 +1,17 @@
 push!(LOAD_PATH, "../src/")
 using Documenter, NeuralEstimators
 
+# Install the packages required by the package extensions
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.develop(PackageSpec(path=joinpath(@__DIR__, "..")))
+# Pkg.add(["AlgebraOfGraphics", "CairoMakie"])
+Pkg.instantiate()
+using AlgebraOfGraphics, CairoMakie
+
 makedocs(
+    # modules = modules,
     sitename = "NeuralEstimators.jl",
-    #format = Documenter.LaTeX(),
-    #format = Documenter.LaTeX(platform = "none"), # extracting the .tex file can be useful for bug fixing; compile it by navigating to docs/build and then running latexmk --shell-escape NeuralEstimators.jl.tex 
     pages = [
         "index.md",
         "methodology.md",

@@ -11,7 +11,7 @@ The convenience constructor `PosteriorEstimator(network, d::Integer, dstar::Inte
 
 # Examples
 ```julia
-using NeuralEstimators, Flux
+using NeuralEstimators, Flux, AlgebraOfGraphics, CairoMakie
 
 # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
 d = 2     # dimension of the parameter vector θ
@@ -39,6 +39,7 @@ estimator = train(estimator, sample, simulate, m = m)
 θ_test = sample(500)
 Z_test = simulate(θ_test, m);
 assessment = assess(estimator, θ_test, Z_test)
+plot(assessment)
 
 # Inference with observed data 
 θ = [0.8f0 0.1f0]'

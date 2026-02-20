@@ -68,6 +68,8 @@ assess
 
 Assessment
 
+plot(assessment::Assessment)
+
 risk
 
 bias
