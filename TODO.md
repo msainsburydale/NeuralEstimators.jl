@@ -33,7 +33,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - [ ] Mirror the `src/` structure where possible (e.g., tests for `Architectures.jl` in `test/test_architectures.jl`).
 
 ### Performance 
-- [ ] Improve the efficiency of the code where possible. See the general [Julia performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/) that could apply, and the [Flux performance tips](https://fluxml.ai/Flux.jl/stable/guide/performance/). In particular, some of the custom structs in this package could be made more efficient by simply adding type parameters, as discusses in the [Flux's custom model example](https://fluxml.ai/Flux.jl/stable/tutorials/custom_layers/#Custom-Model-Example). 
+- [ ] Improve the efficiency of the code where possible. See the general [Julia performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/) that could apply, and the [Flux performance tips](https://fluxml.ai/Flux.jl/stable/guide/performance/). In particular, some of the custom structs in this package could be made more efficient by simply adding type parameters, as discussed in the [Flux's custom model example](https://fluxml.ai/Flux.jl/stable/tutorials/custom_layers/#Custom-Model-Example). 
 
 ### Refactoring
 - [ ] Clarify the sections on "Adding a New Estimator" and "Adding a New Approximate Distribution" in [CONTRIBUTING.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/CONTRIBUTING.md) (also clean the latter approach if possible).
