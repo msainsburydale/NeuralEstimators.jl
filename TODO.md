@@ -6,7 +6,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ### Features
 - [ ] Support for [Lux.jl](https://lux.csail.mit.edu/stable/).
-- [ ] Support for [Enzyme](https://fluxml.ai/Flux.jl/dev/reference/training/enzyme/). Currently, DeepSet does not work with `Enzyme.Duplicated` due to an error about using it with nested networks.
+- [ ] Support for [Enzyme](https://fluxml.ai/Flux.jl/dev/reference/training/enzyme/). Currently, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) does not work with `Enzyme.Duplicated` due to an error about using it with nested networks.
 - [ ] Sequential training methods.
 - [ ] Better functionality to resume training.
 - [ ] Better functionality to visualize training/validation risk functions.
@@ -25,7 +25,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - [ ] Example: Sequence (e.g., time-series) input using recurrent neural networks (RNNs). See [Flux's in-built support for recurrence](https://fluxml.ai/Flux.jl/stable/guide/models/recurrence/). 
 - [ ] Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)). (Might need extra functionality for this.)
 - [ ] Example: Spatio-temporal data.
-- [ ] Document the plot() extension in the API section. 
 
 ### Testing
 - [ ] Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
