@@ -4,19 +4,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ---
 
-### Breaking changes to decide upon before proceeding
-
-* It might be best to have a `summary_network` and `inference_network` decomposition like `BayesFlow`. This would (i) facilitate summary-statistic-based model-misspecification detection; (ii) improve user-friendliness since, given the summary network, the inference network can be constructed automatically for most estimator types (irrespective of the data format, the inference network is always an MLP), and switching between estimator types would be easier; and (iii) facilitate transfer learning with pretrained summary networks. 
-    * This could also be done in a looser, non-breaking way: just add constructors that allow the user to provide a summary network and the inference network (or the number of parameters in the model), and then define the network as a `Chain(summary_network = ..., inference_network = ...)`. 
-    
-    * Might also be able to do this without introducing the explicit notion of a summary network, by applying every component of `network` to the data and defining the "summary statistics" as the layer output with the smallest dimension. However, this would be difficult to make general/robust, particularly for networks that are not simple `Chain` objects that can be easily indexed (e.g., `DeepSet`).
-
-* Might be helpful to store the loss function in `PointEstimator` objects. Mainly useful for knowing post-training (e.g., in a different session, later in time) how the estimator was trained, and for computing the risk at the assessment stage (however, this is a minor convenience, we could also just add a `loss` argument to `assess()`).
-
-* Might be helpful to store number `d` of parameters in the estimator object (this also makes sense if we decide to make the first breaking change above, where we introduce `summary_network` and `inference_network` fields, since the default constructors would then `d` as input anyway). This would be useful for basic checks which would lead to better/more intuitive error messages.
-
-* Rename the main plotting assessment function as `plotdiagnostics()` rather than `plot()`? Then, NeuralEstimators would own the function name and there wouldn't be any need to do `using CairoMakie: plot` in the tutorial.
-
 ### Features
 - [ ] Support for [Lux.jl](https://lux.csail.mit.edu/stable/).
 - [ ] Support for [Enzyme](https://fluxml.ai/Flux.jl/dev/reference/training/enzyme/). Currently, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) does not work with `Enzyme.Duplicated` due to an error about using it with nested networks.
@@ -49,28 +36,18 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ### Refactoring
 - [ ] Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl.
 - [ ] Clean and improve the plotting code/logic.
+
 ---
 
+### Breaking changes to decide upon before proceeding to version 1.0
 
+* It might be best to have a `summary_network` and `inference_network` decomposition like `BayesFlow`. This would (i) facilitate summary-statistic-based model-misspecification detection; (ii) improve user-friendliness since, given the summary network, the inference network can be constructed automatically for most estimator types (irrespective of the data format, the inference network is always an MLP), and switching between estimator types would be easier; and (iii) facilitate transfer learning with pretrained summary networks. 
+    * This could also be done in a looser, non-breaking way: just add constructors that allow the user to provide a summary network and the inference network (or the number of parameters in the model), and then define the network as a `Chain(summary_network = ..., inference_network = ...)`. 
+    
+    * Might also be able to do this without introducing the explicit notion of a summary network, by applying every component of `network` to the data and defining the "summary statistics" as the layer output with the smallest dimension. However, this would be difficult to make general/robust, particularly for networks that are not simple `Chain` objects that can be easily indexed (e.g., `DeepSet`).
 
+* Might be helpful to store the loss function in `PointEstimator` objects. Mainly useful for knowing post-training (e.g., in a different session, later in time) how the estimator was trained, and for computing the risk at the assessment stage (however, this is a minor convenience, we could also just add a `loss` argument to `assess()`).
 
-### Finished - document in next commit. 
+* Might be helpful to store number `d` of parameters in the estimator object (this also makes sense if we decide to make the first breaking change above, where we introduce `summary_network` and `inference_network` fields, since the default constructors would then `d` as input anyway). This would be useful for basic checks which would lead to better/more intuitive error messages.
 
-1. ~~Massive refactoring.~~
-1. ~~`train.jl`:~~ 
-    * ~~Save only the current best network (keep folder structure clean)~~
-    * ~~Reduce code repetition (ideally the three methods would call a single internal function).~~
-    * ~~Clean the code generally.~~
-    * ~~Finish TODOs.~~
-1. ~~`assess()` methods that allow for new types to hook in based only on `sampleposterior()` (just need to add the new type to the relevant assess method).~~
-1. ~~Move all of the estimator-specific inference methods from `src/inference.jl` to `src/Estimators/...`, so that everything specific to a given estimator is in the corresponding file.~~
-- [ ] ~~Better functionality to visualize training/validation risk functions.~~
-    * ~~In train(), always save the risk history in both tempdir() and savepath (if provided by the user). Then, the function plotrisk(savepath = tempdir()) can be called as plotrisk() in the current session and plotrisk(savepath) in later sessions after tempdir() has been lost.~~
-- [ ] ~~Better functionality to resume training.~~
-    * ~~Most important is the optimizer object: serialize the optimizer object and save it during training (both to `tempdir()` and `savepath`).~~
-    * ~~Remove AlgebraOfGraphics.jl (just depend on Makie.jl).~~
-1. ~~Tidy up Contributing.md and make sure it isn't pretentious.~~
-
-- ~~Code cleaning:~~
-    * ~~Clean `assess.jl` code.~~
-    * ~~General code cleaning throughout the repo (TODOs, etc.).~~
+* Rename the main plotting assessment function as `plotdiagnostics()` rather than `plot()`? Then, NeuralEstimators would own the function name and there wouldn't be any need to do `using CairoMakie: plot` in the tutorial.
