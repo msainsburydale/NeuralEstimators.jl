@@ -5,9 +5,9 @@ using Documenter, NeuralEstimators
 using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(PackageSpec(path=joinpath(@__DIR__, "..")))
-# Pkg.add(["AlgebraOfGraphics", "CairoMakie"])
+# Pkg.add(["CairoMakie"])
 Pkg.instantiate()
-using AlgebraOfGraphics, CairoMakie
+using CairoMakie
 
 makedocs(
     # modules = modules,

@@ -22,13 +22,15 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - [ ] Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference (see Tables 1 and 3 of [BayesFlow 2.0](https://arxiv.org/abs/2602.07098)).
 
 ### Documentation
+- [ ] Use [DocumenterVitepress.jl](https://luxdl.github.io/DocumenterVitepress.jl/dev/) as the backend for Documenter.jl (more modern and polished docs; see, e.g., [Lux.jl](https://lux.csail.mit.edu/stable/)).
 - [ ] Example: Sequence (e.g., time-series) input using recurrent neural networks (RNNs). See [Flux's in-built support for recurrence](https://fluxml.ai/Flux.jl/stable/guide/models/recurrence/). 
 - [ ] Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)). (Might need extra functionality for this.)
 - [ ] Example: Spatio-temporal data.
 
 ### Testing
-- [] Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
+- [ ] Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
 - [ ] Clean `test/runtest.jl`: make the tests more systematic, and mirror the `src/` structure where possible (e.g., possibly split the tests based on `src/`; tests for `Architectures.jl` in `test/test_architectures.jl`, etc.).
+- [ ] Improve code coverage (particularly for plotting extensions).
 
 ### Performance 
 - [ ] Improve the efficiency of the code where possible. See the general [Julia performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/) that could apply, and the [Flux performance tips](https://fluxml.ai/Flux.jl/stable/guide/performance/). In particular, some of the custom structs in this package could be made more efficient by simply adding type parameters, as discussed in the [Flux's custom model example](https://fluxml.ai/Flux.jl/stable/tutorials/custom_layers/#Custom-Model-Example). [Lux.jl](https://lux.csail.mit.edu/stable/) might also be faster.
