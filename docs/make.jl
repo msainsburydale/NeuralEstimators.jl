@@ -5,7 +5,7 @@ using Documenter, NeuralEstimators
 using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(PackageSpec(path=joinpath(@__DIR__, "..")))
-# Pkg.add(["Makie"])
+Pkg.add(["Makie"])
 Pkg.instantiate()
 using Makie
 
