@@ -5,9 +5,9 @@ using Documenter, NeuralEstimators
 using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(PackageSpec(path=joinpath(@__DIR__, "..")))
-# Pkg.add(["CairoMakie"])
+# Pkg.add(["Makie"])
 Pkg.instantiate()
-using CairoMakie
+using Makie
 
 makedocs(
     # modules = modules,
