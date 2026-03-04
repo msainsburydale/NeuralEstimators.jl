@@ -9,7 +9,7 @@ struct ActNorm{T1, T2}
     bias::T2
 end
 
-# TODO functionality to initialise based on first batch
+#TODO functionality to initialise based on first batch
 function ActNorm(d::Integer)
     scale = ones(Float32, d)
     bias = zeros(Float32, d)
@@ -225,6 +225,7 @@ function inverse(flow::NormalisingFlow, U::AbstractMatrix, tz::AbstractMatrix)
     return X
 end
 
+#TODO might be better to always do this on the CPU; don't think there is much to gain with do this part of the code on the GPU.
 function logdensity(flow::NormalisingFlow, θ::AbstractMatrix, tz::AbstractMatrix)
     d, K = size(θ)
     @assert d == flow.d
@@ -241,6 +242,7 @@ function logdensity(flow::NormalisingFlow, θ::AbstractMatrix, tz::AbstractMatri
     return log_densities
 end
 
+#TODO might be better to always do this on the CPU; don't think there is much to gain with do this part of the code on the GPU.
 function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer; use_gpu::Bool = true)
 
     # Dimension of parameter vector and device 

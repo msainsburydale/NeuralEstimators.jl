@@ -1,3 +1,5 @@
+#NB I think this should be deprecated, adds code complexity for something that is not often used. For now, I've just removed it from the main documentation. Previously, we wrote: "Several types serve as wrappers around the aforementioned estimators, enhancing their functionality. [`PiecewiseEstimator`](@ref) applies different estimators based on the sample size of the data (see the discussion on [Variable sample sizes](@ref)). Finally, [`Ensemble`](@ref) combines multiple estimators, aggregating their individual estimates to improve accuracy."
+
 @doc raw"""
 	PiecewiseEstimator <: NeuralEstimator
 	PiecewiseEstimator(estimators::Vector{BayesEstimator}, changepoints::Vector{Integer})

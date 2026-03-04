@@ -1,4 +1,3 @@
-#TODO maybe its better to not have a tuple, and just allow the arguments to be passed as normal... Just have to change DeepSet definition to allow two arguments in some places (this is more natural). Can easily allow backwards compat in this case too. 
 @doc raw"""
 	RatioEstimator <: NeuralEstimator
 	RatioEstimator(network)
@@ -29,7 +28,7 @@ inferential algorithms.
 
 # Examples
 ```julia
-using NeuralEstimators, Flux
+using NeuralEstimators, Flux, CairoMakie
 
 # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
 d = 2     # dimension of the parameter vector θ
@@ -48,14 +47,23 @@ network = DeepSet(ψ, ϕ)
 r̂ = RatioEstimator(network)
 
 # Train the estimator
-r̂ = train(r̂, sample, simulate, m = m)
+r̂ = train(r̂, sample, simulate, simulator_args = m, K = 1000)
+
+# Plot the risk history
+plotrisk()
+
+# Assess the estimator
+θ_test = sample(500)
+Z_test = simulate(θ_test, m);
+θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'  # fine gridding of the parameter space
+assessment = assess(r̂, θ_test, Z_test; θ_grid = θ_grid)
+plot(assessment)
 
 # Generate "observed" data 
 θ = sample(1)
-z = simulate(θ, 200)[1]
+z = simulate(θ, 200)
 
 # Grid-based optimization and sampling
-θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'  # fine gridding of the parameter space
 estimate(r̂, z, θ_grid)                         # log of likelihood-to-evidence ratios
 posteriormode(r̂, z; θ_grid = θ_grid)           # posterior mode 
 sampleposterior(r̂, z; θ_grid = θ_grid)         # posterior samples
@@ -69,6 +77,9 @@ posteriormode(r̂, z; θ₀ = θ₀)                   # posterior mode
 struct RatioEstimator{N} <: NeuralEstimator
     network::N
 end
+
+#TODO maybe its better to not have a tuple, and just allow the arguments to be passed as normal... Just have to change DeepSet definition to allow two arguments in some places (this is more natural). Can easily allow backwards compat in this case too. 
+
 function (estimator::RatioEstimator)(Z, θ; kwargs...)
     estimator((Z, θ); kwargs...) # "Tupleise" the input and pass to Tuple method
 end
@@ -80,52 +91,13 @@ function (estimator::RatioEstimator)(Zθ::Tuple)
     return logr
 end
 
-# function (estimator::RatioEstimator)(Zθ::Tuple; classifier::Bool = false)
-#     c = σ(estimator.network(Zθ))
-#     if typeof(c) <: AbstractVector
-#         c = reduce(vcat, c)
-#     end
-#     classifier ? c : c ./ (1 .- c)
-# end
-
-# function (estimator::RatioEstimator)(Zθ::Tuple; return_log_ratio::Bool = true, return_classifier::Bool = false)
-#     log_ratio = estimator.network(Zθ)
-#     if return_log_ratio
-#         return log_ratio
-#     end
-
-#     c = σ(log_ratio)
-#     if typeof(c) <: AbstractVector
-#         c = reduce(vcat, c)
-#     end
-
-#     return_classifier ? c : c ./ (1 .- c)
-# end
-
-# # Estimate ratio for many data sets and parameter vectors
-# θ = sample(1000)
-# Z = simulate(θ, m)
-# r̂(Z, θ)                                   # log of the likelihood-to-evidence ratios
-
-
-function train(estimator::RatioEstimator, args...; kwargs...)
-
-    # Get the keyword arguments and assign the loss function
-    kwargs = (; kwargs...)
-    if haskey(kwargs, :loss)
-        @info "The keyword argument `loss` is not required when training a $(typeof(estimator)), since in this case the binary cross-entropy loss is always used"
-    end
-    _train(estimator, args...; kwargs...)
-end
-
-function _constructset(estimator::RatioEstimator, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-    Z = f32(Z)
-    θ = f32(_extractθ(θ))
+function _inputoutput(estimator::RatioEstimator, Z, θ::P) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+    θ = _extractθ(θ)
 
     # Create independent pairs
     K = numobs(Z)
-    θ̃ = subsetparameters(θ, shuffle(1:K)) #NB can use getobs here instead of subsetparameters
-    Z̃ = Z # NB memory inefficient to replicate the data in this way
+    θ̃ = subsetparameters(θ, shuffle(1:K))
+    Z̃ = Z
 
     # Combine dependent and independent pairs
     θ = hcat(θ, θ̃)
@@ -133,8 +105,7 @@ function _constructset(estimator::RatioEstimator, Z, θ::P, batchsize) where {P 
         Z = vcat(Z, Z̃)
     elseif Z isa AbstractMatrix
         Z = hcat(Z, Z̃)
-    else # general combine along the observation dimension... 
-        # NB most of the scenarios are covered above, so the following isn't really tested
+    else
         Z = getobs(joinobs(Z, Z̃), 1:2K)
     end
 
@@ -142,35 +113,89 @@ function _constructset(estimator::RatioEstimator, Z, θ::P, batchsize) where {P 
     labels = [:dependent, :independent]
     output = onehotbatch(repeat(labels, inner = K), labels)[1:1, :]
 
-    # Shuffle everything in case batching isn't shuffled properly downstrean
+    # Shuffle everything in case batching isn't shuffled properly downstream
     idx = shuffle(1:2K)
     Z = getobs(Z, idx)
     θ = getobs(θ, idx)
     output = output[1:1, idx]
 
-    # Combine data and parameters into a single tuple
     input = (Z, θ)
-
-    _DataLoader((input, output), batchsize)
+    return input, output
 end
 
-function _risk(estimator::RatioEstimator, loss, set::DataLoader, device, optimiser = nothing)
-    sum_loss = 0.0f0
-    K = 0
-    for (input, output) in set
-        input, output = input |> device, output |> device
-        k = size(output)[end]
-        loss_fn = est -> Flux.logitbinarycrossentropy(est.network(input), output)
-        if !isnothing(optimiser)
-            ls, ∇ = Flux.withgradient(loss_fn, estimator)
-            Flux.update!(optimiser, estimator, ∇[1])
-        else
-            ls = loss_fn(estimator)
-        end
-        # Convert average loss to a sum and add to total
-        sum_loss += ls * k
-        K += k
+_loss(estimator::RatioEstimator, loss = nothing) = Flux.logitbinarycrossentropy
+
+function sampleposterior(
+    est::RatioEstimator, Z, N::Integer = 1000;
+    logprior::Function = θ -> 0.0f0,
+    θ_grid = nothing, theta_grid = nothing,
+    kwargs...
+    )
+
+    @assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
+    if !isnothing(theta_grid)
+        θ_grid = theta_grid
+    end
+    @assert !isnothing(θ_grid) "θ_grid must be provided for RatioEstimator"
+    θ_grid = f32(θ_grid)
+
+    # Map over datasets, returning Vector{Matrix}
+    #TODO can be made more efficient by applying the network directly to Z (rather than indexing Z_j) and also g summary statistics: 
+    #     come back to this once we've settled on the summary-network behaviour
+    θ = map(Flux.eachobs(Z)) do Zⱼ
+        logrZθ  = vec(estimate(est, Zⱼ, θ_grid; kwargs...))
+        logpθ   = logprior.(eachcol(θ_grid))
+        weights = exp.(logpθ .+ logrZθ)
+        samples = StatsBase.wsample(eachcol(θ_grid), weights, N; replace = true)
+        reduce(hcat, samples)
     end
 
-    return cpu(sum_loss/K)
+    if length(θ) == 1
+        θ = θ[1]
+    end
+
+    return θ
 end
+
+function posteriormode(
+    est::RatioEstimator, Z;
+    logprior::Function = θ -> 0.0f0, penalty::Union{Function, Nothing} = nothing,
+    θ_grid = nothing, theta_grid = nothing,
+    θ₀ = nothing, theta0 = nothing,
+    kwargs...
+)
+
+    # Check duplicated arguments that are needed so that the R interface uses ASCII characters only
+    @assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
+    @assert isnothing(θ₀) || isnothing(theta0) "Only one of `θ₀` or `theta0` should be given"
+    if !isnothing(theta_grid)
+        θ_grid = theta_grid
+    end
+    if !isnothing(theta0)
+        θ₀ = theta0
+    end
+
+    # Change "penalty" to "prior"
+    if !isnothing(penalty)
+        logprior = penalty
+    end
+
+    # Check that we have either a grid to search over or initial estimates
+    @assert !isnothing(θ_grid) || !isnothing(θ₀) "One of `θ_grid` or `θ₀` should be given"
+    @assert isnothing(θ_grid) || isnothing(θ₀) "Only one of `θ_grid` and `θ₀` should be given"
+
+    if !isnothing(θ_grid)
+        θ_grid = f32(θ_grid)
+        logrZθ = vec(estimate(est, Z, θ_grid; kwargs...))
+        logpθ = logprior.(eachcol(θ_grid))
+        logdensity = logpθ .+ logrZθ
+        θ̂ = θ_grid[:, argmax(logdensity), :]   # extra colon to preserve matrix output
+    else
+        θ̂ = _optimdensity(θ₀, logprior, est)
+    end
+
+    return θ̂
+end
+posteriormode(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, posteriormode.(Ref(est), Z; kwargs...))
+
+InferenceOutput(::RatioEstimator) = ReturnsSamples()

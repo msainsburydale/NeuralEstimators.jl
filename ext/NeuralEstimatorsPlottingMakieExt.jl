@@ -1,8 +1,42 @@
-module NeuralEstimatorsPlotExt
+module NeuralEstimatorsPlottingMakieExt
 
 using NeuralEstimators
-using AlgebraOfGraphics, CairoMakie
-import CairoMakie: plot; export plot
+using Makie
+import Makie: plot; export plot
+
+# ===========================================================================
+#  plotrisk()
+# ===========================================================================
+import NeuralEstimators: _plotrisk
+function _plotrisk(savepath::String)
+    history = loadrisk(savepath)
+    epochs = 0:(size(history, 1) - 1)
+
+    fig = Figure()
+    ax = Axis(fig[1, 1];
+        xlabel = "Epoch",
+        ylabel = "Empirical risk (average loss)"
+    )
+
+    lines!(ax, epochs, history[:, 1];
+        label = "Training",
+        linewidth = 2
+    )
+
+    lines!(ax, epochs, history[:, 2];
+        label = "Validation",
+        linewidth = 2
+    )
+
+    axislegend(ax)
+
+    return fig
+end
+
+
+# ===========================================================================
+#  plot(assessment)
+# ===========================================================================
 
 using DataFrames
 using Statistics: mean, var, std, quantile
@@ -13,20 +47,15 @@ _binom_quantile(q::Float64, n::Int, p::Float64)::Int = Int(binominvcdf(n, p, q))
 _binom_pdf(k::Int, n::Int, p::Float64)::Float64      = binompdf(n, p, k)
 _hyper_quantile(q::Float64, ns::Int, nf::Int, n::Int)::Int = Int(hyperinvcdf(ns, nf, n, q))
 
-
-# ===========================================================================
-#  plot(assessment)
-# ===========================================================================
-
 """
-    plot(assessment::Assessment; grid::Bool = false, prob = 0.99)
+    plot(assessment::Assessment; prob = 0.99)
 
 Visualise the performance of a neural estimator. Accepts the `Assessment`
 object returned by [`assess`](@ref).
 
 !!! note "Extension"
-    This function is defined in the `NeuralEstimatorsPlotExt` extension and
-    requires `AlgebraOfGraphics` and `CairoMakie` to be loaded.
+    This function is defined in the `NeuralEstimatorsPlottingMakieExt` extension and
+    requires `CairoMakie` (or another Makie backend) to be loaded.
 
 The plot produced depends on the type of estimator being assessed:
 
@@ -65,16 +94,11 @@ Specifically, the diagnostic is constructed as follows:
 
 # Keyword arguments
 
-- `grid::Bool = false`: when comparing multiple estimators, set `grid = true`
-  to facet by both estimator (columns) and parameter (rows), making
-  between-estimator differences easier to read. When `false` (the default),
-  estimators are overlaid on the same panel using distinct colours.
-  (Currently only implemented for `PointEstimator` and `IntervalEstimator`.)
 - `prob = 0.99`: nominal simultaneous coverage level for the SBC
   confidence band. Only used when `assessment` contains posterior samples.
 """
 function plot(assessment::Assessment; grid::Bool = false, prob = 0.99)
-    df = assessment.df
+    df = assessment.estimates
 
     # ---- PosteriorEstimator path ----
     if hasproperty(assessment, :samples) && !isnothing(assessment.samples)
@@ -87,44 +111,102 @@ function plot(assessment::Assessment; grid::Bool = false, prob = 0.99)
         return fig
     end
 
-    # ---- QuantileEstimator path ----
+    params         = unique(df.parameter)
+    d              = length(params)
     num_estimators = "estimator" ∉ names(df) ? 1 : length(unique(df.estimator))
-    figure = mapping([0], [1]) * visual(ABLines, color = :red, linestyle = :dash)
 
+    # ---- QuantileEstimator path ----
     if "prob" ∈ names(df)
-        df     = empiricalprob(assessment)
-        figure = mapping([0], [1]) * visual(ABLines, color = :red, linestyle = :dash)
-        figure += data(df) * mapping(:prob, :empirical_prob, layout = :parameter) * visual(Lines, color = :black)
-        figure  = draw(figure, facet = (; linkxaxes = :none, linkyaxes = :none),
-                       axis = (; xlabel = "Probability level, τ", ylabel = "Pr(Q(Z, τ) ≥ θ)"))
-        return figure
+        df_emp = empiricalprob(assessment)
+        fig    = Figure()
+        for (pi, param) in enumerate(params)
+            ax = Axis(fig[1, pi];
+                title  = param,
+                xlabel = pi == ceil(Int, d / 2) ? "Probability level, τ" : "",
+                ylabel = pi == 1 ? "Pr(Q(Z, τ) ≥ θ)" : "",
+            )
+            sub = filter(r -> r.parameter == param, df_emp)
+            sort!(sub, :prob)
+            lines!(ax, sub.prob, sub.empirical_prob; color = :black, linewidth = 1.5)
+            lines!(ax, [0.0, 1.0], [0.0, 1.0]; color = :red, linestyle = :dash, linewidth = 1.2)
+            xlims!(ax, 0.0, 1.0); ylims!(ax, 0.0, 1.0)
+        end
+        return fig
     end
 
     # ---- IntervalEstimator path ----
     if all(["lower", "upper"] .∈ Ref(names(df)))
-        df_stacked = stack(df, [:lower, :upper], variable_name = :bound, value_name = :interval)
-        figure += data(df_stacked) * mapping(:truth, :interval, group = :k => nonnumeric, layout = :parameter) * visual(Lines, color = :black)
-        figure += data(df_stacked) * mapping(:truth, :interval, layout = :parameter) * visual(Scatter, color = :black, marker = '⎯')
+        fig = Figure()
+        for (pi, param) in enumerate(params)
+            ax = Axis(fig[1, pi];
+                title  = param,
+                xlabel = pi == ceil(Int, d / 2) ? "True value" : "",
+                ylabel = pi == 1 ? "Interval" : "",
+            )
+            sub = filter(r -> r.parameter == param, df)
+            for row in eachrow(sub)
+                lines!(ax, [row.truth, row.truth], [row.lower, row.upper];
+                    color = (:black, 0.4), linewidth = 0.8)
+            end
+            scatter!(ax, sub.truth, sub.lower; color = :black, marker = '⎯', markersize = 8)
+            scatter!(ax, sub.truth, sub.upper; color = :black, marker = '⎯', markersize = 8)
+            all_vals = vcat(sub.truth, sub.lower, sub.upper)
+            vmin, vmax = extrema(sub.truth)
+            lines!(ax, [vmin, vmax], [vmin, vmax]; color = :red, linestyle = :dash, linewidth = 1.2)
+        end
+        return fig
     end
 
     # ---- PointEstimator path ----
-    linkyaxes = :none
     if "estimate" ∈ names(df)
-        if num_estimators > 1
-            if grid
-                figure += data(df) * mapping(:truth, :estimate, color = :estimator, col = :estimator, row = :parameter) * visual(alpha = 0.75)
-                linkyaxes = :minimal
-            else
-                figure += data(df) * mapping(:truth, :estimate, color = :estimator, layout = :parameter) * visual(alpha = 0.75)
+        # Determine layout: grid mode gives estimators as columns, params as rows;
+        # otherwise params as columns with estimators overlaid by colour.
+        estimators = num_estimators > 1 ? unique(df.estimator) : [nothing]
+        palette    = Makie.wong_colors()
+
+        if grid && num_estimators > 1
+            fig = Figure()
+            for (ei, est) in enumerate(estimators)
+                for (pi, param) in enumerate(params)
+                    ax = Axis(fig[pi, ei];
+                        title  = ei == 1 ? string(param) : "",
+                        xlabel = pi == length(params) ? string(est) : "",
+                        ylabel = (pi == 1 && ei == 1) ? "Estimate" : "",
+                    )
+                    sub = filter(r -> r.parameter == param && r.estimator == est, df)
+                    vmin, vmax = minimum(sub.truth), maximum(sub.truth)
+                    scatter!(ax, sub.truth, sub.estimate; color = (palette[ei], 0.75), markersize = 5)
+                    lines!(ax, [vmin, vmax], [vmin, vmax]; color = :red, linestyle = :dash, linewidth = 1.2)
+                end
             end
         else
-            figure += data(df) * mapping(:truth, :estimate, layout = :parameter) * visual(color = :black, alpha = 0.75)
+            fig = Figure()
+            for (pi, param) in enumerate(params)
+                ax = Axis(fig[1, pi];
+                    title  = string(param),
+                    xlabel = pi == ceil(Int, d / 2) ? "True value" : "",
+                    ylabel = pi == 1 ? "Estimate" : "",
+                )
+                if num_estimators > 1
+                    for (ei, est) in enumerate(estimators)
+                        sub = filter(r -> r.parameter == param && r.estimator == est, df)
+                        scatter!(ax, sub.truth, sub.estimate;
+                            color = (palette[ei], 0.75), markersize = 5, label = string(est))
+                    end
+                    pi == d && Legend(fig[1, d + 1], ax)
+                else
+                    sub = filter(r -> r.parameter == param, df)
+                    scatter!(ax, sub.truth, sub.estimate; color = (:black, 0.75), markersize = 5)
+                end
+                vmin = minimum(df[df.parameter .== param, :truth])
+                vmax = maximum(df[df.parameter .== param, :truth])
+                lines!(ax, [vmin, vmax], [vmin, vmax]; color = :red, linestyle = :dash, linewidth = 1.2)
+            end
         end
+        return fig
     end
 
-    figure += mapping([0], [1]) * visual(ABLines, color = :red, linestyle = :dash)
-    figure  = draw(figure, facet = (; linkxaxes = :none, linkyaxes = linkyaxes))
-    return figure
+    error("Unrecognised assessment format: expected columns 'estimate', 'lower'/'upper', or 'prob'.")
 end
 
 
@@ -410,4 +492,4 @@ function _p_interior(p_int::Vector{Float64}, x1::Vector{Int},
     return x2_vec, vec(sum(p_x2_int; dims = 2))
 end
 
-end  # module NeuralEstimatorsPlotExt
+end  # module

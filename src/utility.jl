@@ -242,14 +242,6 @@ end
 
 # ---- End test code ----
 
-function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
-    oldstd = stdout
-    redirect_stderr(devnull)
-    data_loader = DataLoader(data, batchsize = batchsize, shuffle = shuffle, partial = partial)
-    redirect_stderr(oldstd)
-    return data_loader
-end
-
 # Here, we define _checkgpu() for the case that CUDA has not been loaded (so, we will be using the CPU)
 # For the case that CUDA is loaded, _checkgpu() is overloaded in ext/NeuralEstimatorsCUDAExt.jl
 # NB Julia complains if we overload functions in package extensions... to get around this, here we

@@ -1,4 +1,4 @@
-# For the method definitions, see the extension ext/NeuralEstimatorsGNNExt.jl
+# See also the extension ext/NeuralEstimatorsGNNExt.jl
 
 @doc raw"""
 	spatialgraph(S)

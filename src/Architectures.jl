@@ -38,6 +38,8 @@ end
 
 # While the formats above cover many applications, the package is flexible: the data structure simply needs to align with the chosen neural-network architecture. 
 
+
+#TODO Allow for a learned embedding of the sample size $m$ in [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet). 
 @doc raw"""
     DeepSet(ψ, ϕ, a = mean; S = nothing)
 	(ds::DeepSet)(Z::Vector{A}) where A <: Any

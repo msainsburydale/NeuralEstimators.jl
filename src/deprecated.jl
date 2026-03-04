@@ -184,7 +184,6 @@ function initialise_estimator(
 
     θ̂ = DeepSet(ψ, ϕ)
 
-    #TODO RatioEstimator, QuantileEstimatorDiscrete, QuantileEstimatorContinuous, PosteriorEstimator
     if estimator_type == "point"
         θ̂ = PointEstimator(θ̂)
     elseif estimator_type == "interval"

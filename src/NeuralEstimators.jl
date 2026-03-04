@@ -43,14 +43,12 @@ for file in sort(readdir(joinpath(@__DIR__, "ApproximateDistributions")))
 end
 
 export train, trainmultiple
+export plotrisk, loadrisk, loadoptimiser
 include("train.jl")
-
-export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
-include("assess.jl")
 
 export NeuralEstimator
 export BayesEstimator, PosteriorEstimator, RatioEstimator
-export PointEstimator, IntervalEstimator, QuantileEstimatorContinuous, QuantileEstimatorDiscrete, QuantileEstimator
+export PointEstimator, IntervalEstimator, QuantileEstimatorContinuous, QuantileEstimator, QuantileEstimatorDiscrete
 export Ensemble, PiecewiseEstimator
 include(joinpath("Estimators", "Estimators.jl"))
 include(joinpath("Estimators", "Ensemble.jl"))
@@ -60,6 +58,9 @@ for file in sort(readdir(joinpath(@__DIR__, "Estimators")))
     file != "Ensemble.jl" || continue
     include(joinpath("Estimators", file))
 end
+
+export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
+include("assess.jl")
 
 export sampleposterior, posteriormean, posteriormedian, posteriormode, posteriorquantile, bootstrap, interval, estimate
 include("inference.jl")

@@ -83,6 +83,7 @@ function logdensity(q::GaussianMixture, θ::AbstractMatrix, tz::AbstractMatrix)
     return log_densities # 1xK matrix 
 end
 
+#TODO might be better to always do this on the CPU; don't think there is much to gain with do this part of the code on the GPU.
 function sampleposterior(q::GaussianMixture, tz::AbstractMatrix, N::Integer; use_gpu::Bool = true)
     d = q.d
     J = q.num_components

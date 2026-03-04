@@ -92,7 +92,6 @@ end
 
 # ---- quantile loss ----
 
-#TODO write the maths for when we have a vector τ
 """
     quantileloss(θ̂, θ, τ; agg = mean)
     quantileloss(θ̂, θ, τ::Vector; agg = mean)
@@ -102,11 +101,6 @@ The asymmetric quantile loss function,
   L(θ̂, θ; τ) = (θ̂ - θ)(𝕀(θ̂ - θ > 0) - τ),
 ```
 where `τ` ∈ (0, 1) is a probability level and 𝕀(⋅) is the indicator function.
-
-The method that takes `τ` as a vector is useful for jointly approximating
-several quantiles of the posterior distribution. In this case, the number of
-rows in `θ̂` is assumed to be ``dr``, where ``d`` is the number of parameters and
-``r`` is the number probability levels in `τ` (i.e., the length of `τ`).
 """
 function quantileloss(θ̂, θ, τ; agg = mean)
     _check_sizes(θ̂, θ)
@@ -119,6 +113,10 @@ function quantileloss(θ̂, θ, τ; agg = mean)
     agg(L)
 end
 
+# NB these methods that takes `τ` as a vector or a matrix are useful for jointly approximating
+# several quantiles of the posterior distribution, but are only used internally. In this case, the number of
+# rows in `θ̂` is assumed to be ``dr``, where ``d`` is the number of parameters and
+# ``r`` is the number probability levels in `τ` (i.e., the length of `τ`).
 function quantileloss(θ̂, θ, τ::V; agg = mean) where {T, V <: AbstractVector{T}}
     τ = convert(containertype(θ̂), τ) # convert τ to the gpu (this line means that users don't need to manually move τ to the gpu)
 
@@ -126,10 +124,11 @@ function quantileloss(θ̂, θ, τ::V; agg = mean) where {T, V <: AbstractVector
     @assert size(θ̂, 2) == size(θ, 2)
     d, K = size(θ)
 
+    #TODO Actually pretty brittle to check like this: breaks if the batchsize (K) is equal to length(τ) but we intended to go to the second branch
     if length(τ) == K # different τ for each training sample => must be training continuous quantile estimator with τ as input
         @ignore_derivatives τ = repeat(τ', d) # just repeat τ to match the number of parameters in the statistical model
         quantileloss(θ̂, θ, τ; agg = agg)
-    else # otherwise, we must training a discrete quantile estimator for some fixed set of probability levels
+    else # otherwise, we must be training a discrete quantile estimator for some fixed set of probability levels
         rd = size(θ̂, 1)
         @assert rd % d == 0
         r = rd ÷ d
@@ -144,7 +143,6 @@ function quantileloss(θ̂, θ, τ::V; agg = mean) where {T, V <: AbstractVector
     end
 end
 
-#NB matrix method is only used internally, and therefore not documented 
 function quantileloss(θ̂, θ, τ::M; agg = mean) where {T, M <: AbstractMatrix{T}}
     d = θ̂ .- θ
     b = d .> 0
@@ -154,6 +152,8 @@ function quantileloss(θ̂, θ, τ::M; agg = mean) where {T, M <: AbstractMatrix
     L = vcat(L₁, L₂)
     agg(L)
 end
+
+
 
 # ---- interval score ----
 

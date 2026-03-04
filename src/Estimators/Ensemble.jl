@@ -86,7 +86,6 @@ Base.length(e::Ensemble) = length(e.estimators)
 Base.eachindex(e::Ensemble) = eachindex(e.estimators)
 Base.show(io::IO, ensemble::Ensemble) = print(io, "\nEnsemble with $(length(ensemble.estimators)) component estimators")
 
-
 function train(ensemble::Ensemble, args...; kwargs...)
     kwargs = (; kwargs...)
     savepath = haskey(kwargs, :savepath) ? kwargs.savepath : nothing
