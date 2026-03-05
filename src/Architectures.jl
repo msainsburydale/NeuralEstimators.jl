@@ -38,7 +38,6 @@ end
 
 # While the formats above cover many applications, the package is flexible: the data structure simply needs to align with the chosen neural-network architecture. 
 
-
 #TODO Allow for a learned embedding of the sample size $m$ in [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet). 
 @doc raw"""
     DeepSet(ψ, ϕ, a = mean; S = nothing)
@@ -232,7 +231,7 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
             end
 
             if !isnothing(d.S)
-                s = @ignore_derivatives d.S.(Z) 
+                s = @ignore_derivatives d.S.(Z)
                 if !isnothing(d.ψ)
                     t = vcat.(t, s)
                 else
@@ -248,8 +247,6 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
     end
 end
 
-
-
 function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})
     # Get the size of the first array up to N-1 dimensions
     first_size = size(arrays[1])[1:(end - 1)]
@@ -263,8 +260,6 @@ function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})
 
     return true  # All arrays have the same first N-1 dimensions
 end
-
-
 
 # ---- Activation functions -----
 

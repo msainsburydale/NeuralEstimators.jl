@@ -130,8 +130,7 @@ function sampleposterior(
     logprior::Function = θ -> 0.0f0,
     θ_grid = nothing, theta_grid = nothing,
     kwargs...
-    )
-
+)
     @assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
     if !isnothing(theta_grid)
         θ_grid = theta_grid
@@ -143,8 +142,8 @@ function sampleposterior(
     #TODO can be made more efficient by applying the network directly to Z (rather than indexing Z_j) and also g summary statistics: 
     #     come back to this once we've settled on the summary-network behaviour
     θ = map(Flux.eachobs(Z)) do Zⱼ
-        logrZθ  = vec(estimate(est, Zⱼ, θ_grid; kwargs...))
-        logpθ   = logprior.(eachcol(θ_grid))
+        logrZθ = vec(estimate(est, Zⱼ, θ_grid; kwargs...))
+        logpθ = logprior.(eachcol(θ_grid))
         weights = exp.(logpθ .+ logrZθ)
         samples = StatsBase.wsample(eachcol(θ_grid), weights, N; replace = true)
         reduce(hcat, samples)
