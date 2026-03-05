@@ -8,7 +8,7 @@ Before proceeding to the main examples, we first load the required packages, the
 using NeuralEstimators
 using Flux                                  # Julia's deep-learning library
 using Distributions: InverseGamma, Uniform  # sampling from probability distributions
-using AlgebraOfGraphics, CairoMakie         # visualisation
+using CairoMakie                            # visualisation
 ```
 
 The following packages will be used in the examples with [Gridded data](@ref) and [Irregular spatial data](@ref):  
@@ -96,7 +96,7 @@ Next, we train the estimator using [`train()`](@ref), here using the default mea
 
 ```julia
 m = 50
-estimator = train(estimator, sample, simulate, m = m)
+estimator = train(estimator, sample, simulate, simulator_args = m)
 ```
 
 One may wish to save a trained estimator and load it in a later session: see [Saving and loading neural estimators](@ref) for details on how this can be done. 
@@ -124,7 +124,7 @@ As an alternative form of uncertainty quantification with neural Bayes estimator
 
 ```julia
 q̂ = IntervalEstimator(network)
-q̂ = train(q̂, sample, simulate, m = m)
+q̂ = train(q̂, sample, simulate, simulator_args = m)
 ```
 
 The resulting posterior credible-interval estimator can also be assessed using [`assess()`](@ref). Often, these intervals have better coverage than bootstrap-based intervals.
@@ -341,7 +341,7 @@ q = 10       # output dimension of the spatial weights
 w = KernelWeights(h_max, q)
 
 # Propagation module
-propagation = GNNChain(
+propagation = Chain(
 	SpatialGraphConv(1 => q, relu, w = w, w_out = q),
 	SpatialGraphConv(q => q, relu, w = w, w_out = q)
 )
@@ -376,7 +376,7 @@ m = 1
 K = 5000
 θ_train = sample(K)
 θ_val   = sample(K÷5)
-estimator = train(estimator, θ_train, θ_val, simulate, m = m, epochs = 10)
+estimator = train(estimator, θ_train, θ_val, simulate, simulator_args = m, epochs = 10)
 ``` 
 
 Note that the computations in GNNs are performed in parallel, making them particularly well-suited for GPUs, which typically contain thousands of cores. If you have access to an NVIDIA GPU, you can utilise it by simply loading the Julia package `CUDA`. 

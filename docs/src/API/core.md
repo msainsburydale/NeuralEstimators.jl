@@ -26,7 +26,7 @@ Neural Bayes estimators are implemented as subtypes of the abstract supertype [`
 
 The type [`PosteriorEstimator`](@ref) can be used to approximate the posterior distribution, and [`RatioEstimator`](@ref) can be used to approximate the likelihood-to-evidence ratio.
 
-Several types serve as wrappers around the aforementioned estimators, enhancing their functionality. [`PiecewiseEstimator`](@ref) applies different estimators based on the sample size of the data (see the discussion on [Variable sample sizes](@ref)). Finally, [`Ensemble`](@ref) combines multiple estimators, aggregating their individual estimates to improve accuracy.
+Finally, [`Ensemble`](@ref) combines multiple estimators, aggregating their individual estimates to improve accuracy.
 
 
 ```@docs
@@ -44,20 +44,24 @@ IntervalEstimator
 
 QuantileEstimator
 
-PiecewiseEstimator
-
 Ensemble
 ```
 
 
 ## Training
 
-The function [`train()`](@ref) is used to train a single neural estimator, while the wrapper function [`trainmultiple()`](@ref) is useful for training multiple neural estimators over a range of sample sizes, making using of the technique known as pre-training.
+The function [`train()`](@ref) is used to train a neural estimator.
+
+After training, the risk history and optimiser state can be accessed and inspected using [`loadrisk()`](@ref), [`plotrisk()`](@ref), and [`loadoptimiser()`](@ref).
 
 ```@docs
 train
 
-trainmultiple
+loadrisk
+
+plotrisk
+
+loadoptimiser
 ```
 
 
@@ -67,6 +71,8 @@ trainmultiple
 assess
 
 Assessment
+
+plot(assessment::Assessment)
 
 risk
 

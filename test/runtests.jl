@@ -7,7 +7,6 @@ using DataFrames
 using Distances
 using Flux
 using Flux: batch, DataLoader, mae, mse
-using Graphs
 using GraphNeuralNetworks
 using LinearAlgebra
 using Random: seed!
@@ -119,15 +118,10 @@ end
         r = 0.3
 
         # Memory efficient constructors (avoids constructing the full distance matrix D)
-        A₁ = adjacencymatrix(S, k)
+        A  = A₁ = adjacencymatrix(S, k)
         A₂ = adjacencymatrix(S, r)
         @test eltype(A₁) == Float32
         @test eltype(A₂) == Float32
-        A = adjacencymatrix(S, k, maxmin = true)
-        @test eltype(A) == Float32
-        A = adjacencymatrix(S, k, maxmin = true, moralise = true)
-        @test eltype(A) == Float32
-        A = adjacencymatrix(S, k, maxmin = true, combined = true)
         @test eltype(A) == Float32
 
         # Construct from full distance matrix D
@@ -153,8 +147,6 @@ end
         # Test that the number of neighbours is correct
         f(A) = collect(mapslices(nnz, A; dims = 1))
         @test all(f(adjacencymatrix(S, k)) .== k)
-        @test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k)
-        @test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k)
         @test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k)
         @test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1)
         @test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k)
@@ -164,8 +156,6 @@ end
         pts = range(0, 1, length = 10)
         S = expandgrid(pts, pts)
         @test all(f(adjacencymatrix(S, k)) .== k)
-        @test all(0 .<= f(adjacencymatrix(S, k; maxmin = true)) .<= k)
-        @test all(k .<= f(adjacencymatrix(S, k; maxmin = true, combined = true)) .<= 2k)
         @test all(1 .<= f(adjacencymatrix(S, r, k; random = true)) .<= k)
         @test all(1 .<= f(adjacencymatrix(S, r, k; random = false)) .<= k+1)
         @test all(f(adjacencymatrix(S, 2.0, k; random = true)) .== k)
@@ -243,9 +233,7 @@ end
         removedata(Z, d)
         removedata(Z, n; fixed_pattern = true)
         removedata(Z, n; contiguous_pattern = true)
-        removedata(Z, n, variable_proportion = true)
         removedata(Z, n; contiguous_pattern = true, fixed_pattern = true)
-        removedata(Z, n; contiguous_pattern = true, variable_proportion = true)
         removedata(Z, p)
         removedata(Z, p; prevent_complete_missing = false)
         # Check that the probability of missingness is roughly correct:
@@ -561,7 +549,7 @@ end
         @test trainables(l) != pars
 
         # GNNSummary
-        propagation = GNNChain(SpatialGraphConv(1 => ch), SpatialGraphConv(ch => ch))
+        propagation = Chain(SpatialGraphConv(1 => ch), SpatialGraphConv(ch => ch))
         readout = GlobalPool(mean)
         ψ = GNNSummary(propagation, readout)
         ψ = ψ |> dvc
@@ -668,27 +656,6 @@ end
     end
 end
 
-@testset "GNN: $dvc" for dvc ∈ devices
-    r = 1     # dimension of response variable
-    nₕ = 32    # dimension of node feature vectors
-    propagation = GNNChain(GraphConv(r => nₕ), GraphConv(nₕ => nₕ))
-    readout = GlobalPool(mean)
-    ψ = GNNSummary(propagation, readout)
-    d = 3     # output dimension 
-    w = 64    # width of hidden layer
-    ϕ = Chain(Dense(nₕ, w, relu), Dense(w, d))
-    ds = DeepSet(ψ, ϕ) |> dvc
-    g₁ = rand_graph(11, 30, ndata = rand32(r, 11)) |> dvc
-    g₂ = rand_graph(13, 40, ndata = rand32(r, 13)) |> dvc
-    g₃ = batch([g₁, g₂]) |> dvc
-    est1 = ds(g₁)                # single graph 
-    est2 = ds(g₃)                # graph with subgraphs corresponding to independent replicates
-    est3 = ds([g₁, g₂, g₃])      # vector of graphs, corresponding to multiple data sets 
-    @test size(est1) == (d, 1)
-    @test size(est2) == (d, 1)
-    @test size(est3) == (d, 3)
-end
-
 @testset "DeepSet: $dvc" for dvc ∈ devices
     # Test 
     # - with and without expert summary statistics 
@@ -711,7 +678,7 @@ end
                     ψ = Chain(Conv((5, 5), 1 => dₜ), GlobalMeanPool(), Flux.flatten)
                 elseif data == "graph"
                     Z = [spatialgraph(rand(100, 2), rand(100, m)) for m ∈ (4, 4)] #TODO doesn't work for variable number of replicates i.e., m ∈ M; also, this can break when n is taken to be small like n=5 (run it many times and you will eventually see ERROR: AssertionError: DataStore: data[e] has 1 observations, but n = 0)
-                    propagation = GNNChain(SpatialGraphConv(1 => 16), SpatialGraphConv(16 => dₜ))
+                    propagation = Chain(SpatialGraphConv(1 => 16), SpatialGraphConv(16 => dₜ))
                     readout = GlobalPool(mean)
                     ψ = GNNSummary(propagation, readout)
                 end
@@ -815,18 +782,18 @@ MLE(Z, ξ) = MLE(Z) # doesn't need ξ but include it for testing
             use_gpu = dvc == gpu
             @testset "train" begin
                 testbackprop(estimator, Z, dvc)
-                estimator = train(estimator, sampler, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, ξ = ξ)
-                estimator = train(estimator, sampler, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, ξ = ξ, savepath = "testing-path")
-                estimator = train(estimator, sampler, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, ξ = ξ, simulate_just_in_time = true)
-                estimator = train(estimator, parameters, parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose)
-                estimator = train(estimator, parameters, parameters, simulator, m = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
-                estimator = train(estimator, parameters, parameters, simulator, m = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
-                estimator = train(estimator, parameters, parameters, simulator, m = m, epochs = 3, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
+                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,) )
+                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), savepath = "testing-path")
+                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), simulate_just_in_time = true)
+                estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose)
+                estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
+                estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
+                estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 3, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
                 Z_train = simulator(parameters, 2m);
                 Z_val = simulator(parameters, m);
                 train(estimator, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
                 train(estimator, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose)
-                trainmultiple(estimator, sampler, simulator, [1, 2, 5]; ξ = ξ, epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
+                trainmultiple(estimator, sampler, simulator, [1, 2, 5]; sampler_args = (ξ,), epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
                 trainmultiple(estimator, parameters, parameters, simulator, [1, 2, 5]; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
                 trainmultiple(estimator, parameters, parameters, Z_train, Z_val, [1, 2, 5]; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
                 Z_train = [simulator(parameters, m) for m ∈ [1, 2, 5]];
@@ -855,7 +822,7 @@ MLE(Z, ξ) = MLE(Z) # doesn't need ξ but include it for testing
                     intervalscore(assessment; average_over_parameters = true, average_over_sample_sizes = false)
                 end
                 @test typeof(assessment) == Assessment
-                @test typeof(assessment.df) == DataFrame
+                @test typeof(assessment.estimates) == DataFrame
                 @test typeof(assessment.runtime) == DataFrame
                 @test typeof(merge(assessment, assessment)) == Assessment
 
@@ -879,7 +846,7 @@ MLE(Z, ξ) = MLE(Z) # doesn't need ξ but include it for testing
                 Z_test = simulator(parameters, m, 5)
                 assessment = assess([estimator], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
                 @test typeof(assessment) == Assessment
-                @test typeof(assessment.df) == DataFrame
+                @test typeof(assessment.estimates) == DataFrame
                 @test typeof(assessment.runtime) == DataFrame
 
                 # Test that estimators needing extra model information can be used:
@@ -956,7 +923,7 @@ end
     @test size(ci) == (p, 2)
 
     # assess()
-    assessment = assess(estimator, rand(p, 2), [Z, Z])
+    assessment = assess(estimator, rand(p, 10), repeat([Z], 10))
     coverage(assessment)
     coverage(assessment; average_over_parameters = true)
     coverage(assessment; average_over_sample_sizes = false)
@@ -968,7 +935,7 @@ end
     intervalscore(assessment; average_over_parameters = true, average_over_sample_sizes = false)
 end
 
-@testset "QuantileEstimatorDiscrete: marginal" begin
+@testset "QuantileEstimator: marginal" begin
     # Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
     d = 1   # dimension of each independent replicate
     p = 1   # number of unknown parameters in the statistical model
@@ -983,10 +950,10 @@ end
 
     # Initialise the estimator
     τ = [0.05, 0.25, 0.5, 0.75, 0.95]
-    q̂ = QuantileEstimatorDiscrete(v; probs = τ)
+    q̂ = QuantileEstimator(v; probs = τ)
 
     # Train the estimator
-    q̂ = train(q̂, prior, simulate, m = m, epochs = 1, verbose = false)
+    q̂ = train(q̂, prior, simulate, simulator_args = m, epochs = 1, verbose = false)
 
     # Assess the estimator
     θ = prior(1000)
@@ -997,7 +964,7 @@ end
     q̂(Z)
 end
 
-@testset "QuantileEstimatorDiscrete: full conditionals" begin
+@testset "QuantileEstimator: full conditionals" begin
     # Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
     d = 1         # dimension of each independent replicate
     p = 2         # number of unknown parameters in the statistical model
@@ -1017,15 +984,15 @@ end
 
     # Initialise estimators respectively targetting quantiles of μ∣Z,σ and σ∣Z,μ
     τ = [0.05, 0.25, 0.5, 0.75, 0.95]
-    q₁ = QuantileEstimatorDiscrete(v; probs = τ, i = 1)
-    q₂ = QuantileEstimatorDiscrete(v; probs = τ, i = 2)
+    q₁ = QuantileEstimator(v; probs = τ, i = 1)
+    q₂ = QuantileEstimator(v; probs = τ, i = 2)
 
     # Train the estimators
-    q₁ = train(q₁, prior, simulate, m = m, epochs = 1, verbose = verbose)
-    q₂ = train(q₂, prior, simulate, m = m, epochs = 1, verbose = verbose)
+    q₁ = train(q₁, prior, simulate, simulator_args = m, epochs = 1, verbose = verbose)
+    q₂ = train(q₂, prior, simulate, simulator_args = m, epochs = 1, verbose = verbose)
 
     # Assess the estimators
-    θ = prior(1000)
+    θ = prior(500)
     Z = simulate(θ, m)
     assessment = assess([q₁, q₂], θ, Z, verbose = verbose)
 
@@ -1068,7 +1035,7 @@ end
     q̂ = QuantileEstimatorContinuous(deepset)
 
     # Train the estimator
-    q̂ = train(q̂, prior, simulate, m = m, epochs = 1, verbose = false)
+    q̂ = train(q̂, prior, simulate, simulator_args = m, epochs = 1, verbose = false)
 
     # Assess the estimator
     θ = prior(1000)
@@ -1128,7 +1095,7 @@ end
     q̂ = QuantileEstimatorContinuous(deepset; i = i)
 
     # Train the estimator
-    q̂ = train(q̂, prior, simulate, m = m, epochs = 1, verbose = false)
+    q̂ = train(q̂, prior, simulate, simulator_args = m, epochs = 1, verbose = false)
 
     # Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
     θ = prior(1000)
@@ -1171,11 +1138,11 @@ end
     r̂ = RatioEstimator(deepset)
 
     # Train the estimator
-    r̂ = train(r̂, prior, simulate, m = m, epochs = 1, verbose = false)
+    r̂ = train(r̂, prior, simulate, simulator_args = m, epochs = 1, verbose = false)
 
     # Inference with "observed" data
     θ = prior(1)
-    z = simulate(θ, m)[1]
+    z = simulate(θ, m)
     θ_grid = Float32.(expandgrid(0:0.01:1, 0:0.01:1)')  # fine gridding of the parameter space
     estimate(r̂, z, θ_grid)                    # likelihood-to-evidence ratios over grid
     mlestimate(r̂, z; θ_grid = θ_grid)         # maximum-likelihood estimate
@@ -1190,8 +1157,8 @@ end
         d = 2     # dimension of the parameter vector θ
         n = 1     # dimension of each independent replicate of Z
         m = 30    # number of independent replicates in each data set
-        sample(K) = rand32(d, K)
-        simulate(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(n, m) for ϑ in eachcol(θ)]
+        sampler(K) = rand32(d, K)
+        simulator(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(n, m) for ϑ in eachcol(θ)]
         w = 128
         q = approxdist(d, d)
         ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
@@ -1199,13 +1166,14 @@ end
         network = DeepSet(ψ, ϕ)
         estimator = PosteriorEstimator(network, d; q = approxdist) # convenience constructor
         estimator = PosteriorEstimator(q, network)
-        estimator = train(estimator, sample, simulate, m = m, epochs = 1, verbose = false)
+        estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, verbose = false)
         @test numdistributionalparams(estimator) == numdistributionalparams(q)
-        θ = sample(10)
-        Z = simulate(θ, m)
+        θ = sampler(10)
+        Z = simulator(θ, m)
         sampleposterior(estimator, Z) # posterior draws 
         posteriormean(estimator, Z)   # point estimate
-        posteriorquantile(estimator, [Z[1]], [0.1, 0.5])   # quantiles (function only works for a single data set)
+        posteriormedian(estimator, Z) # point estimate
+        posteriorquantile(estimator, Z, [0.1, 0.5]) # quantiles 
         assessment = assess(estimator, θ, Z)
     end
 end
@@ -1216,11 +1184,9 @@ end
     p = 2
     initialise_estimator(p, architecture = "DNN")
     initialise_estimator(p, architecture = "MLP")
-    initialise_estimator(p, architecture = "GNN")
     initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)])
 
     @test typeof(initialise_estimator(p, architecture = "MLP", estimator_type = "interval")) <: IntervalEstimator
-    @test typeof(initialise_estimator(p, architecture = "GNN", estimator_type = "interval")) <: IntervalEstimator
     @test typeof(initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)], estimator_type = "interval")) <: IntervalEstimator
 
     @test_throws Exception initialise_estimator(0, architecture = "MLP")
@@ -1277,8 +1243,8 @@ end
     @test length(ensemble) == J
 
     # Training
-    ensemble = train(ensemble, sampler, simulator, m = m, epochs = 1, verbose = verbose, use_gpu = dvc == gpu)
-    ensemble = train(ensemble, sampler, simulator, m = m, epochs = 1, verbose = verbose, use_gpu = dvc == gpu, optimiser = Flux.setup(Adam(5e-3), ensemble))
+    ensemble = train(ensemble, sampler, simulator, simulator_args = m, epochs = 1, verbose = verbose, use_gpu = dvc == gpu)
+    ensemble = train(ensemble, sampler, simulator, simulator_args = m, epochs = 1, verbose = verbose, use_gpu = dvc == gpu, optimiser = Flux.setup(Adam(5e-3), ensemble))
 
     # Assessment
     θ = sampler(1000)

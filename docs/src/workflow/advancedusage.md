@@ -187,7 +187,7 @@ network = DeepSet(ψ, ϕ; S = S)
 estimator = PosteriorEstimator(q, network)
 
 # Train the estimator with the sample size randomly sampled between 2 and 25
-estimator = train(estimator, sample, simulate; K = 30_000, m = 2:25) 
+estimator = train(estimator, sample, simulate; K = 30_000, simulator_args = 2:25) 
 ```
 
 Since the posterior is available in closed form for this example, we can directly compare the standard deviation of the neural posterior to the analytic posterior standard deviation as a function of the sample size $m$. Importantly, the analytic posterior standard deviation is deterministic; it depends only on $\sigma_0$, $\sigma$, and $m$, and not on the observed data. However, we do not expect a neural network to capture this behavior exactly, especially when trained on finite data. As such, some sampling variability in the estimated posterior standard deviation is expected, even when the true value is constant for a given $m$:
@@ -351,7 +351,7 @@ network = DeepSet(ψ, ϕ)
 θ̂ = PointEstimator(network)
 
 # Train the masked neural Bayes estimator
-θ̂ = train(θ̂, sample, simulatemissing, m = 1, ξ = ξ, K = 1000, epochs = 10)
+θ̂ = train(θ̂, sample, simulatemissing, simulator_args = 1, ξ = ξ, K = 1000, epochs = 10)
 ```
 
 Once trained, we can apply our masked neural Bayes estimator to (incomplete) observed data. The data must be encoded in the same manner as during training. Below, we use simulated data as a surrogate for real data, with a missingness proportion of 0.25:
@@ -394,7 +394,7 @@ network = DeepSet(ψ, ϕ)
 
 # Train neural Bayes estimator
 H = 50
-θ̂ = train(θ̂, sample, simulate, m = H, ξ = ξ, K = 1000, epochs = 10)
+θ̂ = train(θ̂, sample, simulate, simulator_args = H, ξ = ξ, K = 1000, epochs = 10)
 ```
 
 Next, we define a function for conditional simulation (see [`EM`](@ref) for details on the required format of this function):
@@ -498,7 +498,7 @@ using Folds
 using CUDA # GPU if it is available
 using LinearAlgebra: Symmetric, cholesky
 using Distributions: cdf, Uniform, Normal, quantile
-using AlgebraOfGraphics, CairoMakie   
+using CairoMakie   
 
 # Sampling θ from the prior distribution
 function sample(K)
@@ -599,11 +599,11 @@ m = 200
 
 # Train an estimator with no censoring
 simulator1(θ, m) = simulatecensored(θ, m; c = [0, 0]) 
-estimator1 = train(estimator, sample, simulator1, m = m) 
+estimator1 = train(estimator, sample, simulator1, simulator_args = m) 
 
 # Train an estimator with mild censoring
 simulator2(θ, m) = simulatecensored(θ, m; c = [0.5, 0.5]) 
-estimator2 = train(estimator, sample, simulator2, m = m)
+estimator2 = train(estimator, sample, simulator2, simulator_args = m)
 
 # Assessment
 θ_test = sample(1000) 

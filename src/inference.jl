@@ -81,46 +81,45 @@ based either on a ``d`` × ``N`` matrix `θ` of posterior draws, where ``d`` den
 
 """
 	posteriormean(θ::AbstractMatrix)	
-	posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...)	
+	posteriormean(estimator, Z, N::Integer = 1000; kwargs...)	
 Computes the posterior mean $_doc_string
 
 See also [`posteriormedian()`](@ref), [`posteriormode()`](@ref).
 """
 posteriormean(θ::AbstractMatrix) = mean(θ; dims = 2)
 posteriormean(θ::AbstractVector{<:AbstractMatrix}) = reduce(hcat, posteriormean.(θ))
-posteriormean(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormean(sampleposterior(estimator, Z, N; kwargs...))
+posteriormean(estimator, Z, N::Integer = 1000; kwargs...) = posteriormean(sampleposterior(estimator, Z, N; kwargs...))
+
 
 """
 	posteriormedian(θ::AbstractMatrix)	
-	posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...)	
+	posteriormedian(estimator, Z, N::Integer = 1000; kwargs...)	
 Computes the vector of marginal posterior medians $_doc_string
 
 See also [`posteriormean()`](@ref), [`posteriorquantile()`](@ref).
 """
 posteriormedian(θ::AbstractMatrix) = median(θ; dims = 2)
 posteriormedian(θ::AbstractVector{<:AbstractMatrix}) = reduce(hcat, posteriormedian.(θ))
-posteriormedian(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, N::Integer = 1000; kwargs...) = posteriormedian(sampleposterior(estimator, Z, N; kwargs...))
+posteriormedian(estimator, Z, N::Integer = 1000; kwargs...) = posteriormedian(sampleposterior(estimator, Z, N; kwargs...))
 
 """
 	posteriorquantile(θ::AbstractMatrix, probs)	
-	posteriorquantile(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, probs, N::Integer = 1000; kwargs...)	
+	posteriorquantile(estimator, Z, probs, N::Integer = 1000; kwargs...)	
 Computes the vector of marginal posterior quantiles with (a collection of) probability levels `probs`, $_doc_string
 
 The return value is a ``d`` × `length(probs)` matrix. 
 
 See also [`posteriormedian()`](@ref).
 """
-function posteriorquantile(θ::AbstractMatrix, probs)
-    mapslices(row -> quantile(row, probs), θ, dims = 2)
-end
-posteriorquantile(estimator::Union{PosteriorEstimator, RatioEstimator}, Z, probs, N::Integer = 1000; kwargs...) = posteriorquantile(sampleposterior(estimator, Z, N; kwargs...), probs)
+posteriorquantile(θ::AbstractMatrix, probs) = mapslices(row -> quantile(row, probs), θ, dims = 2)
+posteriorquantile(θ::AbstractVector{<:AbstractMatrix}, probs) = posteriorquantile.(θ, Ref(probs))
+posteriorquantile(estimator, Z, probs, N::Integer = 1000; kwargs...) = posteriorquantile(sampleposterior(estimator, Z, N; kwargs...), probs)
 
 # ---- Posterior sampling ----
 
-#TODO document use_gpu and other keyword arguments
 @doc raw"""
-	sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000)
-	sampleposterior(estimator::RatioEstimator, Z, N::Integer = 1000; θ_grid, logprior::Function = θ -> 0f0)
+	sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000; use_gpu::Bool = true)
+	sampleposterior(estimator::RatioEstimator, Z, N::Integer = 1000; θ_grid, logprior::Function = θ -> 0f0, use_gpu::Bool = true)
 Samples from the approximate posterior distribution implied by `estimator`.
 
 The positional argument `N` controls the size of the posterior sample.
@@ -135,59 +134,9 @@ other sampling algorithms (e.g., MCMC) may be needed (please contact the package
 """
 function sampleposterior end
 
-function sampleposterior(
-    est::RatioEstimator,
-    Z,
-    N::Integer = 1000;
-    logprior::Function = θ -> 0.0f0,
-    θ_grid = nothing, theta_grid = nothing,
-    # θ₀ = nothing, theta0 = nothing, # NB a basic MCMC sampler could be initialised with θ₀
-    kwargs...)
-    Z = f32(Z)
-
-    # Check duplicated arguments that are needed so that the R interface uses ASCII characters only
-    @assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
-    # @assert isnothing(θ₀) || isnothing(theta0) "Only one of `θ₀` or `theta0` should be given"
-    if !isnothing(theta_grid)
-        θ_grid = theta_grid
-    end
-    # if !isnothing(theta0) θ₀ = theta0 end
-
-    # # Check that we have either a grid to search over or initial estimates
-    # @assert !isnothing(θ_grid) || !isnothing(θ₀) "Either `θ_grid` or `θ₀` should be given"
-    # @assert isnothing(θ_grid) || isnothing(θ₀) "Only one of `θ_grid` and `θ₀` should be given"
-
-    if !isnothing(θ_grid)
-        θ_grid = f32(θ_grid)
-        logrZθ = vec(estimate(est, Z, θ_grid; kwargs...))
-        logpθ = logprior.(eachcol(θ_grid))
-        logdensity = logpθ .+ logrZθ
-        θ = StatsBase.wsample(eachcol(θ_grid), exp.(logdensity), N; replace = true)
-        reduce(hcat, θ)
-    end
-end
-
-function sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000; kwargs...)
-    # Determine if we are using the gpu 
-    args = (; kwargs...)
-    use_gpu = haskey(args, :use_gpu) ? args.use_gpu : true
-
-    # Compute the summary statistics 
-    tz = estimate(estimator.network, Z; use_gpu = use_gpu)
-
-    # Sample from the approximate posterior given the summary statistics 
-    θ = sampleposterior(estimator.q, tz, N; kwargs...)
-
-    if numobs(Z) == 1
-        θ = θ[1]
-    end
-
-    return θ
-end
-
 # ---- Optimisation-based point estimates ----
 
-# TODO density evaluation with PosteriorEstimator would allow us to use these grid and gradient-based methods for computing the posterior mode
+# TODO can use density evaluation with PosteriorEstimator to use these grid and gradient-based methods for computing the posterior mode
 
 @doc raw"""
 	posteriormode(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, logprior::Function = θ -> 0f0, use_gpu = true)
@@ -203,46 +152,7 @@ posterior density is maximised by gradient descent (requires `Optim.jl` to be lo
 
 See also [`posteriormedian()`](@ref), [`posteriormean()`](@ref).
 """
-function posteriormode(
-    est::RatioEstimator, Z;
-    logprior::Function = θ -> 0.0f0, penalty::Union{Function, Nothing} = nothing,
-    θ_grid = nothing, theta_grid = nothing,
-    θ₀ = nothing, theta0 = nothing,
-    kwargs...
-)
-
-    # Check duplicated arguments that are needed so that the R interface uses ASCII characters only
-    @assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
-    @assert isnothing(θ₀) || isnothing(theta0) "Only one of `θ₀` or `theta0` should be given"
-    if !isnothing(theta_grid)
-        θ_grid = theta_grid
-    end
-    if !isnothing(theta0)
-        θ₀ = theta0
-    end
-
-    # Change "penalty" to "prior"
-    if !isnothing(penalty)
-        logprior = penalty
-    end
-
-    # Check that we have either a grid to search over or initial estimates
-    @assert !isnothing(θ_grid) || !isnothing(θ₀) "One of `θ_grid` or `θ₀` should be given"
-    @assert isnothing(θ_grid) || isnothing(θ₀) "Only one of `θ_grid` and `θ₀` should be given"
-
-    if !isnothing(θ_grid)
-        θ_grid = f32(θ_grid)
-        logrZθ = vec(estimate(est, Z, θ_grid; kwargs...))
-        logpθ = logprior.(eachcol(θ_grid))
-        logdensity = logpθ .+ logrZθ
-        θ̂ = θ_grid[:, argmax(logdensity), :]   # extra colon to preserve matrix output
-    else
-        θ̂ = _optimdensity(θ₀, logprior, est)
-    end
-
-    return θ̂
-end
-posteriormode(est::RatioEstimator, Z::AbstractVector; kwargs...) = reduce(hcat, posteriormode.(Ref(est), Z; kwargs...))
+function posteriormode end
 
 # Here, we define _optimdensity() for the case that Optim has not been loaded
 # For the case that Optim is loaded, _optimdensity() is overloaded in ext/NeuralEstimatorsOptimExt.jl
