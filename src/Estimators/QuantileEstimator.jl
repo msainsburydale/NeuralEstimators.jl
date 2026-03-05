@@ -251,11 +251,10 @@ function _inputoutput(estimator::QuantileEstimator, Z, θ::P) where {P <: Union{
     return input, output
 end
 
-function _loss(estimator::Union{IntervalEstimator, QuantileEstimator}, loss = nothing) 
+function _loss(estimator::Union{IntervalEstimator, QuantileEstimator}, loss = nothing)
     # NB: probs is on the CPU but CUDA handles the implicit transfer in quantileloss
-    (estimate, θ) -> quantileloss(estimate, θ, estimator.probs) 
+    (estimate, θ) -> quantileloss(estimate, θ, estimator.probs)
 end
-
 
 @doc raw"""
 	QuantileEstimatorContinuous <: BayesEstimator
@@ -502,7 +501,6 @@ function assess(
     estimator_names::Union{Nothing, String} = nothing,
     use_gpu::Bool = true
 ) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-
     θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
 
     # Apply the estimator to data 
@@ -510,7 +508,7 @@ function assess(
     runtime = DataFrame(runtime = runtime)
 
     # Empirical risk
-    empirical_risk = _computerisk(estimator, θ, Z) 
+    empirical_risk = _computerisk(estimator, θ, Z)
 
     # Convert to DataFrame and add information
     estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = d)
@@ -541,7 +539,6 @@ function assess(
     use_gpu::Bool = true,
     probs = f32(range(0.01, stop = 0.99, length = 100))
 ) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-
     θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
 
     # Get the probability levels and compute the empirical risk
@@ -573,7 +570,7 @@ function assess(
             set_info = eachcol(θ₋ᵢ)
         else
             # Combine each θ₋ᵢ with the corresponding vector of probability levels, which requires repeating θ₋ᵢ appropriately
-            set_info = map(1:K*J) do k
+            set_info = map(1:(K * J)) do k
                 θ₋ᵢₖ = repeat(θ₋ᵢ[:, k:k], inner = (1, n_probs))
                 vcat(θ₋ᵢₖ, probs')
             end

@@ -218,8 +218,6 @@ function subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
     getobs(Z, i)
 end
 
-
-
 # ---- Test code for GNN and subsetdata ----
 
 # n = 250  # number of observations in each realisation

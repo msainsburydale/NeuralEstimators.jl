@@ -21,10 +21,10 @@ If the estimator is a [`PosteriorEstimator`](@ref), in addition to the fields li
 Use `merge()` to combine assessments from multiple estimators of the same type or `join()` to combine assessments from a [`PointEstimator`](@ref) and an [`IntervalEstimator`](@ref).
 """
 struct Assessment
-    estimates::DataFrame 
+    estimates::DataFrame
     runtime::DataFrame
     samples::Union{DataFrame, Nothing}
-    risk
+    risk::Any
 end
 Assessment(estimates, runtime) = Assessment(estimates, runtime, nothing, nothing)
 
@@ -96,7 +96,6 @@ function join(assessment::Assessment, assessments::Assessment...)
     end
     Assessment(estimates, runtime, nothing, nothing)
 end
-
 
 # ---- assess() methods and internal helper functions ----
 
@@ -195,7 +194,7 @@ function assess(
     estimator_name::Union{Nothing, String} = nothing,
     estimator_names::Union{Nothing, String} = nothing,
     N::Integer = 1000,
-    pointsummary::Function = mean, 
+    pointsummary::Function = mean,
     kwargs... #Document these kwargs...
 ) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
 
@@ -207,7 +206,7 @@ function assess(
     runtime = DataFrame(runtime = runtime)
 
     # Empirical risk
-    empirical_risk = _computerisk(estimator, θ, Z) 
+    empirical_risk = _computerisk(estimator, θ, Z)
 
     # Obtain point estimates 
     estimates = reduce(hcat, map.(pointsummary, eachrow.(samples)))
@@ -244,7 +243,6 @@ function assess(
 
     return Assessment(estimates, runtime, samples_df, empirical_risk)
 end
-
 
 """
     _assess_setup(θ, Z, parameter_names)
@@ -294,9 +292,9 @@ end
 
 _resolve_estimator_name(name, names) = isnothing(names) ? name : names
 
-function _computerisk(estimator, θ, Z; use_gpu = true, batchsize = 32) 
-    loss    = _loss(estimator)
-    device  = _checkgpu(use_gpu, verbose = false)
+function _computerisk(estimator, θ, Z; use_gpu = true, batchsize = 32)
+    loss = _loss(estimator)
+    device = _checkgpu(use_gpu, verbose = false)
     estimator = device(estimator)
     dataset = _dataloader(estimator, Z, θ, batchsize)
     _risk(estimator, loss, dataset, device)
@@ -357,7 +355,6 @@ function _add_estimator_name!(df, runtime, name)
     end
 end
 
-
 # Wrapper for assessing multiple estimators at once
 function assess(
     estimators::Union{AbstractVector, Tuple}, θ::P, Z;
@@ -409,14 +406,11 @@ function assess(
     return assessment
 end
 
-
-
 # ---- Diagnostic functions acting on Assessment objects ----
 
 function _groupedloss(df::DataFrame, loss;
     average_over_parameters::Bool = false,
     average_over_sample_sizes::Bool = true)
-
     grouping_variables = "estimator" ∈ names(df) ? [:estimator] : []
     if !average_over_parameters
         push!(grouping_variables, :parameter)
@@ -451,7 +445,7 @@ If the `Assessment` object corresponds to an estimator with a self-defined loss 
 - `loss = (x, y) -> abs(x - y)`: a binary operator defining the loss function (default: absolute-error loss)
 - `average_over_parameters::Bool = false`: if `true`, the loss is averaged over all parameters; otherwise (default), it is computed separately for each parameter.
 """
-function risk(assessment::Assessment; loss = nothing, args...) 
+function risk(assessment::Assessment; loss = nothing, args...)
     isnothing(loss) ? assessment.risk : risk(assessment.estimates; loss = loss, args...)
 end
 
@@ -459,13 +453,11 @@ function risk(df::DataFrame;
     loss = (x, y) -> abs(x - y),
     average_over_parameters::Bool = false,
     average_over_sample_sizes::Bool = true)
-
     df = _groupedloss(df, loss; average_over_parameters, average_over_sample_sizes)
     rename!(df, :loss => :risk)
 
     return df
 end
-
 
 @doc raw"""
 	bias(assessment::Assessment; average_over_parameters = false)
@@ -486,13 +478,11 @@ bias(assessment::Assessment; args...) = bias(assessment.estimates; args...)
 function bias(df::DataFrame;
     average_over_parameters::Bool = false,
     average_over_sample_sizes::Bool = true)
-
     df = _groupedloss(df, (x, y) -> x - y; average_over_parameters, average_over_sample_sizes)
     rename!(df, :loss => :bias)
 
     return df
 end
-
 
 @doc raw"""
 	rmse(assessment::Assessment; average_over_parameters = false)
@@ -512,7 +502,6 @@ rmse(assessment::Assessment; args...) = rmse(assessment.estimates; args...)
 
 function rmse(df::DataFrame; average_over_parameters::Bool = false,
     average_over_sample_sizes::Bool = true)
-
     df = _groupedloss(df, (x, y) -> (x - y)^2; average_over_parameters, average_over_sample_sizes)
     df[:, :loss] = sqrt.(df[:, :loss])
     rename!(df, :loss => :rmse)
@@ -609,5 +598,3 @@ function intervalscore(assessment::Assessment;
 
     return df
 end
-
-

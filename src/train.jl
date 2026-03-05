@@ -108,10 +108,9 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     stopping_epochs::Integer = 5,
     use_gpu::Bool = true,
     verbose::Bool = true,
-    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false), 
+    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false),
     risk_history::Union{Nothing, Matrix} = nothing
 ) where {T, P <: Union{Tuple, AbstractMatrix, ParameterConfigurations}}
-
     verbose && print("Constructing the training set...")
     train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
 
@@ -137,7 +136,7 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     end
 
     !isnothing(lr_schedule) && (lr_schedule = Stateful(lr_schedule))
-    
+
     estimator_best = deepcopy(estimator)
     early_stopping_counter = 0
 
@@ -190,10 +189,9 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
     stopping_epochs::Integer = 5,
     use_gpu::Bool = true,
     verbose::Bool = true,
-    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false), 
+    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false),
     risk_history::Union{Nothing, Matrix} = nothing
 ) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
-
     if !isnothing(m)
         @warn "`m` is deprecated, use `simulator_args` instead"
         simulator_args = (m,)
@@ -203,7 +201,7 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
     if simulate_just_in_time && epochs_per_Z_refresh != 1
         @error "We cannot simulate the data just-in-time if we aren't refreshing the data every epoch; please either set `simulate_just_in_time = false` or `epochs_per_Z_refresh = 1`"
     end
-    
+
     # We may simulate Z_train in its entirety either because (i) we
     # want to avoid the overhead of simulating continuously or (ii) we are
     # not refreshing Z_train every epoch so we need it for subsequent epochs
@@ -211,7 +209,6 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
 
     verbose && println("Simulating validation data and constructing the validation set...")
     val_set = _dataloader(estimator, simulator, θ_val, simulator_args, simulator_kwargs, batchsize)
-    
 
     # ---- Common setup ----
 
@@ -225,14 +222,14 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
     verbose && print("Computing the initial validation risk...")
     min_val_risk = _risk(estimator, loss, val_set, device)
     verbose && println(" Initial validation risk = $min_val_risk")
-    
+
     loss_per_epoch = [min_val_risk min_val_risk;]
     if !isnothing(risk_history)
         loss_per_epoch = vcat(risk_history, loss_per_epoch)
     end
 
     !isnothing(lr_schedule) && (lr_schedule = Stateful(lr_schedule))
-    
+
     estimator_best = deepcopy(estimator)
     early_stopping_counter = 0
 
@@ -315,7 +312,7 @@ function train(estimator, sampler, simulator;
     verbose::Bool = true,
     K::Integer = 10_000,
     K_val::Integer = K ÷ 2 + 1,
-    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false), 
+    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false),
     risk_history::Union{Nothing, Matrix} = nothing
 )
     @assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
@@ -331,7 +328,7 @@ function train(estimator, sampler, simulator;
     if !isnothing(m)
         @warn "`m` is deprecated, use `simulator_args` instead"
         # simulator_args = (m, simulator_args...)
-        simulator_args = (m,) 
+        simulator_args = (m,)
     end
 
     @assert epochs_per_θ_refresh == 1 || epochs_per_theta_refresh == 1 "Only one of `epochs_per_θ_refresh` or `epochs_per_theta_refresh` should be provided"
@@ -350,7 +347,7 @@ function train(estimator, sampler, simulator;
     num_batches = ceil(Int, K / batchsize)
 
     verbose && println("Sampling validation parameters...")
-    θ_val   =  sampler(K_val, sampler_args...; sampler_kwargs...)
+    θ_val = sampler(K_val, sampler_args...; sampler_kwargs...)
     verbose && println("Simulating validation data and constructing the validation set...")
     val_set = _dataloader(estimator, simulator, θ_val, simulator_args, simulator_kwargs, batchsize)
 
@@ -366,14 +363,14 @@ function train(estimator, sampler, simulator;
     verbose && print("Computing the initial validation risk...")
     min_val_risk = _risk(estimator, loss, val_set, device)
     verbose && println(" Initial validation risk = $min_val_risk")
-    
+
     loss_per_epoch = [min_val_risk min_val_risk;]
     if !isnothing(risk_history)
         loss_per_epoch = vcat(risk_history, loss_per_epoch)
     end
 
     !isnothing(lr_schedule) && (lr_schedule = Stateful(lr_schedule))
-    
+
     estimator_best = deepcopy(estimator)
     early_stopping_counter = 0
 
@@ -431,7 +428,7 @@ function train(estimator, sampler, simulator;
             next_lr = ParameterSchedulers.next!(lr_schedule)
             Optimisers.adjust!(optimiser, next_lr)
         end
-        
+
         _saveloss(loss_per_epoch, savepath)
         if val_risk <= min_val_risk
             _savenetwork(estimator, savepath; best = true)
@@ -627,9 +624,6 @@ plotrisk(savepath::String = tempdir()) = _plotrisk(savepath)
 _plotrisk(savepath) = error("plotrisk requires a plotting package to be loaded. Please load a supported plotting package (e.g., `using Plots`) and try again.")
 # Note that defining a generic function here and defining the method in the extension also works,
 # but the error that is thrown when a plotting package is not loaded is not particularly informative.
-
-
-
 
 # ---- Wrapper function for training multiple estimators over a range of sample sizes ----
 

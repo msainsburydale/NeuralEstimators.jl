@@ -2,7 +2,8 @@ module NeuralEstimatorsPlottingMakieExt
 
 using NeuralEstimators
 using Makie
-import Makie: plot; export plot
+import Makie: plot;
+export plot
 
 # ===========================================================================
 #  plotrisk()
@@ -33,7 +34,6 @@ function _plotrisk(savepath::String)
     return fig
 end
 
-
 # ===========================================================================
 #  plot(assessment)
 # ===========================================================================
@@ -44,7 +44,7 @@ using Statistics: mean, var, std, quantile
 # Thin wrappers around StatsFuns
 using StatsFuns: binompdf, binominvcdf, hyperinvcdf
 _binom_quantile(q::Float64, n::Int, p::Float64)::Int = Int(binominvcdf(n, p, q))
-_binom_pdf(k::Int, n::Int, p::Float64)::Float64      = binompdf(n, p, k)
+_binom_pdf(k::Int, n::Int, p::Float64)::Float64 = binompdf(n, p, k)
 _hyper_quantile(q::Float64, ns::Int, nf::Int, n::Int)::Int = Int(hyperinvcdf(ns, nf, n, q))
 
 """
@@ -103,7 +103,7 @@ function plot(assessment::Assessment; grid::Bool = false, prob = 0.99)
     # ---- PosteriorEstimator path ----
     if hasproperty(assessment, :samples) && !isnothing(assessment.samples)
         sbc = _sbc_data(assessment, prob)
-        d   = length(sbc.params)
+        d = length(sbc.params)
         fig = Figure(size = (200 * d, 750))
         _plot_recovery_row!(fig, 1, assessment, d)
         _plot_ecdf_row!(fig, 3, sbc, d)
@@ -111,25 +111,26 @@ function plot(assessment::Assessment; grid::Bool = false, prob = 0.99)
         return fig
     end
 
-    params         = unique(df.parameter)
-    d              = length(params)
+    params = unique(df.parameter)
+    d = length(params)
     num_estimators = "estimator" ∉ names(df) ? 1 : length(unique(df.estimator))
 
     # ---- QuantileEstimator path ----
     if "prob" ∈ names(df)
         df_emp = empiricalprob(assessment)
-        fig    = Figure()
+        fig = Figure()
         for (pi, param) in enumerate(params)
             ax = Axis(fig[1, pi];
-                title  = param,
+                title = param,
                 xlabel = pi == ceil(Int, d / 2) ? "Probability level, τ" : "",
-                ylabel = pi == 1 ? "Pr(Q(Z, τ) ≥ θ)" : "",
+                ylabel = pi == 1 ? "Pr(Q(Z, τ) ≥ θ)" : ""
             )
             sub = filter(r -> r.parameter == param, df_emp)
             sort!(sub, :prob)
             lines!(ax, sub.prob, sub.empirical_prob; color = :black, linewidth = 1.5)
             lines!(ax, [0.0, 1.0], [0.0, 1.0]; color = :red, linestyle = :dash, linewidth = 1.2)
-            xlims!(ax, 0.0, 1.0); ylims!(ax, 0.0, 1.0)
+            xlims!(ax, 0.0, 1.0);
+            ylims!(ax, 0.0, 1.0)
         end
         return fig
     end
@@ -139,9 +140,9 @@ function plot(assessment::Assessment; grid::Bool = false, prob = 0.99)
         fig = Figure()
         for (pi, param) in enumerate(params)
             ax = Axis(fig[1, pi];
-                title  = param,
+                title = param,
                 xlabel = pi == ceil(Int, d / 2) ? "True value" : "",
-                ylabel = pi == 1 ? "Interval" : "",
+                ylabel = pi == 1 ? "Interval" : ""
             )
             sub = filter(r -> r.parameter == param, df)
             for row in eachrow(sub)
@@ -162,16 +163,16 @@ function plot(assessment::Assessment; grid::Bool = false, prob = 0.99)
         # Determine layout: grid mode gives estimators as columns, params as rows;
         # otherwise params as columns with estimators overlaid by colour.
         estimators = num_estimators > 1 ? unique(df.estimator) : [nothing]
-        palette    = Makie.wong_colors()
+        palette = Makie.wong_colors()
 
         if grid && num_estimators > 1
             fig = Figure()
             for (ei, est) in enumerate(estimators)
                 for (pi, param) in enumerate(params)
                     ax = Axis(fig[pi, ei];
-                        title  = ei == 1 ? string(param) : "",
+                        title = ei == 1 ? string(param) : "",
                         xlabel = pi == length(params) ? string(est) : "",
-                        ylabel = (pi == 1 && ei == 1) ? "Estimate" : "",
+                        ylabel = (pi == 1 && ei == 1) ? "Estimate" : ""
                     )
                     sub = filter(r -> r.parameter == param && r.estimator == est, df)
                     vmin, vmax = minimum(sub.truth), maximum(sub.truth)
@@ -183,9 +184,9 @@ function plot(assessment::Assessment; grid::Bool = false, prob = 0.99)
             fig = Figure()
             for (pi, param) in enumerate(params)
                 ax = Axis(fig[1, pi];
-                    title  = string(param),
+                    title = string(param),
                     xlabel = pi == ceil(Int, d / 2) ? "True value" : "",
-                    ylabel = pi == 1 ? "Estimate" : "",
+                    ylabel = pi == 1 ? "Estimate" : ""
                 )
                 if num_estimators > 1
                     for (ei, est) in enumerate(estimators)
@@ -209,7 +210,6 @@ function plot(assessment::Assessment; grid::Bool = false, prob = 0.99)
     error("Unrecognised assessment format: expected columns 'estimate', 'lower'/'upper', or 'prob'.")
 end
 
-
 # ===========================================================================
 #  Row-drawing helpers
 # ===========================================================================
@@ -220,24 +220,24 @@ Plots posterior mean ± 95% CI vs. true value, one panel per parameter.
 Occupies grid rows `row_start` (axes) and `row_start+1` (x-axis label).
 """
 function _plot_recovery_row!(fig::Figure, row_start::Int,
-                             assessment::Assessment, d::Int)
+    assessment::Assessment, d::Int)
     samples_df = assessment.samples
     params = unique(samples_df.parameter)
-    K      = maximum(samples_df.k)
+    K = maximum(samples_df.k)
 
     for (pi, param) in enumerate(params)
         sub = filter(r -> r.parameter == param, samples_df)
 
         truths = Float64[]
-        means  = Float64[]
+        means = Float64[]
         lowers = Float64[]
         uppers = Float64[]
-        for k in 1:K
+        for k = 1:K
             sub_k = filter(r -> r.k == k, sub)
             isempty(sub_k) && continue
             vals = sub_k.value
             push!(truths, sub_k[1, :truth])
-            push!(means,  mean(vals))
+            push!(means, mean(vals))
             push!(lowers, quantile(vals, 0.025))
             push!(uppers, quantile(vals, 0.975))
         end
@@ -246,9 +246,9 @@ function _plot_recovery_row!(fig::Figure, row_start::Int,
         vmin, vmax = minimum(all_vals), maximum(all_vals)
 
         ax = Axis(fig[row_start, pi],
-            title  = param,
+            title = param,
             ylabel = pi == 1 ? "Posterior mean" : "",
-            limits = (vmin, vmax, vmin, vmax),
+            limits = (vmin, vmax, vmin, vmax)
         )
 
         for i in eachindex(truths)
@@ -276,7 +276,7 @@ function _plot_ecdf_row!(fig::Figure, row_start::Int, sbc::NamedTuple, d::Int)
             ylabel = pi == 1 ? "ECDF" : "",
             xticks = [0.0, 0.5, 1.0],
             yticks = [0.0, 0.5, 1.0],
-            limits = (0.0, 1.0, 0.0, 1.0),
+            limits = (0.0, 1.0, 0.0, 1.0)
         )
 
         band!(ax, sbc.band_df.x, sbc.band_df.lower, sbc.band_df.upper;
@@ -303,7 +303,7 @@ function _plot_zscore_row!(fig::Figure, row_start::Int, sbc::NamedTuple, d::Int)
     for (pi, param) in enumerate(sbc.params)
         ax = Axis(fig[row_start, pi],
             ylabel = pi == 1 ? "Posterior z-score" : "",
-            limits = (contraction_xmin, 1.0, nothing, nothing),
+            limits = (contraction_xmin, 1.0, nothing, nothing)
         )
 
         sub = filter(r -> r.parameter == param, sbc.zscore_df)
@@ -313,7 +313,6 @@ function _plot_zscore_row!(fig::Figure, row_start::Int, sbc::NamedTuple, d::Int)
 
     Label(fig[row_start + 1, 1:d], "Posterior contraction"; tellwidth = false)
 end
-
 
 # ===========================================================================
 #  SBC data preparation
@@ -330,14 +329,14 @@ samples. Returns a `NamedTuple` with fields:
 function _sbc_data(assessment::Assessment, prob::Float64)
     samples_df = assessment.samples
     params = unique(samples_df.parameter)
-    d  = length(params)
-    K  = maximum(samples_df.k)
+    d = length(params)
+    K = maximum(samples_df.k)
 
     # ---- ranks ----
     rank_rows = NamedTuple{(:parameter, :k, :rank), Tuple{String, Int, Int}}[]
     for param in params
         sub = filter(r -> r.parameter == param, samples_df)
-        for k in 1:K
+        for k = 1:K
             sub_k = filter(r -> r.k == k, sub)
             isempty(sub_k) && continue
             truth_val = sub_k[1, :truth]
@@ -349,32 +348,32 @@ function _sbc_data(assessment::Assessment, prob::Float64)
     ranks_matrix = Matrix{Int}(undef, K, d)
     for (pi, param) in enumerate(params)
         sub = filter(r -> r.parameter == param, ranks_df)
-        for k in 1:K
+        for k = 1:K
             row = filter(r -> r.k == k, sub)
             ranks_matrix[k, pi] = isempty(row) ? 0 : row[1, :rank]
         end
     end
 
-    max_rank  = maximum(ranks_matrix)
-    N         = K
+    max_rank = maximum(ranks_matrix)
+    N = K
     grid_size = min(max_rank + 1, N)
 
     # ---- confidence band ----
-    gamma   = _adjust_gamma_optimize(N, grid_size, prob)
-    z_grid  = range(0, 1; length = grid_size + 1)
+    gamma = _adjust_gamma_optimize(N, grid_size, prob)
+    z_grid = range(0, 1; length = grid_size + 1)
     z_twice = vcat(0.0, repeat(collect(z_grid[2:end]), inner = 2))
 
     lower_counts, upper_counts = _ecdf_intervals(N, 1, grid_size, gamma)
     band_df = DataFrame(
-        x     = z_twice,
+        x = z_twice,
         lower = lower_counts ./ N,
-        upper = upper_counts ./ N,
+        upper = upper_counts ./ N
     )
 
     # ---- ECDF values ----
     base_vals = floor.(Int, (0:grid_size) .* ((max_rank + 1) / grid_size))
     ecdf_vals = Matrix{Float64}(undef, grid_size + 1, d)
-    for i in 1:(grid_size + 1)
+    for i = 1:(grid_size + 1)
         for (pi, _) in enumerate(params)
             ecdf_vals[i, pi] = mean(ranks_matrix[:, pi] .< base_vals[i])
         end
@@ -382,7 +381,7 @@ function _sbc_data(assessment::Assessment, prob::Float64)
 
     ecdf_rows = NamedTuple{(:z, :parameter, :ecdf), Tuple{Float64, String, Float64}}[]
     for (pi, param) in enumerate(params)
-        for i in 1:(grid_size + 1)
+        for i = 1:(grid_size + 1)
             push!(ecdf_rows, (z = z_grid[i], parameter = param, ecdf = ecdf_vals[i, pi]))
         end
     end
@@ -398,17 +397,17 @@ function _sbc_data(assessment::Assessment, prob::Float64)
     zscore_rows = NamedTuple{(:parameter, :k, :z_score, :contraction), Tuple{String, Int, Float64, Float64}}[]
     for param in params
         sub = filter(r -> r.parameter == param, samples_df)
-        for k in 1:K
+        for k = 1:K
             sub_k = filter(r -> r.k == k, sub)
             isempty(sub_k) && continue
-            truth_val  = sub_k[1, :truth]
-            mu_post    = mean(sub_k.value)
-            sd_post    = std(sub_k.value)
+            truth_val = sub_k[1, :truth]
+            mu_post = mean(sub_k.value)
+            sd_post = std(sub_k.value)
             push!(zscore_rows, (
-                parameter   = param,
-                k           = k,
-                z_score     = (mu_post - truth_val) / sd_post,
-                contraction = 1.0 - sd_post^2 / prior_var[param],
+                parameter = param,
+                k = k,
+                z_score = (mu_post - truth_val) / sd_post,
+                contraction = 1.0 - sd_post^2 / prior_var[param]
             ))
         end
     end
@@ -416,7 +415,6 @@ function _sbc_data(assessment::Assessment, prob::Float64)
 
     return (; params, band_df, ecdf_plot_df, zscore_df)
 end
-
 
 # ===========================================================================
 #  Internal distribution / band helpers
@@ -426,14 +424,14 @@ function _ecdf_intervals(N::Int, L::Int, K::Int, gamma::Float64)
     z = range(0, 1; length = K + 1)
 
     if L == 1
-        lower = [_binom_quantile(gamma / 2,     N, Float64(zi)) for zi in z]
+        lower = [_binom_quantile(gamma / 2, N, Float64(zi)) for zi in z]
         upper = [_binom_quantile(1 - gamma / 2, N, Float64(zi)) for zi in z]
     else
         n_fail = N * (L - 1)
         n_draw = N * L
-        k_vec  = floor.(Int, collect(z) .* n_draw)
-        lower  = [_hyper_quantile(gamma / 2,     N, n_fail, kk) for kk in k_vec]
-        upper  = [_hyper_quantile(1 - gamma / 2, N, n_fail, kk) for kk in k_vec]
+        k_vec = floor.(Int, collect(z) .* n_draw)
+        lower = [_hyper_quantile(gamma / 2, N, n_fail, kk) for kk in k_vec]
+        upper = [_hyper_quantile(1 - gamma / 2, N, n_fail, kk) for kk in k_vec]
     end
 
     lower_step = vcat(repeat(lower[1:K], inner = 2), lower[K + 1])
@@ -443,16 +441,16 @@ end
 
 function _adjust_gamma_optimize(N::Int, K::Int, conf_level::Float64)
     function target(gamma)
-        z  = collect(range(0, 1; length = K))
-        z1 = vcat(0.0, z[1:end-1])
+        z = collect(range(0, 1; length = K))
+        z1 = vcat(0.0, z[1:(end - 1)])
         z2 = z
 
-        x2_lower  = [_binom_quantile(gamma / 2, N, Float64(zi)) for zi in z2]
+        x2_lower = [_binom_quantile(gamma / 2, N, Float64(zi)) for zi in z2]
         rev_lower = reverse(x2_lower)
-        x2_upper  = vcat(N .- rev_lower[2:K], N)
+        x2_upper = vcat(N .- rev_lower[2:K], N)
 
         x1_vec = [0]
-        p_int  = [1.0]
+        p_int = [1.0]
         for i in eachindex(z1)
             x1_vec, p_int = _p_interior(p_int, x1_vec, x2_lower[i]:x2_upper[i], z1[i], z2[i], N)
         end
@@ -462,24 +460,26 @@ function _adjust_gamma_optimize(N::Int, K::Int, conf_level::Float64)
     φ = (√5 - 1) / 2
     a, b = 0.0, 1.0 - conf_level
     c, d_pt = b - φ * (b - a), a + φ * (b - a)
-    fc, fd  = target(c), target(d_pt)
+    fc, fd = target(c), target(d_pt)
     while (b - a) > 1e-8
         if fc < fd
             b, d_pt, fd = d_pt, c, fc
-            c  = b - φ * (b - a); fc = target(c)
+            c = b - φ * (b - a);
+            fc = target(c)
         else
             a, c, fc = c, d_pt, fd
-            d_pt = a + φ * (b - a); fd = target(d_pt)
+            d_pt = a + φ * (b - a);
+            fd = target(d_pt)
         end
     end
     return (a + b) / 2
 end
 
 function _p_interior(p_int::Vector{Float64}, x1::Vector{Int},
-                     x2_range::AbstractRange{Int},
-                     z1::Float64, z2::Float64, N::Int)
-    z_tilde  = (z2 - z1) / (1 - z1)
-    x2_vec   = collect(x2_range)
+    x2_range::AbstractRange{Int},
+    z1::Float64, z2::Float64, N::Int)
+    z_tilde = (z2 - z1) / (1 - z1)
+    x2_vec = collect(x2_range)
     p_x2_int = zeros(length(x2_vec), length(x1))
     for (j, x1j) in enumerate(x1)
         N_tilde = N - x1j

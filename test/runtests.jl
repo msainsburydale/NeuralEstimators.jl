@@ -118,7 +118,7 @@ end
         r = 0.3
 
         # Memory efficient constructors (avoids constructing the full distance matrix D)
-        A  = A₁ = adjacencymatrix(S, k)
+        A = A₁ = adjacencymatrix(S, k)
         A₂ = adjacencymatrix(S, r)
         @test eltype(A₁) == Float32
         @test eltype(A₂) == Float32
@@ -782,7 +782,7 @@ MLE(Z, ξ) = MLE(Z) # doesn't need ξ but include it for testing
             use_gpu = dvc == gpu
             @testset "train" begin
                 testbackprop(estimator, Z, dvc)
-                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,) )
+                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,))
                 estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), savepath = "testing-path")
                 estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), simulate_just_in_time = true)
                 estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose)
