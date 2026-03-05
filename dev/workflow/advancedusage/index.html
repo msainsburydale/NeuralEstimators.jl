@@ -92,7 +92,7 @@ network = DeepSet(ψ, ϕ; S = S)
 estimator = PosteriorEstimator(q, network)
 
 # Train the estimator with the sample size randomly sampled between 2 and 25
-estimator = train(estimator, sample, simulate; K = 30_000, m = 2:25) </code></pre><p>Since the posterior is available in closed form for this example, we can directly compare the standard deviation of the neural posterior to the analytic posterior standard deviation as a function of the sample size <span>$m$</span>. Importantly, the analytic posterior standard deviation is deterministic; it depends only on <span>$\sigma_0$</span>, <span>$\sigma$</span>, and <span>$m$</span>, and not on the observed data. However, we do not expect a neural network to capture this behavior exactly, especially when trained on finite data. As such, some sampling variability in the estimated posterior standard deviation is expected, even when the true value is constant for a given <span>$m$</span>:</p><pre><code class="language-julia hljs"># Closed-form expression for the posterior standard deviation
+estimator = train(estimator, sample, simulate; K = 30_000, simulator_args = 2:25) </code></pre><p>Since the posterior is available in closed form for this example, we can directly compare the standard deviation of the neural posterior to the analytic posterior standard deviation as a function of the sample size <span>$m$</span>. Importantly, the analytic posterior standard deviation is deterministic; it depends only on <span>$\sigma_0$</span>, <span>$\sigma$</span>, and <span>$m$</span>, and not on the observed data. However, we do not expect a neural network to capture this behavior exactly, especially when trained on finite data. As such, some sampling variability in the estimated posterior standard deviation is expected, even when the true value is constant for a given <span>$m$</span>:</p><pre><code class="language-julia hljs"># Closed-form expression for the posterior standard deviation
 analyticstd(σ₀, σ, m) = sqrt(1 / (1 / σ₀^2 + m / σ^2))
 
 # Simulate data and return posterior standard deviation from estimator
@@ -213,7 +213,7 @@ network = DeepSet(ψ, ϕ)
 θ̂ = PointEstimator(network)
 
 # Train the masked neural Bayes estimator
-θ̂ = train(θ̂, sample, simulatemissing, m = 1, ξ = ξ, K = 1000, epochs = 10)</code></pre><p>Once trained, we can apply our masked neural Bayes estimator to (incomplete) observed data. The data must be encoded in the same manner as during training. Below, we use simulated data as a surrogate for real data, with a missingness proportion of 0.25:</p><pre><code class="language-julia hljs">θ = sample(1, ξ)     # true parameters
+θ̂ = train(θ̂, sample, simulatemissing, simulator_args = 1, ξ = ξ, K = 1000, epochs = 10)</code></pre><p>Once trained, we can apply our masked neural Bayes estimator to (incomplete) observed data. The data must be encoded in the same manner as during training. Below, we use simulated data as a surrogate for real data, with a missingness proportion of 0.25:</p><pre><code class="language-julia hljs">θ = sample(1, ξ)     # true parameters
 Z = simulate(θ, 1)[1]    # complete data
 Z = removedata(Z, 0.25)  # &quot;observed&quot; incomplete data (i.e., with missing values)
 UW = encodedata(Z)       # augmented data {U, W}
@@ -235,7 +235,7 @@ network = DeepSet(ψ, ϕ)
 
 # Train neural Bayes estimator
 H = 50
-θ̂ = train(θ̂, sample, simulate, m = H, ξ = ξ, K = 1000, epochs = 10)</code></pre><p>Next, we define a function for conditional simulation (see <a href="../../API/utility/#NeuralEstimators.EM"><code>EM</code></a> for details on the required format of this function):</p><pre><code class="language-julia hljs">function simulateconditional(Z::M, θ; nsims::Integer = 1, ξ) where {M &lt;: AbstractMatrix{Union{Missing, T}}} where T
+θ̂ = train(θ̂, sample, simulate, simulator_args = H, ξ = ξ, K = 1000, epochs = 10)</code></pre><p>Next, we define a function for conditional simulation (see <a href="../../API/utility/#NeuralEstimators.EM"><code>EM</code></a> for details on the required format of this function):</p><pre><code class="language-julia hljs">function simulateconditional(Z::M, θ; nsims::Integer = 1, ξ) where {M &lt;: AbstractMatrix{Union{Missing, T}}} where T
 
 	# Save the original dimensions
 	dims = size(Z)
@@ -310,7 +310,7 @@ using Folds
 using CUDA # GPU if it is available
 using LinearAlgebra: Symmetric, cholesky
 using Distributions: cdf, Uniform, Normal, quantile
-using AlgebraOfGraphics, CairoMakie   
+using CairoMakie   
 
 # Sampling θ from the prior distribution
 function sample(K)
@@ -374,11 +374,11 @@ m = 200
 
 # Train an estimator with no censoring
 simulator1(θ, m) = simulatecensored(θ, m; c = [0, 0]) 
-estimator1 = train(estimator, sample, simulator1, m = m) 
+estimator1 = train(estimator, sample, simulator1, simulator_args = m) 
 
 # Train an estimator with mild censoring
 simulator2(θ, m) = simulatecensored(θ, m; c = [0.5, 0.5]) 
-estimator2 = train(estimator, sample, simulator2, m = m)
+estimator2 = train(estimator, sample, simulator2, simulator_args = m)
 
 # Assessment
 θ_test = sample(1000) 
@@ -438,4 +438,4 @@ assessment2 = assess(estimator, θ_test, (UW_test2, τ_test2), parameter_names =
 # Compare results between the two censoring probability levels
 assessment = merge(assessment1, assessment2)
 rmse(assessment)
-plot(assessment)</code></pre><table><tr><th style="text-align: right">Estimator</th><th style="text-align: right">Parameter</th><th style="text-align: right">RMSE</th></tr><tr><td style="text-align: right">τ = 0</td><td style="text-align: right">ρ</td><td style="text-align: right">0.241780</td></tr><tr><td style="text-align: right">τ = 0</td><td style="text-align: right">δ</td><td style="text-align: right">0.096779</td></tr><tr><td style="text-align: right">τ = 0.80</td><td style="text-align: right">ρ</td><td style="text-align: right">0.476348</td></tr><tr><td style="text-align: right">τ = 0.80</td><td style="text-align: right">δ</td><td style="text-align: right">0.124913</td></tr></table><p><img src="../../assets/figures/potcensoring.png" alt="Peaks-over-threshold censoring"/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/">« Examples</a><a class="docs-footer-nextpage" href="../../API/core/">Core »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Thursday 19 February 2026 04:29">Thursday 19 February 2026</span>. Using Julia version 1.11.9.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+plot(assessment)</code></pre><table><tr><th style="text-align: right">Estimator</th><th style="text-align: right">Parameter</th><th style="text-align: right">RMSE</th></tr><tr><td style="text-align: right">τ = 0</td><td style="text-align: right">ρ</td><td style="text-align: right">0.241780</td></tr><tr><td style="text-align: right">τ = 0</td><td style="text-align: right">δ</td><td style="text-align: right">0.096779</td></tr><tr><td style="text-align: right">τ = 0.80</td><td style="text-align: right">ρ</td><td style="text-align: right">0.476348</td></tr><tr><td style="text-align: right">τ = 0.80</td><td style="text-align: right">δ</td><td style="text-align: right">0.124913</td></tr></table><p><img src="../../assets/figures/potcensoring.png" alt="Peaks-over-threshold censoring"/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/">« Examples</a><a class="docs-footer-nextpage" href="../../API/core/">Core »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 5 March 2026 08:02">Thursday 5 March 2026</span>. Using Julia version 1.11.9.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
