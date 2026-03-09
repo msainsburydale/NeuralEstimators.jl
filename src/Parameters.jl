@@ -1,5 +1,5 @@
 """
-	ParameterConfigurations
+	AbstractParameterSet
 
 An abstract supertype for user-defined types that store parameters and any
 intermediate objects needed for data simulation.
@@ -13,26 +13,30 @@ See [`subsetparameters()`](@ref) for the generic function for subsetting these o
 
 # Examples
 ```julia
-struct P <: ParameterConfigurations
+struct P <: AbstractParameterSet
 	θ
 	# other expensive intermediate objects...
 end
 ```
 """
-abstract type ParameterConfigurations end
+abstract type AbstractParameterSet end
 
-Base.show(io::IO, parameters::P) where {P <: ParameterConfigurations} = print(io, "\nA subtype of `ParameterConfigurations` with K = $(size(parameters, 2)) instances of the $(size(parameters, 1))-dimensional parameter vector")
-Base.show(io::IO, m::MIME"text/plain", parameters::P) where {P <: ParameterConfigurations} = print(io, parameters)
+# Backwards compatability
+const ParameterConfigurations = AbstractParameterSet 
+export ParameterConfigurations
 
-size(parameters::P) where {P <: ParameterConfigurations} = size(_extractθ(parameters))
-size(parameters::P, d::Integer) where {P <: ParameterConfigurations} = size(_extractθ(parameters), d)
+Base.show(io::IO, parameters::P) where {P <: AbstractParameterSet} = print(io, "\nA subtype of `AbstractParameterSet` with K = $(size(parameters, 2)) instances of the $(size(parameters, 1))-dimensional parameter vector")
+Base.show(io::IO, m::MIME"text/plain", parameters::P) where {P <: AbstractParameterSet} = print(io, parameters)
 
-_extractθ(params::P) where {P <: ParameterConfigurations} = params.θ
+size(parameters::P) where {P <: AbstractParameterSet} = size(_extractθ(parameters))
+size(parameters::P, d::Integer) where {P <: AbstractParameterSet} = size(_extractθ(parameters), d)
+
+_extractθ(params::P) where {P <: AbstractParameterSet} = params.θ
 _extractθ(params::P) where {P <: AbstractMatrix} = params
 
 """
 	subsetparameters(parameters::M, indices) where {M <: AbstractMatrix}
-	subsetparameters(parameters::P, indices) where {P <: ParameterConfigurations}
+	subsetparameters(parameters::P, indices) where {P <: AbstractParameterSet}
 
 Subset `parameters` using a collection of `indices`.
 
@@ -41,7 +45,7 @@ number of parameter configurations, K, are also subsetted (over their last dimen
 using `indices`. All other fields are left unchanged. To modify this default
 behaviour, overload `subsetparameters`.
 """
-function subsetparameters(parameters::P, indices) where {P <: ParameterConfigurations}
+function subsetparameters(parameters::P, indices) where {P <: AbstractParameterSet}
     K = size(parameters, 2)
     @assert maximum(indices) <= K
 
@@ -70,12 +74,12 @@ function subsetparameters(parameters::M, indices) where {M <: AbstractMatrix}
 end
 
 # wrapper that allows for indices to be a single Integer
-subsetparameters(θ::P, indices::Integer) where {P <: ParameterConfigurations} = subsetparameters(θ, indices:indices)
+subsetparameters(θ::P, indices::Integer) where {P <: AbstractParameterSet} = subsetparameters(θ, indices:indices)
 subsetparameters(θ::M, indices::Integer) where {M <: AbstractMatrix} = subsetparameters(θ, indices:indices)
 
-# ---- _ParameterLoader: Analogous to DataLoader for ParameterConfigurations objects ----
+# ---- _ParameterLoader: Analogous to DataLoader for AbstractParameterSet objects ----
 
-struct _ParameterLoader{P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+struct _ParameterLoader{P <: Union{AbstractMatrix, AbstractParameterSet}, I <: Integer}
     parameters::P
     batchsize::I
     nobs::I
@@ -85,7 +89,7 @@ struct _ParameterLoader{P <: Union{AbstractMatrix, ParameterConfigurations}, I <
     shuffle::Bool
 end
 
-function _ParameterLoader(parameters::P; batchsize::Integer = 1, shuffle::Bool = false, partial::Bool = false) where {P <: ParameterConfigurations}
+function _ParameterLoader(parameters::P; batchsize::Integer = 1, shuffle::Bool = false, partial::Bool = false) where {P <: AbstractParameterSet}
     @assert batchsize > 0
     K = size(parameters, 2)
     if K <= batchsize

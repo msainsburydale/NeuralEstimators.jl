@@ -1,3 +1,90 @@
+# ---- Internal helper: device placement, f32 conversion, and minibatching ----
+
+"""
+	_applywithdevice(network, z; batchsize, use_gpu, kwargs...)
+Internal helper that applies `network` to data `z`, handling GPU device placement,
+Float32 conversion, and minibatching. Used by `estimate` and `summarystatistics`.
+"""
+function _applywithdevice(network, z; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+
+    z = f32(z)
+
+    if check_deepset(network)
+        # Validate that data is provided as a Vector (not a bare array)
+        bare_array = typeof(z) <: AbstractArray && !(typeof(z) <: AbstractVector)
+        bare_array_in_tuple = typeof(z) <: Tuple && !(typeof(z[1]) <: AbstractVector)
+        if bare_array
+            @info "When using a DeepSet-based network, data should be provided as a Vector of arrays (one array per data set). Converting Z to [Z] automatically."
+            z = [z]
+        elseif bare_array_in_tuple
+            @info "When using a DeepSet-based network, data should be provided as a Vector of arrays (one array per data set). Converting (Z, X) to ([Z], X) automatically."
+            z = ([z[1]], z[2])
+        end
+        K = typeof(z) <: Tuple ? numobs(z[1]) : numobs(z)
+    else
+        K = numobs(z)
+    end
+
+    batchsize = min(K, batchsize)
+    device = _checkgpu(use_gpu, verbose = false)
+    network = network |> device
+
+    data_loader = _DataLoader(z, batchsize, shuffle = false, partial = true)
+    y = map(data_loader) do zᵢ
+        zᵢ = zᵢ |> device
+        y = network(zᵢ; kwargs...)
+        y |> cpu
+    end
+
+    return stackarrays(y)
+end
+
+@inline function check_deepset(T::DataType)
+    occursin("DeepSet", string(T.name)) || any(p -> check_deepset(p), T.parameters)
+end
+@inline function check_deepset(T::Type)
+    false
+end
+@inline check_deepset(x) = check_deepset(typeof(x))
+
+
+
+#TODO Not currently used: Would be great to have a way to automatically and reliably infer the number of summaries from an arbitrary summary_network, so that the user need not specify it when constructing an estimator.
+function _infer_num_summaries(model)
+    # Base case: Dense layer
+    if model isa Dense
+        return size(model.weight, 1)
+        @info "Inferred num_summaries = $inferred from summary_network. Set explicitly if incorrect."
+    end
+    
+    # Recurse into Chain - last layer determines output
+    if model isa Chain
+        return _infer_num_summaries(model.layers[end])
+    end
+    
+    # Recurse into any struct by searching its fields in reverse for the last Dense
+    for field in reverse(fieldnames(typeof(model)))
+        val = getfield(model, field)
+        try
+            return _infer_num_summaries(val)
+        catch
+            continue
+        end
+    end
+    
+    error("Could not infer output dimension from $(typeof(model)). Please specify `num_summaries` explicitly.")
+end
+# If we could implement this properly, the estimator constructors could be defined as follows:
+# function PointEstimator(summary_network, d::Integer, num_summaries = nothing; kwargs...)
+#     if isnothing(num_summaries)
+#         num_summaries = _infer_num_summaries(summary_network)
+#         @info "Inferred num_summaries = $num_summaries from summary_network. Set explicitly if incorrect."
+#     end
+#     inference_network = MLP(num_summaries, d; kwargs...)
+#     PointEstimator(summary_network, inference_network)
+# end
+# PointEstimator(summary_network, d::Integer; num_summaries = nothing, kwargs...) = PointEstimator(summary_network, d, num_summaries; kwargs...)
+
 nparams(model) = length(Flux.trainables(model)) > 0 ? sum(length, Flux.trainables(model)) : 0
 
 # Drop fields from NamedTuple: https://discourse.julialang.org/t/filtering-keys-out-of-named-tuples/73564/8

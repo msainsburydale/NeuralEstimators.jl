@@ -39,7 +39,7 @@ end
 # While the formats above cover many applications, the package is flexible: the data structure simply needs to align with the chosen neural-network architecture. 
 
 
-#TODO Allow for a learned embedding of the sample size $m$ in [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet). 
+#TODO Allow for a learned embedding of the sample size $m$ 
 @doc raw"""
     DeepSet(ψ, ϕ, a = mean; S = nothing)
 	(ds::DeepSet)(Z::Vector{A}) where A <: Any
@@ -48,7 +48,6 @@ The DeepSets representation ([Zaheer et al., 2017](https://arxiv.org/abs/1703.06
 ```math
 \hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}(\mathbf{T}(\mathbf{Z})), \quad
 \mathbf{T}(\mathbf{Z}) = \mathbf{a}(\{\boldsymbol{\psi}(\mathbf{Z}_i) : i = 1, \dots, m\}),
-
 ```
 where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates of data, 
 `ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant aggregation
@@ -68,23 +67,19 @@ For computational efficiency,
 array data are first concatenated along their final dimension 
 (i.e., the replicates dimension) before being passed into the inner network `ψ`, 
 thereby ensuring that `ψ` is applied to a single large array, rather than multiple small ones. 
-	
-Expert summary statistics can be incorporated as
 
+Fixed (non-trainable) transformations of the data can be incorporated alongside the learned summaries via the `S` argument:
 ```math
 \hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}((\mathbf{T}(\mathbf{Z})', \mathbf{S}(\mathbf{Z})')'),
 ```
-where `S` is a function that returns a vector of user-defined summary statistics.
-These user-defined summary statistics are provided either as a
-`Function` that returns a `Vector`, or as a vector of functions. In the case that
-`ψ` is set to `nothing`, only expert summary statistics will be used. See [Expert summary statistics](@ref) for further discussion on their use. 
+where `S` is a function (or vector of functions) that maps data to a vector of fixed summary statistics. These are not differentiated through during training. In the case that `ψ` is set to `nothing`, only the fixed summaries will be used. For the common case where summary statistics are precomputed and stored alongside the data, see [`DataSet`](@ref) as an alternative approach.
 
 Set-level inputs (e.g., covariates) ``𝐗`` can be passed
 directly into the outer network `ϕ` in the following manner: 
 ```math
 \hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}((\mathbf{T}(\mathbf{Z})', \mathbf{X}')'),
 ```
-or, when expert summary statistics are also used,
+or, when fixed transformations are also used,
 ```math
 \hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}((\mathbf{T}(\mathbf{Z})', \mathbf{S}(\mathbf{Z})', \mathbf{X}')').
 ```
@@ -103,21 +98,25 @@ n = 10 # dimension of each replicate
 Z = [rand32(n, m) for m ∈ (3, 4)]
 
 # Construct DeepSet object
-S = logsamplesize
-dₛ = 1   # dimension of expert summary statistic
 dₜ = 16  # dimension of neural summary statistic
 w  = 32  # width of hidden layers
 ψ  = Chain(Dense(n, w, relu), Dense(w, dₜ, relu))
-ϕ  = Chain(Dense(dₜ + dₛ, w, relu), Dense(w, d))
-ds = DeepSet(ψ, ϕ; S = S)
+ϕ  = Chain(Dense(dₜ, w, relu), Dense(w, d))
+ds = DeepSet(ψ, ϕ)
 
 # Apply DeepSet object to data
 ds(Z)
 
+# With fixed transformations S
+dₛ = 1   # dimension of fixed summary statistic
+ϕ  = Chain(Dense(dₜ + dₛ, w, relu), Dense(w, d))
+ds = DeepSet(ψ, ϕ; S = logsamplesize)
+ds(Z)
+
 # With set-level inputs 
 dₓ = 2 # dimension of set-level inputs 
-ϕ  = Chain(Dense(dₜ + dₛ + dₓ, w, relu), Dense(w, d))
-ds = DeepSet(ψ, ϕ; S = S)
+ϕ  = Chain(Dense(dₜ + dₓ, w, relu), Dense(w, d))
+ds = DeepSet(ψ, ϕ)
 X  = [rand32(dₓ) for _ ∈ eachindex(Z)]
 ds((Z, X))
 ```
@@ -136,12 +135,12 @@ Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network
 
 # Single data set
 function (d::DeepSet)(Z::A) where {A}
-    d.ϕ(summarystatistics(d, Z))
+    d.ϕ(_deepsetsummaries(d, Z))
 end
 # Single data set with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractVector{T}} where {T}
     Z, x = tup
-    t = summarystatistics(d, Z)
+    t = _deepsetsummaries(d, Z)
     u = vcat(t, x)
     d.ϕ(u)
 end
@@ -154,7 +153,7 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: Abstra
     else
         # Designed for situations where we have a fixed data set and want to
         # evaluate the object for many different set-level covariates
-        t = summarystatistics(d, Z) # only needs to be computed once
+        t = _deepsetsummaries(d, Z) # only needs to be computed once
         tx = vcat(repeat(t, 1, size(x, 2)), x) # NB ideally we'd avoid copying t so many times here, using @view
         d.ϕ(tx) # Sanity check: stackarrays([d((Z, vec(x̃))) for x̃ in eachcol(x)])
     end
@@ -162,12 +161,12 @@ end
 # Multiple data sets
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A}
     # Stack into a single array before applying the outer network
-    d.ϕ(stackarrays(summarystatistics(d, Z)))
+    d.ϕ(stackarrays(_deepsetsummaries(d, Z)))
 end
 # Multiple data sets with set-level covariates
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
     Z, x = tup
-    t = summarystatistics(d, Z)
+    t = _deepsetsummaries(d, Z)
     tx = vcat.(t, x)
     d.ϕ(stackarrays(tx))
 end
@@ -195,7 +194,7 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: 
 end
 
 # Single data set
-function summarystatistics(d::DeepSet, Z::A) where {A}
+function _deepsetsummaries(d::DeepSet, Z::A) where {A}
     if !isnothing(d.ψ)
         t = d.a(d.ψ(Z))
     end
@@ -210,12 +209,12 @@ function summarystatistics(d::DeepSet, Z::A) where {A}
     return t
 end
 # Multiple data sets: general fallback using broadcasting
-function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A}
-    summarystatistics.(Ref(d), Z)
+function _deepsetsummaries(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A}
+    _deepsetsummaries.(Ref(d), Z)
 end
 
 # Multiple data sets: optimised version for array data
-function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+function _deepsetsummaries(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
     if !isnothing(d.ψ)
         if _first_N_minus_1_dims_identical(Z)
             # Stack Z = [A₁, A₂, ...] into a single large N-dimensional array and then apply the inner network
@@ -243,12 +242,10 @@ function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
             return t
         else
             # Array sizes differ, so therefore cannot stack together; use simple (and slower) broadcasting method (identical to general fallback method defined above)
-            return summarystatistics.(Ref(d), Z)
+            return _deepsetsummaries.(Ref(d), Z)
         end
     end
 end
-
-
 
 function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})
     # Get the size of the first array up to N-1 dimensions

@@ -23,3 +23,8 @@ function numdistributionalparams end
 
 # Catch the case that t is a vector
 sampleposterior(q::ApproximateDistribution, t::AbstractVector, N::Integer; kwargs...) = sampleposterior(q, reshape(t, :, 1), N; kwargs...)
+
+# Generic keyword constructor for all ApproximateDistribution subtypes;
+# allows num_summaries to be passed as either a positional or keyword argument
+(::Type{T})(num_parameters::Integer; num_summaries::Integer, kwargs...) where {T <: ApproximateDistribution} =
+    T(num_parameters, num_summaries; kwargs...)

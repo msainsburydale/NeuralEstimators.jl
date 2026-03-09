@@ -24,26 +24,28 @@ src/
 ├── NeuralEstimators.jl          # Module entry point: imports, exports, includes
 │
 ├── Estimators/                  # Neural estimator types
-│   ├── Estimators.jl            # Abstract types: NeuralEstimator, BayesEstimator
+│   ├── Estimators.jl            # Abstract types (NeuralEstimator, BayesEstimator) and summary-network helpers
 │   ├── PointEstimator.jl        # Point estimates 
 │   ├── QuantileEstimator.jl     # Posterior quantile estimation
 │   ├── PosteriorEstimator.jl    # Full posterior approximation
 │   ├── RatioEstimator.jl        # Likelihood-to-evidence ratio estimation
 │   ├── Ensemble.jl              # Ensemble of estimators
 │
-├── ApproximateDistributions/    # Approximate posterior distributions used by PosteriorEstimator
+├── ApproximateDistributions/    # Approximate distributions used by PosteriorEstimator
+│   ├── ApproximateDistributions.jl  # Abstract type (ApproximateDistribution)
 │   ├── GaussianMixture.jl       
 │   ├── NormalisingFlow.jl       
 │
-├── Parameters.jl                # ParameterConfigurations abstract type and utilities
+├── train.jl                     # Training function (train)
+├── assess.jl                    # Post-training assessment (assess, Assessment, etc.)
+├── Parameters.jl                # AbstractParameterSet and utilities
+├── DataSet.jl                   # DataSet struct and utilities
 ├── Architectures.jl             # Neural-network building blocks (DeepSet, MLP, etc.)
-├── train.jl                     # Training functions (train)
-├── assess.jl                    # Estimator assessment (assess, Assessment, risk, bias, rmse, etc.)
-├── inference.jl                 # Post-training inference (estimate, sampleposterior, bootstrap, etc.)
-├── summarystatistics.jl         # Expert summary statistics (samplesize, samplecorrelation, etc.)
+├── inference.jl                 # Post-training inference (estimate, sampleposterior, etc.)
+├── summarystatistics.jl         # Expert summary statistics (samplesize, etc.)
 ├── losses.jl                    # Non-standard loss functions (quantileloss, tanhloss, etc.)
 ├── missingdata.jl               # Missing data support (EM algorithm, masking)
-├── utility.jl                   # Miscellaneous utility functions
+├── utility.jl                   # Utility functions
 ```
 
 ### Including Files
@@ -72,11 +74,15 @@ Every concrete estimator wraps one or more Flux neural networks and must be call
 
 ### `ApproximateDistribution`
 
-An abstract type (defined in `ApproximateDistributions.jl`) for families of parameteric distributions used to approximate the posterior distribution by objects of type `PosteriorEstimator`. 
+An abstract type (defined in `ApproximateDistributions.jl`) for families of parametric distributions used to approximate the posterior distribution by objects of type `PosteriorEstimator`. 
 
-### `ParameterConfigurations`
+### `AbstractParameterSet`
 
 An abstract type (defined in `Parameters.jl`) for user-defined structs that hold parameter matrices and any precomputed intermediate quantities needed for simulation. The only required field is `θ`, a `d × K` matrix of parameter vectors. Implement `subsetparameters` if your type stores additional fields that should be subsetted consistently.
+
+### `DataSet`
+
+A struct (defined in `DataSet.jl`) that couples raw data `Z` with a matrix `S` of precomputed expert summary statistics (`K` columns, one per data set). Passing a `DataSet` object to any estimator causes the learned summary statistics from the summary network to be concatenated with `S` before being passed to the inference network. If `S` is not provided, `DataSet(Z)` behaves identically to passing `Z` directly. The internal forward-pass helper `_summarystatistics` handles the concatenation.
 
 ### `train` and `assess`
 
@@ -115,55 +121,56 @@ Please try to follow the [Julia style guide](https://docs.julialang.org/en/v1/ma
 
 ## Adding a New Estimator
 
-The recommended workflow for developing a new estimator type is to first prototype interactively, and then consolidate into the package once things are working.
+The recommended workflow for developing a new estimator type is to first prototype interactively, which allows you to rapidly iterate and test changes on the fly without restarting the session, and then consolidate into the package once things are working.
 
 **Interactive prototyping:**
-1. Once you've started Julia and loaded `NeuralEstimators`, define a custom struct subtyping `NeuralEstimator`, for example, `struct MyEstimator <: NeuralEstimator`. This struct will have fields storing the neural network and anything else needed for inference.
-1. Define the forward pass of the estimator: `(estimator::MyEstimator)(input) = ...`
-1. Import any public or internal functions you need to extend (see below for which ones are needed): `import NeuralEstimators: _loss, _inputoutput`.
-1. Extend the relevant functions interactively. This allows you to rapidly iterate and test changes on the fly without restarting the session.
-1. Train and assess the estimator interactively to verify correctness.
+1. Define a custom struct subtyping `NeuralEstimator`, for example, `struct MyEstimator <: NeuralEstimator`. This struct will have fields storing the neural networks and anything else needed for inference.
+1. Define convenience constructors. 
+1. Define the forward pass of the estimator: `(estimator::MyEstimator)(input) = ...`  
+   * When applying the summary network to data, use `_summarystatistics(estimator, Z)` rather than `estimator.summary_network(Z)` to automatically cater for `DataSet` objects.
+1. `import` and extend the relevant functions listed below.
+1. Train and assess the estimator to verify correctness.
 1. Write a docstring for the estimator with a self-contained example that can be copy-pasted and run.
 
 **Consolidating into the package:**
 1. Create `src/Estimators/MyEstimator.jl` and move all of the above definitions into it.
 1. Export `MyEstimator` in `NeuralEstimators.jl`.
 
-**Which methods to extend:**
+**Which methods to define:**
+
+After running `import NeuralEstimators: <function name>`:
+
 - Training: 
-   - `_loss(estimator, loss)`: By default, returns the user-specified `loss` unchanged. Define `_loss(estimator::MyEstimator, loss = nothing)` to override this and enforce a specific objective regardless of what the user provides. Note that the two-argument form is required for compatibility with how the function is called in `train()`.
+   - `_loss(estimator::MyEstimator, loss)`: by default, returns `loss` unchanged. Define `_loss(estimator::MyEstimator, loss = nothing)` to enforce a specific objective regardless of what the user provides.
 
-   - `_inputoutput(estimator, Z, θ)`: By default, returns `(Z, θ)` as the `(input, output)` pair, where `Z` is the simulated data and `θ` is the true parameters, so that training minimises `loss(estimator(Z), θ)`. Override this method if the estimator requires a different input/output structure.
+   - `_inputoutput(estimator, Z, θ)`: by default, returns `(Z, θ)` as the `(input, output)` pair, where `Z` is the simulated data and `θ` is the true parameters, so that training minimises `loss(estimator(Z), θ)`. Override if the estimator requires a different input/output structure.
 
-   - `_risk(estimator, loss, dataset, device, optimiser)`: By default, iterates over `(input, output)` batches in `dataset` and returns the empirical risk based on `loss(estimator(input), output)`. Override this method only if the required computation cannot be expressed through `_loss()` or `_inputoutput()` alone.
-- Inference: Extend existing functions (e.g., `sampleposterior`) or define new ones if needed. 
-- Assessment: If your estimator returns point estimates via `estimate()` or posterior
-  samples via `sampleposterior()`, it will work with `assess()` automatically — just
-  add it to the relevant `Union` in `assess.jl`. Otherwise, implement a custom
-  `assess()` method.
+   - `_risk(estimator, loss, dataset, device, optimiser)`: by default, iterates over `(input, output)` batches in `dataset` and computes `loss(estimator(input), output)`. Override only if the required computation cannot be expressed through `_loss` or `_inputoutput` alone.
+- Inference: extend existing functions (e.g., `sampleposterior`) or define new ones as needed. 
+- Assessment: if your estimator returns point estimates via `estimate` or posterior
+  samples via `sampleposterior`, it will work with `assess` automatically (just
+  add it to the relevant `Union` in `assess.jl`). Otherwise, implement a custom
+  `assess` method.
 
 ---
 
 ## Adding a New Approximate Distribution
 
-The recommended workflow for developing a new approximate distribution is to first prototype interactively, and then consolidate into the package once things are working.
-
 **Interactive prototyping:**
-1. Once you've started Julia and loaded `NeuralEstimators`, define a custom struct subtyping `ApproximateDistribution`, for example, `struct MyDist <: ApproximateDistribution`. This struct will have fields storing anything needed to parameterise the distribution.
-1. Import any functions you need to extend: `import NeuralEstimators: logdensity, sampleposterior`.
-1. Extend the relevant functions interactively (see below). This allows you to rapidly iterate and test changes on the fly without restarting the session.
-1. Test the distribution by plugging it into a `PosteriorEstimator` and training interactively to verify correctness.
+1. Define a custom struct subtyping `ApproximateDistribution`, for example, `struct MyDist <: ApproximateDistribution`. The fields of this struct should store anything needed to parameterise the distribution, including any neural network(s) used to condition the distribution on the learned summary statistics (e.g., an MLP mapping summary statistics to distributional parameters, or coupling blocks that accept summary statistics as a conditioning input as in a normalising flow).
+1. Define a convenience constructor with the signature: `MyDist(num_parameters::Integer, num_summaries::Integer; kwargs...)`. This ensures compatibility with `PosteriorEstimator`'s convenience constructor, which calls `q(num_parameters, num_summaries; kwargs...)` internally.
+1. Import the following functions: `import NeuralEstimators: logdensity, sampleposterior, numdistributionalparams`.
+1. Define methods:
+- `logdensity(q::MyDist, θ::AbstractMatrix, t::AbstractMatrix)`: log-density of `q` evaluated at parameters `θ`, given summary statistics `t`. Required for training.
+- `sampleposterior(q::MyDist, t::AbstractMatrix, N::Integer)`: draws `N` posterior samples from `q` given summary statistics `t`, where each column of `t` corresponds to an independent data set. Required for inference.
+- `numdistributionalparams(q::MyDist)`: number of distributional parameters. Optional.
+1. Test the distribution by plugging it into a `PosteriorEstimator`, then training and assessing the estimator to verify correctness.
 1. Write a docstring with a self-contained example that can be copy-pasted and run.
 
 **Consolidating into the package:**
 1. Create `src/ApproximateDistributions/MyDist.jl` and move all of the above definitions into it.
 1. Export `MyDist` in `NeuralEstimators.jl`.
 
-**Which methods to extend:**
-- `logdensity(q::MyDist, θ::AbstractMatrix, t::AbstractMatrix)`: The log-density of the approximate distribution `q` evaluated at parameters `θ`, given summary statistics `t`. Required for training.
-
-- `sampleposterior(q::MyDist, t::AbstractMatrix, N::Integer)`: Draw `N` posterior samples from `q` given summary statistics `t`. Required for inference.
-- `numdistributionalparams(q::MyDist)`: The number of distributional parameters; used to automatically construct the MLP that maps summary statistics to distributional parameters inside `PosteriorEstimator`.
 
 ---
 

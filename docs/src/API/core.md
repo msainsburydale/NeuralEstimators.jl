@@ -6,10 +6,10 @@ This page documents the classes and functions that are central to the workflow o
 
 Parameters sampled from the prior distribution are stored as a $d \times K$ matrix, where $d$ is the dimension of the parameter vector to make inference on and $K$ is the number of sampled parameter vectors. 
 
-It can sometimes be helpful to wrap the parameter matrix in a user-defined type that also stores expensive intermediate objects needed for data simulated (e.g., Cholesky factors). The user-defined type should be a subtype of [`ParameterConfigurations`](@ref), whose only requirement is a field `θ` that stores the matrix of parameters. See [Storing expensive intermediate objects for data simulation](@ref) for further discussion.   
+It can sometimes be helpful to wrap the parameter matrix in a user-defined type that also stores expensive intermediate objects needed for data simulated (e.g., Cholesky factors). The user-defined type should be a subtype of [`AbstractParameterSet`](@ref), whose only requirement is a field `θ` that stores the matrix of parameters. See [Storing expensive intermediate objects for data simulation](@ref) for further discussion.   
 
 ```@docs
-ParameterConfigurations
+AbstractParameterSet
 ```
 
 ## Simulating data
@@ -17,6 +17,12 @@ ParameterConfigurations
 The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. 
 
 Simulated data sets are stored as mini-batches in a format amenable to the chosen neural-network architecture. For example, when constructing an estimator from data collected over a grid, one may use a generic CNN, with each data set stored in the final dimension of a four-dimensional array. When performing inference from replicated data, a [`DeepSet`](@ref) architecture may be used, where simulated data sets are stored in a vector, and conditionally independent replicates are stored as mini-batches within each element of the vector.
+
+Expert summary statistics can be incorporated by wrapping the simulated data in a [`DataSet`](@ref) object, which couples the raw data with a matrix of precomputed summary statistics.
+
+```@docs
+DataSet
+```
 
 ## Estimators
 
@@ -45,6 +51,20 @@ IntervalEstimator
 QuantileEstimator
 
 Ensemble
+```
+
+### Helper functions
+
+The following helper functions operate on an estimator to inspect its components or apply parts of it to data. For the main inference functions used post-training, see [Inference with observed data](@ref).
+
+```@docs
+summarynetwork
+
+setsummarynetwork
+
+summarystatistics
+
+logdensity
 ```
 
 
@@ -103,4 +123,6 @@ posteriormedian
 posteriorquantile
 
 posteriormode
+
+logratio
 ```

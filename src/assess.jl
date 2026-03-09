@@ -134,7 +134,7 @@ function assess(
     B::Integer = 400,
     loss = Flux.Losses.mae,   # TODO this will be simplified if we add loss to the estimator object
     ξ = nothing, xi = nothing # deprecated since it isn't typically needed when assessing NeuralEstimators (a collection of objects passed to estimator)
-) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
 
     # Check duplicated arguments that are needed so that the R interface uses ASCII characters only
     @assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
@@ -197,7 +197,7 @@ function assess(
     N::Integer = 1000,
     pointsummary::Function = mean, 
     kwargs... #Document these kwargs...
-) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
 
     # Set up
     θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
@@ -263,9 +263,9 @@ Returns `(θ, parameter_names, d, K, J, m)` where:
 - `m`               — `Vector` of length `KJ` giving the number of replicates in
                       each element of `Z` (always `1` when `Z` is not a vector)
 """
-function _assess_setup(θ::P, Z, parameter_names::Vector{String}) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+function _assess_setup(θ::P, Z, parameter_names::Vector{String}) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
 
-    # Unwrap ParameterConfigurations into plain matrix
+    # Unwrap AbstractParameterSet into plain matrix
     θ = _extractθ(θ)
     d, K = size(θ)
 
@@ -367,7 +367,7 @@ function assess(
     ξ = nothing, xi = nothing,     # Deprecated
     use_xi = false, use_ξ = false, # Deprecated: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators, specifying whether or not the estimator uses `ξ`
     kwargs...
-) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     num_estimators = length(estimators)
     if isnothing(estimator_names)
         estimator_names = ["estimator$i" for i ∈ eachindex(estimators)]

@@ -1,77 +1,12 @@
 """
-	estimate(estimator, Z, X = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
-Applies `estimator` to data `Z`.
-
-If `X` is provided, the estimator will be applied to the tuple `(Z, X)`. 
+	estimate(estimator::BayesEstimator, Z; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+Applies `estimator` to data `Z` and returns the resulting estimates.
 """
-function estimate(estimator, z, x = nothing; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
-
-    # Convert to Float32 for numerical efficiency
-    x = f32(x)
-    z = f32(z)
-
-    # Tupleise if necessary
-    z = isnothing(x) ? z : (z, x)
-
-    # Determine if minibatching is possible...
-    # this is complicated by the fact that DeepSets can be applied to arrays directly, in which case the data 
-    # get converted internally to a one-element vector... so treat estimators based on a DeepSet as a special case
-    if check_deepset(estimator)
-        # Only do batching if we have multiple data sets
-        if typeof(z) <: AbstractVector
-            minibatching = true
-            batchsize = min(numobs(z), batchsize)
-        elseif typeof(z) <: Tuple && typeof(z[1]) <: AbstractVector
-            # Can only batch if both elements have the same number of observations 
-            K₁ = numobs(z[1])
-            K₂ = numobs(z[2])
-            minibatching = K₁ == K₂
-            batchsize = min(K₁, batchsize)
-        else # we dont have multiple data sets: just apply the estimator without batching
-            minibatching = false
-        end
-    else
-        # If we have tuple input, can only batch if both elements have the same number of observations 
-        if typeof(z) <: Tuple
-            K₁ = numobs(z[1])
-            K₂ = numobs(z[2])
-            minibatching = K₁ == K₂
-            batchsize = min(K₁, batchsize)
-        else
-            minibatching = true
-            batchsize = min(numobs(z), batchsize)
-        end
-    end
-
-    # Check whether a GPU is available
-    device = _checkgpu(use_gpu, verbose = false)
-    estimator = estimator |> device
-
-    if !minibatching
-        z = z |> device
-        ŷ = estimator(z; kwargs...)
-        ŷ = ŷ |> cpu
-    else
-        data_loader = _DataLoader(z, batchsize, shuffle = false, partial = true)
-        ŷ = map(data_loader) do zᵢ
-            zᵢ = zᵢ |> device
-            ŷ = estimator(zᵢ; kwargs...)
-            ŷ = ŷ |> cpu
-            ŷ
-        end
-        ŷ = stackarrays(ŷ)
-    end
-
-    return ŷ
+function estimate(estimator::NeuralEstimator, z, x = nothing; kwargs...)
+    input = isnothing(x) ? z : (z, x)
+    _applywithdevice(estimator, input; kwargs...)
 end
 
-@inline function check_deepset(T::DataType)
-    occursin("DeepSet", string(T.name)) || any(p -> check_deepset(p), T.parameters)
-end
-@inline function check_deepset(T::Type)
-    false
-end
-@inline check_deepset(x) = check_deepset(typeof(x))
 
 # ---- Point estimation from estimators that allow for posterior sampling ----
 
@@ -237,8 +172,8 @@ end
 # ---- Parametric bootstrap ----
 
 """
-	bootstrap(estimator::PointEstimator, parameters::P, Z; use_gpu = true) where P <: Union{AbstractMatrix, ParameterConfigurations}
-	bootstrap(estimator::PointEstimator, parameters::P, simulator, m::Integer; B = 400, use_gpu = true) where P <: Union{AbstractMatrix, ParameterConfigurations}
+	bootstrap(estimator::PointEstimator, parameters::P, Z; use_gpu = true) where P <: Union{AbstractMatrix, AbstractParameterSet}
+	bootstrap(estimator::PointEstimator, parameters::P, simulator, m::Integer; B = 400, use_gpu = true) where P <: Union{AbstractMatrix, AbstractParameterSet}
 	bootstrap(estimator::PointEstimator, Z; B = 400, blocks = nothing, trim = true, use_gpu = true)
 Generates `B` bootstrap estimates using `estimator`.
 
@@ -256,7 +191,7 @@ block 2, `blocks` should be `[1, 1, 2, 2, 2]`. The resampling algorithm generate
 
 The return type is a ``d`` × `B` matrix, where ``d`` is the dimension of the parameter vector. 
 """
-function bootstrap(estimator, parameters::P, simulator, m::Integer; B::Integer = 400, use_gpu::Bool = true) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+function bootstrap(estimator, parameters::P, simulator, m::Integer; B::Integer = 400, use_gpu::Bool = true) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     K = size(parameters, 2)
     @assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
 
@@ -274,7 +209,7 @@ function bootstrap(estimator, parameters::P, simulator, m::Integer; B::Integer =
     return bs
 end
 
-function bootstrap(estimator, parameters::P, Z̃; use_gpu::Bool = true) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+function bootstrap(estimator, parameters::P, Z̃; use_gpu::Bool = true) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     K = size(parameters, 2)
     @assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
     bs = estimate(estimator, Z̃, use_gpu = use_gpu)

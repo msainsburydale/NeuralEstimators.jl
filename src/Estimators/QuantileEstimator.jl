@@ -233,7 +233,7 @@ function (est::QuantileEstimator)(Z, θ₋ᵢ::Vector)
 end
 (est::QuantileEstimator)(Z, θ₋ᵢ::Number) = est(Z, [θ₋ᵢ])
 
-function _inputoutput(estimator::QuantileEstimator, Z, θ::P) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+function _inputoutput(estimator::QuantileEstimator, Z, θ::P) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     θ = _extractθ(θ)
 
     i = estimator.i
@@ -429,7 +429,7 @@ end
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Number) = est(Z, [θ₋ᵢ], τ)
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Vector) = est(Z, [θ₋ᵢ], τ)
 
-function _inputoutput(estimator::QuantileEstimatorContinuous, Zτ, θ::P) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+function _inputoutput(estimator::QuantileEstimatorContinuous, Zτ, θ::P) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     θ = _extractθ(θ)
     Z, τ = Zτ
     τ = f32(τ)
@@ -501,7 +501,7 @@ function assess(
     estimator_name::Union{Nothing, String} = nothing,
     estimator_names::Union{Nothing, String} = nothing,
     use_gpu::Bool = true
-) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
 
     θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
 
@@ -540,7 +540,7 @@ function assess(
     estimator_names::Union{Nothing, String} = nothing, # for backwards compatibility
     use_gpu::Bool = true,
     probs = f32(range(0.01, stop = 0.99, length = 100))
-) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
 
     θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
 
@@ -584,7 +584,7 @@ function assess(
     end
 
     # Estimates 
-    runtime = @elapsed estimates = estimate(estimator, Z, set_info, use_gpu = use_gpu)
+    runtime = @elapsed estimates = estimate(estimator, Z, set_info, use_gpu = use_gpu) #TODO set_info functionality relies on the network being able to be applied to a tuple, which is not general (only applies to DeepSets); better to move this functionality into the estimator object itself
     runtime = DataFrame(runtime = runtime)
 
     # Convert to DataFrame and add information

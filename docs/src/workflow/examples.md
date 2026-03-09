@@ -147,10 +147,10 @@ When using CNNs with `NeuralEstimators`, each data set must be stored as a multi
 
  For illustration, here we develop a neural Bayes estimator for the (univariate) spatial Gaussian process model with exponential covariance function and unknown range parameter $\theta > 0$. The spatial domain is taken to be the unit square, we simulate data on a regular square grid of size $n = 16^2 = 256$, and we adopt the prior $\theta \sim U(0, 0.5)$. 
  
- Simulation from Gaussian processes typically involves the computation of an expensive intermediate object, namely, the Cholesky factor of a covariance matrix. Storing intermediate objects can enable the fast simulation of new data sets when the parameters are held fixed. Hence, in this example, we define a custom type `Parameters` subtyping [`ParameterConfigurations`](@ref) for storing the matrix of parameters and the corresponding Cholesky factors: 
+ Simulation from Gaussian processes typically involves the computation of an expensive intermediate object, namely, the Cholesky factor of a covariance matrix. Storing intermediate objects can enable the fast simulation of new data sets when the parameters are held fixed. Hence, in this example, we define a custom type `Parameters` subtyping [`AbstractParameterSet`](@ref) for storing the matrix of parameters and the corresponding Cholesky factors: 
 
 ```julia
-struct Parameters{T} <: ParameterConfigurations
+struct Parameters{T} <: AbstractParameterSet
 	θ::Matrix{T}
 	L
 end
@@ -273,7 +273,7 @@ Second, the spatial data should be stored as a graph, which can be achieved usin
 For illustration, we again consider a spatial Gaussian process model with exponential covariance function, and we define a type for storing expensive intermediate objects needed for data simulation. In this example, these objects include Cholesky factors, and spatial graphs which store the adjacency matrices needed to perform graph convolutions: 
 
 ```julia
-struct Parameters <: ParameterConfigurations
+struct Parameters <: AbstractParameterSet
 	θ::Matrix      # true parameters  
 	L              # Cholesky factors
 	g              # spatial graphs

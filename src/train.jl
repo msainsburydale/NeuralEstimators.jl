@@ -1,6 +1,6 @@
 """
-    train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
-    train(estimator, θ_train::P, θ_val::P, simulator::Function; ...) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+    train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...) where {T, P <: Union{AbstractMatrix, AbstractParameterSet}}
+    train(estimator, θ_train::P, θ_val::P, simulator::Function; ...) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     train(estimator, sampler::Function, simulator::Function; ...)
 Trains a neural `estimator`.
 
@@ -22,6 +22,7 @@ The trained estimator is always returned on the CPU.
 - `batchsize = 32`: the batchsize to use when performing stochastic gradient descent, that is, the number of training samples processed between each update of the neural-network parameters.
 - `optimiser = Flux.setup(Adam(5e-4), estimator)`: any [Optimisers.jl](https://fluxml.ai/Optimisers.jl/stable/) optimisation rule for updating the neural-network parameters. When the training data and/or parameters are held fixed, one may wish to employ regularisation to prevent overfitting; for example, `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), estimator)`, which corresponds to L₂ regularisation with penalty coefficient λ=10⁻⁴. 
 - `lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule}`: defines the learning-rate schedule for adaptively changing the learning rate during training. Accepts either a [ParameterSchedulers.jl](https://fluxml.ai/ParameterSchedulers.jl/dev/) object or `nothing` for a fixed learning rate. By default, it uses [`CosAnneal`](https://fluxml.ai/ParameterSchedulers.jl/dev/api/cyclic/#ParameterSchedulers.CosAnneal) with a maximum set to the initial learning rate from `optimiser`, a minimum of zero, and a period equal to the number of epochs. The learning rate is updated at the end of each epoch. 
+- `freeze_summary_network = false`: if `true` and the estimator has a `summary_network` field, freezes the summary network parameters during training (i.e., only the inference network is updated). This is useful for transfer learning, where a pretrained summary network is held fixed while a new inference network is trained for a different model or estimator type.
 - `use_gpu = true`: flag indicating whether to use a GPU if one is available.
 - `savepath::Union{Nothing, String} = tempdir()`: path to save information generated during training. If `nothing`, nothing is saved. Otherwise, the following files are always saved to both `savepath` and `tempdir()` (the latter for convenient within-session access via [`loadrisk`](@ref), [`plotrisk`](@ref), and [`loadoptimiser`](@ref)):
   - `loss_per_epoch.csv`: training and validation risk at each epoch, in the first and second columns respectively.
@@ -62,17 +63,18 @@ end
 function simulator(θ, m)
 	[ϑ[1] .+ ϑ[2] * randn(1, m) for ϑ ∈ eachcol(θ)]
 end
-
-# Neural network 
 d = 2     # dimension of the parameter vector θ
 n = 1     # dimension of each independent replicate of Z
-w = 128   # width of each hidden layer 
-ψ = Chain(Dense(n, w, relu), Dense(w, w, relu))
-ϕ = Chain(Dense(w, w, relu), Dense(w, d))
-network = DeepSet(ψ, ϕ)
+
+# Summary network
+num_summaries = 4d
+w = 64 # width of each hidden layer  
+ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
+ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, num_summaries))
+summary_network = DeepSet(ψ, ϕ)
 
 # Initialise the estimator
-estimator = PointEstimator(network)
+estimator = PointEstimator(summary_network, num_summaries, d)
 
 # Number of data sets in each epoch and number of independent replicates in each data set
 K = 1000
@@ -99,6 +101,19 @@ estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, optimiser = loado
 """
 function train end
 
+# TODO: when freeze_summary_network = true, precompute summary statistics once before 
+# the epoch loop by passing Z_train/Z_val through summary_network and substituting the 
+# resulting matrices. Substantial saving for fixed-data training; less so for 
+# simulator-based methods where data refreshes periodically. Note: dispatch on 
+# AbstractMatrix alone is ambiguous (could be raw data or summaries) — consider a 
+# Summaries wrapper type to signal precomputed inputs unambiguously.
+# struct Summaries{T}
+#     value::T
+# end
+# Could do this by defining the forward pass of each estimator with two methods, the second dispatching on AbstractMatrix (or a Summaries wrapper type to signal precomputed inputs unambiguously). :
+#     * `(estimator::NeuralEstimator)(args...) = <usual forward pass>`
+#     * `(estimator::NeuralEstimator)(summary_stats::Summaries, args...) = <forward pass based on summary stats>`
+
 function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     batchsize::Integer = 32,
     epochs::Integer = 100,
@@ -109,8 +124,9 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     use_gpu::Bool = true,
     verbose::Bool = true,
     lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false), 
-    risk_history::Union{Nothing, Matrix} = nothing
-) where {T, P <: Union{Tuple, AbstractMatrix, ParameterConfigurations}}
+    risk_history::Union{Nothing, Matrix} = nothing,
+    freeze_summary_network::Bool = false
+) where {T, P <: Union{Tuple, AbstractMatrix, AbstractParameterSet}}
 
     verbose && print("Constructing the training set...")
     train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
@@ -126,6 +142,8 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     device = _checkgpu(use_gpu, verbose = verbose)
     estimator = estimator |> device
     optimiser = optimiser |> device
+
+    _maybe_freeze_summary_network!(optimiser, estimator, freeze_summary_network)
 
     verbose && print("Computing the initial validation risk...")
     min_val_risk = _risk(estimator, loss, val_set, device)
@@ -172,6 +190,7 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
         end
     end
 
+    Optimisers.thaw!(optimiser)
     _savefinal(estimator, optimiser, train_time, savepath, verbose)
 
     return cpu(estimator_best)
@@ -191,8 +210,9 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
     use_gpu::Bool = true,
     verbose::Bool = true,
     lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false), 
-    risk_history::Union{Nothing, Matrix} = nothing
-) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+    risk_history::Union{Nothing, Matrix} = nothing,
+    freeze_summary_network::Bool = false
+) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
 
     if !isnothing(m)
         @warn "`m` is deprecated, use `simulator_args` instead"
@@ -221,6 +241,8 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
     device = _checkgpu(use_gpu, verbose = verbose)
     estimator = estimator |> device
     optimiser = optimiser |> device
+
+    _maybe_freeze_summary_network!(optimiser, estimator, freeze_summary_network)
 
     verbose && print("Computing the initial validation risk...")
     min_val_risk = _risk(estimator, loss, val_set, device)
@@ -292,6 +314,7 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
         end
     end
 
+    Optimisers.thaw!(optimiser)
     _savefinal(estimator, optimiser, train_time, savepath, verbose)
 
     return cpu(estimator_best)
@@ -316,7 +339,8 @@ function train(estimator, sampler, simulator;
     K::Integer = 10_000,
     K_val::Integer = K ÷ 2 + 1,
     lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false), 
-    risk_history::Union{Nothing, Matrix} = nothing
+    risk_history::Union{Nothing, Matrix} = nothing,
+    freeze_summary_network::Bool = false
 )
     @assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
     if !isnothing(xi)
@@ -362,6 +386,8 @@ function train(estimator, sampler, simulator;
     device = _checkgpu(use_gpu, verbose = verbose)
     estimator = estimator |> device
     optimiser = optimiser |> device
+
+    _maybe_freeze_summary_network!(optimiser, estimator, freeze_summary_network)
 
     verbose && print("Computing the initial validation risk...")
     min_val_risk = _risk(estimator, loss, val_set, device)
@@ -445,6 +471,7 @@ function train(estimator, sampler, simulator;
         end
     end
 
+    Optimisers.thaw!(optimiser)
     _savefinal(estimator, optimiser, train_time, savepath, verbose)
 
     return cpu(estimator_best)
@@ -454,18 +481,18 @@ end
 _loss(estimator, loss) = loss
 
 # Constructs inputs and outputs (default simulated data and corresponding true parameters, respectively)
-function _inputoutput(estimator, Z, θ::P) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+function _inputoutput(estimator, Z, θ::P) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     input = Z
     output = _extractθ(θ)
     return input, output
 end
 
-function _dataloader(estimator, simulator, θ::P, simulator_args, simulator_kwargs, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+function _dataloader(estimator, simulator, θ::P, simulator_args, simulator_kwargs, batchsize) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     Z = simulator(θ, simulator_args...; simulator_kwargs...)
     _dataloader(estimator, Z, θ, batchsize)
 end
 
-function _dataloader(estimator, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+function _dataloader(estimator, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     data = _inputoutput(estimator, Z, θ)
     _DataLoader(data, batchsize)
 end
@@ -503,6 +530,12 @@ function _risk(estimator, loss, data_loader, device, optimiser = nothing)
     end
 
     return cpu(sum_loss/K)
+end
+
+function _maybe_freeze_summary_network!(optimiser, estimator, freeze::Bool)
+    freeze || return
+    hasfield(typeof(estimator), :summary_network) || @warn "freeze_summary_network = true was set but the estimator has no `summary_network` field; ignoring"
+    freeze && hasfield(typeof(estimator), :summary_network) && Optimisers.freeze!(optimiser.summary_network)
 end
 
 function findlr(opt)
@@ -707,10 +740,10 @@ function _trainmultiple(estimator; sampler = nothing, simulator = nothing, M = n
     return estimators
 end
 trainmultiple(estimator, sampler, simulator, M; args...) = _trainmultiple(estimator, sampler = sampler, simulator = simulator, M = M; args...)
-trainmultiple(estimator, θ_train::P, θ_val::P, simulator, M; args...) where {P <: Union{AbstractMatrix, ParameterConfigurations}} = _trainmultiple(estimator, θ_train = θ_train, θ_val = θ_val, simulator = simulator, M = M; args...)
+trainmultiple(estimator, θ_train::P, θ_val::P, simulator, M; args...) where {P <: Union{AbstractMatrix, AbstractParameterSet}} = _trainmultiple(estimator, θ_train = θ_train, θ_val = θ_val, simulator = simulator, M = M; args...)
 
 # This method is for when the data can be easily subsetted
-function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...) where {T, P <: Union{AbstractMatrix, ParameterConfigurations}, I <: Integer}
+function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...) where {T, P <: Union{AbstractMatrix, AbstractParameterSet}, I <: Integer}
     @assert length(unique(numberreplicates(Z_val))) == 1 "The elements of `Z_val` should be equally replicated: check with `numberreplicates(Z_val)`"
     @assert length(unique(numberreplicates(Z_train))) == 1 "The elements of `Z_train` should be equally replicated: check with `numberreplicates(Z_train)`"
 
@@ -718,7 +751,7 @@ function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T, 
 end
 
 # This method is for when the data cannot be easily subsetted, so another layer of vectors is needed
-function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: Union{V₁, Tuple{V₁, V₂}}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T, P <: Union{AbstractMatrix, ParameterConfigurations}}
+function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: Union{V₁, Tuple{V₁, V₂}}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T, P <: Union{AbstractMatrix, AbstractParameterSet}}
     @assert length(Z_train) == length(Z_val)
 
     @assert !(typeof(estimator) <: Vector) # check that estimator is not a vector of estimators, which is common error if one calls trainmultiple() on the output of a previous call to trainmultiple()

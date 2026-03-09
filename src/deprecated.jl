@@ -51,7 +51,7 @@ simulate(parameters, m)
 simulate(parameters, m, 2)
 ```
 """
-function simulate(parameters::P, m, J::Integer; args...) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+function simulate(parameters::P, m, J::Integer; args...) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     v = [simulate(parameters, m; args...) for i ∈ 1:J]
     if typeof(v[1]) <: Tuple
         z = vcat([v[i][1] for i ∈ eachindex(v)]...)
