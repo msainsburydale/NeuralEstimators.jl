@@ -1,7 +1,7 @@
 name = "NeuralEstimators"
 uuid = "38f6df31-6b4a-4144-b2af-7ace2da57606"
 authors = ["Matthew Sainsbury-Dale <msainsburydale@gmail.com> and contributors"]
-version = "0.1.6"
+version = "0.2.0"
 
 [deps]
 Accessors = "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697"
