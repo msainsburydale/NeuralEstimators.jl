@@ -21,7 +21,7 @@ struct GaussianMixture{D, M} <: ApproximateDistribution
     d::D
     dstar::D
     num_components::D
-    mlp::M
+    inference_network::M
 end
 function GaussianMixture(d::Integer, dstar::Integer; num_components::Integer = 10, kwargs...)
     in = dstar
@@ -32,8 +32,8 @@ function GaussianMixture(d::Integer, dstar::Integer; num_components::Integer = 1
         Dense(out, d * num_components, identity),      # μ ∈ ℝ
         Dense(out, d * num_components, softplus)       # σ > 0
     )
-    mlp = MLP(in, out; final_layer = final_layer, kwargs...)
-    GaussianMixture(d, dstar, num_components, mlp)
+    inference_network = MLP(in, out; final_layer = final_layer, kwargs...)
+    GaussianMixture(d, dstar, num_components, inference_network)
 end
 numdistributionalparams(q::GaussianMixture) = (2 * q.d + 1) * q.num_components
 
@@ -54,7 +54,7 @@ function logdensity(q::GaussianMixture, θ::AbstractMatrix, tz::AbstractMatrix)
     @assert K == size(tz, 2)
 
     # Get the approximate-distribution parameters
-    w, μ, σ = distributionparameters(q, q.mlp(tz))
+    w, μ, σ = distributionparameters(q, q.inference_network(tz))
 
     # Reshape ready for broadcasting 
     J = q.num_components
@@ -83,14 +83,14 @@ function logdensity(q::GaussianMixture, θ::AbstractMatrix, tz::AbstractMatrix)
     return log_densities # 1xK matrix 
 end
 
-#TODO might be better to always do this on the CPU; don't think there is much to gain with do this part of the code on the GPU.
+#TODO might be better to always do this on the CPU; don't think there is much to gain doing this part of the code on the GPU.
 function sampleposterior(q::GaussianMixture, tz::AbstractMatrix, N::Integer; use_gpu::Bool = true)
     d = q.d
     J = q.num_components
     device = _checkgpu(use_gpu, verbose = false)
     q = q |> device
     tz = tz |> device
-    κ_all = q.mlp(tz) |> cpu
+    κ_all = q.inference_network(tz) |> cpu
 
     θ = map(eachcol(κ_all)) do κ
 

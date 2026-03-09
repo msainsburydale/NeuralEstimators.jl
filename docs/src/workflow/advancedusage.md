@@ -24,7 +24,7 @@ For convenience, the function [`train()`](@ref) allows for the automatic saving 
 
 ## Storing expensive intermediate objects for data simulation
 
-Parameters sampled from the prior distribution may be stored in two ways. Most simply, they can be stored as a $d \times K$ matrix, where $d$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution. Alternatively, they can be stored in a user-defined subtype of [`ParameterConfigurations`](@ref), whose only requirement is a field `θ` that stores the $d \times K$ matrix of parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below.
+Parameters sampled from the prior distribution may be stored in two ways. Most simply, they can be stored as a $d \times K$ matrix, where $d$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution. Alternatively, they can be stored in a user-defined subtype of [`AbstractParameterSet`](@ref), whose only requirement is a field `θ` that stores the $d \times K$ matrix of parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below.
 
 ## On-the-fly and just-in-time simulation
 
@@ -98,7 +98,7 @@ train(estimator, θ_train, θ_val, Z_train, Z_val; optimiser = optimiser)
 
 Implicitly, neural estimators involve the learning of summary statistics. However, some summary statistics are available in closed form, simple to compute, and highly informative (e.g., sample quantiles, the empirical variogram). Often, explicitly incorporating these expert summary statistics in a neural estimator can simplify the optimisation problem, and lead to a better estimator.
 
-The fusion of learned and expert summary statistics is facilitated by our implementation of the [`DeepSet`](@ref) framework. Note that this implementation also allows the user to construct a neural estimator using only expert summary statistics, following, for example, [Gerber and Nychka (2021)](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382) and [Rai et al. (2024)](https://onlinelibrary.wiley.com/doi/abs/10.1002/env.2845). Note also that the user may specify arbitrary expert summary statistics, however, for convenience several standard [User-defined summary statistics](@ref) are provided with the package, including a fast, sparse approximation of the empirical variogram.
+The fusion of learned and expert summary statistics is facilitated by the [`DataSet`](@ref) struct, which couples raw data with a matrix of precomputed expert summary statistics. These are concatenated with the learned summary statistics during both training and inference, regardless of the chosen neural-network architecture. Note that a neural estimator based purely on expert summary statistics (see, e.g., [Gerber and Nychka, 2021](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382); [Rai et al. ,2024](https://onlinelibrary.wiley.com/doi/abs/10.1002/env.2845)) can be constructed by setting the summary network to `identity` and passing the summary statistics directly as a matrix. Note also that users may specify arbitrary expert summary statistics, however for convenience several standard [User-defined summary statistics](@ref) are provided with the package, including a fast, sparse approximation of the empirical variogram.
 
 For an example of incorporating expert summary statistics, see [Irregular spatial data](@ref), where the empirical variogram is used alongside learned graph-neural-network-based summary statistics.
 
@@ -261,7 +261,7 @@ D = pairwise(Euclidean(), S, dims = 1)
 ξ = (Π = Π, S = S, D = D)
 
 # Struct for storing parameters and Cholesky factors
-struct Parameters <: ParameterConfigurations
+struct Parameters <: AbstractParameterSet
 	θ
 	L
 end

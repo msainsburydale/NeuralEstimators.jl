@@ -1,4 +1,4 @@
-# Architectures
+# Neural-network building blocks
 
 As discussed in the [Overview](@ref), any [Flux](https://fluxml.ai/Flux.jl/stable/) model can be used to construct a neural network when using the package. In addition to the standard Flux layers and architectures, the following components can be useful.
 
@@ -22,7 +22,7 @@ Pages   = ["summarystatistics.md"]
 ```
 
 The following functions correspond to summary statistics that are often useful
-as user-defined summary statistics in [`DeepSet`](@ref) objects.
+as user-defined summaries in [`DeepSet`](@ref) objects.
 
 ```@docs
 samplesize

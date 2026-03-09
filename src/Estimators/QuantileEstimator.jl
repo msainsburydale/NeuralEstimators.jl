@@ -233,7 +233,7 @@ function (est::QuantileEstimator)(Z, θ₋ᵢ::Vector)
 end
 (est::QuantileEstimator)(Z, θ₋ᵢ::Number) = est(Z, [θ₋ᵢ])
 
-function _inputoutput(estimator::QuantileEstimator, Z, θ::P) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+function _inputoutput(estimator::QuantileEstimator, Z, θ::P) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     θ = _extractθ(θ)
 
     i = estimator.i
@@ -251,10 +251,11 @@ function _inputoutput(estimator::QuantileEstimator, Z, θ::P) where {P <: Union{
     return input, output
 end
 
-function _loss(estimator::Union{IntervalEstimator, QuantileEstimator}, loss = nothing)
+function _loss(estimator::Union{IntervalEstimator, QuantileEstimator}, loss = nothing) 
     # NB: probs is on the CPU but CUDA handles the implicit transfer in quantileloss
-    (estimate, θ) -> quantileloss(estimate, θ, estimator.probs)
+    (estimate, θ) -> quantileloss(estimate, θ, estimator.probs) 
 end
+
 
 @doc raw"""
 	QuantileEstimatorContinuous <: BayesEstimator
@@ -428,7 +429,7 @@ end
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Number) = est(Z, [θ₋ᵢ], τ)
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Vector) = est(Z, [θ₋ᵢ], τ)
 
-function _inputoutput(estimator::QuantileEstimatorContinuous, Zτ, θ::P) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+function _inputoutput(estimator::QuantileEstimatorContinuous, Zτ, θ::P) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     θ = _extractθ(θ)
     Z, τ = Zτ
     τ = f32(τ)
@@ -500,7 +501,8 @@ function assess(
     estimator_name::Union{Nothing, String} = nothing,
     estimator_names::Union{Nothing, String} = nothing,
     use_gpu::Bool = true
-) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+
     θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
 
     # Apply the estimator to data 
@@ -508,7 +510,7 @@ function assess(
     runtime = DataFrame(runtime = runtime)
 
     # Empirical risk
-    empirical_risk = _computerisk(estimator, θ, Z)
+    empirical_risk = _computerisk(estimator, θ, Z) 
 
     # Convert to DataFrame and add information
     estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = d)
@@ -538,7 +540,8 @@ function assess(
     estimator_names::Union{Nothing, String} = nothing, # for backwards compatibility
     use_gpu::Bool = true,
     probs = f32(range(0.01, stop = 0.99, length = 100))
-) where {P <: Union{AbstractMatrix, ParameterConfigurations}}
+) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+
     θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
 
     # Get the probability levels and compute the empirical risk
@@ -570,7 +573,7 @@ function assess(
             set_info = eachcol(θ₋ᵢ)
         else
             # Combine each θ₋ᵢ with the corresponding vector of probability levels, which requires repeating θ₋ᵢ appropriately
-            set_info = map(1:(K * J)) do k
+            set_info = map(1:K*J) do k
                 θ₋ᵢₖ = repeat(θ₋ᵢ[:, k:k], inner = (1, n_probs))
                 vcat(θ₋ᵢₖ, probs')
             end
@@ -581,7 +584,7 @@ function assess(
     end
 
     # Estimates 
-    runtime = @elapsed estimates = estimate(estimator, Z, set_info, use_gpu = use_gpu)
+    runtime = @elapsed estimates = estimate(estimator, Z, set_info, use_gpu = use_gpu) #TODO set_info functionality relies on the network being able to be applied to a tuple, which is not general (only applies to DeepSets); better to move this functionality into the estimator object itself
     runtime = DataFrame(runtime = runtime)
 
     # Convert to DataFrame and add information

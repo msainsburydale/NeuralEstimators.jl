@@ -1,5 +1,6 @@
 module NeuralEstimators
 
+using Accessors: @set
 using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
 import Base: join, merge, show, size, summary, getindex, length, eachindex
@@ -26,10 +27,13 @@ using StatsBase: wsample, sample
 export tanhloss, kpowerloss, intervalscore, quantileloss
 include("losses.jl")
 
-export ParameterConfigurations, subsetparameters
+export AbstractParameterSet, subsetparameters
 include("Parameters.jl")
 
-export DeepSet, summarystatistics, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference, DensePositive, MLP
+export DataSet
+include("DataSet.jl")
+
+export DeepSet, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference, DensePositive, MLP
 export vectotril, vectotriu
 include("Architectures.jl")
 
@@ -50,6 +54,7 @@ export NeuralEstimator
 export BayesEstimator, PosteriorEstimator, RatioEstimator
 export PointEstimator, IntervalEstimator, QuantileEstimatorContinuous, QuantileEstimator, QuantileEstimatorDiscrete
 export Ensemble, PiecewiseEstimator
+export summarynetwork, setsummarynetwork, summarystatistics
 include(joinpath("Estimators", "Estimators.jl"))
 include(joinpath("Estimators", "Ensemble.jl"))
 for file in sort(readdir(joinpath(@__DIR__, "Estimators")))
@@ -62,7 +67,7 @@ end
 export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
 include("assess.jl")
 
-export sampleposterior, posteriormean, posteriormedian, posteriormode, posteriorquantile, bootstrap, interval, estimate
+export sampleposterior, posteriormean, posteriormedian, posteriormode, posteriorquantile, bootstrap, interval, estimate, logratio
 include("inference.jl")
 
 export stackarrays, expandgrid, numberreplicates, nparams, samplesize, drop, containertype, rowwisenorm, subsetdata

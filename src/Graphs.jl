@@ -188,6 +188,7 @@ end
 Base.show(io::IO, D::GNNSummary) = print(io, "\nThe propagation and readout modules of a graph neural network (GNN), with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)")
 GNNSummary(args...; kwargs...) = error("GNNSummary requires GraphNeuralNetworks.jl to be loaded, i.e., `using GraphNeuralNetworks`")
 
+
 #TODO clean up this documentation (e.g., don't bother with the bin notation)
 #TODO there is a more general structure that we could define, that has message(xi, xj, e) as a slot
 @doc raw"""
@@ -239,6 +240,7 @@ struct NeighbourhoodVariogram{T} # <: GNNLayer
     # TODO inner constructor, add 0 into h_cutoffs if it is not already in there 
 end
 NeighbourhoodVariogram(args...; kwargs...) = error("NeighbourhoodVariogram requires GraphNeuralNetworks.jl to be loaded, i.e., `using GraphNeuralNetworks`")
+
 
 @doc raw"""
 	IndicatorWeights(h_max, n_bins::Integer)
@@ -325,6 +327,7 @@ function (l::KernelWeights)(h::M) where {M <: AbstractMatrix{T}} where {T}
     f32(N)
 end
 Flux.trainable(l::KernelWeights) = NamedTuple()
+
 
 # ---- Adjacency matrices ----
 

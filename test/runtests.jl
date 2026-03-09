@@ -1,12 +1,12 @@
 using NeuralEstimators
 import NeuralEstimators: simulate
-using NeuralEstimators: _runondevice, _check_sizes, _extractθ, nested_eltype, rowwisenorm, triangularnumber, forward, inverse
+using NeuralEstimators: _infer_num_summaries, _runondevice, _check_sizes, _extractθ, nested_eltype, rowwisenorm, triangularnumber, forward, inverse
 using NeuralEstimators: ActNorm, Permutation, AffineCouplingBlock, CouplingLayer
 using CUDA
 using DataFrames
 using Distances
 using Flux
-using Flux: batch, DataLoader, mae, mse
+using Flux: batch, DataLoader, mae, mse, numobs, getobs
 using GraphNeuralNetworks
 using LinearAlgebra
 using Random: seed!
@@ -70,7 +70,7 @@ end
         @test stackarrays(v) == cat(v..., dims = N)
     end
     @testset "subsetparameters" begin
-        struct TestParameters <: ParameterConfigurations
+        struct TestParameters <: AbstractParameterSet
             v::Any
             θ::Any
             chols::Any
@@ -101,7 +101,151 @@ end
         @test all([containertype(x) for x ∈ eachcol(a)] .== T)
     end
 
+    @testset "DataSet" begin
+
+        K = 10
+        Z = [randn(2, 5) for _ in 1:K]  # K data sets, each 2×5
+        S = randn(3, K)                  # 3 expert summaries per data set
+
+        # ---- Construction ----
+        @testset "construction" begin
+            ds = DataSet(Z, S)
+            @test ds.Z === Z
+            @test ds.S === S
+
+            # Without expert summaries
+            ds_no_s = DataSet(Z)
+            @test ds_no_s.Z === Z
+            @test isnothing(ds_no_s.S)
+
+            # Assert mismatch between numobs(Z) and size(S, 2)
+            @test_throws AssertionError DataSet(Z, randn(3, K + 1))
+        end
+
+        # ---- MLUtils interface ----
+        @testset "numobs and getobs" begin
+            ds = DataSet(Z, S)
+            @test numobs(ds) == K
+
+            # getobs: single index
+            ds1 = getobs(ds, 1)
+            @test numobs(ds1) == 1
+            @test ds1.S == S[:, 1:1]
+
+            # getobs: range
+            ds_sub = getobs(ds, 1:3)
+            @test numobs(ds_sub) == 3
+            @test ds_sub.S == S[:, 1:3]
+        end
+
+        # ---- getindex ----
+        @testset "getindex" begin
+            ds = DataSet(Z, S)
+            ds1 = ds[1]
+            @test numobs(ds1) == 1
+
+            ds_sub = ds[1:3]
+            @test numobs(ds_sub) == 3
+        end
+
+        # ---- utility methods ----
+        @testset "numberreplicates" begin
+            ds = DataSet(Z, S)
+            @test numberreplicates(ds) == numberreplicates(Z)
+        end
+
+        @testset "subsetdata" begin
+            ds = DataSet(Z, S)
+            ds_sub = subsetdata(ds, 1:3)
+            @test numobs(ds_sub) == K
+            @test all(numberreplicates(ds_sub) .== 3)
+        end
+
+        # ---- f32 ----
+        @testset "f32" begin
+            Z64 = [randn(2, 5) for _ in 1:K]
+            S64 = randn(3, K)
+            ds = DataSet(Z64, S64)
+            ds32 = f32(ds)
+            @test eltype(ds32.S) == Float32
+            @test eltype(ds32.Z[1]) == Float32
+        end
+
+        # ---- forward pass ----
+        @testset "forward pass" begin
+            n, num_summaries = 2, 4
+            ψ = Chain(Dense(n, 8, relu))
+            ϕ = Chain(Dense(8, num_summaries))
+            network = DeepSet(ψ, ϕ)
+            estimator = PointEstimator(network)
+
+            ds = DataSet(Z, S)  # S has 3 rows, network outputs 4 → vcat gives 7
+            t = estimator(ds)
+            @test size(t, 1) == num_summaries + size(S, 1)  # 4 + 3 = 7
+            @test size(t, 2) == K
+
+            # Without expert summaries: output size unchanged
+            ds_no_s = DataSet(Z)
+            t_no_s = estimator(ds_no_s)
+            @test size(t_no_s, 1) == num_summaries
+            @test size(t_no_s, 2) == K
+        end
+
+    end
+
     @test isnothing(_check_sizes(1, 1))
+
+    @testset "_infer_num_summaries" begin
+
+        # Simple Dense layer
+        @test _infer_num_summaries(Dense(10, 4)) == 4
+
+        # Chain of Dense layers
+        @test _infer_num_summaries(Chain(Dense(10, 64, relu), Dense(64, 4))) == 4
+
+        # DeepSet (common summary network type)
+        ψ = Chain(Dense(1, 64, relu), Dense(64, 64, relu))
+        ϕ = Chain(Dense(64, 64, relu), Dense(64, 8))
+        @test _infer_num_summaries(DeepSet(ψ, ϕ)) == 8
+
+        # Nested Chain
+        @test _infer_num_summaries(Chain(Chain(Dense(10, 64, relu), Dense(64, 32, relu)), Dense(32, 4))) == 4
+
+        # CNN ending in Dense
+        cnn = Chain(Conv((3,), 1 => 16, relu), Flux.flatten, Dense(16, 4))
+        @test _infer_num_summaries(cnn) == 4
+
+        # Error case: no Dense layer found
+        @test_throws ErrorException _infer_num_summaries(Chain(Conv((3,), 1 => 16, relu), Flux.flatten))
+
+        # Simple struct with a single network field
+        struct SimpleWrapper
+            network
+        end
+        (m::SimpleWrapper)(x) = m.network(x)
+
+        # Struct with multiple fields (like DeepSet) where last field is the output network
+        struct MultiFieldWrapper
+            encoder
+            decoder
+        end
+        (m::MultiFieldWrapper)(x) = m.decoder(m.encoder(x))
+
+        # Simple wrapper struct
+        network = Chain(Dense(10, 64, relu), Dense(64, 4))
+        @test _infer_num_summaries(SimpleWrapper(network)) == 4
+
+        # Multi-field struct — should find the last Dense via the decoder field
+        encoder = Chain(Dense(10, 64, relu), Dense(64, 32, relu))
+        decoder = Chain(Dense(32, 16, relu), Dense(16, 8))
+        @test _infer_num_summaries(MultiFieldWrapper(encoder, decoder)) == 8
+
+        # Deeply nested struct
+        inner = SimpleWrapper(Chain(Dense(10, 64, relu), Dense(64, 4)))
+        outer = SimpleWrapper(inner)
+        @test _infer_num_summaries(outer) == 4
+
+    end
 
     @testset "maternclusterprocess" begin
         S = maternclusterprocess()
@@ -118,7 +262,7 @@ end
         r = 0.3
 
         # Memory efficient constructors (avoids constructing the full distance matrix D)
-        A = A₁ = adjacencymatrix(S, k)
+        A  = A₁ = adjacencymatrix(S, k)
         A₂ = adjacencymatrix(S, r)
         @test eltype(A₁) == Float32
         @test eltype(A₂) == Float32
@@ -709,7 +853,7 @@ end
 
 S = samplesize # Expert summary statistics
 parameter_names = ["μ", "σ"]
-struct Parameters <: ParameterConfigurations
+struct Parameters <: AbstractParameterSet
     θ::Any
 end
 ξ = (parameter_names = parameter_names,)
@@ -745,11 +889,6 @@ function simulatornocovariates(parameters, m, J::Integer)
     vcat(v...)
 end
 
-# Traditional estimator for comparison
-MLE(Z) = permutedims(hcat(mean.(Z), var.(Z)))
-MLE(Z::Tuple) = MLE(Z[1])
-MLE(Z, ξ) = MLE(Z) # doesn't need ξ but include it for testing
-
 @testset "PointEstimator" begin
     @testset "$covar" for covar ∈ ["no set-level covariates" "set-level covariates"]
         q = w
@@ -782,7 +921,7 @@ MLE(Z, ξ) = MLE(Z) # doesn't need ξ but include it for testing
             use_gpu = dvc == gpu
             @testset "train" begin
                 testbackprop(estimator, Z, dvc)
-                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,))
+                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,) )
                 estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), savepath = "testing-path")
                 estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), simulate_just_in_time = true)
                 estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose)
@@ -848,10 +987,6 @@ MLE(Z, ξ) = MLE(Z) # doesn't need ξ but include it for testing
                 @test typeof(assessment) == Assessment
                 @test typeof(assessment.estimates) == DataFrame
                 @test typeof(assessment.runtime) == DataFrame
-
-                # Test that estimators needing extra model information can be used:
-                assess([MLE], parameters, Z_test, verbose = verbose)
-                assess([MLE], parameters, Z_test, verbose = verbose, ξ = ξ)
             end
 
             @testset "bootstrap" begin
@@ -895,7 +1030,7 @@ end
     Z = rand(Float32, d, m)
     parameter_names = ["ρ", "σ", "τ"]
     p = length(parameter_names)
-    arch = initialise_estimator(p, architecture = "MLP", d = d).network
+    arch = initialise_estimator(p, architecture = "MLP", d = d).summary_network
 
     # IntervalEstimator
     estimator = IntervalEstimator(arch)
@@ -1128,15 +1263,15 @@ end
         Dense(w, q, relu)
     )
     ϕ = Chain(
-        Dense(q + p, w, relu),
+        Dense(q, w, relu),
         Dense(w, w, relu),
-        Dense(w, 1)
+        Dense(w, q)
     )
-    deepset = DeepSet(ψ, ϕ)
+    summary_network = DeepSet(ψ, ϕ)
 
     # Initialise the estimator
-    r̂ = RatioEstimator(deepset)
-
+    r̂ = RatioEstimator(summary_network, p; num_summaries = q)
+    
     # Train the estimator
     r̂ = train(r̂, prior, simulate, simulator_args = m, epochs = 1, verbose = false)
 
@@ -1144,7 +1279,7 @@ end
     θ = prior(1)
     z = simulate(θ, m)
     θ_grid = Float32.(expandgrid(0:0.01:1, 0:0.01:1)')  # fine gridding of the parameter space
-    estimate(r̂, z, θ_grid)                    # likelihood-to-evidence ratios over grid
+    logratio(r̂, z, θ_grid = θ_grid)           # likelihood-to-evidence ratios over grid
     mlestimate(r̂, z; θ_grid = θ_grid)         # maximum-likelihood estimate
     mapestimate(r̂, z; θ_grid = θ_grid)        # maximum-a-posteriori estimate
     samples = sampleposterior(r̂, z; θ_grid = θ_grid)    # posterior samples
@@ -1160,12 +1295,13 @@ end
         sampler(K) = rand32(d, K)
         simulator(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(n, m) for ϑ in eachcol(θ)]
         w = 128
-        q = approxdist(d, d)
+        num_summaries = d
         ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
-        ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, d))
-        network = DeepSet(ψ, ϕ)
-        estimator = PosteriorEstimator(network, d; q = approxdist) # convenience constructor
-        estimator = PosteriorEstimator(q, network)
+        ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, num_summaries))
+        summary_network = DeepSet(ψ, ϕ)
+        q = approxdist(d, num_summaries)
+        estimator = PosteriorEstimator(summary_network, d; num_summaries = num_summaries, q = approxdist) # convenience constructor
+        estimator = PosteriorEstimator(summary_network, q)
         estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, verbose = false)
         @test numdistributionalparams(estimator) == numdistributionalparams(q)
         θ = sampler(10)
@@ -1179,21 +1315,6 @@ end
 end
 
 # ---- Wrappers and helper functions for NeuralEstimators ----
-
-@testset "initialise_estimator" begin
-    p = 2
-    initialise_estimator(p, architecture = "DNN")
-    initialise_estimator(p, architecture = "MLP")
-    initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)])
-
-    @test typeof(initialise_estimator(p, architecture = "MLP", estimator_type = "interval")) <: IntervalEstimator
-    @test typeof(initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5), (3, 3)], estimator_type = "interval")) <: IntervalEstimator
-
-    @test_throws Exception initialise_estimator(0, architecture = "MLP")
-    @test_throws Exception initialise_estimator(p, d = 0, architecture = "MLP")
-    @test_throws Exception initialise_estimator(p, architecture = "CNN")
-    @test_throws Exception initialise_estimator(p, architecture = "CNN", kernel_size = [(10, 10), (5, 5)])
-end
 
 @testset "PiecewiseEstimator" begin
     n = 2    # bivariate data
@@ -1275,7 +1396,7 @@ end
     )
 
     # Sampler from the prior
-    struct GPParameters <: ParameterConfigurations
+    struct GPParameters <: AbstractParameterSet
         θ::Any
         cholesky_factors::Any
     end

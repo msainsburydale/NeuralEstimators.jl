@@ -7,7 +7,7 @@ using GraphNeuralNetworks
 using GraphNeuralNetworks: check_num_nodes
 using NNlib: scatter, gather
 using Statistics, Random, LinearAlgebra
-import NeuralEstimators: subsetdata, numberreplicates, summarystatistics, spatialgraph
+import NeuralEstimators: subsetdata, numberreplicates, _deepsetsummaries, spatialgraph
 import NeuralEstimators: GNNSummary, SpatialGraphConv, IndicatorWeights, KernelWeights, NeighbourhoodVariogram
 import NeuralEstimators: _first_N_minus_1_dims_identical
 
@@ -42,7 +42,7 @@ function numberreplicates(Z::G) where {G <: GNNGraph}
 end
 
 # Multiple data sets: optimised version for graph data
-function summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
+function _deepsetsummaries(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
     @assert isnothing(d.ψ) || typeof(d.ψ) <: GNNSummary "For graph input data, the summary network ψ should be a `GNNSummary` object"
 
     if !isnothing(d.ψ)
@@ -344,6 +344,7 @@ function normalise_edge_neighbors(g::AbstractGNNGraph, e)
     return e ./ (den .+ eps(eltype(e)))
 end
 
+
 function (ψ::GNNSummary)(g::GNNGraph)
 
     # Propagation module
@@ -357,10 +358,12 @@ function (ψ::GNNSummary)(g::GNNGraph)
     R = ψ.readout(h, Z)
 
     # Reshape from three-dimensional array to matrix 
-    R = reshape(R, size(R, 1), :) #NB not ideal to do this here, I think, makes the output of summarystatistics() quite confusing. (keep in mind the behaviour of summarystatistics on a vector of graphs and a single graph) 
+    R = reshape(R, size(R, 1), :) #NB not ideal to do this here, I think, makes the output of _deepsetsummaries() quite confusing. (keep in mind the behaviour of _deepsetsummaries on a vector of graphs and a single graph) 
 
     return R
 end
+
+
 
 function NeighbourhoodVariogram(h_max, n_bins::Integer)
     h_cutoffs = range(0, stop = h_max, length = n_bins+1)
@@ -369,7 +372,7 @@ function NeighbourhoodVariogram(h_max, n_bins::Integer)
 end
 function (l::NeighbourhoodVariogram)(g::GNNGraph)
 
-    # NB in the case of a batched graph, see the comments in the method summarystatistics(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
+    # NB in the case of a batched graph, see the comments in the method _deepsetsummaries(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
     Z = g.ndata.Z
     h = g.graph[3]
 
@@ -392,5 +395,6 @@ function (l::NeighbourhoodVariogram)(g::GNNGraph)
     vec(Σ ./ 2N_card)
 end
 Flux.trainable(l::NeighbourhoodVariogram) = NamedTuple()
+
 
 end
