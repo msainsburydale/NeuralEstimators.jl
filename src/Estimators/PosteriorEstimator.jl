@@ -95,7 +95,7 @@ where ``q`` denotes the approximate posterior distribution.
 
 See also [`sampleposterior`](@ref).
 """
-logdensity(estimator::PosteriorEstimator, θ, Z) = logdensity(estimator.q, f32(θ), _summarystatistics(estimator, f32(Z))) 
+logdensity(estimator::PosteriorEstimator, θ, Z) = logdensity(estimator.q, f32(θ), _summarystatistics(estimator, f32(Z)))
 (estimator::PosteriorEstimator)(Zθ::Tuple) = logdensity(estimator, Zθ[2], Zθ[1]) # internal method only used during training 
 
 numdistributionalparams(estimator::PosteriorEstimator) = numdistributionalparams(estimator.q)

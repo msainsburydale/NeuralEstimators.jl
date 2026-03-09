@@ -153,8 +153,6 @@ function quantileloss(θ̂, θ, τ::M; agg = mean) where {T, M <: AbstractMatrix
     agg(L)
 end
 
-
-
 # ---- interval score ----
 
 """

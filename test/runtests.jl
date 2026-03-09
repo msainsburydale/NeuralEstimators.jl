@@ -102,9 +102,8 @@ end
     end
 
     @testset "DataSet" begin
-
         K = 10
-        Z = [randn(2, 5) for _ in 1:K]  # K data sets, each 2×5
+        Z = [randn(2, 5) for _ = 1:K]  # K data sets, each 2×5
         S = randn(3, K)                  # 3 expert summaries per data set
 
         # ---- Construction ----
@@ -163,7 +162,7 @@ end
 
         # ---- f32 ----
         @testset "f32" begin
-            Z64 = [randn(2, 5) for _ in 1:K]
+            Z64 = [randn(2, 5) for _ = 1:K]
             S64 = randn(3, K)
             ds = DataSet(Z64, S64)
             ds32 = f32(ds)
@@ -190,7 +189,6 @@ end
             @test size(t_no_s, 1) == num_summaries
             @test size(t_no_s, 2) == K
         end
-
     end
 
     @test isnothing(_check_sizes(1, 1))
@@ -220,14 +218,14 @@ end
 
         # Simple struct with a single network field
         struct SimpleWrapper
-            network
+            network::Any
         end
         (m::SimpleWrapper)(x) = m.network(x)
 
         # Struct with multiple fields (like DeepSet) where last field is the output network
         struct MultiFieldWrapper
-            encoder
-            decoder
+            encoder::Any
+            decoder::Any
         end
         (m::MultiFieldWrapper)(x) = m.decoder(m.encoder(x))
 
@@ -244,7 +242,6 @@ end
         inner = SimpleWrapper(Chain(Dense(10, 64, relu), Dense(64, 4)))
         outer = SimpleWrapper(inner)
         @test _infer_num_summaries(outer) == 4
-
     end
 
     @testset "maternclusterprocess" begin
@@ -262,7 +259,7 @@ end
         r = 0.3
 
         # Memory efficient constructors (avoids constructing the full distance matrix D)
-        A  = A₁ = adjacencymatrix(S, k)
+        A = A₁ = adjacencymatrix(S, k)
         A₂ = adjacencymatrix(S, r)
         @test eltype(A₁) == Float32
         @test eltype(A₂) == Float32
@@ -921,7 +918,7 @@ end
             use_gpu = dvc == gpu
             @testset "train" begin
                 testbackprop(estimator, Z, dvc)
-                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,) )
+                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,))
                 estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), savepath = "testing-path")
                 estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), simulate_just_in_time = true)
                 estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose)
@@ -1271,7 +1268,7 @@ end
 
     # Initialise the estimator
     r̂ = RatioEstimator(summary_network, p; num_summaries = q)
-    
+
     # Train the estimator
     r̂ = train(r̂, prior, simulate, simulator_args = m, epochs = 1, verbose = false)
 

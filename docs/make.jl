@@ -4,7 +4,7 @@ using Documenter, NeuralEstimators
 # Install the packages required by the package extensions
 using Pkg
 Pkg.activate(@__DIR__)
-Pkg.develop(PackageSpec(path=joinpath(@__DIR__, "..")))
+Pkg.develop(PackageSpec(path = joinpath(@__DIR__, "..")))
 Pkg.add(["Makie"])
 Pkg.instantiate()
 using Makie

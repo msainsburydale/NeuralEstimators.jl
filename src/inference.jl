@@ -7,7 +7,6 @@ function estimate(estimator::NeuralEstimator, z, x = nothing; kwargs...)
     _applywithdevice(estimator, input; kwargs...)
 end
 
-
 # ---- Point estimation from estimators that allow for posterior sampling ----
 
 _doc_string = """
@@ -24,7 +23,6 @@ See also [`posteriormedian()`](@ref), [`posteriormode()`](@ref).
 posteriormean(θ::AbstractMatrix) = mean(θ; dims = 2)
 posteriormean(θ::AbstractVector{<:AbstractMatrix}) = reduce(hcat, posteriormean.(θ))
 posteriormean(estimator, Z, N::Integer = 1000; kwargs...) = posteriormean(sampleposterior(estimator, Z, N; kwargs...))
-
 
 """
 	posteriormedian(θ::AbstractMatrix)	

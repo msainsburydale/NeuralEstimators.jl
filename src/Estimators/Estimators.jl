@@ -10,7 +10,6 @@ An abstract supertype for neural Bayes estimators.
 """
 abstract type BayesEstimator <: NeuralEstimator end
 
-
 # ---- Summary network helper functions ----
 
 """
@@ -33,7 +32,7 @@ end
 # Internal helper function for applying the summary network to data, used in each estimator's forward pass 
 _summarystatistics(estimator, Z) = estimator.summary_network(Z)
 _summarystatistics(estimator, d::DataSet) = vcat(estimator.summary_network(d.Z), d.S)
-_summarystatistics(estimator, d::DataSet{Z, Nothing}) where Z = estimator.summary_network(d.Z)
+_summarystatistics(estimator, d::DataSet{Z, Nothing}) where {Z} = estimator.summary_network(d.Z)
 
 """
 	summarynetwork(estimator::NeuralEstimator)
