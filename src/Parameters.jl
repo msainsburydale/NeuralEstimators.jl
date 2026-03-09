@@ -22,7 +22,7 @@ end
 abstract type AbstractParameterSet end
 
 # Backwards compatability
-const ParameterConfigurations = AbstractParameterSet 
+const ParameterConfigurations = AbstractParameterSet
 export ParameterConfigurations
 
 Base.show(io::IO, parameters::P) where {P <: AbstractParameterSet} = print(io, "\nA subtype of `AbstractParameterSet` with K = $(size(parameters, 2)) instances of the $(size(parameters, 1))-dimensional parameter vector")

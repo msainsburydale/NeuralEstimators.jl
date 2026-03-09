@@ -344,7 +344,6 @@ function normalise_edge_neighbors(g::AbstractGNNGraph, e)
     return e ./ (den .+ eps(eltype(e)))
 end
 
-
 function (ψ::GNNSummary)(g::GNNGraph)
 
     # Propagation module
@@ -362,8 +361,6 @@ function (ψ::GNNSummary)(g::GNNGraph)
 
     return R
 end
-
-
 
 function NeighbourhoodVariogram(h_max, n_bins::Integer)
     h_cutoffs = range(0, stop = h_max, length = n_bins+1)
@@ -395,6 +392,5 @@ function (l::NeighbourhoodVariogram)(g::GNNGraph)
     vec(Σ ./ 2N_card)
 end
 Flux.trainable(l::NeighbourhoodVariogram) = NamedTuple()
-
 
 end

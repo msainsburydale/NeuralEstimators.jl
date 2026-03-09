@@ -86,11 +86,11 @@ end
 
 # Constructor: summary network, number of parameters, number of summaries => MLP inference network
 function RatioEstimator(
-    summary_network, num_parameters::Integer, num_summaries::Integer; 
+    summary_network, num_parameters::Integer, num_summaries::Integer;
     num_summaries_θ::Integer = 2num_parameters,
     summary_network_θ_kwargs::NamedTuple = (;),
     kwargs...
-    )
+)
     summary_network_θ = MLP(num_parameters, num_summaries_θ; summary_network_θ_kwargs...)
     inference_network = MLP(num_summaries + num_summaries_θ, 1; kwargs...)
     @info "RatioEstimator: num_summaries = $num_summaries."
@@ -109,7 +109,6 @@ function (estimator::RatioEstimator)(Z, θ)
     return logr
 end
 (estimator::RatioEstimator)(Zθ::Tuple) = estimator(Zθ[1], Zθ[2]) # Tuple method used internally during training
-
 
 function _inputoutput(estimator::RatioEstimator, Z, θ::P) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     θ = _extractθ(θ)
@@ -162,10 +161,10 @@ A vector of log ratios, one for each column of `θ_grid`.
 """
 function logratio(estimator::RatioEstimator, Z, θ_grid_posarg = nothing; θ_grid = nothing)
     @assert !(!isnothing(θ_grid_posarg) && !isnothing(θ_grid)) "θ_grid must be provided exactly once, either as a positional or keyword argument, but not both"
-    @assert !( isnothing(θ_grid_posarg) &&  isnothing(θ_grid)) "θ_grid must be provided either as a positional or keyword argument"
+    @assert !(isnothing(θ_grid_posarg) && isnothing(θ_grid)) "θ_grid must be provided either as a positional or keyword argument"
     θ_grid = isnothing(θ_grid_posarg) ? θ_grid : θ_grid_posarg
 
-    summary_stats   = summarystatistics(estimator, Z)
+    summary_stats = summarystatistics(estimator, Z)
     summary_stats_θ = estimator.summary_network_θ(θ_grid)
     _gridlogratio(estimator, summary_stats, summary_stats_θ)
 end
@@ -182,8 +181,7 @@ function sampleposterior(
     logprior::Function = θ -> 0.0f0,
     θ_grid = nothing, theta_grid = nothing,
     kwargs...
-    )
-
+)
     @assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
     if !isnothing(theta_grid)
         θ_grid = theta_grid
@@ -192,17 +190,17 @@ function sampleposterior(
     θ_grid = f32(θ_grid)
 
     # Log prior over the grid
-    logpθ = logprior.(eachcol(θ_grid))                     
-    
+    logpθ = logprior.(eachcol(θ_grid))
+
     # θ embeddings over the grid
-    summary_stats_θ = estimator.summary_network_θ(θ_grid)  
+    summary_stats_θ = estimator.summary_network_θ(θ_grid)
 
     # Summary statistics for each data set 
-    summary_stats = summarystatistics(estimator, Z)        
+    summary_stats = summarystatistics(estimator, Z)
 
     # For each data set, pass summary stats and θ embeddings through the inference net, then sample
     samples = map(eachcol(summary_stats)) do s
-        logrZθ  = vec(_gridlogratio(estimator, s, summary_stats_θ))
+        logrZθ = vec(_gridlogratio(estimator, s, summary_stats_θ))
         weights = exp.(logpθ .+ logrZθ)
         samples = StatsBase.wsample(eachcol(θ_grid), weights, N; replace = true)
         reduce(hcat, samples)
@@ -243,13 +241,12 @@ function posteriormode(
     @assert isnothing(θ_grid) || isnothing(θ₀) "Only one of `θ_grid` and `θ₀` should be given"
 
     if !isnothing(θ_grid)
-
         logpθ = logprior.(eachcol(θ_grid))
-        summary_stats   = summarystatistics(estimator, Z)
+        summary_stats = summarystatistics(estimator, Z)
         summary_stats_θ = estimator.summary_network_θ(θ_grid)
 
         modes = map(eachcol(summary_stats)) do s
-            logrZθ    = vec(_gridlogratio(estimator, s, summary_stats_θ))
+            logrZθ = vec(_gridlogratio(estimator, s, summary_stats_θ))
             logdensity = logpθ .+ logrZθ
             θ_grid[:, argmax(logdensity)]
         end
@@ -260,4 +257,3 @@ function posteriormode(
         return _optimdensity(θ₀, logprior, estimator) #TODO doesn't work for multiple data sets; _optimdensity needs to take Z as input, I guess. Also, can be done more efficiently by computing the summary statistics. Try it out, could be interesting!
     end
 end
-

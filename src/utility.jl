@@ -6,7 +6,6 @@ Internal helper that applies `network` to data `z`, handling GPU device placemen
 Float32 conversion, and minibatching. Used by `estimate` and `summarystatistics`.
 """
 function _applywithdevice(network, z; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
-
     z = f32(z)
 
     if check_deepset(network)
@@ -47,8 +46,6 @@ end
 end
 @inline check_deepset(x) = check_deepset(typeof(x))
 
-
-
 #TODO Not currently used: Would be great to have a way to automatically and reliably infer the number of summaries from an arbitrary summary_network, so that the user need not specify it when constructing an estimator.
 function _infer_num_summaries(model)
     # Base case: Dense layer
@@ -56,12 +53,12 @@ function _infer_num_summaries(model)
         return size(model.weight, 1)
         @info "Inferred num_summaries = $inferred from summary_network. Set explicitly if incorrect."
     end
-    
+
     # Recurse into Chain - last layer determines output
     if model isa Chain
         return _infer_num_summaries(model.layers[end])
     end
-    
+
     # Recurse into any struct by searching its fields in reverse for the last Dense
     for field in reverse(fieldnames(typeof(model)))
         val = getfield(model, field)
@@ -71,7 +68,7 @@ function _infer_num_summaries(model)
             continue
         end
     end
-    
+
     error("Could not infer output dimension from $(typeof(model)). Please specify `num_summaries` explicitly.")
 end
 # If we could implement this properly, the estimator constructors could be defined as follows:
@@ -304,8 +301,6 @@ end
 function subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
     getobs(Z, i)
 end
-
-
 
 # ---- Test code for GNN and subsetdata ----
 

@@ -65,4 +65,4 @@ function PointEstimator(network)
 end
 
 # Forward pass: point estimates
-(estimator::PointEstimator)(Z) = estimator.inference_network(_summarystatistics(estimator, Z))
+(estimator::PointEstimator)(Z) = estimator.inference_network(_summarystatistics(estimator, Z))
