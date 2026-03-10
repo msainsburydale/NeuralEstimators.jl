@@ -42,39 +42,23 @@ A convenient interface for `R` users is available on [CRAN](https://CRAN.R-proje
 
 ### Contributing
 
-To get started, see [CONTRIBUTING.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/CONTRIBUTING.md) for an overview of the code structure, development workflow, and how to submit contributions. A list of planned improvements is available in [TODO.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/TODO.md), and instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/README.md). 
+To get started, see [CONTRIBUTING.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/CONTRIBUTING.md) for an overview of the code structure, development workflow, and how to submit contributions. A list of planned improvements is available in [TODO.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/TODO.md), and instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/README.md). 
 
 If you encounter a bug or have a suggestion, please feel free to [open an issue](https://github.com/msainsburydale/NeuralEstimators.jl/issues) or submit a pull request.
 
 ### Supporting and citing
 
-This software was developed as part of academic research. If you would like to support it, please star the repository. If you use it in your research or other activities, please also use the following citations.
+This software was developed as part of academic research. If you would like to support it, please star the repository. If you use it in your research or other activities, please also use the following citation.
 
 ```
-@Manual{,
-    title = {{NeuralEstimators}: Likelihood-Free Parameter Estimation
-      using Neural Networks},
-    author = {Matthew Sainsbury-Dale},
-    year = {2024},
-    note = {R package version 0.1-2},
-    url = {https://CRAN.R-project.org/package=NeuralEstimators},
-    doi = {10.32614/CRAN.package.NeuralEstimators},
-  }
-
-@Article{,
-    title = {Likelihood-Free Parameter Estimation with Neural {B}ayes
-      Estimators},
-    author = {Matthew Sainsbury-Dale and Andrew Zammit-Mangion and
-      Raphael Huser},
-    journal = {The American Statistician},
-    year = {2024},
-    volume = {78},
-    pages = {1--14},
-    doi = {10.1080/00031305.2023.2249522},
-  }
+@misc{NeuralEstimators.jl,
+  title = {{NeuralEstimators.jl}: A {J}ulia package for efficient simulation-based inference using neural networks},
+  author = {Sainsbury-Dale, Matthew},
+  year = {2026},
+  note = {Version 0.2.0},
+  howpublished = {\url{https://github.com/msainsburydale/NeuralEstimators.jl}}
+}
 ```
-
-
 
 ### Papers using NeuralEstimators
 
