@@ -2,7 +2,7 @@
 
 `NeuralEstimators` facilitates a suite of neural methods for parameter inference in scenarios where simulation from the model is feasible. These methods are **likelihood-free** and **amortised**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches. 
 
-The package supports neural Bayes estimators, which transform data into point summaries of the posterior distribution; neural posterior estimators, which perform approximate posterior inference via KL-divergence minimisation; and neural ratio estimators, which approximate the likelihood-to-evidence ratio and thereby enable frequentist or Bayesian inference through various downstream algorithms, such as MCMC sampling. 
+The package supports neural Bayes estimators, which transform data into point summaries of the posterior distribution; neural posterior estimators, which perform approximate posterior inference via KL-divergence minimisation; and neural ratio estimators, which approximate the likelihood-to-evidence ratio and thereby enable frequentist or Bayesian inference through various downstream algorithms.
 
 User-friendliness is a central focus of the package, which is designed to minimise "boilerplate" code while preserving complete flexibility in the neural-network architecture and other workflow components. The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. A convenient interface for R users is available on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
 
@@ -60,39 +60,24 @@ Z = simulate(θ)         # "observed" data
 estimate(estimator, Z)  # point estimate: μ̂ = 0.797, σ̂ = 0.087
 ```
 
-## Supporting and citing
-
-This software was developed as part of academic research. If you would like to support it, please star the [repository](https://github.com/msainsburydale/NeuralEstimators.jl). If you use it in your research or other activities, please also use the following citations.
-
-```
-@Manual{,
-    title = {{NeuralEstimators}: Likelihood-Free Parameter Estimation
-      using Neural Networks},
-    author = {Matthew Sainsbury-Dale},
-    year = {2024},
-    note = {R package version 0.1-2},
-    url = {https://CRAN.R-project.org/package=NeuralEstimators},
-    doi = {10.32614/CRAN.package.NeuralEstimators},
-  }
-
-@Article{,
-    title = {Likelihood-Free Parameter Estimation with Neural {B}ayes
-      Estimators},
-    author = {Matthew Sainsbury-Dale and Andrew Zammit-Mangion and
-      Raphael Huser},
-    journal = {The American Statistician},
-    year = {2024},
-    volume = {78},
-    pages = {1--14},
-    doi = {10.1080/00031305.2023.2249522},
-  }
-```
-
 ## Contributing
 
-If you encounter a bug or have a suggestion, please consider [opening an issue](https://github.com/msainsburydale/NeuralEstimators.jl/issues) or submitting a pull request. Instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/README.md). When adding functionality to the package, you may wish to add unit tests to the file [test/runtests.jl](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/test/runtests.jl). You can then run these tests locally by executing the following command from the root folder:
-```bash
-julia --project=. -e "using Pkg; Pkg.test()"
+To get started, see [CONTRIBUTING.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/CONTRIBUTING.md) for an overview of the code structure, development workflow, and how to submit contributions. A list of planned improvements is available in [TODO.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/TODO.md), and instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/README.md). 
+
+If you encounter a bug or have a suggestion, please feel free to [open an issue](https://github.com/msainsburydale/NeuralEstimators.jl/issues) or submit a pull request.
+
+## Supporting and citing
+
+This software was developed as part of academic research. If you would like to support it, please [star the repository](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main). If you use it in your research or other activities, please also use the following citation.
+
+```
+@misc{NeuralEstimators.jl,
+  title = {{NeuralEstimators.jl}: A {J}ulia package for efficient simulation-based inference using neural networks},
+  author = {Sainsbury-Dale, Matthew},
+  year = {2026},
+  note = {Version 0.2.0},
+  howpublished = {\url{https://github.com/msainsburydale/NeuralEstimators.jl}}
+}
 ```
 
 ## Papers using NeuralEstimators
