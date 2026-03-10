@@ -2,7 +2,7 @@
 
 `NeuralEstimators` facilitates a suite of neural methods for parameter inference in scenarios where simulation from the model is feasible. These methods are **likelihood-free** and **amortised**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches. 
 
-The package supports neural Bayes estimators, which transform data into point summaries of the posterior distribution; neural posterior estimators, which perform approximate posterior inference via KL-divergence minimisation; and neural ratio estimators, which approximate the likelihood-to-evidence ratio and thereby enable frequentist or Bayesian inference through various downstream algorithms.
+The package supports neural Bayes estimators (NBEs), which transform data into point summaries of the posterior distribution; neural posterior estimators (NPEs), which perform approximate posterior inference via KL-divergence minimisation; and neural ratio estimators (NREs), which approximate the likelihood-to-evidence ratio and thereby enable frequentist or Bayesian inference through various downstream algorithms.
 
 User-friendliness is a central focus of the package, which is designed to minimise "boilerplate" code while preserving complete flexibility in the neural-network architecture and other workflow components. The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. A convenient interface for R users is available on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
 
@@ -10,7 +10,7 @@ Once familiar with the [Methodology](@ref), see the [Overview](@ref) of the pack
 
 ## Installation
 
-To install the package, please first install the current stable release of [`Julia`](https://julialang.org/downloads/). Then, one may install the current stable version of the package using the following command inside `Julia`:
+To install the package, please first install the current stable release of [Julia](https://julialang.org/downloads/). Then, one may install the current stable version of the package using the following command inside Julia:
 
 ```julia
 using Pkg; Pkg.add("NeuralEstimators")
@@ -30,12 +30,12 @@ In the following minimal example, we develop a [neural Bayes estimator](@ref "Ne
 using NeuralEstimators, Flux
 
 # Priors μ,σ ~ U(0, 1) and data Zᵢ|μ,σ ~ N(μ, σ²), i = 1,…, m
-d = 2    # dimension of the parameter vector θ
+d = 2    # dimension of the parameter vector θ = (μ,σ)'
 n = 1    # dimension of each data replicate Zᵢ
-sample(K) = rand(d, K) 
-simulate(θ, m = 100) = [ϑ[1] .+ ϑ[2] * randn(n, m) for ϑ ∈ eachcol(θ)]  
+sampler(K) = rand(d, K) 
+simulator(θ, m = 100) = [ϑ[1] .+ ϑ[2] * randn(n, m) for ϑ ∈ eachcol(θ)]  
 
-# Neural network, based on the DeepSets architecture
+# Neural network using DeepSets architecture (supports any number m of replicates)
 w = 128  # width of each hidden layer 
 ψ = Chain(Dense(n, w, relu), Dense(w, w, relu))
 ϕ = Chain(Dense(w, w, relu), Dense(w, d))
@@ -45,19 +45,19 @@ network = DeepSet(ψ, ϕ)
 estimator = PointEstimator(network) 
 
 # Train the estimator
-estimator = train(estimator, sample, simulate, epochs = 20)
+estimator = train(estimator, sampler, simulator, epochs = 20)
 
 # Assess the estimator
-θ_test = sample(1000)
-Z_test = simulate(θ_test)
+θ_test = sampler(1000)
+Z_test = simulator(θ_test)
 assessment = assess(estimator, θ_test, Z_test)
-bias(assessment)   # μ = 0.001, σ = 0.001
-rmse(assessment)   # μ = 0.05,  σ = 0.04
+bias(assessment)
+rmse(assessment)
 
-# Apply the estimator to observed data
-θ = [0.8 0.1]'          # true parameters
-Z = simulate(θ)         # "observed" data
-estimate(estimator, Z)  # point estimate: μ̂ = 0.797, σ̂ = 0.087
+# Apply the estimator to "observed" data
+θ = [0.8 0.1]'           # true parameters
+Z = simulator(θ)         # "observed" data
+estimate(estimator, Z)   # point estimate
 ```
 
 ## Contributing
