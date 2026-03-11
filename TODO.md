@@ -5,24 +5,35 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ---
 
 ### Features
+
+**Backend**
 - [ ] Support for [Lux.jl](https://lux.csail.mit.edu/stable/).
 - [ ] Support for [Enzyme](https://github.com/EnzymeAD/Enzyme.jl). Currently, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) does not work with `Enzyme.Duplicated` due to an error about using it with nested networks.
-- [ ] Functions for automated neural architecture search (see, e.g., [this paper](https://www.jmlr.org/papers/volume20/18-598/18-598.pdf)) using for example, [evolutionary algorithms](https://en.wikipedia.org/wiki/Neural_architecture_search#Evolution) or [Bayesian optimization](https://en.wikipedia.org/wiki/Neural_architecture_search#Bayesian_optimization). 
+
+**Training**
 - [ ] Sequential training methods.
-- [ ] Summary-statistic-based model-misspecification detection: see the [BayesFlow documentation](https://bayesflow.org/main/api/bayesflow.diagnostics.summary_space_comparison.html) and the references therein. 
-- [ ] Model selection/comparison: see the [BayesFlow documentation](https://bayesflow.org/main/api/bayesflow.approximators.ModelComparisonApproximator.html#bayesflow.approximators.ModelComparisonApproximator), [this paper](https://arxiv.org/abs/2004.10629), and [this paper](https://arxiv.org/pdf/2503.23156).
-- [ ] Option to check the validation risk (and save the estimator) more frequently than the end of each epoch, to avoid wasted computation with very large training sets. 
+- [ ] Option to check the validation risk (and save the estimator) more frequently than the end of each epoch, to avoid wasted computation with very large training sets.
 - [ ] Support for reading data from disk during training, to handle data sets that are too large to fit in memory.
-- [ ] Ensemble methods with `PosteriorEstimator` and `RatioEstimator`.
-- [ ] Explicit learning of summary statistics (see [Zammit-Mangion et al., 2025, Sec. 4](https://arxiv.org/pdf/2404.12484)).
-- [ ] Incorporate [Bootstrap.jl](https://github.com/juliangehring/Bootstrap.jl) (possibly as an [extension](https://docs.julialang.org/en/v1/manual/code-loading/#man-extensions)) to expand bootstrap functionality.
-- [ ] Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
-- [ ] Methods for high-dimensional parameter vectors (e.g., [telescoping ratio estimation](https://arxiv.org/abs/2510.04042)).
-- [ ] Parameter bounds when doing posterior inference (see [#38](https://github.com/msainsburydale/NeuralEstimators.jl/issues/38)).
-- [ ] Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference (see Tables 1 and 3 of [BayesFlow 2.0](https://arxiv.org/abs/2602.07098)).
-- [ ] Post-training calibration for better inferences (especially PointEstimator and RatioEstimator). 
+
+**Architecture & network design**
+- [ ] Functions for automated neural architecture search (see, e.g., [this paper](https://www.jmlr.org/papers/volume20/18-598/18-598.pdf)) using for example, [evolutionary algorithms](https://en.wikipedia.org/wiki/Neural_architecture_search#Evolution) or [Bayesian optimization](https://en.wikipedia.org/wiki/Neural_architecture_search#Bayesian_optimization).
 - [ ] Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
 - [ ] Add several ready-to-go summary networks (e.g., for gridded data, time-series, etc.).
+
+**Estimator types & methods**
+- [ ] Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
+- [ ] Model selection/comparison: see the [BayesFlow documentation](https://bayesflow.org/main/api/bayesflow.approximators.ModelComparisonApproximator.html#bayesflow.approximators.ModelComparisonApproximator), [this paper](https://arxiv.org/abs/2004.10629), and [this paper](https://arxiv.org/pdf/2503.23156).
+- [ ] Methods for high-dimensional parameter vectors (e.g., [telescoping ratio estimation](https://arxiv.org/abs/2510.04042)).
+- [ ] Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference (see Tables 1 and 3 of [BayesFlow 2.0](https://arxiv.org/abs/2602.07098)).
+- [ ] Explicit learning of summary statistics (see [Zammit-Mangion et al., 2025, Sec. 4](https://arxiv.org/pdf/2404.12484)).
+- [ ] Ensemble methods with `PosteriorEstimator` and `RatioEstimator`.
+
+**Inference & diagnostics**
+- [ ] Summary-statistic-based model-misspecification detection: see the [BayesFlow documentation](https://bayesflow.org/main/api/bayesflow.diagnostics.summary_space_comparison.html) and the references therein.
+- [ ] Post-training calibration for better inferences (especially PointEstimator and RatioEstimator).
+- [ ] Parameter bounds when doing posterior inference (see [#38](https://github.com/msainsburydale/NeuralEstimators.jl/issues/38)).
+- [ ] Incorporate [Bootstrap.jl](https://github.com/juliangehring/Bootstrap.jl) (possibly as an [extension](https://docs.julialang.org/en/v1/manual/code-loading/#man-extensions)) to expand bootstrap functionality.
+
 
 ### Documentation
 - [ ] Use [DocumenterVitepress.jl](https://luxdl.github.io/DocumenterVitepress.jl/dev/) as the backend for Documenter.jl (more modern and polished docs; see, e.g., [Lux.jl](https://lux.csail.mit.edu/stable/)).
