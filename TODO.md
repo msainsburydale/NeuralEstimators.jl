@@ -6,7 +6,8 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ### Features
 - [ ] Support for [Lux.jl](https://lux.csail.mit.edu/stable/).
-- [ ] Support for [Enzyme](https://fluxml.ai/Flux.jl/dev/reference/training/enzyme/). Currently, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) does not work with `Enzyme.Duplicated` due to an error about using it with nested networks.
+- [ ] Support for [Enzyme](https://github.com/EnzymeAD/Enzyme.jl). Currently, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) does not work with `Enzyme.Duplicated` due to an error about using it with nested networks.
+- [ ] Functions for automated neural architecture search (see, e.g., [this paper](https://www.jmlr.org/papers/volume20/18-598/18-598.pdf)) using for example, [evolutionary algorithms](https://en.wikipedia.org/wiki/Neural_architecture_search#Evolution) or [Bayesian optimization](https://en.wikipedia.org/wiki/Neural_architecture_search#Bayesian_optimization). 
 - [ ] Sequential training methods.
 - [ ] Summary-statistic-based model-misspecification detection: see the [BayesFlow documentation](https://bayesflow.org/main/api/bayesflow.diagnostics.summary_space_comparison.html) and the references therein. 
 - [ ] Model selection/comparison: see the [BayesFlow documentation](https://bayesflow.org/main/api/bayesflow.approximators.ModelComparisonApproximator.html#bayesflow.approximators.ModelComparisonApproximator), [this paper](https://arxiv.org/abs/2004.10629), and [this paper](https://arxiv.org/pdf/2503.23156).
@@ -20,7 +21,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - [ ] Parameter bounds when doing posterior inference (see [#38](https://github.com/msainsburydale/NeuralEstimators.jl/issues/38)).
 - [ ] Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference (see Tables 1 and 3 of [BayesFlow 2.0](https://arxiv.org/abs/2602.07098)).
 - [ ] Post-training calibration for better inferences (especially PointEstimator and RatioEstimator). 
-- [ ] Training: when `freeze_summary_network = true`, precompute summary statistics once before the epoch loop for massive speedups. Could do this by defining the forward pass of each estimator with two methods, the second dispatching on AbstractMatrix (or a Summaries wrapper type to signal precomputed inputs unambiguously). 
 - [ ] Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
 - [ ] Add several ready-to-go summary networks (e.g., for gridded data, time-series, etc.).
 
@@ -29,9 +29,11 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - [ ] Example: Sequence (e.g., time-series) input using recurrent neural networks (RNNs). See [Flux's in-built support for recurrence](https://fluxml.ai/Flux.jl/stable/guide/models/recurrence/). 
 - [ ] Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)). (Might need extra functionality for this.)
 - [ ] Example: Spatio-temporal data.
+- [ ] Add a gif to the README (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif)).
 
 ### Performance 
 - [ ] Improve the efficiency of the code where possible. See the general [Julia performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/) that could apply, and the [Flux performance tips](https://fluxml.ai/Flux.jl/stable/guide/performance/). Using [Lux.jl](https://lux.csail.mit.edu/stable/) might also be faster?
+- [ ] Some operations should always be done on the CPU, specifically those involving only matrices and MLPs (e.g., inference network transformations on (learned) summary statistics, mappings performed in `GaussianMixture` and `NormalisingFlow`).
 
 ### Refactoring/API improvements
 - [ ] Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl.
@@ -47,12 +49,12 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ### Breaking changes to decide upon before version 1.0
 
-[ ] Might be helpful to store the loss function in `PointEstimator` objects. 
- * Mainly useful for knowing post-training how the estimator was trained, and for computing the risk at the assessment stage (however, this is a minor convenience, we could also just add a `loss` argument to `assess`).
- * Otherwise, could just save the loss function as metadata during training (`assess` could then load it from `tmp` or `savepath`).
+- [ ] Might be helpful to store the loss function in `PointEstimator` objects. 
+  * Mainly useful for knowing post-training how the estimator was trained, and for computing the risk at the assessment stage (however, this is a minor convenience, we could also just add a `loss` argument to `assess`).
+  * Otherwise, could just save the loss function as metadata during training (`assess` could then load it from `tmp` or `savepath`).
 
-[ ] Might be helpful to store the number of parameters `num_parameters` in the estimator object. 
-* This would be useful for basic checks which would lead to better/more intuitive error messages. This also makes sense with the new summary network decomposition, since these constructors already require `num_parameters`.
-* Main drawback is that it bloats the struct slightly; and estimators don't necessarily need to be initialised with `num_parameters` explicitly given, in which case this field would then be empty.
+- [ ] Might be helpful to store the number of parameters `num_parameters` in the estimator object. 
+  * This would be useful for basic checks which would lead to better/more intuitive error messages. This also makes sense with the new summary network decomposition, since these constructors already require `num_parameters`.
+  * Main drawback is that it bloats the struct slightly; and estimators don't necessarily need to be initialised with `num_parameters` explicitly given, in which case this field would then be empty.
 
 

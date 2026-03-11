@@ -44,7 +44,7 @@ struct DataSet{Z, S}
 end
 
 # Methods
-Flux.numobs(d::DataSet) = Flux.numobs(d.Z)
+Base.length(d::DataSet) = length(d.Z)
 Base.getindex(d::DataSet, i::Integer) = DataSet(Flux.getobs(d.Z, i:i), d.S[:, i:i])
 Base.getindex(d::DataSet, i) = DataSet(Flux.getobs(d.Z, i), d.S[:, i])
 

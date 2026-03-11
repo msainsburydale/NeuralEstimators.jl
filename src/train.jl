@@ -22,7 +22,7 @@ The trained estimator is always returned on the CPU.
 - `batchsize = 32`: the batchsize to use when performing stochastic gradient descent, that is, the number of training samples processed between each update of the neural-network parameters.
 - `optimiser = Flux.setup(Adam(5e-4), estimator)`: any [Optimisers.jl](https://fluxml.ai/Optimisers.jl/stable/) optimisation rule for updating the neural-network parameters. When the training data and/or parameters are held fixed, one may wish to employ regularisation to prevent overfitting; for example, `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), estimator)`, which corresponds to L₂ regularisation with penalty coefficient λ=10⁻⁴. 
 - `lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule}`: defines the learning-rate schedule for adaptively changing the learning rate during training. Accepts either a [ParameterSchedulers.jl](https://fluxml.ai/ParameterSchedulers.jl/dev/) object or `nothing` for a fixed learning rate. By default, it uses [`CosAnneal`](https://fluxml.ai/ParameterSchedulers.jl/dev/api/cyclic/#ParameterSchedulers.CosAnneal) with a maximum set to the initial learning rate from `optimiser`, a minimum of zero, and a period equal to the number of epochs. The learning rate is updated at the end of each epoch. 
-- `freeze_summary_network = false`: if `true` and the estimator has a `summary_network` field, freezes the summary network parameters during training (i.e., only the inference network is updated). This is useful for transfer learning, where a pretrained summary network is held fixed while a new inference network is trained for a different model or estimator type.
+- `freeze_summary_network = false`: if `true` and the estimator has a `summary_network` field, freezes the summary network parameters during training (i.e., only the inference network is updated). In this case, the summary statistics for a given instance of simulated data are computed only once, giving a significant speedup. This is useful for transfer learning, where a pretrained summary network is held fixed while a new inference network is trained for a different model or estimator type.
 - `use_gpu = true`: flag indicating whether to use a GPU if one is available.
 - `savepath::Union{Nothing, String} = tempdir()`: path to save information generated during training. If `nothing`, nothing is saved. Otherwise, the following files are always saved to both `savepath` and `tempdir()` (the latter for convenient within-session access via [`loadrisk`](@ref), [`plotrisk`](@ref), and [`loadoptimiser`](@ref)):
   - `loss_per_epoch.csv`: training and validation risk at each epoch, in the first and second columns respectively.
@@ -74,7 +74,7 @@ w = 64 # width of each hidden layer
 summary_network = DeepSet(ψ, ϕ)
 
 # Initialise the estimator
-estimator = PointEstimator(summary_network, num_summaries, d)
+estimator = PointEstimator(summary_network, d; num_summaries = num_summaries)
 
 # Number of data sets in each epoch and number of independent replicates in each data set
 K = 1000
@@ -91,28 +91,17 @@ plotrisk()
 # Training: simulation on-the-fly with fixed parameters 
 θ_train = sampler(K)
 θ_val   = sampler(K)
-estimator = train(estimator, θ_train, θ_val, simulator, simulator_args = m, optimiser = loadoptimiser(), risk_history = loadrisk())
+estimator = train(estimator, θ_train, θ_val, simulator, simulator_args = m, optimiser = loadoptimiser(), risk_history = loadrisk(), freeze_summary_network = true)
 
 # Training: fixed parameters and fixed data
 Z_train   = simulator(θ_train, m)
 Z_val     = simulator(θ_val, m)
-estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, optimiser = loadoptimiser(), risk_history = loadrisk())
+estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, optimiser = loadoptimiser(), risk_history = loadrisk(), freeze_summary_network = true)
 ```
 """
 function train end
 
-# TODO: when freeze_summary_network = true, precompute summary statistics once before 
-# the epoch loop by passing Z_train/Z_val through summary_network and substituting the 
-# resulting matrices. Substantial saving for fixed-data training; less so for 
-# simulator-based methods where data refreshes periodically. Note: dispatch on 
-# AbstractMatrix alone is ambiguous (could be raw data or summaries) — consider a 
-# Summaries wrapper type to signal precomputed inputs unambiguously.
-# struct Summaries{T}
-#     value::T
-# end
-# Could do this by defining the forward pass of each estimator with two methods, the second dispatching on AbstractMatrix (or a Summaries wrapper type to signal precomputed inputs unambiguously). :
-#     * `(estimator::NeuralEstimator)(args...) = <usual forward pass>`
-#     * `(estimator::NeuralEstimator)(summary_stats::Summaries, args...) = <forward pass based on summary stats>`
+# TODO with summary statistics only, much faster to always use the CPU.
 
 function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     batchsize::Integer = 32,
@@ -127,10 +116,37 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 ) where {T, P <: Union{Tuple, AbstractMatrix, AbstractParameterSet}}
-    verbose && print("Constructing the training set...")
+
+    device = _checkgpu(use_gpu, verbose = verbose)
+
+    if freeze_summary_network && !hasfield(typeof(estimator), :summary_network)
+        @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
+        freeze_summary_network = false
+    end
+
+    train_time = 0.0
+
+    # Precompute summary statistics before the epoch loop when the summary network
+    # is frozen and the training data are fixed. Because the summary network
+    # parameters never change, applying it to Z_train and Z_val yields the same
+    # result every epoch — so we pay that cost once here and wrap the matrices in
+    # Summaries to signal to _summarystatistics that no further network pass is needed.
+    # This gives a large speedup when the summary network is expensive relative to
+    # the inference network.
+    if freeze_summary_network
+        verbose && print("Computing summary statistics...")
+        t = @elapsed begin
+            Z_train = Summaries(_precomputesummaries(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+            Z_val   = Summaries(_precomputesummaries(estimator, Z_val; use_gpu = use_gpu, batchsize = batchsize))
+        end
+        verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+        train_time += t
+    end
+
+    verbose && println("Constructing the training set...")
     train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
 
-    verbose && print("Constructing the validation set...")
+    verbose && println("Constructing the validation set...")
     val_set = _dataloader(estimator, Z_val, θ_val, batchsize)
 
     # ---- Common setup ----
@@ -138,11 +154,10 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     loss = _loss(estimator, loss)
     _checkargs(batchsize, epochs, stopping_epochs, risk_history)
 
-    device = _checkgpu(use_gpu, verbose = verbose)
     estimator = estimator |> device
     optimiser = optimiser |> device
 
-    _maybe_freeze_summary_network!(optimiser, estimator, freeze_summary_network)
+    freeze_summary_network && Optimisers.freeze!(optimiser.summary_network)
 
     verbose && print("Computing the initial validation risk...")
     min_val_risk = _risk(estimator, loss, val_set, device)
@@ -160,7 +175,7 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
     # ---- End common setup ----
 
-    train_time = @elapsed for epoch = 1:epochs
+    train_time += @elapsed for epoch = 1:epochs
         GC.gc(false)
 
         # For each batch update estimator and compute the training loss
@@ -212,6 +227,14 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 ) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+
+    device = _checkgpu(use_gpu, verbose = verbose)
+
+    if freeze_summary_network && !hasfield(typeof(estimator), :summary_network)
+        @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
+        freeze_summary_network = false
+    end
+
     if !isnothing(m)
         @warn "`m` is deprecated, use `simulator_args` instead"
         simulator_args = (m,)
@@ -222,24 +245,34 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
         @error "We cannot simulate the data just-in-time if we aren't refreshing the data every epoch; please either set `simulate_just_in_time = false` or `epochs_per_Z_refresh = 1`"
     end
 
+    verbose && print("Simulating validation data...")
+    train_time = @elapsed Z_val = simulator(θ_val, simulator_args...; simulator_kwargs...)
+    verbose && println(" Simulated in $(round(train_time, digits = 3)) seconds")
+
+    if freeze_summary_network
+        verbose && print("Computing summary statistics...")
+        t = @elapsed Z_val = Summaries(_precomputesummaries(estimator, Z_val; use_gpu = use_gpu, batchsize = batchsize))
+        verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+        train_time += t
+    end
+
+    verbose && println("Constructing the validation set...")
+    val_set = _dataloader(estimator, Z_val, θ_val, batchsize)
+
     # We may simulate Z_train in its entirety either because (i) we
     # want to avoid the overhead of simulating continuously or (ii) we are
     # not refreshing Z_train every epoch so we need it for subsequent epochs
     store_entire_train_set = !simulate_just_in_time || epochs_per_Z_refresh != 1
-
-    verbose && println("Simulating validation data and constructing the validation set...")
-    val_set = _dataloader(estimator, simulator, θ_val, simulator_args, simulator_kwargs, batchsize)
 
     # ---- Common setup ----
 
     loss = _loss(estimator, loss)
     _checkargs(batchsize, epochs, stopping_epochs, risk_history)
 
-    device = _checkgpu(use_gpu, verbose = verbose)
     estimator = estimator |> device
     optimiser = optimiser |> device
 
-    _maybe_freeze_summary_network!(optimiser, estimator, freeze_summary_network)
+    freeze_summary_network && Optimisers.freeze!(optimiser.summary_network)
 
     verbose && print("Computing the initial validation risk...")
     min_val_risk = _risk(estimator, loss, val_set, device)
@@ -258,35 +291,42 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
     # ---- End common setup ----
 
     local train_set
-    train_time = @elapsed for epoch = 1:epochs
-        GC.gc(false)
+    train_time += @elapsed for epoch = 1:epochs
 
-        sim_time = 0.0
+        GC.gc(false)
+        epoch_time = 0.0
+
         if store_entire_train_set
             # Simulate new training data if needed
             if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
                 verbose && print("Simulating training data...")
                 train_set = nothing
                 GC.gc(false)
-                sim_time = @elapsed train_set = _dataloader(estimator, simulator, θ_train, simulator_args, simulator_kwargs, batchsize)
-                verbose && println(" Finished in $(round(sim_time, digits = 3)) seconds")
+                t = @elapsed Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
+                verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+                epoch_time += t
+                if freeze_summary_network 
+                    epoch_time += @elapsed Z_train = Summaries(_precomputesummaries(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+                end
+                train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
             end
             # Update estimator and compute the training risk
-            epoch_time = @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser)
+            epoch_time += @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser)
         else
             # Update estimator and compute the training risk
-            epoch_time = 0.0
             train_risk = []
-
+            t = 0.0
             for θ ∈ _ParameterLoader(θ_train, batchsize = batchsize)
-                sim_time += @elapsed set = _dataloader(estimator, simulator, θ, simulator_args, simulator_kwargs, batchsize)
+                t += @elapsed Z = simulator(θ, simulator_args...; simulator_kwargs...)
+                set = _dataloader(estimator, Z, θ, batchsize)
                 epoch_time += @elapsed rsk = _risk(estimator, loss, set, device, optimiser)
                 push!(train_risk, rsk)
             end
-            verbose && println("Total time spent simulating data: $(round(sim_time, digits = 3)) seconds")
+            verbose && println("Total simulation time: $(round(t, digits = 3)) seconds")
+            epoch_time += t
             train_risk = mean(train_risk)
         end
-        epoch_time += sim_time
+        
 
         # Compute the validation risk and report to the user
         epoch_time += @elapsed val_risk = _risk(estimator, loss, val_set, device)
@@ -339,6 +379,14 @@ function train(estimator, sampler, simulator;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 )
+
+    device = _checkgpu(use_gpu, verbose = verbose)
+
+    if freeze_summary_network && !hasfield(typeof(estimator), :summary_network)
+        @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
+        freeze_summary_network = false
+    end
+
     @assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
     if !isnothing(xi)
         ξ = xi
@@ -370,21 +418,34 @@ function train(estimator, sampler, simulator;
     # Number of batches of θ in each epoch
     num_batches = ceil(Int, K / batchsize)
 
-    verbose && println("Sampling validation parameters...")
-    θ_val = sampler(K_val, sampler_args...; sampler_kwargs...)
-    verbose && println("Simulating validation data and constructing the validation set...")
-    val_set = _dataloader(estimator, simulator, θ_val, simulator_args, simulator_kwargs, batchsize)
+    verbose && print("Sampling validation parameters...")
+    train_time = @elapsed θ_val = sampler(K_val, sampler_args...; sampler_kwargs...)
+    verbose && println(" Finished in $(round(train_time, digits = 3)) seconds")
+
+    verbose && print("Simulating validation data...")
+    t = @elapsed Z_val = simulator(θ_val, simulator_args...; simulator_kwargs...)
+    verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+    train_time += t
+
+    if freeze_summary_network
+        verbose && print("Computing summary statistics...")
+        t = @elapsed Z_val = Summaries(_precomputesummaries(estimator, Z_val; use_gpu = use_gpu, batchsize = batchsize))
+        verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+        train_time += t
+    end
+
+    verbose && println("Constructing the validation set...")
+    val_set = _dataloader(estimator, Z_val, θ_val, batchsize)
 
     # ---- Common setup ----
 
     loss = _loss(estimator, loss)
     _checkargs(batchsize, epochs, stopping_epochs, risk_history)
 
-    device = _checkgpu(use_gpu, verbose = verbose)
     estimator = estimator |> device
     optimiser = optimiser |> device
 
-    _maybe_freeze_summary_network!(optimiser, estimator, freeze_summary_network)
+    freeze_summary_network && Optimisers.freeze!(optimiser.summary_network)
 
     verbose && print("Computing the initial validation risk...")
     min_val_risk = _risk(estimator, loss, val_set, device)
@@ -407,8 +468,10 @@ function train(estimator, sampler, simulator;
     # the loop; circumvent this by declaring local variables
     local θ_train
     local train_set
-    train_time = @elapsed for epoch ∈ 1:epochs
+    train_time += @elapsed for epoch ∈ 1:epochs
         GC.gc(false)
+
+        epoch_time = 0.0
 
         if store_entire_train_set
 
@@ -427,19 +490,27 @@ function train(estimator, sampler, simulator;
                 verbose && print("Refreshing the training data...")
                 train_set = nothing
                 GC.gc(false)
-                t = @elapsed train_set = _dataloader(estimator, simulator, θ_train, simulator_args, simulator_kwargs, batchsize)
+                t = @elapsed Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
                 verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+                epoch_time += t
+                if freeze_summary_network
+                    epoch_time += @elapsed Z_train = Summaries(_precomputesummaries(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+                end
+                train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
             end
 
             # For each batch, update estimator and compute the training risk
-            epoch_time = @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser)
+            epoch_time += @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser)
 
         else
             # Full simulation on the fly and just-in-time sampling
+            # Precomputation is incompatible with just-in-time simulation since
+            # each batch is simulated and immediately consumed.
             train_risk = []
-            epoch_time = @elapsed for _ ∈ 1:num_batches
+            epoch_time += @elapsed for _ ∈ 1:num_batches
                 θ = sampler(batchsize, sampler_args...; sampler_kwargs...)
-                dat = _dataloader(estimator, simulator, θ, simulator_args, simulator_kwargs, batchsize)
+                Z = simulator(θ, simulator_args...; simulator_kwargs...)
+                dat = _dataloader(estimator, Z, θ, batchsize)
                 rsk = _risk(estimator, loss, dat, device, optimiser)
                 push!(train_risk, rsk)
             end
@@ -484,11 +555,6 @@ function _inputoutput(estimator, Z, θ::P) where {P <: Union{AbstractMatrix, Abs
     return input, output
 end
 
-function _dataloader(estimator, simulator, θ::P, simulator_args, simulator_kwargs, batchsize) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
-    Z = simulator(θ, simulator_args...; simulator_kwargs...)
-    _dataloader(estimator, Z, θ, batchsize)
-end
-
 function _dataloader(estimator, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     data = _inputoutput(estimator, Z, θ)
     _DataLoader(data, batchsize)
@@ -527,12 +593,6 @@ function _risk(estimator, loss, data_loader, device, optimiser = nothing)
     end
 
     return cpu(sum_loss/K)
-end
-
-function _maybe_freeze_summary_network!(optimiser, estimator, freeze::Bool)
-    freeze || return
-    hasfield(typeof(estimator), :summary_network) || @warn "freeze_summary_network = true was set but the estimator has no `summary_network` field; ignoring"
-    freeze && hasfield(typeof(estimator), :summary_network) && Optimisers.freeze!(optimiser.summary_network)
 end
 
 function findlr(opt)

@@ -3,39 +3,46 @@
 """
 	_applywithdevice(network, z; batchsize, use_gpu, kwargs...)
 Internal helper that applies `network` to data `z`, handling GPU device placement,
-Float32 conversion, and minibatching. Used by `estimate` and `summarystatistics`.
+Float32 conversion, and minibatching.
 """
 function _applywithdevice(network, z; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
     z = f32(z)
-
-    if check_deepset(network)
-        # Validate that data is provided as a Vector (not a bare array)
-        bare_array = typeof(z) <: AbstractArray && !(typeof(z) <: AbstractVector)
-        bare_array_in_tuple = typeof(z) <: Tuple && !(typeof(z[1]) <: AbstractVector)
-        if bare_array
-            @info "When using a DeepSet-based network, data should be provided as a Vector of arrays (one array per data set). Converting Z to [Z] automatically."
-            z = [z]
-        elseif bare_array_in_tuple
-            @info "When using a DeepSet-based network, data should be provided as a Vector of arrays (one array per data set). Converting (Z, X) to ([Z], X) automatically."
-            z = ([z[1]], z[2])
-        end
-        K = typeof(z) <: Tuple ? numobs(z[1]) : numobs(z)
-    else
-        K = numobs(z)
-    end
-
-    batchsize = min(K, batchsize)
+    batchsize = min(numobs(z), batchsize)
     device = _checkgpu(use_gpu, verbose = false)
     network = network |> device
-
     data_loader = _DataLoader(z, batchsize, shuffle = false, partial = true)
     y = map(data_loader) do zᵢ
         zᵢ = zᵢ |> device
         y = network(zᵢ; kwargs...)
         y |> cpu
     end
-
     return stackarrays(y)
+end
+
+# Wrapper around _applywithdevice for use at inference time. Handles the case where
+# a user passes a single dataset as a bare array to a DeepSet-based network — since
+# DeepSet expects a Vector of arrays (one per dataset), a bare array is automatically
+# wrapped in a single-element vector as a user convenience.
+# All inference functions (estimate, summarystatistics, sampleposterior, etc.) should
+# use this rather than calling _applywithdevice directly.
+function _applywithdevice_inference(network, z; kwargs...)
+    z = _check_deepset_input(network, z)
+    _applywithdevice(network, z; kwargs...)
+end
+
+# Wraps a bare array in a single-element vector when using a DeepSet-based network,
+# allowing users to pass a single dataset without manually wrapping it in a vector.
+function _check_deepset_input(network, z)
+    if check_deepset(network)
+        bare_array = typeof(z) <: AbstractArray && !(typeof(z) <: AbstractVector)
+        bare_array_in_tuple = typeof(z) <: Tuple && !(typeof(z[1]) <: AbstractVector)
+        if bare_array
+            z = [z]
+        elseif bare_array_in_tuple
+            z = ([z[1]], z[2])
+        end
+    end
+    return z
 end
 
 @inline function check_deepset(T::DataType)
@@ -45,6 +52,7 @@ end
     false
 end
 @inline check_deepset(x) = check_deepset(typeof(x))
+
 
 #TODO Not currently used: Would be great to have a way to automatically and reliably infer the number of summaries from an arbitrary summary_network, so that the user need not specify it when constructing an estimator.
 function _infer_num_summaries(model)

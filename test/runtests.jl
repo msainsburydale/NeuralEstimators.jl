@@ -897,7 +897,7 @@ end
         end
         ψ = Chain(Dense(n, w), Dense(w, w), Flux.flatten)
         ϕ = Chain(Dense(q + 1, w), Dense(w, p))
-        estimator = PointEstimator(DeepSet(ψ, ϕ, S = S))
+        estimator = PointEstimator(DeepSet(ψ, ϕ, S = S), p; num_summaries = p)
         show(devnull, estimator)
 
         @testset "$dvc" for dvc ∈ devices
@@ -921,14 +921,18 @@ end
                 estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,))
                 estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), savepath = "testing-path")
                 estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), simulate_just_in_time = true)
+                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), freeze_summary_network = true)
                 estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose)
                 estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
                 estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
                 estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 3, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
+                estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
+                estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
                 Z_train = simulator(parameters, 2m);
                 Z_val = simulator(parameters, m);
                 train(estimator, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
                 train(estimator, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose)
+                train(estimator, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
                 trainmultiple(estimator, sampler, simulator, [1, 2, 5]; sampler_args = (ξ,), epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
                 trainmultiple(estimator, parameters, parameters, simulator, [1, 2, 5]; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
                 trainmultiple(estimator, parameters, parameters, Z_train, Z_val, [1, 2, 5]; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)

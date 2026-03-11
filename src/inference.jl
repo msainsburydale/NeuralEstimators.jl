@@ -4,7 +4,7 @@ Applies `estimator` to data `Z` and returns the resulting estimates.
 """
 function estimate(estimator::NeuralEstimator, z, x = nothing; kwargs...)
     input = isnothing(x) ? z : (z, x)
-    _applywithdevice(estimator, input; kwargs...)
+    _applywithdevice_inference(estimator, input; kwargs...)
 end
 
 # ---- Point estimation from estimators that allow for posterior sampling ----

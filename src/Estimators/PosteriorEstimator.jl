@@ -113,7 +113,7 @@ end
 function sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000; use_gpu::Bool = true, kwargs...)
 
     # Compute the summary statistics
-    t = summarystatistics(estimator, Z; use_gpu = use_gpu)
+    t = summarystatistics(estimator, Z; use_gpu = use_gpu) #TODO batchsize argument
 
     # Sample from the approximate posterior given the summary statistics 
     θ = sampleposterior(estimator.q, t, N; kwargs...)

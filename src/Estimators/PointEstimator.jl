@@ -60,7 +60,7 @@ PointEstimator(summary_network, num_parameters::Integer; num_summaries, kwargs..
 
 # Constructor: Old workflow, summary network represents the entire network
 function PointEstimator(network)
-    @info "Constructing PointEstimator with a single network. Consider separating the summary and inference networks as PointEstimator(summary_network, inference_network), which enables additional functionality such as ensemble methods and amortised inference."
+    @info "Constructing PointEstimator with a single network. Consider separating the summary and inference networks as PointEstimator(summary_network, inference_network), which enables additional functionality such as transfer learning and model-misspecification detection."
     PointEstimator(network, identity)
 end
 
