@@ -53,7 +53,6 @@ end
 end
 @inline check_deepset(x) = check_deepset(typeof(x))
 
-
 #TODO Not currently used: Would be great to have a way to automatically and reliably infer the number of summaries from an arbitrary summary_network, so that the user need not specify it when constructing an estimator.
 function _infer_num_summaries(model)
     # Base case: Dense layer
