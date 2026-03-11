@@ -61,7 +61,6 @@ function _precomputesummaries(estimator::NeuralEstimator, d::DataSet; kwargs...)
     isnothing(d.S) ? t : vcat(t, d.S)
 end
 
-
 # ---- Summaries wrapper type ----
 
 """

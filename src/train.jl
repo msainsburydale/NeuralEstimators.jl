@@ -116,7 +116,6 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 ) where {T, P <: Union{Tuple, AbstractMatrix, AbstractParameterSet}}
-
     device = _checkgpu(use_gpu, verbose = verbose)
 
     if freeze_summary_network && !hasfield(typeof(estimator), :summary_network)
@@ -137,7 +136,7 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
         verbose && print("Computing summary statistics...")
         t = @elapsed begin
             Z_train = Summaries(_precomputesummaries(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
-            Z_val   = Summaries(_precomputesummaries(estimator, Z_val; use_gpu = use_gpu, batchsize = batchsize))
+            Z_val = Summaries(_precomputesummaries(estimator, Z_val; use_gpu = use_gpu, batchsize = batchsize))
         end
         verbose && println(" Finished in $(round(t, digits = 3)) seconds")
         train_time += t
@@ -227,7 +226,6 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 ) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
-
     device = _checkgpu(use_gpu, verbose = verbose)
 
     if freeze_summary_network && !hasfield(typeof(estimator), :summary_network)
@@ -292,7 +290,6 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
 
     local train_set
     train_time += @elapsed for epoch = 1:epochs
-
         GC.gc(false)
         epoch_time = 0.0
 
@@ -305,7 +302,7 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
                 t = @elapsed Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
                 verbose && println(" Finished in $(round(t, digits = 3)) seconds")
                 epoch_time += t
-                if freeze_summary_network 
+                if freeze_summary_network
                     epoch_time += @elapsed Z_train = Summaries(_precomputesummaries(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
                 end
                 train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
@@ -326,7 +323,6 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
             epoch_time += t
             train_risk = mean(train_risk)
         end
-        
 
         # Compute the validation risk and report to the user
         epoch_time += @elapsed val_risk = _risk(estimator, loss, val_set, device)
@@ -379,7 +375,6 @@ function train(estimator, sampler, simulator;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 )
-
     device = _checkgpu(use_gpu, verbose = verbose)
 
     if freeze_summary_network && !hasfield(typeof(estimator), :summary_network)
