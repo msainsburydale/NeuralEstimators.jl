@@ -8,7 +8,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 **Backend**
 - [ ] Support for [Lux.jl](https://lux.csail.mit.edu/stable/).
-- [ ] Support for [Enzyme](https://github.com/EnzymeAD/Enzyme.jl). Currently, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) does not work with `Enzyme.Duplicated` due to an error about using it with nested networks.
 
 **Training**
 - [ ] Sequential training methods.
@@ -58,6 +57,8 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ---
 
 ### Breaking changes to decide upon before version 1.0
+
+- [ ] Add a `base_distribution` field in `NormalisingFlow`.
 
 - [ ] Might be helpful to store the loss function in `PointEstimator` objects. 
   * Mainly useful for knowing post-training how the estimator was trained, and for computing the risk at the assessment stage (however, this is a minor convenience, we could also just add a `loss` argument to `assess`).

@@ -1,6 +1,7 @@
 module NeuralEstimators
 
 using Accessors: @set
+using ADTypes
 using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
 import Base: join, merge, show, size, summary, getindex, length, eachindex

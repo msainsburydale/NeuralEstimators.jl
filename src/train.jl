@@ -24,6 +24,7 @@ The trained estimator is always returned on the CPU.
 - `lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule}`: defines the learning-rate schedule for adaptively changing the learning rate during training. Accepts either a [ParameterSchedulers.jl](https://fluxml.ai/ParameterSchedulers.jl/dev/) object or `nothing` for a fixed learning rate. By default, it uses [`CosAnneal`](https://fluxml.ai/ParameterSchedulers.jl/dev/api/cyclic/#ParameterSchedulers.CosAnneal) with a maximum set to the initial learning rate from `optimiser`, a minimum of zero, and a period equal to the number of epochs. The learning rate is updated at the end of each epoch. 
 - `freeze_summary_network = false`: if `true` and the estimator has a `summary_network` field, freezes the summary network parameters during training (i.e., only the inference network is updated). In this case, the summary statistics for a given instance of simulated data are computed only once, giving a significant speedup. This is useful for transfer learning, where a pretrained summary network is held fixed while a new inference network is trained for a different model or estimator type.
 - `use_gpu = true`: flag indicating whether to use a GPU if one is available.
+- `adtype::AbstractADType = AutoZygote()`: the automatic differentiation backend used to compute gradients during training. The default uses [Zygote.jl](https://fluxml.ai/Zygote.jl/dev/). Alternatively, `AutoEnzyme()` can be used to enable [Enzyme.jl](https://enzymead.github.io/Enzyme.jl/stable/), which can be faster and more memory efficient, and supports mutation and scalar indexing (requires `using Enzyme`).
 - `savepath::Union{Nothing, String} = tempdir()`: path to save information generated during training. If `nothing`, nothing is saved. Otherwise, the following files are always saved to both `savepath` and `tempdir()` (the latter for convenient within-session access via [`loadrisk`](@ref), [`plotrisk`](@ref), and [`loadoptimiser`](@ref)):
   - `loss_per_epoch.csv`: training and validation risk at each epoch, in the first and second columns respectively.
   - `best_optimiser.bson`: optimiser state corresponding to the best validation risk.
@@ -83,6 +84,9 @@ m = 30
 # Training: simulation on-the-fly
 estimator  = train(estimator, sampler, simulator, simulator_args = m, K = K)
 
+# Training: simulation on-the-fly
+estimator  = train(estimator, sampler, simulator, simulator_args = m, K = K)
+
 # Plot the risk history (using any plotting backend)
 using Plots
 unicodeplots()
@@ -114,7 +118,8 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     verbose::Bool = true,
     lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false),
     risk_history::Union{Nothing, Matrix} = nothing,
-    freeze_summary_network::Bool = false
+    freeze_summary_network::Bool = false,
+    adtype::AbstractADType = AutoZygote()
 ) where {T, P <: Union{Tuple, AbstractMatrix, AbstractParameterSet}}
     device = _checkgpu(use_gpu, verbose = verbose)
 
@@ -178,7 +183,7 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
         GC.gc(false)
 
         # For each batch update estimator and compute the training loss
-        epoch_time = @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser)
+        epoch_time = @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser, adtype)
         epoch_time += @elapsed val_risk = _risk(estimator, loss, val_set, device)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
         verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" findlr(optimiser))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
@@ -224,7 +229,8 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
     verbose::Bool = true,
     lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false),
     risk_history::Union{Nothing, Matrix} = nothing,
-    freeze_summary_network::Bool = false
+    freeze_summary_network::Bool = false,
+    adtype::AbstractADType = AutoZygote()
 ) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     device = _checkgpu(use_gpu, verbose = verbose)
 
@@ -308,7 +314,7 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
                 train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
             end
             # Update estimator and compute the training risk
-            epoch_time += @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser)
+            epoch_time += @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser, adtype)
         else
             # Update estimator and compute the training risk
             train_risk = []
@@ -316,7 +322,7 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
             for θ ∈ _ParameterLoader(θ_train, batchsize = batchsize)
                 t += @elapsed Z = simulator(θ, simulator_args...; simulator_kwargs...)
                 set = _dataloader(estimator, Z, θ, batchsize)
-                epoch_time += @elapsed rsk = _risk(estimator, loss, set, device, optimiser)
+                epoch_time += @elapsed rsk = _risk(estimator, loss, set, device, optimiser, adtype)
                 push!(train_risk, rsk)
             end
             verbose && println("Total simulation time: $(round(t, digits = 3)) seconds")
@@ -373,7 +379,8 @@ function train(estimator, sampler, simulator;
     K_val::Integer = K ÷ 2 + 1,
     lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false),
     risk_history::Union{Nothing, Matrix} = nothing,
-    freeze_summary_network::Bool = false
+    freeze_summary_network::Bool = false,
+    adtype::AbstractADType = AutoZygote()
 )
     device = _checkgpu(use_gpu, verbose = verbose)
 
@@ -495,7 +502,7 @@ function train(estimator, sampler, simulator;
             end
 
             # For each batch, update estimator and compute the training risk
-            epoch_time += @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser)
+            epoch_time += @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser, adtype)
 
         else
             # Full simulation on the fly and just-in-time sampling
@@ -506,7 +513,7 @@ function train(estimator, sampler, simulator;
                 θ = sampler(batchsize, sampler_args...; sampler_kwargs...)
                 Z = simulator(θ, simulator_args...; simulator_kwargs...)
                 dat = _dataloader(estimator, Z, θ, batchsize)
-                rsk = _risk(estimator, loss, dat, device, optimiser)
+                rsk = _risk(estimator, loss, dat, device, optimiser, adtype)
                 push!(train_risk, rsk)
             end
             train_risk = mean(train_risk)
@@ -567,7 +574,7 @@ end
 
 # Computes the risk for a general loss function in a memory-safe manner, updating the
 # neural-network parameters using stochastic gradient descent if optimiser is specified
-function _risk(estimator, loss, data_loader, device, optimiser = nothing)
+function _risk(estimator, loss, data_loader, device, optimiser = nothing, adtype = AutoZygote())
     sum_loss = 0.0f0
     K = 0
     for (input, output) in data_loader
@@ -577,7 +584,7 @@ function _risk(estimator, loss, data_loader, device, optimiser = nothing)
             # NB storing the loss in this way is computationally efficient, but it means that
             # the final training risk that we report for each epoch is slightly inaccurate
             # (since the neural-network parameters are updated after each batch)
-            ls, ∇ = Flux.withgradient(estimator -> loss(estimator(input), output), estimator)
+            ls, ∇ = Flux.withgradient(estimator -> loss(estimator(input), output), adtype, estimator)
             Flux.update!(optimiser, estimator, ∇[1])
         else
             ls = loss(estimator(input), output)
