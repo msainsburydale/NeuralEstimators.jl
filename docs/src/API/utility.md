@@ -13,7 +13,7 @@ overloaded in some applications.
 ```@docs
 numberreplicates
 
-subsetdata
+subsetreplicates
 ```
 
 ## Downstream-inference algorithms

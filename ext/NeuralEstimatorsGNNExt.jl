@@ -7,11 +7,11 @@ using GraphNeuralNetworks
 using GraphNeuralNetworks: check_num_nodes
 using NNlib: scatter, gather
 using Statistics, Random, LinearAlgebra
-import NeuralEstimators: subsetdata, numberreplicates, _deepsetsummaries, spatialgraph
+import NeuralEstimators: subsetreplicates, numberreplicates, _deepsetsummaries, spatialgraph
 import NeuralEstimators: GNNSummary, SpatialGraphConv, IndicatorWeights, KernelWeights, NeighbourhoodVariogram
 import NeuralEstimators: _first_N_minus_1_dims_identical
 
-function subsetdata(Z::G, i) where {G <: GNNGraph}
+function subsetreplicates(Z::G, i) where {G <: GNNGraph}
     if typeof(i) <: Integer
         i = i:i
     end
@@ -19,10 +19,10 @@ function subsetdata(Z::G, i) where {G <: GNNGraph}
     if ndims(Z.ndata[sym]) == 3
         GNNGraph(Z; ndata = Z.ndata[sym][:, i, :])
     else
-        # @warn "`subsetdata()` is slow for graphical data."
+        # @warn "`subsetreplicates()` is slow for graphical data."
         # TODO Recall that I set the code up to have ndata as a 3D array; with this format, non-parametric bootstrap would be exceedingly fast (since we can subset the array data, I think).
         # TODO getgraph() doesn't currently work with the GPU: see https://github.com/CarloLucibello/GraphNeuralNetworks.jl/issues/161
-        # TODO getgraph() doesn’t return duplicates. So subsetdata(Z, [1, 1]) returns just a single graph
+        # TODO getgraph() doesn’t return duplicates. So subsetreplicates(Z, [1, 1]) returns just a single graph
         # TODO can't check for CuArray (and return to GPU) because CuArray won't always be defined (no longer depend on CUDA) and we can't overload exact signatures in package extensions... it's low priority, but will be good to fix when time permits. Hopefully, the above issue with GraphNeuralNetworks.jl will get fixed, and we can then just remove the call to cpu() below
         #flag = Z.ndata[sym] isa CuArray
         Z = cpu(Z)

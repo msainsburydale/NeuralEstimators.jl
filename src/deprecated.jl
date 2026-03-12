@@ -65,8 +65,14 @@ end
 
 export subsetparameters
 function subsetparameters(parameters, idx)
-    @warn "`subsetparameters` is deprecated, use `getobs` instead (i.e., `getobs(parameters, idx)`)." maxlog=1
+    @warn "`subsetparameters` is deprecated, use `getindex` instead (i.e., `parameters[idx]`)." maxlog=1
     return getobs(parameters, idx)
+end
+
+export subsetdata
+function subsetdata(data, idx)
+    @warn "`subsetdata` is deprecated, use `subsetreplicates` instead." maxlog=1
+    return subsetreplicates(data, idx)
 end
 
 # ---- Helper function for initialising an estimator ----

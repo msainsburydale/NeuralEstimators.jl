@@ -730,9 +730,9 @@ Each estimator is pre-trained with the estimator for the previous sample size (s
 pre-trained with the estimator for sample size `m₁`.
 
 The method for `Z_train` and `Z_val` subsets the data using
-`subsetdata(Z, 1:mᵢ)` for each `mᵢ ∈ m`. The method for `Z_train::V` and
+`subsetreplicates(Z, 1:mᵢ)` for each `mᵢ ∈ m`. The method for `Z_train::V` and
 `Z_val::V` trains an estimator for each element of `Z_train::V` and `Z_val::V`
-and, hence, it does not need to invoke `subsetdata()`, which can be slow or
+and, hence, it does not need to invoke `subsetreplicates()`, which can be slow or
 difficult to define in some cases (e.g., for graphical data). Note that, in this
 case, `m` is inferred from the data.
 
@@ -781,8 +781,8 @@ function _trainmultiple(estimator; sampler = nothing, simulator = nothing, M = n
             estimators[i] = train(estimators[i], θ_train, θ_val, simulator; simulator_args = mᵢ, kwargs...)
         else
             # subset the training and validation data to the current sample size, and then train 
-            Z_trainᵢ = subsetdata(Z_train, 1:mᵢ)
-            Z_valᵢ = subsetdata(Z_val, 1:mᵢ)
+            Z_trainᵢ = subsetreplicates(Z_train, 1:mᵢ)
+            Z_valᵢ = subsetreplicates(Z_val, 1:mᵢ)
             estimators[i] = train(estimators[i], θ_train, θ_val, Z_trainᵢ, Z_valᵢ; kwargs...)
         end
     end

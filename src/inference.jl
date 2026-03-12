@@ -237,11 +237,11 @@ function bootstrap(estimator, Z; B::Integer = 400, use_gpu::Bool = true, blocks 
             if trim && length(idx) > m
                 idx = idx[1:m]  # trim to match original sample size
             end
-            subsetdata(Z, idx)
+            subsetreplicates(Z, idx)
         end
     else
         m = numberreplicates(Z)
-        Z̃ = [subsetdata(Z, rand(1:m, m)) for _ = 1:B]
+        Z̃ = [subsetreplicates(Z, rand(1:m, m)) for _ = 1:B]
     end
 
     # Estimate the parameters for each bootstrap sample

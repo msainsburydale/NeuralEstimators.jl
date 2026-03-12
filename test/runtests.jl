@@ -129,9 +129,9 @@ end
             @test numberreplicates(ds) == numberreplicates(Z)
         end
 
-        @testset "subsetdata" begin
+        @testset "subsetreplicates" begin
             ds = DataSet(Z, S)
-            ds_sub = subsetdata(ds, 1:3)
+            ds_sub = subsetreplicates(ds, 1:3)
             @test numobs(ds_sub) == K
             @test all(numberreplicates(ds_sub) .== 3)
         end

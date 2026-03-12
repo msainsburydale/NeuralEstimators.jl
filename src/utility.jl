@@ -257,9 +257,9 @@ function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, M}} where {V₁ <:
 end
 
 """
-	subsetdata(Z::V, i) where {V <: AbstractArray{A}} where {A <: Any}
-	subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
-	subsetdata(Z::G, i) where {G <: GNNGraph}
+	subsetreplicates(Z::V, i) where {V <: AbstractArray{A}} where {A <: Any}
+	subsetreplicates(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
+	subsetreplicates(Z::G, i) where {G <: GNNGraph}
 Return replicate(s) `i` from each data set in `Z`.
 
 If working with data that are not covered by the default methods, overload the function with the appropriate type for `Z`.
@@ -285,34 +285,34 @@ K = 2  # number of data sets
 
 # Array data
 Z = [rand(n, d, m) for k ∈ 1:K]
-subsetdata(Z, 2)   # extract second replicate from each data set
-subsetdata(Z, 1:3) # extract first 3 replicates from each data set
+subsetreplicates(Z, 2)   # extract second replicate from each data set
+subsetreplicates(Z, 1:3) # extract first 3 replicates from each data set
 
 # Graphical data
 e = 8 # number of edges
 Z = [batch([rand_graph(n, e, ndata = rand(d, n)) for _ ∈ 1:m]) for k ∈ 1:K]
-subsetdata(Z, 2)   # extract second replicate from each data set
-subsetdata(Z, 1:3) # extract first 3 replicates from each data set
+subsetreplicates(Z, 2)   # extract second replicate from each data set
+subsetreplicates(Z, 1:3) # extract first 3 replicates from each data set
 ```
 """
-function subsetdata end
+function subsetreplicates end
 
-function subsetdata(Z::V, i) where {V <: AbstractVector{A}} where {A}
-    subsetdata.(Z, Ref(i))
+function subsetreplicates(Z::V, i) where {V <: AbstractVector{A}} where {A}
+    subsetreplicates.(Z, Ref(i))
 end
 
-function subsetdata(tup::Tup, i) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
+function subsetreplicates(tup::Tup, i) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
     Z = tup[1]
     X = tup[2]
     @assert length(Z) == length(X)
-    (subsetdata(Z, i), X) # X is not subsetted because it is set-level information
+    (subsetreplicates(Z, i), X) # X is not subsetted because it is set-level information
 end
 
-function subsetdata(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
+function subsetreplicates(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
     getobs(Z, i)
 end
 
-# ---- Test code for GNN and subsetdata ----
+# ---- Test code for GNN and subsetreplicates ----
 
 # n = 250  # number of observations in each realisation
 # m = 100  # number of replicates in each data set
@@ -321,16 +321,16 @@ end
 #
 # # Array data
 # Z = [rand(n, d, m) for k ∈ 1:K]
-# @elapsed subsetdata(Z_array, 1:3) # ≈ 0.03 seconds
+# @elapsed subsetreplicates(Z_array, 1:3) # ≈ 0.03 seconds
 #
 # # Graphical data
 # e = 100 # number of edges
 # Z = [batch([rand_graph(n, e, ndata = rand(d, n)) for _ ∈ 1:m]) for k ∈ 1:K]
-# @elapsed subsetdata(Z, 1:3) # ≈ 2.5 seconds
+# @elapsed subsetreplicates(Z, 1:3) # ≈ 2.5 seconds
 #
 # # Graphical data: efficient storage
 # Z2 = [rand_graph(n, e, ndata = rand(d, m, n)) for k ∈ 1:K]
-# @elapsed subsetdata(Z2, 1:3) # ≈ 0.13 seconds
+# @elapsed subsetreplicates(Z2, 1:3) # ≈ 0.13 seconds
 
 # ---- End test code ----
 

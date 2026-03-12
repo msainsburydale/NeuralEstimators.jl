@@ -72,7 +72,7 @@ include("assess.jl")
 export sampleposterior, posteriormean, posteriormedian, posteriormode, posteriorquantile, bootstrap, interval, estimate, logratio
 include("inference.jl")
 
-export stackarrays, expandgrid, numberreplicates, nparams, samplesize, drop, containertype, rowwisenorm, subsetdata
+export stackarrays, expandgrid, numberreplicates, nparams, samplesize, drop, containertype, rowwisenorm, subsetreplicates
 include("utility.jl")
 
 export samplesize, logsamplesize, invsqrtsamplesize, samplecorrelation, samplecovariance

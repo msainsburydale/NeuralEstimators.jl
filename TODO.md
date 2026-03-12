@@ -34,7 +34,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
 - Add several ready-to-go summary networks (e.g., for gridded data, time-series, etc.).
 
-
 ### Documentation
 - 🟡 Update the examples to reflect the new API (in particular, the explicit summary-inference-network decomposition).
 - Use [DocumenterVitepress.jl](https://luxdl.github.io/DocumenterVitepress.jl/dev/) as the backend for Documenter.jl (more modern and polished docs; see, e.g., [Lux.jl](https://lux.csail.mit.edu/stable/)).
@@ -52,7 +51,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Clean and improve the plotting code/logic.
 - Update all `QuantileEstimator` types to employ `summary_network`s.
 - Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
-- 🔴 rename `subsetdata` to `subsetreplicates`.
 
 ### Testing
 - Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
