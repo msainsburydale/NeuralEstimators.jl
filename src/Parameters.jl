@@ -34,7 +34,7 @@ _extractθ(parameters::AbstractParameterSet) = parameters.θ
 _extractθ(parameters) = parameters
 numobs(parameters::AbstractParameterSet) = numobs(_extractθ(parameters))
 
-Base.getindex(parameters::AbstractParameterSet, i::Integer) = Base.getindex(parameters, i:i) 
+Base.getindex(parameters::AbstractParameterSet, i::Integer) = Base.getindex(parameters, i:i)
 function Base.getindex(parameters::P, idx) where {P <: AbstractParameterSet}
 
     maximum(idx) <= numobs(parameters) || throw(BoundsError(parameters, idx))
