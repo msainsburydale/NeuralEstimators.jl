@@ -69,8 +69,6 @@ function subsetparameters(parameters, idx)
     return getobs(parameters, idx)
 end
 
-
-
 # ---- Helper function for initialising an estimator ----
 
 #TODO this is not very Julian, it would be better to have constructors for each estimator type. 

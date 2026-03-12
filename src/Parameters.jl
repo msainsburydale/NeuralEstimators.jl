@@ -32,9 +32,8 @@ _extractθ(parameters::AbstractParameterSet) = parameters.θ
 _extractθ(parameters) = parameters
 numobs(parameters::AbstractParameterSet) = numobs(_extractθ(parameters))
 
-Base.getindex(parameters::AbstractParameterSet, i::Integer) = Base.getindex(parameters, i:i) 
+Base.getindex(parameters::AbstractParameterSet, i::Integer) = Base.getindex(parameters, i:i)
 function Base.getindex(parameters::P, idx) where {P <: AbstractParameterSet}
-
     @assert maximum(idx) <= numobs(parameters) "Index out of bounds: attempted to access observation $(maximum(idx)) from a parameter set with $(numobs(parameters)) observations."
 
     fields = map(fieldnames(P)) do name
