@@ -154,7 +154,7 @@ function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: Abstra
         # evaluate the object for many different set-level covariates
         t = _deepsetsummaries(d, Z) # only needs to be computed once
         tx = vcat(repeat(t, 1, size(x, 2)), x) # NB ideally we'd avoid copying t so many times here, using @view
-        d.ϕ(tx) # Sanity check: stackarrays([d((Z, vec(x̃))) for x̃ in eachcol(x)])
+        d.ϕ(tx)
     end
 end
 # Multiple data sets

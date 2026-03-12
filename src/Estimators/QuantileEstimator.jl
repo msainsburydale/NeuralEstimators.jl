@@ -453,8 +453,8 @@ function _inputoutput(estimator::QuantileEstimatorContinuous, Zτ, θ::P) where 
     return input, output
 end
 
-#TODO can this be changed/removed by modifying _loss and _inputoutput?
-function _risk(estimator::QuantileEstimatorContinuous, loss, data_loader, device, optimiser = nothing)
+#TODO can this be changed/removed by modifying _loss and _inputoutput? Would be much better to have a single _risk() to avoid errors/code drift moving forward
+function _risk(estimator::QuantileEstimatorContinuous, loss, data_loader, device, optimiser = nothing, adtype = AutoZygote())
     sum_loss = 0.0f0
     K = 0
     for (input, output) in data_loader
@@ -481,7 +481,7 @@ function _risk(estimator::QuantileEstimatorContinuous, loss, data_loader, device
 
         lossfn = est -> quantileloss(est(input), output, τ)
         if !isnothing(optimiser)
-            ls, ∇ = Flux.withgradient(lossfn, estimator)
+            ls, ∇ = Flux.withgradient(lossfn, adtype, estimator)
             Flux.update!(optimiser, estimator, ∇[1])
         else
             ls = lossfn(estimator)

@@ -12,6 +12,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 **Training**
 - [ ] Sequential training methods.
 - [ ] Support for reading data from disk during training, to handle data sets that are too large to fit in memory.
+- [ ] Post-training calibration for better inference (especially PointEstimator and RatioEstimator, but can easily do this for general estimators).
 
 **Estimator types & methods**
 - [ ] Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
@@ -20,10 +21,10 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - [ ] Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference (see Tables 1 and 3 of [BayesFlow 2.0](https://arxiv.org/abs/2602.07098)).
 - [ ] Explicit learning of summary statistics (see [Zammit-Mangion et al., 2025, Sec. 4](https://arxiv.org/pdf/2404.12484)).
 - [ ] Ensemble methods with PosteriorEstimator and RatioEstimator.
+- [ ] Loosen the restriction on the format of the parameters to enable inference on more general structures (and thereby facilitate methods such as [LatticeVision](https://arxiv.org/abs/2505.09803)).
 
 **Inference & diagnostics**
 - [ ] Summary-statistic-based model-misspecification detection: see the [BayesFlow documentation](https://bayesflow.org/main/api/bayesflow.diagnostics.summary_space_comparison.html) and the references therein.
-- [ ] Post-training calibration for better inferences (especially PointEstimator and RatioEstimator).
 - [ ] Parameter bounds when doing posterior inference (see [#38](https://github.com/msainsburydale/NeuralEstimators.jl/issues/38)).
 - [ ] Incorporate [Bootstrap.jl](https://github.com/juliangehring/Bootstrap.jl) (possibly as an [extension](https://docs.julialang.org/en/v1/manual/code-loading/#man-extensions)) to expand bootstrap functionality.
 
@@ -48,6 +49,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - [ ] Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl.
 - [ ] Clean and improve the plotting code/logic.
 - [ ] Update all `QuantileEstimator` types to employ `summary_network`s.
+- [ ] Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
 
 ### Testing
 - [ ] Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
@@ -58,7 +60,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ### Breaking changes to decide upon before version 1.0
 
-- [ ] Add a `base_distribution` field in `NormalisingFlow`.
+- [ ] Add a `base_distribution` field in `NormalisingFlow` (default standard Normal).
 
 - [ ] Might be helpful to store the loss function in `PointEstimator` objects. 
   * Mainly useful for knowing post-training how the estimator was trained, and for computing the risk at the assessment stage (however, this is a minor convenience, we could also just add a `loss` argument to `assess`).

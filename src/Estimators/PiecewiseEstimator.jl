@@ -76,6 +76,6 @@ function (estimator::PiecewiseEstimator)(Z)
         j = findfirst(mᵢ .<= changepoints)
         estimator.estimators[j](Z[[i]])
     end
-    return stackarrays(θ̂)
+    return reduce(hcat, θ̂)
 end
 Base.show(io::IO, estimator::PiecewiseEstimator) = print(io, "\nPiecewise estimator with $(length(estimator.estimators)) estimators and sample size change-points: $(estimator.changepoints)")

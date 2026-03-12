@@ -457,7 +457,7 @@ function simulateconditional(Z::M, θ; nsims::Integer = 1, ξ) where {M <: Abstr
 		z[I₂] = Z₂[:, l]
 		z
 	end
-	Z = stackarrays(Z, merge = false)
+	Z = stack(Z)
 
 	# Convert Z to an array with appropriate dimensions
 	Z = reshape(Z, dims..., 1, nsims)

@@ -1,4 +1,4 @@
-#TODO might be faster to do some of the computations on the CPU (MLPs are generally faster on the CPU)
+#TODO might be faster to do these computations on the CPU (MLPs are often faster on the CPU)
 
 """
     ActNorm(d::Integer)

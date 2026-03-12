@@ -10,13 +10,16 @@ function _applywithdevice(network, z; batchsize::Integer = 32, use_gpu::Bool = t
     batchsize = min(numobs(z), batchsize)
     device = _checkgpu(use_gpu, verbose = false)
     network = network |> device
+    Flux.testmode!(network)
     data_loader = _DataLoader(z, batchsize, shuffle = false, partial = true)
-    y = map(data_loader) do zᵢ
-        zᵢ = zᵢ |> device
-        y = network(zᵢ; kwargs...)
-        y |> cpu
+    try
+        y = map(data_loader) do zᵢ
+            cpu(network(zᵢ |> device))
+        end
+        return reduce(hcat, y)
+    finally
+        Flux.testmode!(network, :auto) # back to default
     end
-    return stackarrays(y)
 end
 
 # Wrapper around _applywithdevice for use at inference time. Handles the case where

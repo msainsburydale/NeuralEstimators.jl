@@ -66,7 +66,7 @@ function (ensemble::Ensemble)(Z; aggr = mean)
     θ̂s = [estimator(Z) for estimator in ensemble.estimators]
 
     # Stack into 3D array (d × n × m) where m = number of estimators
-    θ̂ = stackarrays(θ̂s, merge = false)
+    θ̂ = stack(θ̂s)
 
     # Aggregate elementwise
     if aggr === mean

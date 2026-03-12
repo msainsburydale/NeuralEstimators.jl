@@ -24,7 +24,7 @@ simulategaussian(L)
 """
 function simulategaussian(obj::M, m::Integer) where {M <: AbstractMatrix{T}} where {T <: Number}
     y = [simulategaussian(obj) for _ ∈ 1:m]
-    y = stackarrays(y, merge = false)
+    y = stack(y)
     return y
 end
 
@@ -64,7 +64,7 @@ simulateschlather(L)
 """
 function simulateschlather(obj::M, m::Integer; kwargs...) where {M <: AbstractMatrix{T}} where {T <: Number}
     y = [simulateschlather(obj; kwargs...) for _ ∈ 1:m]
-    y = stackarrays(y, merge = false)
+    y = stack(y)
     return y
 end
 
@@ -251,13 +251,13 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
     L = map(1:K) do k
         C = matern.(UpperTriangular(D), ρ[k], ν[k], σ²[k])
         L = cholesky(Symmetric(C)).L
-        L = convert(Array, L) # convert from Triangular to Array so that stackarrays() can be used
+        L = convert(Array, L) # convert from Triangular to Array so that stack() can be used below
         L
     end
 
     # Optionally convert from Vector of Matrices to 3D Array
     if stack
-        L = stackarrays(L, merge = false)
+        L = Base.stack(L)
     end
 
     return L
@@ -285,7 +285,7 @@ function maternchols(D::V, ρ, ν, σ² = one(nested_eltype(D)); stack::Bool = t
 
     # Optionally convert from Vector of Matrices to 3D Array
     if stack
-        L = stackarrays(L, merge = false)
+        L = Base.stack(L)
     end
     return L
 end
