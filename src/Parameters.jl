@@ -1,29 +1,31 @@
 """
 	AbstractParameterSet
 
-An abstract supertype for user-defined types that store parameters and any
-intermediate objects needed for data simulation.
-
-The user-defined type must have a field `θ` that stores the ``d`` × ``K`` matrix
-of parameters, where ``d`` is the dimension of the parameter vector to make 
-inference on and ``K`` is the number of sampled parameter vectors. There are no
-other requirements.
+An abstract supertype for user-defined types that store parameters and any auxiliary objects needed for data simulation.
 
 The user-defined type must have a field `θ` that stores the parameters. Typically, 
 `θ` is a ``d`` × ``K`` matrix, where ``d`` is the dimension of the
 parameter vector and ``K`` is the number of sampled parameter vectors, though
-any batchable object compatible with `numobs`/`getobs` from MLUtils.jl is
-supported. There are no other requirements.
+any batchable object compatible with `numobs`/`getobs` is supported. There are no other requirements.
 
-Objects of type `P <: AbstractParameterSet` are indexed using `getindex`/`getobs`, with any batchable fields indexed accordingly (all other fields are left unchanged). 
-To modify this default behaviour, provide a specific method Base.getindex(parameters::P, idx) for your concrete type `P <: AbstractParameterSet`.
+The number of parameter instances can be retrieved with `numobs`, and the size of `θ` can be inspected with `size`. 
+
+Subtypes of `AbstractParameterSet` support indexing via `Base.getindex`, 
+with any batchable fields subsetted accordingly and all other fields left unchanged.
+To modify this default behaviour, provide a specific `Base.getindex` method for your concrete subtype.
 
 # Examples
 ```julia
-struct P <: AbstractParameterSet
+struct Parameters <: AbstractParameterSet
 	θ
-	# other expensive intermediate objects...
+	# auxiliary objects needed for data simulation
 end
+
+θ = randn(2, 100)
+parameters = Parameters(θ)
+numobs(parameters)   # 100
+size(parameters)     # (2, 100)
+parameters[1:10]     # subset of 10 parameter vectors
 ```
 """
 abstract type AbstractParameterSet end
@@ -35,7 +37,7 @@ numobs(parameters::AbstractParameterSet) = numobs(_extractθ(parameters))
 Base.getindex(parameters::AbstractParameterSet, i::Integer) = Base.getindex(parameters, i:i) 
 function Base.getindex(parameters::P, idx) where {P <: AbstractParameterSet}
 
-    @assert maximum(idx) <= numobs(parameters) "Index out of bounds: attempted to access observation $(maximum(idx)) from a parameter set with $(numobs(parameters)) observations."
+    maximum(idx) <= numobs(parameters) || throw(BoundsError(parameters, idx))
 
     fields = map(fieldnames(P)) do name
         field = getfield(parameters, name)
@@ -52,7 +54,7 @@ end
 size(parameters::AbstractParameterSet) = size(_extractθ(parameters))
 size(parameters::AbstractParameterSet, d) = size(_extractθ(parameters), d)
 
-Base.show(io::IO, parameters::P) where {P <: AbstractParameterSet} = print(io, "\nA subtype of `AbstractParameterSet` with K = $(size(parameters, 2)) instances of the $(size(parameters, 1))-dimensional parameter vector")
+Base.show(io::IO, parameters::P) where {P <: AbstractParameterSet} = print(io, "\nA subtype of `AbstractParameterSet` with $(numobs(parameters)) parameter instances")
 Base.show(io::IO, m::MIME"text/plain", parameters::P) where {P <: AbstractParameterSet} = print(io, parameters)
 
 # Backwards compatability
