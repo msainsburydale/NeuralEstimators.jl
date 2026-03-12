@@ -228,7 +228,7 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false,
     adtype::AbstractADType = AutoZygote()
-) where P
+) where {P}
     device = _checkgpu(use_gpu, verbose = verbose)
 
     if freeze_summary_network && !hasfield(typeof(estimator), :summary_network)
@@ -318,7 +318,7 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
             t = 0.0
             for θ ∈ _DataLoader(θ_train, batchsize)
                 t += @elapsed Z = simulator(θ, simulator_args...; simulator_kwargs...)
-                set = _dataloader(estimator, Z, θ, batchsize) 
+                set = _dataloader(estimator, Z, θ, batchsize)
                 epoch_time += @elapsed rsk = _risk(estimator, loss, set, device, optimiser, adtype)
                 push!(train_risk, rsk)
             end
@@ -789,7 +789,7 @@ function _trainmultiple(estimator; sampler = nothing, simulator = nothing, M = n
     return estimators
 end
 trainmultiple(estimator, sampler, simulator, M; args...) = _trainmultiple(estimator, sampler = sampler, simulator = simulator, M = M; args...)
-trainmultiple(estimator, θ_train::P, θ_val::P, simulator, M; args...) where P = _trainmultiple(estimator, θ_train = θ_train, θ_val = θ_val, simulator = simulator, M = M; args...)
+trainmultiple(estimator, θ_train::P, θ_val::P, simulator, M; args...) where {P} = _trainmultiple(estimator, θ_train = θ_train, θ_val = θ_val, simulator = simulator, M = M; args...)
 
 # This method is for when the data can be easily subsetted
 function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...) where {P, T, I <: Integer}
