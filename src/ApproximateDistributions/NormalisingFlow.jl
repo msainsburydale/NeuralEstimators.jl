@@ -239,9 +239,9 @@ function logdensity(flow::NormalisingFlow, θ::AbstractMatrix, tz::AbstractMatri
     return log_densities
 end
 
-function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer) 
+function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer)
     # Number of data sets and dimension of parameter vector 
-    K = size(tz, 2) 
+    K = size(tz, 2)
     d = flow.d
 
     # Sample from the base distribution 
@@ -249,7 +249,7 @@ function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer)
 
     # Repeat tz to match the desired sample size
     tz = repeat(tz, inner = (1, N))
-   
+
     # Move to the GPU if one is available
     device = _checkgpu(true, verbose = false)
     U = device(U)
@@ -260,5 +260,5 @@ function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer)
     θ = inverse(flow, U, tz) |> cpu
 
     # Return after splitting into a vector
-    return [θ[:, (i-1)*N+1:i*N] for i in 1:K]
+    return [θ[:, ((i - 1) * N + 1):(i * N)] for i = 1:K]
 end
