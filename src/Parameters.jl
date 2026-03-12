@@ -36,7 +36,6 @@ numobs(parameters::AbstractParameterSet) = numobs(_extractθ(parameters))
 
 Base.getindex(parameters::AbstractParameterSet, i::Integer) = Base.getindex(parameters, i:i)
 function Base.getindex(parameters::P, idx) where {P <: AbstractParameterSet}
-
     maximum(idx) <= numobs(parameters) || throw(BoundsError(parameters, idx))
 
     fields = map(fieldnames(P)) do name
