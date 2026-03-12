@@ -51,8 +51,8 @@ posteriorquantile(estimator, Z, probs, N::Integer = 1000; kwargs...) = posterior
 # ---- Posterior sampling ----
 
 @doc raw"""
-	sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000; use_gpu::Bool = true)
-	sampleposterior(estimator::RatioEstimator, Z, N::Integer = 1000; θ_grid, logprior::Function = θ -> 0f0, use_gpu::Bool = true)
+	sampleposterior(estimator::PosteriorEstimator, Z, N::Integer = 1000; kwargs...)
+	sampleposterior(estimator::RatioEstimator, Z, N::Integer = 1000; θ_grid, logprior::Function = θ -> 0f0, kwargs...)
 Samples from the approximate posterior distribution implied by `estimator`.
 
 The positional argument `N` controls the size of the posterior sample.
@@ -64,6 +64,8 @@ parameter space, specified through the keyword argument `θ_grid`. The approxima
 evaluated over this grid, which is then used to draw samples. This is effective when making inference with a
 small number of parameters. For models with a large number of parameters,
 other sampling algorithms (e.g., MCMC) may be needed (please contact the package maintainer).
+
+Keyword arguments are passed onto [summarystatistics](@ref).
 """
 function sampleposterior end
 

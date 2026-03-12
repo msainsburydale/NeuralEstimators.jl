@@ -195,7 +195,7 @@ function sampleposterior(
     summary_stats_θ = estimator.summary_network_θ(θ_grid)
 
     # Summary statistics for each data set 
-    summary_stats = summarystatistics(estimator, Z)
+    summary_stats = summarystatistics(estimator, Z; kwargs...)
 
     # For each data set, pass summary stats and θ embeddings through the inference net, then sample
     samples = map(eachcol(summary_stats)) do s

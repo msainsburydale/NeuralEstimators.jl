@@ -83,14 +83,16 @@ function logdensity(q::GaussianMixture, θ::AbstractMatrix, tz::AbstractMatrix)
     return log_densities # 1xK matrix 
 end
 
-#TODO might be better to always do this on the CPU; don't think there is much to gain doing this part of the code on the GPU.
-function sampleposterior(q::GaussianMixture, tz::AbstractMatrix, N::Integer; use_gpu::Bool = true)
+function sampleposterior(q::GaussianMixture, tz::AbstractMatrix, N::Integer)
     d = q.d
     J = q.num_components
-    device = _checkgpu(use_gpu, verbose = false)
-    q = q |> device
-    tz = tz |> device
-    κ_all = q.inference_network(tz) |> cpu
+
+    # Always use CPU (bottleneck is wsample, which isn't vectorised)
+    device = cpu
+    q = device(q)
+    tz = device(tz)
+
+    κ_all = q.inference_network(tz)
 
     θ = map(eachcol(κ_all)) do κ
 

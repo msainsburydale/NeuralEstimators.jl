@@ -44,7 +44,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ### Performance 
 - Improve the efficiency of the code where possible. See the general [Julia performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/) that could apply, and the [Flux performance tips](https://fluxml.ai/Flux.jl/stable/guide/performance/). Using [Lux.jl](https://lux.csail.mit.edu/stable/) might also be faster?
-- 🟡 Some operations should always be done on the CPU, specifically those involving only matrices and MLPs (e.g., inference network transformations on (learned) summary statistics, mappings performed in `GaussianMixture` and `NormalisingFlow`).
+- Some operations involving only matrices and MLPs (e.g., inference network transformations of summary statistics) should default to using the CPU.
 
 ### Refactoring/API improvements
 - Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl.

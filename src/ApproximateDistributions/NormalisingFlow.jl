@@ -1,5 +1,3 @@
-#TODO might be faster to do these computations on the CPU (MLPs are often faster on the CPU)
-
 """
     ActNorm(d::Integer)
 Activation normalisation layer (Kingma and Dhariwal, 2018) for an input of dimension `d`. 
@@ -225,7 +223,6 @@ function inverse(flow::NormalisingFlow, U::AbstractMatrix, tz::AbstractMatrix)
     return X
 end
 
-#TODO might be better to always do this on the CPU; don't think there is much to gain with do this part of the code on the GPU.
 function logdensity(flow::NormalisingFlow, θ::AbstractMatrix, tz::AbstractMatrix)
     d, K = size(θ)
     @assert d == flow.d
@@ -242,55 +239,26 @@ function logdensity(flow::NormalisingFlow, θ::AbstractMatrix, tz::AbstractMatri
     return log_densities
 end
 
-#TODO might be better to always do this on the CPU; don't think there is much to gain with do this part of the code on the GPU.
-function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer; use_gpu::Bool = true)
-
-    # Dimension of parameter vector and device 
+function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer) 
+    # Number of data sets and dimension of parameter vector 
+    K = size(tz, 2) 
     d = flow.d
-    device = _checkgpu(use_gpu, verbose = false)
+
+    # Sample from the base distribution 
+    U = randn(Float32, d, N * K)
+
+    # Repeat tz to match the desired sample size
+    tz = repeat(tz, inner = (1, N))
+   
+    # Move to the GPU if one is available
+    device = _checkgpu(true, verbose = false)
+    U = device(U)
+    tz = device(tz)
     flow = device(flow)
 
-    # Sample from the flow given each summary statistic in tz 
-    θ = map(eachcol(tz)) do t
-        # Sample from base distribution 
-        U = randn(Float32, d, N) |> device
+    # Compute samples 
+    θ = inverse(flow, U, tz) |> cpu
 
-        # Expand t to match sample size
-        T = repeat(reshape(t, :, 1), inner = (1, N)) |> device
-
-        # Compute and return samples 
-        inverse(flow, U, T) |> cpu
-    end
-
-    return θ
+    # Return after splitting into a vector
+    return [θ[:, (i-1)*N+1:i*N] for i in 1:K]
 end
-
-# The following code does it all at once (I found that this isn't faster, but perhaps it can be useful at some point)
-# function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer; use_gpu::Bool = true) 
-#     # Number of data sets and dimension of parameter vector 
-#     K = size(tz, 2) 
-#     d = flow.d
-#
-#     # Sample from base distribution 
-#     U = randn(Float32, d, N * K)
-#
-#     # Repeat tz to match the desired sample size
-#     tz = repeat(tz, inner = (1, N))
-#    
-#     # Determine the device
-#     device = _checkgpu(use_gpu, verbose = false)
-#     U = device(U)
-#     tz = device(tz)
-#     flow = device(flow)
-#
-#     # Compute samples 
-#     θ = inverse(flow, U, tz) 
-#
-#     # Return to CPU
-#     θ = cpu(θ)
-#
-#     # Split into a vector 
-#     θ = [θ[:, (i-1)*N+1:i*N] for i in 1:K]  
-#
-#     return θ
-# end
