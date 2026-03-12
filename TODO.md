@@ -40,6 +40,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Example: Sequence (e.g., time-series) input using recurrent neural networks (RNNs). See [Flux's in-built support for recurrence](https://fluxml.ai/Flux.jl/stable/guide/models/recurrence/). 
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)). (Might need extra functionality for this.)
 - Example: Spatio-temporal data.
+- Example: Nonstationary spatial data with image-to-image networks (see, e.g., [LatticeVision](https://arxiv.org/abs/2505.09803)).
 - Add a gif to the README (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif)).
 
 ### Performance 

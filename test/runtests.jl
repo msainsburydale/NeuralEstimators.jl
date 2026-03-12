@@ -358,7 +358,7 @@ end
         # Check that none of the replicates contain 100% missing:
         @test !(d ∈ unique(mapslices(x -> sum(ismissing.(x)), removedata(Z, p), dims = 1)))
 
-        # encodedata() 
+        # encodedata()
         n = 16
         Z = rand(n)
         Z = removedata(Z, 0.25)
@@ -598,12 +598,12 @@ end
         @testset "NormalisingFlow" begin
             flow = NormalisingFlow(d, dstar) |> dvc
 
-            # forward pass 
+            # forward pass
             U, log_det_J = forward(flow, θ, TZ)
             @test size(U) == (d, K)
             @test size(log_det_J) == (1, K)
 
-            # backward/inverse pass 
+            # backward/inverse pass
             X = inverse(flow, U, TZ)
             @test size(X) == (d, K)
             @test maximum(abs.(θ - X)) < 1e-4
@@ -614,7 +614,7 @@ end
 
             # sampling (employs backward/inverse pass, used during inference)
             N = 100
-            samples = sampleposterior(flow, TZ, N; use_gpu = dvc == gpu)
+            samples = sampleposterior(flow, TZ, N)
             @test length(samples) == K
             @test size(samples[1]) == (d, N)
         end
@@ -774,17 +774,17 @@ end
 end
 
 @testset "DeepSet: $dvc" for dvc ∈ devices
-    # Test 
-    # - with and without expert summary statistics 
-    # - with and without set-level inputs 
-    # - common data formats  
-    n = 10     # dimension of each data replicate 
+    # Test
+    # - with and without expert summary statistics
+    # - with and without set-level inputs
+    # - common data formats
+    n = 10     # dimension of each data replicate
     M = (3, 4) # number of replicates in each data set
     w = 32     # width of each hidden layer
-    d = 5      # output dimension 
+    d = 5      # output dimension
     dₜ = 16    # dimension of neural summary statistic
     for S in (nothing, samplesize)
-        for dₓ in (0, 2) # dimension of set-level inputs 
+        for dₓ in (0, 2) # dimension of set-level inputs
             for data in ("unstructured", "grid", "graph")
                 dₛ = isnothing(S) ? 0 : 1 # dimension of expert summary statistic
                 if data == "unstructured"
@@ -808,13 +808,13 @@ end
                 else
                     input = Z
                 end
-                # Forward evaluation 
+                # Forward evaluation
                 y = ds(input)
                 @test size(y) == (d, length(M))
-                # Basic back propagation 
+                # Basic back propagation
                 testbackprop(ds, input, dvc)
-                #TODO also test specifically that all parameters are being updated. Can do this by accessing getting .psi or by broadcasting over the trainables (this can be done in the function testbackprop). 
-                # Training  
+                #TODO also test specifically that all parameters are being updated. Can do this by accessing getting .psi or by broadcasting over the trainables (this can be done in the function testbackprop).
+                # Training
                 θ = θ = rand(d, length(M))
                 train(cpu(ds), θ, θ, input, input; epochs = 1, use_gpu = dvc == gpu, batchsize = length(M), verbose = verbose) # NB move ds to CPU to check that an estimator passed to train() on the CPU can be trained on the GPU
             end
@@ -1283,10 +1283,10 @@ end
         @test numdistributionalparams(estimator) == numdistributionalparams(q)
         θ = sampler(10)
         Z = simulator(θ, m)
-        sampleposterior(estimator, Z) # posterior draws 
+        sampleposterior(estimator, Z) # posterior draws
         posteriormean(estimator, Z)   # point estimate
         posteriormedian(estimator, Z) # point estimate
-        posteriorquantile(estimator, Z, [0.1, 0.5]) # quantiles 
+        posteriorquantile(estimator, Z, [0.1, 0.5]) # quantiles
         assessment = assess(estimator, θ, Z)
     end
 end
@@ -1295,7 +1295,7 @@ end
 
 @testset "PiecewiseEstimator" begin
     n = 2    # bivariate data
-    d = 3    # dimension of parameter vector 
+    d = 3    # dimension of parameter vector
     w = 128  # width of each hidden layer
     ψ₁ = Chain(Dense(n, w, relu), Dense(w, w, relu));
     ϕ₁ = Chain(Dense(w, w, relu), Dense(w, d));
