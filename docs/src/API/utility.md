@@ -14,8 +14,6 @@ overloaded in some applications.
 numberreplicates
 
 subsetdata
-
-subsetparameters
 ```
 
 ## Downstream-inference algorithms

@@ -78,7 +78,7 @@ An abstract type (defined in `ApproximateDistributions.jl`) for families of para
 
 ### `AbstractParameterSet`
 
-An abstract type (defined in `Parameters.jl`) for user-defined structs that hold parameter matrices and any precomputed intermediate quantities needed for simulation. The only required field is `θ`, a `d × K` matrix of parameter vectors. Implement `subsetparameters` if your type stores additional fields that should be subsetted consistently.
+An abstract type (defined in `Parameters.jl`) for user-defined structs that hold parameters and any precomputed intermediate quantities needed for simulation. 
 
 ### `DataSet`
 

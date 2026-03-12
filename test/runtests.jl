@@ -69,30 +69,6 @@ end
         v = [A₁, A₂];
         @test stackarrays(v) == cat(v..., dims = N)
     end
-    @testset "subsetparameters" begin
-        struct TestParameters <: AbstractParameterSet
-            v::Any
-            θ::Any
-            chols::Any
-        end
-
-        K = 4
-        parameters = TestParameters(array(K), array(3, K), array(2, 2, K))
-        indices = 2:3
-        parameters_subset = subsetparameters(parameters, indices)
-        @test parameters_subset.θ == parameters.θ[:, indices]
-        @test parameters_subset.chols == parameters.chols[:, :, indices]
-        @test parameters_subset.v == parameters.v[indices]
-        @test size(subsetparameters(parameters, 2), 2) == 1
-
-        ## Parameters stored as a simple matrix
-        parameters = rand(3, K)
-        indices = 2:3
-        parameters_subset = subsetparameters(parameters, indices)
-        @test size(parameters_subset) == (3, 2)
-        @test parameters_subset == parameters[:, indices]
-        @test size(subsetparameters(parameters, 2), 2) == 1
-    end
     @testset "containertype" begin
         a = rand(3, 4)
         T = Array
@@ -909,7 +885,7 @@ end
             @test size(estimator(Z), 2) == K
 
             # Single data set methods
-            z = simulator(subsetparameters(parameters, 1), m) |> dvc
+            z = simulator(parameters[1], m) |> dvc
             if covar == "set-level covariates"
                 z = (z[1][1], z[2][1])
             end

@@ -22,9 +22,10 @@ It is also straightforward to save the entire neural estimator, including its ar
 
 For convenience, the function [`train()`](@ref) allows for the automatic saving of the model state during the training stage, via the argument `savepath`.
 
+
 ## Storing expensive intermediate objects for data simulation
 
-Parameters sampled from the prior distribution may be stored in two ways. Most simply, they can be stored as a $d \times K$ matrix, where $d$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution. Alternatively, they can be stored in a user-defined subtype of [`AbstractParameterSet`](@ref), whose only requirement is a field `θ` that stores the $d \times K$ matrix of parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below.
+Parameters sampled from the prior distribution may be stored in several ways. Most simply, they can be stored as a $d \times K$ matrix, where $d$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution; more generally, any batchable object compatible with `numobs`/`getobs` from [MLUtils.jl](https://juliaml.github.io/MLUtils.jl/stable/) is supported. Alternatively, parameters can be stored in a user-defined subtype of [`AbstractParameterSet`](@ref), whose only requirement is a field `θ` that stores the parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below.
 
 ## On-the-fly and just-in-time simulation
 

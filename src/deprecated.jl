@@ -63,6 +63,14 @@ function simulate(parameters::P, m, J::Integer; args...) where {P <: Union{Abstr
     return v
 end
 
+export subsetparameters
+function subsetparameters(parameters, idx)
+    @warn "`subsetparameters` is deprecated, use `getobs` instead (i.e., `getobs(parameters, idx)`)." maxlog=1
+    return getobs(parameters, idx)
+end
+
+
+
 # ---- Helper function for initialising an estimator ----
 
 #TODO this is not very Julian, it would be better to have constructors for each estimator type. 

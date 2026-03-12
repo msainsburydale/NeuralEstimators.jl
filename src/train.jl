@@ -1,6 +1,6 @@
 """
-    train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...) where {T, P <: Union{AbstractMatrix, AbstractParameterSet}}
-    train(estimator, θ_train::P, θ_val::P, simulator::Function; ...) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+    train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...) where {P, T}
+    train(estimator, θ_train::P, θ_val::P, simulator::Function; ...) where {P, T}
     train(estimator, sampler::Function, simulator::Function; ...)
 Trains a neural `estimator`.
 
@@ -11,7 +11,7 @@ simulate new data conditional on the parameters. If
 provided with specific sets of parameters (`θ_train` and `θ_val`) and/or data
 (`Z_train` and `Z_val`), they will be held fixed during training.
 
-The validation parameters and data are always held fixed, 
+The validation parameters and data are always held fixed.
 
 The trained estimator is always returned on the CPU. 
 
@@ -84,9 +84,6 @@ m = 30
 # Training: simulation on-the-fly
 estimator  = train(estimator, sampler, simulator, simulator_args = m, K = K)
 
-# Training: simulation on-the-fly
-estimator  = train(estimator, sampler, simulator, simulator_args = m, K = K)
-
 # Plot the risk history (using any plotting backend)
 using Plots
 unicodeplots()
@@ -120,7 +117,7 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false,
     adtype::AbstractADType = AutoZygote()
-) where {T, P <: Union{Tuple, AbstractMatrix, AbstractParameterSet}}
+) where {P, T}
     device = _checkgpu(use_gpu, verbose = verbose)
 
     if freeze_summary_network && !hasfield(typeof(estimator), :summary_network)
@@ -231,7 +228,7 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false,
     adtype::AbstractADType = AutoZygote()
-) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+) where P
     device = _checkgpu(use_gpu, verbose = verbose)
 
     if freeze_summary_network && !hasfield(typeof(estimator), :summary_network)
@@ -319,9 +316,9 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
             # Update estimator and compute the training risk
             train_risk = []
             t = 0.0
-            for θ ∈ _ParameterLoader(θ_train, batchsize = batchsize)
+            for θ ∈ _DataLoader(θ_train, batchsize)
                 t += @elapsed Z = simulator(θ, simulator_args...; simulator_kwargs...)
-                set = _dataloader(estimator, Z, θ, batchsize)
+                set = _dataloader(estimator, Z, θ, batchsize) 
                 epoch_time += @elapsed rsk = _risk(estimator, loss, set, device, optimiser, adtype)
                 push!(train_risk, rsk)
             end
@@ -551,14 +548,10 @@ end
 _loss(estimator, loss) = loss
 
 # Constructs inputs and outputs (default simulated data and corresponding true parameters, respectively)
-function _inputoutput(estimator, Z, θ::P) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
-    input = Z
-    output = _extractθ(θ)
-    return input, output
-end
+_inputoutput(estimator, Z, θ) = (Z, θ)
 
-function _dataloader(estimator, Z, θ::P, batchsize) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
-    data = _inputoutput(estimator, Z, θ)
+function _dataloader(estimator, Z, θ, batchsize)
+    data = _inputoutput(estimator, Z, _extractθ(θ))
     _DataLoader(data, batchsize)
 end
 
@@ -796,10 +789,10 @@ function _trainmultiple(estimator; sampler = nothing, simulator = nothing, M = n
     return estimators
 end
 trainmultiple(estimator, sampler, simulator, M; args...) = _trainmultiple(estimator, sampler = sampler, simulator = simulator, M = M; args...)
-trainmultiple(estimator, θ_train::P, θ_val::P, simulator, M; args...) where {P <: Union{AbstractMatrix, AbstractParameterSet}} = _trainmultiple(estimator, θ_train = θ_train, θ_val = θ_val, simulator = simulator, M = M; args...)
+trainmultiple(estimator, θ_train::P, θ_val::P, simulator, M; args...) where P = _trainmultiple(estimator, θ_train = θ_train, θ_val = θ_val, simulator = simulator, M = M; args...)
 
 # This method is for when the data can be easily subsetted
-function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...) where {T, P <: Union{AbstractMatrix, AbstractParameterSet}, I <: Integer}
+function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T, M::Vector{I}; args...) where {P, T, I <: Integer}
     @assert length(unique(numberreplicates(Z_val))) == 1 "The elements of `Z_val` should be equally replicated: check with `numberreplicates(Z_val)`"
     @assert length(unique(numberreplicates(Z_train))) == 1 "The elements of `Z_train` should be equally replicated: check with `numberreplicates(Z_train)`"
 
@@ -807,7 +800,7 @@ function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T, 
 end
 
 # This method is for when the data cannot be easily subsetted, so another layer of vectors is needed
-function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: Union{V₁, Tuple{V₁, V₂}}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T, P <: Union{AbstractMatrix, AbstractParameterSet}}
+function trainmultiple(estimator, θ_train::P, θ_val::P, Z_train::V, Z_val::V; args...) where {V <: AbstractVector{S}} where {S <: Union{V₁, Tuple{V₁, V₂}}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {P, T}
     @assert length(Z_train) == length(Z_val)
 
     @assert !(typeof(estimator) <: Vector) # check that estimator is not a vector of estimators, which is common error if one calls trainmultiple() on the output of a previous call to trainmultiple()

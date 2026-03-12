@@ -10,7 +10,8 @@ using CSV
 using DataFrames
 using Distances
 using Flux
-using Flux: getobs, numobs, ofeltype, DataLoader, update!, onehotbatch, _match_eltype, @non_differentiable, @ignore_derivatives
+using Flux: getobs, ofeltype, DataLoader, update!, onehotbatch, _match_eltype, @non_differentiable, @ignore_derivatives
+import Flux: numobs
 using Folds
 using InvertedIndices
 using LinearAlgebra
@@ -28,7 +29,7 @@ using StatsBase: wsample, sample
 export tanhloss, kpowerloss, intervalscore, quantileloss
 include("losses.jl")
 
-export AbstractParameterSet, subsetparameters
+export AbstractParameterSet
 include("Parameters.jl")
 
 export DataSet

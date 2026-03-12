@@ -4,9 +4,9 @@ This page documents the classes and functions that are central to the workflow o
 
 ## Sampling parameters
 
-Parameters sampled from the prior distribution are stored as a $d \times K$ matrix, where $d$ is the dimension of the parameter vector to make inference on and $K$ is the number of sampled parameter vectors. 
+Parameters sampled from the prior distribution are typically stored as a $d \times K$ matrix, where $d$ is the dimension of the parameter vector to make inference on and $K$ is the number of sampled parameter vectors, though any batchable object (compatible with `numobs`/`getobs` from [MLUtils.jl](https://juliaml.github.io/MLUtils.jl/stable/)) is supported.
 
-It can sometimes be helpful to wrap the parameter matrix in a user-defined type that also stores expensive intermediate objects needed for data simulated (e.g., Cholesky factors). The user-defined type should be a subtype of [`AbstractParameterSet`](@ref), whose only requirement is a field `θ` that stores the matrix of parameters. See [Storing expensive intermediate objects for data simulation](@ref) for further discussion.   
+It can sometimes be helpful to wrap the parameters in a user-defined type that also stores expensive intermediate objects needed for data simulated (e.g., Cholesky factors). The user-defined type should be a subtype of [`AbstractParameterSet`](@ref), whose only requirement is a field `θ` that stores parameters.  
 
 ```@docs
 AbstractParameterSet

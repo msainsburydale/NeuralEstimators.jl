@@ -27,14 +27,16 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - 🟡 Summary-statistic-based model-misspecification detection: see the [BayesFlow documentation](https://bayesflow.org/main/api/bayesflow.diagnostics.summary_space_comparison.html) and the references therein.
 - Parameter bounds when doing posterior inference (see [#38](https://github.com/msainsburydale/NeuralEstimators.jl/issues/38)).
 - Incorporate [Bootstrap.jl](https://github.com/juliangehring/Bootstrap.jl) (possibly as an [extension](https://docs.julialang.org/en/v1/manual/code-loading/#man-extensions)) to expand bootstrap functionality.
+- assess.jl/inference.jl for more general parameter shapes (currently assumes the parameters are stored as a matrix).
 
 **Summary network architecture**
 - Functions for automated neural architecture search (see, e.g., [this paper](https://www.jmlr.org/papers/volume20/18-598/18-598.pdf)) using for example, [evolutionary algorithms](https://en.wikipedia.org/wiki/Neural_architecture_search#Evolution) or [Bayesian optimization](https://en.wikipedia.org/wiki/Neural_architecture_search#Bayesian_optimization).
 - Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
-- 🟡 Add several ready-to-go summary networks (e.g., for gridded data, time-series, etc.).
+- Add several ready-to-go summary networks (e.g., for gridded data, time-series, etc.).
 
 
 ### Documentation
+- 🟡 Update the examples to reflect the new API (in particular, the explicit summary-inference-network decomposition).
 - Use [DocumenterVitepress.jl](https://luxdl.github.io/DocumenterVitepress.jl/dev/) as the backend for Documenter.jl (more modern and polished docs; see, e.g., [Lux.jl](https://lux.csail.mit.edu/stable/)).
 - Example: Sequence (e.g., time-series) input using recurrent neural networks (RNNs). See [Flux's in-built support for recurrence](https://fluxml.ai/Flux.jl/stable/guide/models/recurrence/). 
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)). (Might need extra functionality for this.)
@@ -50,7 +52,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Clean and improve the plotting code/logic.
 - Update all `QuantileEstimator` types to employ `summary_network`s.
 - Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
-- 🔴 Loosen the restriction on the format of the parameters to enable inference on more general structures (and thereby facilitate methods such as [LatticeVision](https://arxiv.org/abs/2505.09803)). The parameters (or more generally, the targets of inference) just need to be batchable: throughout, remove the annotation `{P <: Union{AbstractMatrix, AbstractParameterSet}}`;  replace `size(θ, 2)` with `numobs(θ)`; and use `getobs` for indexing.
+- 🟡 rename `subsetdata` to `subsetreplicates`.
 
 ### Testing
 - Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.

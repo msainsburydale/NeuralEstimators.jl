@@ -103,10 +103,9 @@ numdistributionalparams(estimator::PosteriorEstimator) = numdistributionalparams
 # Always use the KL divergence to train objects of type PosteriorEstimator
 _loss(estimator::PosteriorEstimator, loss = nothing) = (q, θ) -> -mean(q)
 
-function _inputoutput(estimator::PosteriorEstimator, Z, θ::P) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
-    θ = _extractθ(θ)
+function _inputoutput(estimator::PosteriorEstimator, Z, θ)
     input = (Z, θ)           # combine data and parameters into a single tuple which will be used to compute the log-density at θ
-    output_placeholder = θ   # irrelevant what we use for the output, since the loss is defined only in terms of the density at θ
+    output_placeholder = θ   # currently irrelevant what we use for the output, since the loss is defined only in terms of the density at θ. However, this will change with sequential training.
     return input, output_placeholder
 end
 

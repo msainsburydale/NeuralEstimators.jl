@@ -9,7 +9,14 @@ of parameters, where ``d`` is the dimension of the parameter vector to make
 inference on and ``K`` is the number of sampled parameter vectors. There are no
 other requirements.
 
-See [`subsetparameters()`](@ref) for the generic function for subsetting these objects. 
+The user-defined type must have a field `θ` that stores the parameters. Typically, 
+`θ` is a ``d`` × ``K`` matrix, where ``d`` is the dimension of the
+parameter vector and ``K`` is the number of sampled parameter vectors, though
+any batchable object compatible with `numobs`/`getobs` from MLUtils.jl is
+supported. There are no other requirements.
+
+Objects of type `P <: AbstractParameterSet` are indexed using `getindex`/`getobs`, with any batchable fields indexed accordingly (all other fields are left unchanged). 
+To modify this default behaviour, provide a specific method Base.getindex(parameters::P, idx) for your concrete type `P <: AbstractParameterSet`.
 
 # Examples
 ```julia
@@ -21,99 +28,33 @@ end
 """
 abstract type AbstractParameterSet end
 
-# Backwards compatability
-const ParameterConfigurations = AbstractParameterSet
-export ParameterConfigurations
+_extractθ(parameters::AbstractParameterSet) = parameters.θ
+_extractθ(parameters) = parameters
+numobs(parameters::AbstractParameterSet) = numobs(_extractθ(parameters))
 
-Base.show(io::IO, parameters::P) where {P <: AbstractParameterSet} = print(io, "\nA subtype of `AbstractParameterSet` with K = $(size(parameters, 2)) instances of the $(size(parameters, 1))-dimensional parameter vector")
-Base.show(io::IO, m::MIME"text/plain", parameters::P) where {P <: AbstractParameterSet} = print(io, parameters)
+Base.getindex(parameters::AbstractParameterSet, i::Integer) = Base.getindex(parameters, i:i) 
+function Base.getindex(parameters::P, idx) where {P <: AbstractParameterSet}
 
-size(parameters::P) where {P <: AbstractParameterSet} = size(_extractθ(parameters))
-size(parameters::P, d::Integer) where {P <: AbstractParameterSet} = size(_extractθ(parameters), d)
+    @assert maximum(idx) <= numobs(parameters) "Index out of bounds: attempted to access observation $(maximum(idx)) from a parameter set with $(numobs(parameters)) observations."
 
-_extractθ(params::P) where {P <: AbstractParameterSet} = params.θ
-_extractθ(params::P) where {P <: AbstractMatrix} = params
-
-"""
-	subsetparameters(parameters::M, indices) where {M <: AbstractMatrix}
-	subsetparameters(parameters::P, indices) where {P <: AbstractParameterSet}
-
-Subset `parameters` using a collection of `indices`.
-
-Arrays in `parameters::P` with last dimension equal in size to the
-number of parameter configurations, K, are also subsetted (over their last dimension)
-using `indices`. All other fields are left unchanged. To modify this default
-behaviour, overload `subsetparameters`.
-"""
-function subsetparameters(parameters::P, indices) where {P <: AbstractParameterSet}
-    K = size(parameters, 2)
-    @assert maximum(indices) <= K
-
-    fields = [getfield(parameters, name) for name ∈ fieldnames(P)]
-    fields = map(fields) do field
+    fields = map(fieldnames(P)) do name
+        field = getfield(parameters, name)
         try
-            N = ndims(field)
-            if size(field, N) == K
-                colons = ntuple(_ -> (:), N - 1)
-                field[colons..., indices]
-            else
-                field
-            end
+            getobs(field, idx)
         catch
             field
         end
     end
+
     return P(fields...)
 end
 
-function subsetparameters(parameters::M, indices) where {M <: AbstractMatrix}
-    K = size(parameters, 2)
-    @assert maximum(indices) <= K
+size(parameters::AbstractParameterSet) = size(_extractθ(parameters))
+size(parameters::AbstractParameterSet, d) = size(_extractθ(parameters), d)
 
-    return parameters[:, indices]
-end
+Base.show(io::IO, parameters::P) where {P <: AbstractParameterSet} = print(io, "\nA subtype of `AbstractParameterSet` with K = $(size(parameters, 2)) instances of the $(size(parameters, 1))-dimensional parameter vector")
+Base.show(io::IO, m::MIME"text/plain", parameters::P) where {P <: AbstractParameterSet} = print(io, parameters)
 
-# wrapper that allows for indices to be a single Integer
-subsetparameters(θ::P, indices::Integer) where {P <: AbstractParameterSet} = subsetparameters(θ, indices:indices)
-subsetparameters(θ::M, indices::Integer) where {M <: AbstractMatrix} = subsetparameters(θ, indices:indices)
-
-# ---- _ParameterLoader: Analogous to DataLoader for AbstractParameterSet objects ----
-
-struct _ParameterLoader{P <: Union{AbstractMatrix, AbstractParameterSet}, I <: Integer}
-    parameters::P
-    batchsize::I
-    nobs::I
-    partial::Bool
-    imax::I
-    indices::Vector{I}
-    shuffle::Bool
-end
-
-function _ParameterLoader(parameters::P; batchsize::Integer = 1, shuffle::Bool = false, partial::Bool = false) where {P <: AbstractParameterSet}
-    @assert batchsize > 0
-    K = size(parameters, 2)
-    if K <= batchsize
-        batchsize = K
-    end
-    imax = partial ? K : K - batchsize + 1 # imax ≡ the largest index that we go to
-    _ParameterLoader(parameters, batchsize, K, partial, imax, [1:K;], shuffle)
-end
-
-# returns parameters in d.indices[i+1:i+batchsize]
-@propagate_inbounds function Base.iterate(d::_ParameterLoader, i = 0)
-    i >= d.imax && return nothing
-    if d.shuffle && i == 0
-        shuffle!(d.indices)
-    end
-    nexti = min(i + d.batchsize, d.nobs)
-    indices = d.indices[(i + 1):nexti]
-    batch = subsetparameters(d.parameters, indices)
-
-    try
-        batch = subsetparameters(d.parameters, indices)
-    catch
-        error("The default method for `subsetparameters` has failed; please see `?subsetparameters` for details.")
-    end
-
-    return (batch, nexti)
-end
+# Backwards compatability
+const ParameterConfigurations = AbstractParameterSet
+export ParameterConfigurations

@@ -233,9 +233,7 @@ function (est::QuantileEstimator)(Z, θ₋ᵢ::Vector)
 end
 (est::QuantileEstimator)(Z, θ₋ᵢ::Number) = est(Z, [θ₋ᵢ])
 
-function _inputoutput(estimator::QuantileEstimator, Z, θ::P) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
-    θ = _extractθ(θ)
-
+function _inputoutput(estimator::QuantileEstimator, Z, θ)
     i = estimator.i
     if isnothing(i)
         input = Z
@@ -428,8 +426,7 @@ end
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Number) = est(Z, [θ₋ᵢ], τ)
 (est::QuantileEstimatorContinuous)(Z, θ₋ᵢ::Number, τ::Vector) = est(Z, [θ₋ᵢ], τ)
 
-function _inputoutput(estimator::QuantileEstimatorContinuous, Zτ, θ::P) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
-    θ = _extractθ(θ)
+function _inputoutput(estimator::QuantileEstimatorContinuous, Zτ, θ)
     Z, τ = Zτ
     τ = f32(τ)
 

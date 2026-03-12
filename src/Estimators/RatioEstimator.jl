@@ -110,12 +110,11 @@ function (estimator::RatioEstimator)(Z, θ)
 end
 (estimator::RatioEstimator)(Zθ::Tuple) = estimator(Zθ[1], Zθ[2]) # Tuple method used internally during training
 
-function _inputoutput(estimator::RatioEstimator, Z, θ::P) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
-    θ = _extractθ(θ)
+function _inputoutput(estimator::RatioEstimator, Z, θ)
 
     # Create independent pairs
     K = numobs(Z)
-    θ̃ = subsetparameters(θ, shuffle(1:K))
+    θ̃ = getobs(θ, shuffle(1:K))
     Z̃ = Z
 
     # Combine dependent and independent pairs
