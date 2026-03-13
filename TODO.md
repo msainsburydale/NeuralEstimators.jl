@@ -36,12 +36,13 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ### Documentation
 - 🟡 Update the examples to reflect the new API (in particular, the explicit summary-inference-network decomposition).
-- Use [DocumenterVitepress.jl](https://luxdl.github.io/DocumenterVitepress.jl/dev/) as the backend for Documenter.jl (more modern and polished docs; see, e.g., [Lux.jl](https://lux.csail.mit.edu/stable/)).
+- Use [DocumenterVitepress.jl](https://luxdl.github.io/DocumenterVitepress.jl/dev/) as the backend for Documenter.jl (more modern and polished docs; see, e.g., [Lux.jl](https://lux.csail.mit.edu/stable/)). Then, in the examples, add `:::code-group`s for the different estimator types.
 - Example: Sequence (e.g., time-series) input using recurrent neural networks (RNNs). See [Flux's in-built support for recurrence](https://fluxml.ai/Flux.jl/stable/guide/models/recurrence/). 
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)). (Might need extra functionality for this.)
 - Example: Spatio-temporal data.
 - Example: Nonstationary spatial data with image-to-image networks (see, e.g., [LatticeVision](https://arxiv.org/abs/2505.09803)).
 - Add a gif to the README (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif)).
+- GitHub: Remove the workshop branch and update the tutorial.
 
 ### Performance 
 - Improve the efficiency of the code where possible. See the general [Julia performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/) that could apply, and the [Flux performance tips](https://fluxml.ai/Flux.jl/stable/guide/performance/). Using [Lux.jl](https://lux.csail.mit.edu/stable/) might also be faster?
@@ -52,6 +53,8 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Clean and improve the plotting code/logic.
 - Update all `QuantileEstimator` types to employ `summary_network`s.
 - Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
+- Rename `PiecewiseEstimator` to `Piecewise`? Our naming convention is "Quantity"Estimator, but "Piecewise" is not a quantity that we are estimating.
+
 
 ### Testing
 - Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
