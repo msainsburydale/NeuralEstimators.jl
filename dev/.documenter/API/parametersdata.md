@@ -41,7 +41,7 @@ parameters[1:10]     # subset of 10 parameter vectors
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Parameters.jl#L1-L30" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Parameters.jl#L1-L30" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -65,7 +65,7 @@ NamedMatrix(μ = randn(3), σ = rand(3))
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Parameters.jl#L64-L73" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Parameters.jl#L63-L72" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -116,7 +116,7 @@ datasets = DataSet(Z, S)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/DataSet.jl#L1-L35" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/DataSet.jl#L1-L35" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 

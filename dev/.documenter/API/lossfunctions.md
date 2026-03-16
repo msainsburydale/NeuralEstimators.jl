@@ -29,7 +29,7 @@ where $d$ denotes the dimension of the parameter vector $\boldsymbol{\theta}$. I
 Compared with the [`kpowerloss()`](/API/lossfunctions#NeuralEstimators.kpowerloss), which may also be used as a continuous approximation of the 0–1 loss function, the gradient of this loss is bounded as $\|\hat{\boldsymbol{\theta}} - \boldsymbol{\theta}\|_1 \to 0$, which can improve numerical stability during training. 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/losses.jl#L15-L31" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/losses.jl#L15-L31" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -54,7 +54,7 @@ If `safeorigin = true`, the loss function is modified to be piecewise, continuou
 See also [`tanhloss()`](/API/lossfunctions#NeuralEstimators.tanhloss).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/losses.jl#L50-L63" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/losses.jl#L50-L63" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -76,7 +76,7 @@ $$  L(θ̂, θ; τ) = (θ̂ - θ)(𝕀(θ̂ - θ > 0) - τ),$$
 where `τ` ∈ (0, 1) is a probability level and 𝕀(⋅) is the indicator function.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/losses.jl#L95-L104" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/losses.jl#L95-L104" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -101,7 +101,7 @@ where `α` ∈ (0, 1) and 𝕀(⋅) is the indicator function.
 The method that takes a single value `θ̂` assumes that `θ̂` is a matrix with $2d$ rows, where $d$ is the dimension of the parameter vector to make inference on. The first and second sets of $d$ rows will be used as `l` and `u`, respectively.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/losses.jl#L158-L173" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/losses.jl#L158-L173" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 

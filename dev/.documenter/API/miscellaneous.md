@@ -19,7 +19,7 @@ numberreplicates(Z)
 Generic function that returns the number of replicates in a given object. Default implementations are provided for commonly used data formats, namely, data stored as an `Array` or as a `GNNGraph`.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/utility.jl#L225-L231" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/utility.jl#L225-L231" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -67,7 +67,7 @@ subsetreplicates(Z, 1:3) # extract first 3 replicates from each data set
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/utility.jl#L259-L297" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/utility.jl#L259-L297" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -195,7 +195,7 @@ estimates = em(Z_list, θ₀ = [1.0, 2.0])  # Matrix with 3 columns
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/missingdata.jl#L1-L120" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/missingdata.jl#L1-L120" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -251,7 +251,7 @@ adjacencymatrix(D, r, k; random = false)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Graphs.jl#L331-L387" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Graphs.jl#L331-L387" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -282,7 +282,7 @@ containertype(typeof(a))
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/utility.jl#L205-L220" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/utility.jl#L205-L220" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -312,7 +312,7 @@ UW = encodedata(Z)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/missingdata.jl#L408-L427" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/missingdata.jl#L408-L427" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -331,7 +331,7 @@ Generates a grid of all possible combinations of the elements from two input vec
 Same as `expand.grid()` in `R`, but currently caters for two dimensions only.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/utility.jl#L361-L366" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/utility.jl#L361-L366" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -378,7 +378,7 @@ maternchols([D, D̃], ρ, ν, σ²; stack = false)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/modelspecificfunctions.jl#L202-L239" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/modelspecificfunctions.jl#L202-L239" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -424,7 +424,7 @@ removedata(Z, n)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/missingdata.jl#L266-L305" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/missingdata.jl#L266-L305" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -441,7 +441,7 @@ rowwisenorm(A)
 Computes the row-wise norm of a matrix `A`.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/utility.jl#L110-L113" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/utility.jl#L110-L113" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -497,7 +497,7 @@ g = spatialgraph(S, Z)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Graphs.jl#L3-L54" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Graphs.jl#L3-L54" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -532,7 +532,7 @@ stackarrays(Z)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/utility.jl#L381-L400" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/utility.jl#L381-L400" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -569,7 +569,7 @@ vectotriu(v; strict = true)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/utility.jl#L146-L173" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/utility.jl#L146-L173" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -612,7 +612,7 @@ simulategaussian(L)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/modelspecificfunctions.jl#L1-L24" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/modelspecificfunctions.jl#L1-L24" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -672,7 +672,7 @@ Plots.plot(heatmaps...)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/modelspecificfunctions.jl#L305-L348" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/modelspecificfunctions.jl#L305-L348" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -715,7 +715,7 @@ simulateschlather(L)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/modelspecificfunctions.jl#L35-L64" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/modelspecificfunctions.jl#L35-L64" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -763,7 +763,7 @@ end
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Graphs.jl#L591-L626" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Graphs.jl#L591-L626" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -788,7 +788,7 @@ $$C(\|\boldsymbol{h}\|) = \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \left(\frac{\
 where `ρ` is a range parameter, `ν` is a smoothness parameter, `σ²` is the marginal variance,  $\Gamma(\cdot)$ is the gamma function, and $K_\nu(\cdot)$ is the modified Bessel function of the second kind of order $\nu$.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/modelspecificfunctions.jl#L115-L126" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/modelspecificfunctions.jl#L115-L126" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -822,7 +822,7 @@ is the squared Mahalanobis distance between $\boldsymbol{s}$ and $\boldsymbol{r}
 Note that, in practical applications, the reference point $\boldsymbol{\omega}$ is often taken to be an estimable parameter rather than fixed and known. 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/modelspecificfunctions.jl#L145-L169" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/modelspecificfunctions.jl#L145-L169" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -853,7 +853,7 @@ The method `gaussiandensity(Z::A, L::LT)` assumes that the last dimension of `Z`
 If `logdensity = true` (default), the log-density is returned.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/modelspecificfunctions.jl#L573-L587" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/modelspecificfunctions.jl#L573-L587" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -870,7 +870,7 @@ schlatherbivariatedensity(z₁, z₂, ψ₁₂; logdensity = true)
 The bivariate density function (see, e.g., [Sainsbury-Dale et al., 2024](https://www.tandfonline.com/doi/suppl/10.1080/00031305.2023.2249522?scroll=top), Sec. S6.2) for [Schlather&#39;s (2002)](https://link.springer.com/article/10.1023/A:1020977924878) max-stable model, where `ψ₁₂` denotes the spatial correlation function evaluated at the locations of observations `z₁` and `z₂`.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/modelspecificfunctions.jl#L605-L608" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/modelspecificfunctions.jl#L605-L608" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 

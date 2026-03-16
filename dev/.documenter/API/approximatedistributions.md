@@ -37,7 +37,7 @@ Subtypes `A <: ApproximateDistribution` must implement the following methods:
   
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/ApproximateDistributions/ApproximateDistributions.jl#L1-L14" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/ApproximateDistributions/ApproximateDistributions.jl#L1-L14" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -69,7 +69,7 @@ When using a `GaussianMixture` as the approximate distribution of a [`PosteriorE
   
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/ApproximateDistributions/GaussianMixture.jl#L1-L19" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/ApproximateDistributions/GaussianMixture.jl#L1-L19" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -99,7 +99,7 @@ When using a `NormalisingFlow` as the approximate distribution of a [`PosteriorE
   
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/ApproximateDistributions/NormalisingFlow.jl#L175-L192" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/ApproximateDistributions/NormalisingFlow.jl#L175-L192" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -119,7 +119,7 @@ numdistributionalparams(estimator::PosteriorEstimator)
 The number of distributional parameters (i.e., the dimension of the space $\mathcal{K}$ of approximate-distribution parameters $\boldsymbol{\kappa}$). 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/ApproximateDistributions/ApproximateDistributions.jl#L17-L21" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/ApproximateDistributions/ApproximateDistributions.jl#L17-L21" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -156,7 +156,7 @@ where $c = 1.9$ is a fixed clamping threshold. This transformation ensures that 
 Additional keyword arguments `kwargs` are passed to the [`MLP`](/API/architectures#NeuralEstimators.MLP) constructor when creating `κ₁` and `κ₂`. 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/ApproximateDistributions/NormalisingFlow.jl#L45-L66" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/ApproximateDistributions/NormalisingFlow.jl#L45-L66" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 

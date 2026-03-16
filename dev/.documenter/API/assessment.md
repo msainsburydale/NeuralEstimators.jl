@@ -42,7 +42,7 @@ The return value is of type [`Assessment`](/API/assessment#NeuralEstimators.Asse
   
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/assess.jl#L102-L122" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/assess.jl#L102-L122" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -81,7 +81,7 @@ If the estimator is a [`QuantileEstimator`](/API/estimators#NeuralEstimators.Qua
 Use `merge()` to combine assessments from multiple estimators of the same type or `join()` to combine assessments from a [`PointEstimator`](/API/estimators#NeuralEstimators.PointEstimator) and an [`IntervalEstimator`](/API/estimators#NeuralEstimators.IntervalEstimator).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/assess.jl#L1-L22" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/assess.jl#L1-L22" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -130,7 +130,7 @@ The plot produced depends on the type of estimator being assessed:
   
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/ext/NeuralEstimatorsPlottingMakieExt.jl#L50-L99" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/ext/NeuralEstimatorsPlottingMakieExt.jl#L50-L99" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -161,7 +161,7 @@ If the `Assessment` object corresponds to an estimator with a self-defined loss 
   
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/assess.jl#L428-L447" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/assess.jl#L428-L447" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -184,7 +184,7 @@ $${\textrm{bias}}(\hat{\boldsymbol{\theta}}(\cdot))
 where $\{\boldsymbol{\theta}^{(k)} : k = 1, \dots, K\}$ denotes a set of $K$ parameter vectors sampled from the prior and, for each $k$, data $\boldsymbol{Z}^{(k)}$ are simulated from the statistical model conditional on $\boldsymbol{\theta}^{(k)}$.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/assess.jl#L462-L475" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/assess.jl#L462-L475" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -207,7 +207,7 @@ $${\textrm{rmse}}(\hat{\boldsymbol{\theta}}(\cdot))
 where $\{\boldsymbol{\theta}^{(k)} : k = 1, \dots, K\}$ denotes a set of $K$ parameter vectors sampled from the prior and, for each $k$, data $\boldsymbol{Z}^{(k)}$ are simulated from the statistical model conditional on $\boldsymbol{\theta}^{(k)}$.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/assess.jl#L487-L500" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/assess.jl#L487-L500" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -228,7 +228,7 @@ Computes a Monte Carlo approximation of an interval estimator&#39;s expected cov
   
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/assess.jl#L512-L521" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/assess.jl#L512-L521" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 

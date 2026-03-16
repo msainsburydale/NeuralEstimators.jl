@@ -85,7 +85,7 @@ ds((Z, X))
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Architectures.jl#L42-L122" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Architectures.jl#L42-L122" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -143,7 +143,7 @@ ds([g, g])   # vector of graphs, corresponding to multiple data sets
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Graphs.jl#L134-L183" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Graphs.jl#L134-L183" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -176,7 +176,7 @@ The method `(mlp::MLP)(x, y)` concatenates `x` and `y` along their first dimensi
   
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Architectures.jl#L745-L759" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Architectures.jl#L745-L759" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -200,7 +200,7 @@ Computes the number of independent replicates in the data set `Z`.
 Note that this function is a wrapper around [`numberreplicates`](/API/miscellaneous#NeuralEstimators.numberreplicates) with return type equal to the eltype of `Z`.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/summarystatistics.jl#L1-L6" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/summarystatistics.jl#L1-L6" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -217,7 +217,7 @@ logsamplesize(Z)
 Computes the log of the number of independent replicates in the data set `Z`. 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/summarystatistics.jl#L9-L12" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/summarystatistics.jl#L9-L12" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -234,7 +234,7 @@ invsqrtsamplesize(Z)
 Computes the inverse of the square root of the number of independent replicates in the data set `Z`. 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/summarystatistics.jl#L15-L18" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/summarystatistics.jl#L15-L18" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -260,7 +260,7 @@ samplecorrelation(z)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/summarystatistics.jl#L44-L56" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/summarystatistics.jl#L44-L56" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -286,7 +286,7 @@ samplecovariance(z)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/summarystatistics.jl#L21-L33" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/summarystatistics.jl#L21-L33" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -339,7 +339,7 @@ nv(g)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Graphs.jl#L193-L236" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Graphs.jl#L193-L236" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -373,7 +373,7 @@ l(x)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Architectures.jl#L601-L617" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Architectures.jl#L601-L617" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -400,7 +400,7 @@ b(z)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Architectures.jl#L696-L711" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Architectures.jl#L696-L711" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -472,7 +472,7 @@ l(g)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Graphs.jl#L57-L122" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Graphs.jl#L57-L122" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -528,7 +528,7 @@ Z = randn(n, K)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Architectures.jl#L265-L302" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Architectures.jl#L265-L302" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -600,7 +600,7 @@ L[1] * L[1]'
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Architectures.jl#L449-L519" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Architectures.jl#L449-L519" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -664,7 +664,7 @@ L[1] * L[1]'
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Architectures.jl#L340-L402" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Architectures.jl#L340-L402" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -701,7 +701,7 @@ w(h)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Graphs.jl#L243-L266" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Graphs.jl#L243-L266" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -736,7 +736,7 @@ w(h)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Graphs.jl#L285-L306" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Graphs.jl#L285-L306" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -789,7 +789,7 @@ f.b
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Architectures.jl#L646-L683" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Architectures.jl#L646-L683" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 

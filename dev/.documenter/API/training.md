@@ -127,7 +127,7 @@ estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, optimiser = loado
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/train.jl#L1-L89" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/train.jl#L1-L89" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -148,7 +148,7 @@ Returns a matrix with two columns: training risk (column 1) and validation risk 
 See also [`plotrisk`](/API/training#NeuralEstimators.plotrisk).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/train.jl#L669-L679" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/train.jl#L669-L679" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -169,7 +169,7 @@ Requires a plotting package (e.g., `using Plots`) to be loaded.
 See also [`loadrisk`](/API/training#NeuralEstimators.loadrisk).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/train.jl#L687-L697" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/train.jl#L687-L697" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -192,7 +192,7 @@ By default, loads the optimiser corresponding to the best network (as measured b
 The returned optimizer can be passed directly to `train()` via the `optimiser`  keyword argument to resume training with the correct optimiser state.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/train.jl#L646-L661" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/train.jl#L646-L661" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 

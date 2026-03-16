@@ -17,7 +17,7 @@ estimate(estimator::BayesEstimator, Z; batchsize::Integer = 32, use_gpu::Bool = 
 Applies `estimator` to data `Z` and returns the resulting estimates.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/inference.jl#L1-L4" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/inference.jl#L1-L4" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -42,7 +42,7 @@ Non-parametric bootstrapping is facilitated by passing a single data set, `Z`. T
 The return type is a $d$ × `B` matrix, where $d$ is the dimension of the parameter vector. 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/inference.jl#L174-L193" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/inference.jl#L174-L193" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -64,7 +64,7 @@ When given `θ`, the intervals are constructed by computing quantiles with proba
 The return type is a $d$ × 2 matrix, whose first and second columns respectively contain the lower and upper bounds of the interval. The rows of this matrix can be named by passing a vector of strings to the keyword argument `parameter_names`. 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/inference.jl#L102-L116" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/inference.jl#L102-L116" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -90,7 +90,7 @@ When using a `RatioEstimator`, the prior distribution $p(\boldsymbol{\theta})$ i
 Keyword arguments are passed onto [summarystatistics](/API/estimators#NeuralEstimators.summarystatistics).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/inference.jl#L53-L69" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/inference.jl#L53-L69" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -110,7 +110,7 @@ Computes the posterior mean based either on a $d$ × $N$ matrix `θ` of posterio
 See also [`posteriormedian()`](/API/inference#NeuralEstimators.posteriormedian), [`posteriormode()`](/API/inference#NeuralEstimators.posteriormode).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/inference.jl#L16-L22" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/inference.jl#L16-L22" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -130,7 +130,7 @@ Computes the vector of marginal posterior medians based either on a $d$ × $N$ m
 See also [`posteriormean()`](/API/inference#NeuralEstimators.posteriormean), [`posteriorquantile()`](/API/inference#NeuralEstimators.posteriorquantile).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/inference.jl#L27-L33" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/inference.jl#L27-L33" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -152,7 +152,7 @@ The return value is a $d$ × `length(probs)` matrix.
 See also [`posteriormedian()`](/API/inference#NeuralEstimators.posteriormedian).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/inference.jl#L38-L46" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/inference.jl#L38-L46" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -177,7 +177,7 @@ If a vector `θ₀` of initial parameter estimates is given, the approximate pos
 See also [`posteriormedian()`](/API/inference#NeuralEstimators.posteriormedian), [`posteriormean()`](/API/inference#NeuralEstimators.posteriormean).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/inference.jl#L76-L89" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/inference.jl#L76-L89" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -207,7 +207,7 @@ Compute the log likelihood-to-evidence ratios over a grid of parameter values `�
 A vector of log ratios, one for each column of `θ_grid`.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/RatioEstimator.jl#L144-L158" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/RatioEstimator.jl#L144-L158" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 

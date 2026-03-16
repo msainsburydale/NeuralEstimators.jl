@@ -17,7 +17,7 @@ NeuralEstimator
 An abstract supertype for all neural estimators.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/Estimators.jl#L1-L4" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/Estimators.jl#L1-L4" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -94,7 +94,7 @@ posteriormean(estimator, Z)   # point estimate
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/PosteriorEstimator.jl#L1-L55" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/PosteriorEstimator.jl#L1-L55" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -178,7 +178,7 @@ sampleposterior(estimator, z; θ_grid = θ_grid)         # posterior sample
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/RatioEstimator.jl#L1-L71" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/RatioEstimator.jl#L1-L71" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -199,7 +199,7 @@ BayesEstimator <: NeuralEstimator
 An abstract supertype for neural Bayes estimators.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/Estimators.jl#L7-L10" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/Estimators.jl#L7-L10" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -263,7 +263,7 @@ estimate(estimator, Z)   # point estimate
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/PointEstimator.jl#L1-L47" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/PointEstimator.jl#L1-L47" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -335,7 +335,7 @@ interval(estimator, Z)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/QuantileEstimator.jl#L1-L64" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/QuantileEstimator.jl#L1-L64" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -434,7 +434,7 @@ q₁(Z[1], θ₋ᵢ)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/QuantileEstimator.jl#L87-L187" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/QuantileEstimator.jl#L87-L187" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -506,7 +506,7 @@ ensemble(Z)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/Ensemble.jl#L1-L58" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/Ensemble.jl#L1-L58" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -529,7 +529,7 @@ Returns the summary network of `estimator`.
 See also [`summarystatistics`](/API/estimators#NeuralEstimators.summarystatistics).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/Estimators.jl#L15-L20" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/Estimators.jl#L15-L20" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -550,7 +550,7 @@ Note that [`RatioEstimator`](/API/estimators#NeuralEstimators.RatioEstimator) ha
 See also [`summarynetwork`](/API/estimators#NeuralEstimators.summarynetwork).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/Estimators.jl#L24-L31" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/Estimators.jl#L24-L31" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -571,7 +571,7 @@ If `Z` is a [`DataSet`](/API/parametersdata#NeuralEstimators.DataSet) object, th
 See also [`summarynetwork`](/API/estimators#NeuralEstimators.summarynetwork).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/Estimators.jl#L36-L44" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/Estimators.jl#L36-L44" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -596,7 +596,7 @@ where $q$ denotes the approximate posterior distribution.
 See also [`sampleposterior`](/API/inference#NeuralEstimators.sampleposterior).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/138d4afc03ecc00c49eae4b1b31e01adb0ff5ec1/src/Estimators/PosteriorEstimator.jl#L82-L93" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/msainsburydale/NeuralEstimators.jl/blob/8897312e13e5ff49dc41be0d960c7da307b8575f/src/Estimators/PosteriorEstimator.jl#L82-L93" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
