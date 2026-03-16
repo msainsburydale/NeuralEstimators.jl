@@ -10,13 +10,13 @@ with columns:
 - `k`:         the index of the parameter vector
 - `j`:         the index of the data set (only relevant in the case that multiple data sets are associated with each parameter vector)
 
+If the estimator is a [`PosteriorEstimator`](@ref) or a [`RatioEstimator`](@ref), in addition to the fields listed above, the field `samples` stores the posterior samples as a long-form `DataFrame` with the columns `parameter`, `truth`, `k`, `j` (as given above), as well as:
+- `draw`: the index of the draw within the posterior samples
+- `value`: the value of the posterior sample for a given parameter and draw.
+
 If the estimator is an [`IntervalEstimator`](@ref), the column `estimate` will be replaced by the columns `lower` and `upper`, containing the lower and upper bounds of the interval, respectively.
 
 If the estimator is a [`QuantileEstimator`](@ref), there will also be a column `prob` indicating the probability level of the corresponding quantile estimate.
-
-If the estimator is a [`PosteriorEstimator`](@ref), in addition to the fields listed above, the field `samples` stores the posterior samples as a long-form `DataFrame` with the columns `parameter`, `truth`, `k`, `j` (as given above), as well as:
-- `draw`: the index of the draw within the posterior samples
-- `value`: the value of the posterior sample for a given parameter and draw.
 
 Use `merge()` to combine assessments from multiple estimators of the same type or `join()` to combine assessments from a [`PointEstimator`](@ref) and an [`IntervalEstimator`](@ref).
 """

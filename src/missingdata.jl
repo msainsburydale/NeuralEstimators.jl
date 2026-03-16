@@ -289,7 +289,7 @@ the data will be removed in a contiguous block based on a randomly selected star
 The return type is `Array{Union{T, Missing}}`.
 
 # Examples
-```
+```julia
 d = 5           # dimension of each replicate
 m = 2000        # number of replicates
 Z = rand(d, m)  # simulated data
@@ -417,7 +417,7 @@ the indicator array `W` is concatenated along the first dimension of `Z`. If `Z`
 dimensions, `W` is concatenated along the second-to-last dimension of `Z`. 
 
 # Examples
-```
+```julia
 using NeuralEstimators
 
 Z = rand(16, 16, 1, 1)

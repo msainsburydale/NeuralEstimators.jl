@@ -6,7 +6,7 @@ input `z` and then concatenated, which allows users to provide a collection of
 functions as a user-defined summary statistic in [`DeepSet`](@ref) objects.
 
 Examples
-```
+```julia
 f(z) = rand32(2)
 g(z) = rand32(3) .+ z
 S = [f, g]
@@ -283,7 +283,7 @@ the functions midpoint. In `Compress`, we fix θ₀ = 0, since the output of a
 randomly initialised neural network is typically around zero.
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux
 
 a = [25, 0.5, -pi/2]
@@ -382,7 +382,7 @@ covariance matrices using [`vectotril`](@ref) and `Symmetric`.
 See also [`CorrelationMatrix`](@ref).
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux, LinearAlgebra
 
 d = 4
@@ -488,7 +488,7 @@ correlation matrices using [`vectotril`](@ref) and `Symmetric`.
 See also [`CovarianceMatrix`](@ref).
 
 # Examples
-```
+```julia
 using NeuralEstimators, LinearAlgebra, Flux
 
 d  = 4
@@ -607,7 +607,7 @@ ensures positive weights (biases are left unconstrained).
 This layer can be useful for constucting (partially) monotonic neural networks. 
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux
 
 l = DensePositive(Dense(5 => 2))
@@ -648,7 +648,7 @@ end
 Function ``f(x, y) = |ax - (1-a)y|^b`` for trainable parameters a ∈ [0, 1] and b > 0.
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux
 
 # Generate some data
@@ -702,7 +702,7 @@ that connects the input of the block directly to the output,
 facilitating the training of deep networks.
 
 # Examples
-```
+```julia
 using NeuralEstimators
 z = rand(16, 16, 1, 1)
 b = ResidualBlock((3, 3), 1 => 32)

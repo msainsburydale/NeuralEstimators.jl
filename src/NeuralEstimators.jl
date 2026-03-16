@@ -16,6 +16,7 @@ using Folds
 using InvertedIndices
 using LinearAlgebra
 using NamedArrays
+import NamedArrays: NamedMatrix
 using ParameterSchedulers
 using ParameterSchedulers: Stateful, next!
 using Printf
@@ -29,7 +30,7 @@ using StatsBase: wsample, sample
 export tanhloss, kpowerloss, intervalscore, quantileloss
 include("losses.jl")
 
-export AbstractParameterSet
+export AbstractParameterSet, NamedMatrix
 include("Parameters.jl")
 
 export DataSet

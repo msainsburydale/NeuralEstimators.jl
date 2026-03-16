@@ -34,48 +34,39 @@ inferential algorithms. For Bayesian inference, posterior samples can be obtaine
 using NeuralEstimators, Flux, CairoMakie
 
 # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
-num_parameters = 2     # dimension of the parameter vector θ
-n = 1                  # dimension of each independent replicate of Z
-m = 30                 # number of independent replicates in each data set
-sampler(K) = rand32(num_parameters, K)
-simulator(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(n, m) for ϑ in eachcol(θ)]
+d, m = 2, 100  # dimension of θ and number of replicates
+sampler(K) = NamedMatrix(μ = rand(K), σ = rand(K))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(m))
+simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
-# Summary network
-num_summaries = 4num_parameters
-w = 128   
-ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
-ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, num_summaries))
-summary_network = DeepSet(ψ, ϕ)
+# Neural network
+num_summaries = 3d
+summary_network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, num_summaries))
 
 # Initialise the estimator
-estimator = RatioEstimator(summary_network, num_parameters; num_summaries = num_summaries)
+estimator = RatioEstimator(summary_network, d; num_summaries = num_summaries)
 
 # Train the estimator
-estimator = train(estimator, sampler, simulator, simulator_args = m, K = 1000)
+estimator = train(estimator, sampler, simulator, K = 1000)
 
 # Plot the risk history
 plotrisk()
 
 # Assess the estimator
-θ_test = sampler(500)
-Z_test = simulator(θ_test, m);
-θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'  # fine gridding of the parameter space
+θ_test = sampler(250)
+Z_test = simulator(θ_test);
+θ_grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
 assessment = assess(estimator, θ_test, Z_test; θ_grid = θ_grid)
 plot(assessment)
 
 # Generate "observed" data 
 θ = sampler(1)
-z = simulator(θ, 200)
+z = simulator(θ)
 
 # Grid-based optimization and sampling
 logratio(estimator, z, θ_grid = θ_grid)                # log of likelihood-to-evidence ratios
 posteriormode(estimator, z; θ_grid = θ_grid)           # posterior mode 
 sampleposterior(estimator, z; θ_grid = θ_grid)         # posterior sample
-
-# Gradient-based optimization
-using Optim
-θ₀ = [0.5, 0.5]                                        # initial estimate
-posteriormode(estimator, z; θ₀ = θ₀)                   # posterior mode 
 ```
 """
 struct RatioEstimator{M1, M2, N} <: NeuralEstimator
@@ -84,6 +75,12 @@ struct RatioEstimator{M1, M2, N} <: NeuralEstimator
     inference_network::N
 end
 
+# NB: not currently supporting this; see NeuralEstimatorsOptimExt if we want to reintroduce it
+# Gradient-based optimization 
+# using Optim
+# θ₀ = [0.5, 0.5]                                        # initial estimate
+# posteriormode(estimator, z; θ₀ = θ₀)                   # posterior mode 
+
 # Constructor: summary network, number of parameters, number of summaries => MLP inference network
 function RatioEstimator(
     summary_network, num_parameters::Integer, num_summaries::Integer;
@@ -91,8 +88,9 @@ function RatioEstimator(
     summary_network_θ_kwargs::NamedTuple = (;),
     kwargs...
 )
-    summary_network_θ = MLP(num_parameters, num_summaries_θ; summary_network_θ_kwargs...)
-    inference_network = MLP(num_summaries + num_summaries_θ, 1; kwargs...)
+    # NB enforce output_activation = identity for both internally constructed MLPs
+    summary_network_θ = MLP(num_parameters, num_summaries_θ; output_activation = identity, summary_network_θ_kwargs...)
+    inference_network = MLP(num_summaries + num_summaries_θ, 1; output_activation = identity, kwargs...) 
     @info "RatioEstimator: num_summaries = $num_summaries."
     RatioEstimator(summary_network, summary_network_θ, inference_network)
 end
@@ -162,6 +160,7 @@ function logratio(estimator::RatioEstimator, Z, θ_grid_posarg = nothing; θ_gri
     @assert !(!isnothing(θ_grid_posarg) && !isnothing(θ_grid)) "θ_grid must be provided exactly once, either as a positional or keyword argument, but not both"
     @assert !(isnothing(θ_grid_posarg) && isnothing(θ_grid)) "θ_grid must be provided either as a positional or keyword argument"
     θ_grid = isnothing(θ_grid_posarg) ? θ_grid : θ_grid_posarg
+    θ_grid = f32(θ_grid)
 
     summary_stats = summarystatistics(estimator, Z)
     summary_stats_θ = estimator.summary_network_θ(θ_grid)
@@ -240,6 +239,7 @@ function posteriormode(
     @assert isnothing(θ_grid) || isnothing(θ₀) "Only one of `θ_grid` and `θ₀` should be given"
 
     if !isnothing(θ_grid)
+        θ_grid = f32(θ_grid)
         logpθ = logprior.(eachcol(θ_grid))
         summary_stats = summarystatistics(estimator, Z)
         summary_stats_θ = estimator.summary_network_θ(θ_grid)

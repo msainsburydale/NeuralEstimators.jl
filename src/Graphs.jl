@@ -32,7 +32,7 @@ Additional keyword arguments inherit from [`adjacencymatrix()`](@ref) to determi
 `k=30` neighbours within a disc of radius `r=0.15` units.
 
 # Examples
-```
+```julia
 using NeuralEstimators, GraphNeuralNetworks
 
 # Number of replicates and spatial dimension
@@ -105,7 +105,7 @@ although a custom choice for this function can be provided using the keyword arg
 - `w_out = in` (applicable only if `w = nothing`): the output dimension of $\boldsymbol{w}^{(l)}(\cdot, \cdot)$.  
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux, GraphNeuralNetworks
 
 # Toy spatial data
@@ -147,7 +147,7 @@ each graph is associated with a single parameter vector. The graphs may contain
 subgraphs corresponding to independent replicates.
 
 # Examples
-```
+```julia
 using NeuralEstimators, Flux, GraphNeuralNetworks
 using Statistics: mean
 
@@ -210,7 +210,7 @@ The input type is a `GNNGraph`, and the empirical variogram is computed based on
 Specifically, only locations that are considered neighbours will be used when computing the empirical variogram. 
 
 # Examples 
-```
+```julia
 using NeuralEstimators, GraphNeuralNetworks, Distances, LinearAlgebra
   
 # Simulate Gaussian spatial data with exponential covariance function 
@@ -254,7 +254,7 @@ $h \equiv \|\boldsymbol{s} - \boldsymbol{u} \|$ is the spatial distance between 
 $\boldsymbol{u}$, and $\{B_k : k = 1, \dots, K\}$ is a set of $K =$`n_bins` equally-sized distance bins covering the spatial distances between 0 and `h_max`. 
 
 # Examples 
-```
+```julia
 using NeuralEstimators, GraphNeuralNetworks
 
 h_max = 1
@@ -294,7 +294,7 @@ For spatial locations $\boldsymbol{s}$ and  $\boldsymbol{u}$, creates a spatial 
 where $h \equiv \|\boldsymbol{s} - \boldsymbol{u}\|$ is the spatial distance between $\boldsymbol{s}$ and $\boldsymbol{u}$, and ${\mu_k : k = 1, \dots, K}$ and ${\sigma_k : k = 1, \dots, K}$ are the means and standard deviations of the Gaussian kernels for each bin, covering the spatial distances between 0 and h_max.
 
 # Examples 
-```
+```julia
 using NeuralEstimators, GraphNeuralNetworks
 
 h_max = 1
@@ -362,7 +362,7 @@ a neighbour of another node is given by `collect(mapslices(nnz, A; dims = 2))`.
 By convention, we do not consider a location to neighbour itself (i.e., the diagonal elements of the adjacency matrix are zero). 
 
 # Examples
-```
+```julia
 using NeuralEstimators, Distances, SparseArrays
 
 n = 250
@@ -604,7 +604,7 @@ which can be interfaced from Julia using
 [`RCall`](https://juliainterop.github.io/RCall.jl/stable/).
 
 # Examples
-```
+```julia
 using NeuralEstimators
 
 # Simulate a realisation from a Matérn cluster process
