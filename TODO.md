@@ -15,37 +15,44 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - 🟡 Post-training calibration for better inference (especially PointEstimator and RatioEstimator, but can easily do this for general estimators).
 
 **Estimator types & methods**
-- Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
-- Model selection/comparison: see the [BayesFlow documentation](https://bayesflow.org/main/api/bayesflow.approximators.ModelComparisonApproximator.html#bayesflow.approximators.ModelComparisonApproximator), [this paper](https://arxiv.org/abs/2004.10629), and [this paper](https://arxiv.org/pdf/2503.23156).
+- 🟡 Improve inference methods with RatioEstimator (alternative to grid-based sampling, e.g., MCMC).
 - 🟡 Methods for high-dimensional parameter vectors (e.g., [telescoping ratio estimation](https://arxiv.org/abs/2510.04042)).
-- Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference (see Tables 1 and 3 of [BayesFlow 2.0](https://arxiv.org/abs/2602.07098)).
+- Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
+- Model selection/comparison: see [here](https://bayesflow.org/main/api/bayesflow.approximators.ModelComparisonApproximator.html#bayesflow.approximators.ModelComparisonApproximator), [this paper](https://arxiv.org/abs/2004.10629), and [this paper](https://arxiv.org/pdf/2503.23156).
+- Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference.
 - Explicit learning of summary statistics (see [Zammit-Mangion et al., 2025, Sec. 4](https://arxiv.org/pdf/2404.12484)).
 - Ensemble methods with general estimator types (e.g., PosteriorEstimator, RatioEstimator).
-- Better inference methods with RatioEstimator.
 
 **Inference & diagnostics**
-- 🟡 Summary-statistic-based model-misspecification detection: see the [BayesFlow documentation](https://bayesflow.org/main/api/bayesflow.diagnostics.summary_space_comparison.html) and the references therein.
+- 🟡 Summary-statistic-based model-misspecification detection: see [here](https://bayesflow.org/main/api/bayesflow.diagnostics.summary_space_comparison.html) and the references therein. Once implemented, document by adding a subsection "Detecting model misspecification", or similar, at the end of the page "API/Inference with observed data".
 - Parameter bounds when doing posterior inference (see [#38](https://github.com/msainsburydale/NeuralEstimators.jl/issues/38)).
 - Incorporate [Bootstrap.jl](https://github.com/juliangehring/Bootstrap.jl) (possibly as an [extension](https://docs.julialang.org/en/v1/manual/code-loading/#man-extensions)) to expand bootstrap functionality.
 - assess.jl/inference.jl for more general parameter shapes (currently assumes the parameters are stored as a matrix).
 
 **Summary network architecture**
+- Add several ready-to-go summary networks (e.g., for gridded data, time-series, etc.).
 - Functions for automated neural architecture search (see, e.g., [this paper](https://www.jmlr.org/papers/volume20/18-598/18-598.pdf)) using for example, [evolutionary algorithms](https://en.wikipedia.org/wiki/Neural_architecture_search#Evolution) or [Bayesian optimization](https://en.wikipedia.org/wiki/Neural_architecture_search#Bayesian_optimization).
 - Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
-- Add several ready-to-go summary networks (e.g., for gridded data, time-series, etc.).
 
 ### Documentation
-- 🟡 Update the examples to reflect the new API (in particular, the explicit summary-inference-network decomposition).
-- Use [DocumenterVitepress.jl](https://luxdl.github.io/DocumenterVitepress.jl/dev/) as the backend for Documenter.jl (more modern and polished docs; see, e.g., [Lux.jl](https://lux.csail.mit.edu/stable/)). Then, in the examples, add `:::code-group`s for the different estimator types.
-- Example: Sequence (e.g., time-series) input using recurrent neural networks (RNNs). See [Flux's in-built support for recurrence](https://fluxml.ai/Flux.jl/stable/guide/models/recurrence/). 
-- Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)). (Might need extra functionality for this.)
+- 🟡 Lux.jl: Once we've added support for Lux, update the documentation to reflect that either Flux or Lux can be used (use `codegroup`s in the examples to choose which deep-learning package and to define the neural networks).
+- Update/improve the logo and home page (see, e.g., [here](https://beautiful.makie.org/dev/)).
+- Citations: Use proper citation manager (see [here](https://luxdl.github.io/DocumenterVitepress.jl/dev/manual/citations)).
+- Examples: Add [`::: tabs`](https://luxdl.github.io/DocumenterVitepress.jl/dev/manual/markdown-examples#Tabs) in the assessment stage to show the various diagnostic plots (recovery plots for point estimates; SBC and posterior contraction for posterior samples).
+-  Examples: Don't use DeepSets in CNN (just reference DeepSet); also think about this for GNN. Maybe retain DeepSet so that we can illustrate variable grid sizes using `GlobalMeanPool` (not clear how variable grid sizes could be handled during training otherwise)? Could do a `::: codegroup` to illustrate both networks (could also do this for the univariate data example, showing both DeepSet and regular MLP).
+- Example: Sequence (e.g., time-series) input using recurrent neural networks (RNNs). See [Flux's in-built support for recurrence](https://fluxml.ai/Flux.jl/stable/guide/models/recurrence/).
 - Example: Spatio-temporal data.
 - Example: Nonstationary spatial data with image-to-image networks (see, e.g., [LatticeVision](https://arxiv.org/abs/2505.09803)).
+- Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)). (Might need extra functionality for this.)
+- Example: Lévy Processes using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
+- Clean Advanced usage; move "expert summary statistics", "censored data", and "missing data" to the examples section (each with their own example page), and merge "Variable sample sizes" into the section on replciated data (possibly as a "Bonus" subsection at the end).
+- Some of the API pages could be organised better with subsections.
 - Add a gif to the README (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif)).
 - GitHub: Remove the workshop branch and update the tutorial.
 
-### Performance 
-- Improve the efficiency of the code where possible. See the general [Julia performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/) that could apply, and the [Flux performance tips](https://fluxml.ai/Flux.jl/stable/guide/performance/). Using [Lux.jl](https://lux.csail.mit.edu/stable/) might also be faster?
+### Performance
+- [Lux.jl](https://lux.csail.mit.edu/stable/) may be faster.
+- Improve the efficiency of the code where possible. See the general [Julia performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/) that could apply, and the [Flux performance tips](https://fluxml.ai/Flux.jl/stable/guide/performance/).
 - Some operations involving only matrices and MLPs (e.g., inference network transformations of summary statistics) should default to using the CPU.
 
 ### Refactoring/API improvements
@@ -63,7 +70,9 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ---
 
-### Breaking changes to decide upon before version 1.0
+### 🟡 Breaking changes to decide upon before version 1.0
+
+These changes would alter the fields of estimator objects, making it more difficult to load estimators saved in previous versions (although user-facing API would remain unchanged).
 
 - Add a `base_distribution` field in `NormalisingFlow` (default standard Normal).
 

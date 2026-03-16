@@ -17,43 +17,39 @@ The convenience constructor builds `q` internally given `num_parameters` and `nu
 ```julia
 using NeuralEstimators, Flux, CairoMakie
 
-# Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
-num_parameters = 2  # dimension of the parameter vector θ
-n = 1               # dimension of each independent replicate of Z
-m = 50              # number of independent replicates in each data set
-sampler(K) = rand32(num_parameters, K)
-simulator(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(n, m) for ϑ in eachcol(θ)]
+# Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ N(0, 1) and σ ~ U(0, 1)
+d, m = 2, 100  # dimension of θ and number of replicates
+sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(m))
+simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
-# Summary network 
-num_summaries = 4num_parameters
-w = 128   
-ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
-ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, num_summaries))
-summary_network = DeepSet(ψ, ϕ)
+# Neural network
+num_summaries = 3d
+summary_network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, num_summaries))
 
 # Initialise the estimator, with q built internally
-estimator = PosteriorEstimator(summary_network, num_parameters; num_summaries = num_summaries)
+estimator = PosteriorEstimator(summary_network, d; num_summaries = num_summaries)
 
 # Or, build q explicitly
-q = NormalisingFlow(num_parameters; num_summaries = num_summaries)
+q = NormalisingFlow(d; num_summaries = num_summaries)
 estimator = PosteriorEstimator(summary_network, q)
 
 # Train the estimator
-estimator = train(estimator, sampler, simulator, simulator_args = m, K = 3000)
+estimator = train(estimator, sampler, simulator, K = 3000)
 
 # Plot the risk history
 plotrisk()
 
 # Assess the estimator
-θ_test = sampler(500)
-Z_test = simulator(θ_test, m);
+θ_test = sampler(250)
+Z_test = simulator(θ_test);
 assessment = assess(estimator, θ_test, Z_test)
 plot(assessment)
 
 # Inference with observed data 
-θ = [0.8f0 0.1f0]'
-Z = simulator(θ, m)
-sampleposterior(estimator, Z) # posterior draws 
+θ = sampler(1)
+Z = simulator(θ)
+sampleposterior(estimator, Z) # posterior draws
 posteriormean(estimator, Z)   # point estimate
 ```
 """

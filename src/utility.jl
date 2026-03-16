@@ -130,7 +130,7 @@ materialised) since `Triangular` matrices are not always compatible with other
 GPU operations.
 
 # Examples
-```
+```julia
 using NeuralEstimators
 
 d = 4
@@ -211,7 +211,7 @@ Returns the container type of its argument.
 If given a `SubArray`, returns the container type of the parent array.
 
 # Examples
-```
+```julia
 a = rand(3, 4)
 containertype(a)
 containertype(typeof(a))
@@ -273,7 +273,7 @@ with graphical data (use [`numberreplicates()`](@ref) to check that the training
 and validation data sets are equally replicated, which prevents subsetting).
 
 # Examples
-```
+```julia
 using NeuralEstimators
 using GraphNeuralNetworks
 using Flux: batch
@@ -387,7 +387,7 @@ If all arrays have the same size along the last dimension, stacks along a new fi
 Alternatively, if sizes differ along the last dimension, concatenates along the last dimension.
 
 # Examples
-```
+```julia
 # Vector containing arrays of the same size:
 Z = [rand(2, 3, m) for m ∈ (1, 1)];
 stackarrays(Z)

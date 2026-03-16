@@ -12,6 +12,7 @@ Thank you for your interest in contributing to **NeuralEstimators**! We welcome 
 1. [Adding a New Estimator](#adding-a-new-estimator)
 1. [Adding a New Approximate Distribution](#adding-a-new-approximate-distribution)
 1. [Adding a New Architecture](#adding-a-new-architecture)
+1. [Adding a New Documentation Example](#adding-a-new-documentation-example)
 
 ---
 
@@ -179,3 +180,26 @@ After running `import NeuralEstimators: <function name>`:
 In general, we leave the construction of neural network architectures to the user: the package is intentionally agnostic to the specific architecture used, and most standard Flux layers and containers work out of the box. 
 
 That said, reusable building blocks that are broadly applicable and not already available in Flux (e.g., `DeepSet`, `MLP`) can be added to `Architectures.jl`. Follow the Flux layer pattern (a struct with fields for parameters, and a callable method), and export the type and any associated constructor helpers from `NeuralEstimators.jl`.
+
+---
+
+## Adding a New Documentation Example
+
+Documentation examples live in `docs/src/examples/`. Each example is a self-contained `.md` file that walks through the full workflow for a specific type of data, as the data structure determines the appropriate neural network architecture.
+
+**To add a new example:**
+
+1. Create a new file `docs/src/examples/data_<name>.md` and write the example following the general workflow:
+   - Introductory paragraph describing the statistical model and parameters.
+   - `## Package dependencies` — list all required packages, including the GPU code-group block.
+   - `## Sampling parameters` — define a `sampler` function.
+   - `## Simulating data` — define a `simulator` function.
+   - `## Constructing the neural network` — construct the summary network.
+   - `## Constructing the neural estimator` — use the code-group block for `PointEstimator`, `PosteriorEstimator`, and `RatioEstimator`.
+   - `## Training the estimator` — call `train`.
+   - `## Assessing the estimator` — call `assess` and show diagnostics.
+   - `## Applying the estimator to observed data` — use the code-group block for the three estimator types.
+   
+   See `docs/src/examples/data_replicated.md` for a worked example to follow as a template.
+2. Register the new file in `makedocs` in `docs/make.jl` by adding it to the `"Examples"` section of the `pages` argument.
+3. Build and preview the documentation locally (see [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/README.md)).

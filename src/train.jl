@@ -54,35 +54,22 @@ The trained estimator is always returned on the CPU.
 ```julia
 using NeuralEstimators, Flux
 
-# Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ N(0, 1) and σ ~ U(0, 1)
-function sampler(K)
-	μ = randn(K) # Gaussian prior
-	σ = rand(K)  # Uniform prior
-	θ = vcat(μ', σ')
-	return θ
-end
-function simulator(θ, m)
-	[ϑ[1] .+ ϑ[2] * randn(1, m) for ϑ ∈ eachcol(θ)]
-end
-d = 2     # dimension of the parameter vector θ
-n = 1     # dimension of each independent replicate of Z
+# Data Z|μ,σ ~ N(μ, σ²), priors μ ~ U(0, 1) and σ ~ U(0, 1)
+m = 50 # number of replicates in each data set
+sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(m))
+simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
 # Summary network
-num_summaries = 4d
-w = 64 # width of each hidden layer  
-ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
-ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, num_summaries))
-summary_network = DeepSet(ψ, ϕ)
+num_summaries = 6
+summary_network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, num_summaries))
 
 # Initialise the estimator
 estimator = PointEstimator(summary_network, d; num_summaries = num_summaries)
 
-# Number of data sets in each epoch and number of independent replicates in each data set
-K = 1000
-m = 30
-
 # Training: simulation on-the-fly
-estimator  = train(estimator, sampler, simulator, simulator_args = m, K = K)
+K = 1000
+estimator  = train(estimator, sampler, simulator, K = K)
 
 # Plot the risk history (using any plotting backend)
 using Plots
@@ -92,17 +79,17 @@ plotrisk()
 # Training: simulation on-the-fly with fixed parameters 
 θ_train = sampler(K)
 θ_val   = sampler(K)
-estimator = train(estimator, θ_train, θ_val, simulator, simulator_args = m, optimiser = loadoptimiser(), risk_history = loadrisk(), freeze_summary_network = true)
+estimator = train(estimator, θ_train, θ_val, simulator, optimiser = loadoptimiser(), risk_history = loadrisk(), freeze_summary_network = true)
 
 # Training: fixed parameters and fixed data
-Z_train   = simulator(θ_train, m)
-Z_val     = simulator(θ_val, m)
+Z_train   = simulator(θ_train)
+Z_val     = simulator(θ_val)
 estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, optimiser = loadoptimiser(), risk_history = loadrisk(), freeze_summary_network = true)
 ```
 """
 function train end
 
-# TODO with summary statistics only, much faster to always use the CPU.
+# TODO with summary statistics only, might be faster to always use the CPU?
 
 function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     batchsize::Integer = 32,
@@ -551,7 +538,7 @@ _loss(estimator, loss) = loss
 _inputoutput(estimator, Z, θ) = (Z, θ)
 
 function _dataloader(estimator, Z, θ, batchsize)
-    data = _inputoutput(estimator, Z, _extractθ(θ))
+    data = _inputoutput(estimator, Z, _stripnames(_extractθ(θ)))
     _DataLoader(data, batchsize)
 end
 

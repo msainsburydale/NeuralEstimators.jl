@@ -9,7 +9,7 @@ length equal to the number of spatial locations, ``n``; otherwise, the data are
 returned as an ``n``x`m` matrix.
 
 # Examples
-```
+```julia
 using NeuralEstimators, Distances, LinearAlgebra
 
 n = 500
@@ -49,7 +49,7 @@ returned as an ``n``x`m` matrix.
 - `Gumbel = true`: flag indicating whether the data should be log-transformed from the unit Fréchet scale to the Gumbel scale.
 
 # Examples
-```
+```julia
 using NeuralEstimators, Distances, LinearAlgebra
 
 n = 500
@@ -214,7 +214,7 @@ three-dimensional array (this is only possible if all distance matrices in `D`
 are the same size).
 
 # Examples
-```
+```julia
 using NeuralEstimators
 using LinearAlgebra: norm
 n  = 10
@@ -320,7 +320,7 @@ thinning factor (`thin`) and the burn-in (`burn`).
 - `thin = 10`: thinning factor.
 
 # Examples
-```
+```julia
 using NeuralEstimators 
 
 ## Marginal simulation 

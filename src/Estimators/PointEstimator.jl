@@ -3,44 +3,46 @@
     PointEstimator(network)
     PointEstimator(summary_network, inference_network)
     PointEstimator(summary_network, num_parameters; num_summaries, kwargs...)
-A neural point estimator, where the neural `network` is a mapping from the sample space to the parameter space.
+A neural point estimator mapping data to a point summary of the posterior distribution.
+
+The neural network can be provided in two ways:
+- As a single `network` that maps data directly to the parameter space.
+- As a `summary_network` that maps data to a vector of summary statistics, with the `inference_network` constructed internally based on `num_parameters` and `num_summaries`.
 
 # Examples
 ```julia
 using NeuralEstimators, Flux, CairoMakie
 
-# Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
-num_parameters = 2     # dimension of the parameter vector θ
-n = 1                  # dimension of each independent replicate of Z
-m = 50                 # number of independent replicates in each data set
-sampler(K) = rand32(num_parameters, K)
-simulator(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(n, m) for ϑ in eachcol(θ)]
+# Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ N(0, 1) and σ ~ U(0, 1)
+d, m = 2, 100  # dimension of θ and number of replicates
+sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(m))
+simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
-# Neural network
-w = 128   
-ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
-ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, num_parameters))
-network = DeepSet(ψ, ϕ)
+# Neural network, an MLP mapping m inputs into d outputs
+network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
 
-# Initialise the estimator
+# Initialise a neural point estimator
 estimator = PointEstimator(network)
 
 # Train the estimator
-estimator = train(estimator, sampler, simulator, simulator_args = m, K = 1000)
+estimator = train(estimator, sampler, simulator)
 
 # Plot the risk history
 plotrisk()
 
 # Assess the estimator
-θ_test = sampler(500)
-Z_test = simulator(θ_test, m);
+θ_test = sampler(1000)
+Z_test = simulator(θ_test)
 assessment = assess(estimator, θ_test, Z_test)
+bias(assessment)
+rmse(assessment)
 plot(assessment)
 
-# Inference with "observed" data 
-θ = [0.8f0 0.1f0]'
-Z = simulator(θ, m)
-estimate(estimator, Z)
+# Apply to observed data (here, simulated as a stand-in)
+θ = sampler(1)           # ground truth (not known in practice)
+Z = simulator(θ)         # stand-in for real observations
+estimate(estimator, Z)   # point estimate
 ```
 """
 struct PointEstimator{M, N} <: BayesEstimator

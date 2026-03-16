@@ -22,11 +22,11 @@ makedocs(
         ],
         "Advanced usage" => "examples/advancedusage.md",
         "API" => [
-            "Parameters and data" => "API/1parametersdata.md",
-            "API/2estimators.md",
-            "API/3training.md",
-            "API/4assessment.md",
-            "API/5inference.md",
+            "Parameters and data" => "API/parametersdata.md",
+            "API/estimators.md",
+            "API/training.md",
+            "API/assessment.md",
+            "API/inference.md",
             "API/architectures.md",
             "API/approximatedistributions.md",
             "API/lossfunctions.md",
@@ -47,13 +47,3 @@ deploydocs(
     branch = "gh-pages",
     devbranch = "main"
 )
-
-# DocumenterVitepress.deploydocs(;
-#     repo = "...",
-#     target = joinpath(@__DIR__, "build"),
-#     branch = "gh-pages",
-#     devbranch = "...",
-#     push_preview = true,
-# )
-
-# julia --project=. docs/make.jl && julia -e 'using LiveServer; serve(dir="docs/build")'

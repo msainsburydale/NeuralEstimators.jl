@@ -25,7 +25,7 @@ Computes the [sample covariance matrix](https://en.wikipedia.org/wiki/Sample_mea
 Σ̂, and returns the vectorised lower triangle of Σ̂.
 
 # Examples
-```
+```julia
 # 5 independent replicates of a 3-dimensional vector
 z = rand(3, 5)
 samplecovariance(z)
@@ -48,7 +48,7 @@ Computes the sample correlation matrix,
 R̂, and returns the vectorised strict lower triangle of R̂.
 
 # Examples
-```
+```julia
 # 5 independent replicates of a 3-dimensional vector
 z = rand(3, 5)
 samplecorrelation(z)
