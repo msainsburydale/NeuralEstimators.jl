@@ -45,5 +45,5 @@ DocumenterVitepress.deploydocs(;
     target = joinpath(@__DIR__, "build"),
     branch = "gh-pages",
     devbranch = "main",
-    push_preview = true,
+    push_preview = true
 )
