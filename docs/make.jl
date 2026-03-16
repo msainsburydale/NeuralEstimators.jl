@@ -35,9 +35,9 @@ makedocs(
         ]
     ],
     format = DocumenterVitepress.MarkdownVitepress(
-    repo = "github.com/msainsburydale/NeuralEstimators.jl",
-    devbranch = "main",
-    devurl = "dev")
+        repo = "github.com/msainsburydale/NeuralEstimators.jl",
+        devbranch = "main",
+        devurl = "dev")
 )
 
 deploydocs(

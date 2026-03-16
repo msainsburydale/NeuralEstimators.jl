@@ -90,7 +90,7 @@ function RatioEstimator(
 )
     # NB enforce output_activation = identity for both internally constructed MLPs
     summary_network_θ = MLP(num_parameters, num_summaries_θ; output_activation = identity, summary_network_θ_kwargs...)
-    inference_network = MLP(num_summaries + num_summaries_θ, 1; output_activation = identity, kwargs...) 
+    inference_network = MLP(num_summaries + num_summaries_θ, 1; output_activation = identity, kwargs...)
     @info "RatioEstimator: num_summaries = $num_summaries."
     RatioEstimator(summary_network, summary_network_θ, inference_network)
 end
