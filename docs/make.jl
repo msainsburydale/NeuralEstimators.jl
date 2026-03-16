@@ -40,10 +40,10 @@ makedocs(
         devurl = "dev")
 )
 
-deploydocs(
-    deps = nothing, make = nothing,
-    repo = "github.com/msainsburydale/NeuralEstimators.jl.git",
-    target = "build",
+DocumenterVitepress.deploydocs(;
+    repo = "github.com/msainsburydale/NeuralEstimators.jl",
+    target = joinpath(@__DIR__, "build"),
     branch = "gh-pages",
-    devbranch = "main"
+    devbranch = "main",
+    push_preview = true,
 )
