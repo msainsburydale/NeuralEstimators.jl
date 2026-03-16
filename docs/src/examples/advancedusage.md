@@ -25,7 +25,9 @@ For convenience, the function [`train()`](@ref) allows for the automatic saving 
 
 ## Storing expensive intermediate objects for data simulation
 
-Parameters sampled from the prior distribution may be stored in several ways. Most simply, they can be stored as a $d \times K$ matrix, where $d$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution; more generally, any batchable object compatible with `numobs`/`getobs` from [MLUtils.jl](https://juliaml.github.io/MLUtils.jl/stable/) is supported. Alternatively, parameters can be stored in a user-defined subtype of [`AbstractParameterSet`](@ref), whose only requirement is a field `θ` that stores the parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below.
+Parameters sampled from the prior distribution may be stored in several ways. Most simply, they can be stored as a $d \times K$ matrix, where $d$ is the number of parameters in the model and $K$ is the number of parameter vectors sampled from the prior distribution; more generally, any batchable object compatible with [`numobs`](https://juliaml.github.io/MLUtils.jl/dev/api/#MLCore.numobs)/[`getobs`](https://juliaml.github.io/MLUtils.jl/dev/api/#MLCore.getobs) is supported. 
+
+Alternatively, parameters can be stored in a user-defined subtype of [`AbstractParameterSet`](@ref), whose only requirement is a field `θ` that stores the parameters. With this approach, one may store computationally expensive intermediate objects, such as Cholesky factors, for later use when conducting "on-the-fly" simulation, which is discussed below.
 
 ## On-the-fly and just-in-time simulation
 
@@ -102,6 +104,30 @@ Implicitly, neural estimators involve the learning of summary statistics. Howeve
 The fusion of learned and expert summary statistics is facilitated by the [`DataSet`](@ref) struct, which couples raw data with a matrix of precomputed expert summary statistics. These are concatenated with the learned summary statistics during both training and inference, regardless of the chosen neural-network architecture. Note that a neural estimator based purely on expert summary statistics (see, e.g., [Gerber and Nychka, 2021](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382); [Rai et al. ,2024](https://onlinelibrary.wiley.com/doi/abs/10.1002/env.2845)) can be constructed by setting the summary network to `identity` and passing the summary statistics directly as a matrix. Note also that users may specify arbitrary expert summary statistics, however for convenience several standard [User-defined summary statistics](@ref) are provided with the package, including a fast, sparse approximation of the empirical variogram.
 
 For an example of incorporating expert summary statistics, see [Irregular spatial data](@ref), where the empirical variogram is used alongside learned graph-neural-network-based summary statistics.
+
+## Parameter constraints
+
+Many models have parameter constraints (e.g., variance and range parameters that must be strictly positive). These constraints can be accounted for in various way. For example, when constructing a neural Bayes estimator (i.e., a point estimator), they can be incorporated in the final layer of the neural network by choosing appropriate activation functions for each parameter. Below, we construct a neural Bayes estimator for $\boldsymbol{\theta} = (\mu, \sigma)'$ that enforces the constraint $\sigma > 0$ by applying the softplus activation function in the final layer of the outer network. For additional ways to constrain parameter estimates, see [Output layers](@ref).
+
+```julia
+n = 1    # dimension of each data replicate (univariate)
+d = 2    # dimension of the parameter vector θ
+w = 128  # width of each hidden layer 
+
+# Final layer has output dimension d and enforces parameter constraints
+final_layer = Parallel(
+    vcat,
+    Dense(w, 1, identity),     # μ ∈ ℝ
+    Dense(w, 1, softplus)      # σ > 0
+)
+
+# Inner and outer networks
+ψ = Chain(Dense(n, w, relu), Dense(w, d, relu))    
+ϕ = Chain(Dense(d, w, relu), final_layer)          
+
+# Combine into a DeepSet
+network = DeepSet(ψ, ϕ)
+```
 
 ## Variable sample sizes
 

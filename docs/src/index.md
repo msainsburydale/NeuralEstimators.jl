@@ -1,3 +1,10 @@
+```@raw html
+---
+sidebar: false
+next: false
+---
+```
+
 # NeuralEstimators
 
 `NeuralEstimators` facilitates a suite of neural methods for parameter inference in scenarios where simulation from the model is feasible. These methods are **likelihood-free** and **amortised**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches. 
@@ -5,8 +12,6 @@
 The package supports neural Bayes estimators (NBEs), which transform data into point summaries of the posterior distribution; neural posterior estimators (NPEs), which perform approximate posterior inference via KL-divergence minimisation; and neural ratio estimators (NREs), which approximate the likelihood-to-evidence ratio and thereby enable frequentist or Bayesian inference through various downstream algorithms.
 
 User-friendliness is a central focus of the package, which is designed to minimise "boilerplate" code while preserving complete flexibility in the neural-network architecture and other workflow components. The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. A convenient interface for R users is available on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
-
-Once familiar with the [Methodology](@ref), see the [Overview](@ref) of the package workflow and the [Examples](@ref), or refer to the [Quick start](@ref) section below.
 
 ## Installation
 
@@ -24,41 +29,107 @@ using Pkg; Pkg.add(url = "https://github.com/msainsburydale/NeuralEstimators.jl"
 
 ## Quick start 
 
-In the following minimal example, we develop a [neural Bayes estimator](@ref "Neural Bayes estimators") for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $\boldsymbol{Z} \equiv (Z_1, \dots, Z_m)'$, where each $Z_i \overset{\mathrm{iid}}\sim N(\mu, \sigma^2)$. 
+In the following minimal example, we develop a neural estimator for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $\boldsymbol{Z} \equiv (Z_1, \dots, Z_m)'$, where each $Z_i \overset{\mathrm{iid}}\sim N(\mu, \sigma^2)$ and we use the marginal priors $\mu \sim N(0, 1)$ and $\sigma \sim U(0, 1)$. 
 
-```julia
-using NeuralEstimators, Flux
+::: code-group
 
-# Priors μ,σ ~ U(0, 1) and data Zᵢ|μ,σ ~ N(μ, σ²), i = 1,…, m
-d = 2    # dimension of the parameter vector θ = (μ,σ)'
-n = 1    # dimension of each data replicate Zᵢ
-sampler(K) = rand(d, K) 
-simulator(θ, m = 100) = [ϑ[1] .+ ϑ[2] * randn(n, m) for ϑ ∈ eachcol(θ)]  
+```julia [Point estimation]
+using NeuralEstimators, Flux, CairoMakie
 
-# Neural network using DeepSets architecture (supports any number m of replicates)
-w = 128  # width of each hidden layer 
-ψ = Chain(Dense(n, w, relu), Dense(w, w, relu))
-ϕ = Chain(Dense(w, w, relu), Dense(w, d))
-network = DeepSet(ψ, ϕ)
+# Functions to sample from the prior and simulate data
+d, m = 2, 100  # dimension of θ and number of replicates
+sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(m))
+simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
-# Initialise a neural point estimator
-estimator = PointEstimator(network) 
+# Neural network, an MLP mapping m inputs into d outputs
+network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
+
+# Initialise a neural estimator
+estimator = PointEstimator(network)
 
 # Train the estimator
-estimator = train(estimator, sampler, simulator, epochs = 20)
+estimator = train(estimator, sampler, simulator)
 
 # Assess the estimator
-θ_test = sampler(1000)
+θ_test = sampler(250)
 Z_test = simulator(θ_test)
 assessment = assess(estimator, θ_test, Z_test)
 bias(assessment)
 rmse(assessment)
+plot(assessment)
 
-# Apply the estimator to "observed" data
-θ = [0.8 0.1]'           # true parameters
-Z = simulator(θ)         # "observed" data
-estimate(estimator, Z)   # point estimate
+# Apply to observed data (here, simulated as a stand-in)
+θ = sampler(1)                   # ground truth (not known in practice)
+Z = simulator(θ)                 # stand-in for real observations
+estimate(estimator, Z)           # point estimate
 ```
+
+```julia [Posterior estimation]
+using NeuralEstimators, Flux, CairoMakie
+
+# Functions to sample from the prior and simulate data
+d, m = 2, 100  # dimension of θ and number of replicates
+sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(m))
+simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
+
+# Neural network, an MLP mapping m inputs into d outputs
+network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
+
+# Initialise a neural estimator
+estimator = PosteriorEstimator(network, d; num_summaries = d)
+
+# Train the estimator
+estimator = train(estimator, sampler, simulator)
+
+# Assess the estimator
+θ_test = sampler(250)
+Z_test = simulator(θ_test)
+assessment = assess(estimator, θ_test, Z_test)
+bias(assessment)
+rmse(assessment)
+plot(assessment)
+
+# Apply to observed data (here, simulated as a stand-in)
+θ = sampler(1)                   # ground truth (not known in practice)
+Z = simulator(θ)                 # stand-in for real observations
+sampleposterior(estimator, Z)    # approximate posterior sample
+```
+
+```julia [Ratio estimation]
+using NeuralEstimators, Flux, CairoMakie
+
+# Functions to sample from the prior and simulate data
+d, m = 2, 100  # dimension of θ and number of replicates
+sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(m))
+simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
+
+# Neural network, an MLP mapping m inputs into d outputs
+network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
+
+# Initialise a neural estimator
+estimator = RatioEstimator(network, d; num_summaries = d)
+
+# Train the estimator
+estimator = train(estimator, sampler, simulator)
+
+# Assess the estimator
+θ_test = sampler(250)
+Z_test = simulator(θ_test)
+assessment = assess(estimator, θ_test, Z_test)
+bias(assessment)
+rmse(assessment)
+plot(assessment)
+
+# Apply to observed data (here, simulated as a stand-in)
+θ = sampler(1)                   # ground truth (not known in practice)
+Z = simulator(θ)                 # stand-in for real observations
+sampleposterior(estimator, Z)    # approximate posterior sample
+```
+
+:::
 
 ## Contributing
 

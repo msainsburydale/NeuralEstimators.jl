@@ -2,7 +2,6 @@
 
 Here, we provide an overview of the amortised neural inferential methods supported by the package, which include [neural Bayes estimators](@ref "Neural Bayes estimators"), [neural posterior estimators](@ref "Neural posterior estimators"), and [neural ratio estimators](@ref "Neural ratio estimators"). For further details on each of these methods and amortised neural inference more broadly, see the review paper by [Zammit-Mangion et al. (2025)](https://doi.org/10.1146/annurev-statistics-112723-034123) and the references therein.
 
-
 **Notation:** We denote model parameters of interest by $\boldsymbol{\theta} \equiv (\theta_1, \dots, \theta_d)' \in \Theta$, where $\Theta \subseteq \mathbb{R}^d$ is the parameter space. We denote data by $\boldsymbol{Z} \equiv (Z_1, \dots, Z_n)' \in \mathcal{Z}$, where $\mathcal{Z} \subseteq \mathbb{R}^n$ is the sample space. We denote neural-network parameters by $\boldsymbol{\gamma}$. For simplicity, we assume that all measures admit densities with respect to the Lebesgue measure. We use $\pi(\cdot)$ to denote the prior density function of the parameters. The input argument to a generic density function $p(\cdot)$ serves to specify both the random variable associated with the density and its evaluation point.
 
 ## Neural Bayes estimators

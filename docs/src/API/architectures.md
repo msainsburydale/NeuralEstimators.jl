@@ -1,6 +1,10 @@
+```@meta
+CollapsedDocStrings = true
+```
+
 # Neural-network building blocks
 
-As discussed in the [Overview](@ref), any [Flux](https://fluxml.ai/Flux.jl/stable/) model can be used to construct a neural network when using the package. In addition to the standard Flux layers and architectures, the following components can be useful.
+Any [Flux](https://fluxml.ai/Flux.jl/stable/) model can be used to construct a neural network when using the package. In addition to the standard Flux layers and architectures, the following components can be useful.
 
 ## Modules
 
@@ -14,7 +18,7 @@ GNNSummary
 MLP
 ```
 
-# User-defined summary statistics
+## User-defined summary statistics
 
 ```@index
 Order = [:type, :function]
@@ -45,8 +49,6 @@ In addition to the [built-in layers](https://fluxml.ai/Flux.jl/stable/reference/
 ```@docs
 DensePositive
 
-PowerDifference
-
 ResidualBlock
 
 SpatialGraphConv
@@ -60,7 +62,7 @@ Order = [:type, :function]
 Pages   = ["activationfunctions.md"]
 ```
 
-In addition to the [standard activation functions](https://fluxml.ai/Flux.jl/stable/models/activation/) provided by Flux (e.g., `relu`, `softplus`), the following layers can be used at the end of an architecture to ensure valid estimates for certain models. Note that the Flux layer `Parallel` can be useful for applying several different parameter constraints, as shown in the [Univariate data](@ref) example.
+In addition to the [standard activation functions](https://fluxml.ai/Flux.jl/stable/models/activation/) provided by Flux (e.g., `relu`, `softplus`), the following layers can be used at the end of an architecture to ensure valid estimates for certain models. Note that the Flux layer `Parallel` can be useful for applying several different parameter constraints.
 
 !!! note "Layers vs. activation functions"
     Although we may conceptualise the following types as "output activation functions", they should be treated as separate layers included in the final stage of a Flux `Chain()`. In particular, they cannot be used as the activation function of a `Dense` layer. 
@@ -71,4 +73,14 @@ Compress
 CorrelationMatrix
 
 CovarianceMatrix
+```
+
+## Miscellaneous
+
+```@docs
+IndicatorWeights
+
+KernelWeights
+
+PowerDifference
 ```

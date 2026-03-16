@@ -1,0 +1,5 @@
+[deps]
+DocumenterVitepress = "4710194d-e776-4893-9690-8d956a29c365"
+LiveServer = "16fef848-5104-11e9-1b77-fb7a48bbb589"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+NeuralEstimators = "38f6df31-6b4a-4144-b2af-7ace2da57606"

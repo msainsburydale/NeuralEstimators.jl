@@ -1,7 +1,54 @@
-# Model-specific functions
+```@meta
+CollapsedDocStrings = true
+```
+
+# Miscellaneous
+
+## Core
+
+These functions can appear during the core workflow, and may need to be
+overloaded in some applications.
+
+```@docs
+numberreplicates
+
+subsetreplicates
+```
+
+## Downstream-inference algorithms
+
+```@docs 
+EM
+```
+
+## Utility functions
+
+```@docs
+adjacencymatrix
+
+containertype
+
+encodedata
+
+expandgrid
+
+maternchols
+
+removedata
+
+rowwisenorm
+
+spatialgraph
+
+stackarrays
+
+vectotril
+```
+
+## Model-specific functions
 
 
-## Data simulators
+### Data simulators
 
 The philosophy of `NeuralEstimators` is to cater for any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. However, the following functions have been included as they may be helpful to others, and their source code illustrates how a user could formulate code for their own model.
 
@@ -15,13 +62,13 @@ simulatepotts
 simulateschlather
 ```
 
-## Spatial point processes
+### Spatial point processes
 
 ```@docs
 maternclusterprocess
 ```
 
-## Covariance functions
+### Covariance functions
 
 These covariance functions may be of use for various models.
 
@@ -32,7 +79,7 @@ paciorek
 ```
 
 
-## Density functions
+### Density functions
 
 Density functions are not needed in the workflow of `NeuralEstimators`. However, as part of a series of comparison studies between neural estimators and likelihood-based estimators given in various paper, we have developed the following functions for evaluating the density function for several popular distributions. We include these in `NeuralEstimators` to cater for the possibility that they may be of use in future comparison studies.
 
