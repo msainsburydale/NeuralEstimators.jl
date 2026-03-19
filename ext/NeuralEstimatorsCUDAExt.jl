@@ -3,9 +3,9 @@ module NeuralEstimatorsCUDAExt
 using NeuralEstimators
 using CUDA
 using Flux: gpu, cpu
-import NeuralEstimators: _checkgpu, _forcegc
+import NeuralEstimators: _getdevice, _forcegc
 
-function _checkgpu(use_gpu::Bool; verbose::Bool = true)
+function _getdevice(use_gpu::Bool; verbose::Bool = true)
     if use_gpu && CUDA.functional()
         if verbose
             @info "Running on CUDA GPU"

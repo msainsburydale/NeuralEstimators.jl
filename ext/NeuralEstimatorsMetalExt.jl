@@ -3,9 +3,9 @@ module NeuralEstimatorsMetalExt
 using NeuralEstimators
 using Metal
 using Flux: gpu, cpu
-import NeuralEstimators: _checkgpu
+import NeuralEstimators: _getdevice
 
-function _checkgpu(use_gpu::Bool; verbose::Bool = true)
+function _getdevice(use_gpu::Bool; verbose::Bool = true)
     if use_gpu && Metal.functional()
         if verbose
             @info "Running on Apple Silicon GPU"

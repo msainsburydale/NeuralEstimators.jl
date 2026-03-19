@@ -161,7 +161,7 @@ function (em::EM)(
 
     θ₀ = cpu(θ₀)
 
-    device = _checkgpu(use_gpu, verbose = verbose)
+    device = _getdevice(use_gpu, verbose = verbose)
     MAP = em.MAP |> device
 
     if !any(ismissing.(Z))

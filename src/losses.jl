@@ -1,5 +1,4 @@
-# This is an internal function used in Flux to check the size of the
-# arguments passed to a loss function
+# Internal function used to check the size of the arguments passed to a loss function
 function _check_sizes(ŷ::AbstractArray, y::AbstractArray)
     for d = 1:max(ndims(ŷ), ndims(y))
         size(ŷ, d) == size(y, d) || throw(DimensionMismatch(
@@ -9,6 +8,22 @@ function _check_sizes(ŷ::AbstractArray, y::AbstractArray)
 end
 _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
 @non_differentiable _check_sizes(ŷ::Any, y::Any)
+
+# ---- Flux losses ----
+
+# Same as Flux's versions https://fluxml.ai/Flux.jl/stable/reference/models/losses/#man-losses
+# defined here to reduce dependency on Flux
+
+function logitbinarycrossentropy(ŷ, y; agg = mean)
+  _check_sizes(ŷ, y)
+  agg(@.((1 - y) * ŷ - logσ(ŷ)))
+end
+
+function mae(ŷ, y; agg = mean)
+  _check_sizes(ŷ, y)
+  agg(abs.(ŷ .- y))
+end
+
 
 # ---- surrogates for 0-1 loss ----
 
@@ -61,7 +76,7 @@ If `safeorigin = true`, the loss function is modified to be piecewise, continuou
 
 See also [`tanhloss()`](@ref).
 """
-function kpowerloss(θ̂, θ, κ; safeorigin::Bool = true, agg = mean, ϵ = ofeltype(θ̂, 0.1), joint::Bool = true)
+function kpowerloss(θ̂, θ, κ; safeorigin::Bool = true, agg = mean, ϵ = convert(float(eltype(θ̂)), 0.1), joint::Bool = true)
 
     #  If `joint = true`, the L₁ norm is computed over each parameter vector, so that, with 
     # `κ` close to zero, the resulting Bayes estimator is the mode of the joint posterior distribution;

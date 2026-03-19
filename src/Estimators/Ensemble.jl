@@ -98,12 +98,12 @@ function train(ensemble::Ensemble, args...; kwargs...)
         end
         if !isnothing(optimiser) # catch errors caused by constructing the optimiser from the Ensemble object
             lr = try
-                findlr(optimiser)
+                _findlr(optimiser)
             catch
                 ;
                 5e-4
             end
-            kwargs = merge(kwargs, (optimiser = Flux.setup(Adam(lr), estimator),))
+            kwargs = merge(kwargs, (optimiser = Optimisers.setup(Adam(lr), estimator),))
         end
         train(estimator, args...; kwargs...)
     end

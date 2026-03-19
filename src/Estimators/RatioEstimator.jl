@@ -125,21 +125,21 @@ function _inputoutput(estimator::RatioEstimator, Z, θ)
         Z = getobs(joinobs(Z, Z̃), 1:2K)
     end
 
-    # Create class labels for output
-    labels = [:dependent, :independent]
-    output = onehotbatch(repeat(labels, inner = K), labels)[1:1, :]
+    # Binary class labels: 1 for dependent pairs (Z, θ), 0 for independent pairs (Z̃, θ̃)
+    output = [ones(Float32, 1, K) zeros(Float32, 1, K)]
 
-    # Shuffle everything in case batching isn't shuffled properly downstream
+    # Shuffle everything just in case batching isn't shuffled properly downstream
     idx = shuffle(1:2K)
     Z = getobs(Z, idx)
     θ = getobs(θ, idx)
-    output = output[1:1, idx]
+    output = output[:, idx]
 
     input = (Z, θ)
     return input, output
 end
 
-_loss(estimator::RatioEstimator, loss = nothing) = Flux.logitbinarycrossentropy
+_loss(estimator::RatioEstimator, loss = nothing) = logitbinarycrossentropy
+
 
 """
     logratio(estimator::RatioEstimator, Z, θ_grid)

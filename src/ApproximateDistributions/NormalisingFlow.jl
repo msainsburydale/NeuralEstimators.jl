@@ -64,7 +64,7 @@ where $c = 1.9$ is a fixed clamping threshold. This transformation ensures that 
 
 Additional keyword arguments `kwargs` are passed to the [`MLP`](@ref) constructor when creating `κ₁` and `κ₂`. 
 """
-struct AffineCouplingBlock{D, M <: MLP}
+struct AffineCouplingBlock{D, M}
     scale::M
     translate::M
     d₁::D
@@ -251,7 +251,7 @@ function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer)
     tz = repeat(tz, inner = (1, N))
 
     # Move to the GPU if one is available
-    device = _checkgpu(true, verbose = false)
+    device = _getdevice(true, verbose = false) #TODO flag for reactant
     U = device(U)
     tz = device(tz)
     flow = device(flow)

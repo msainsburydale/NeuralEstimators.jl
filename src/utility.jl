@@ -5,10 +5,10 @@
 Internal helper that applies `network` to data `z`, handling GPU device placement,
 Float32 conversion, and minibatching.
 """
-function _applywithdevice(network, z; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+function _applywithdevice(network, z; batchsize::Integer = 32, use_gpu::Bool = true, use_reactant::Bool = false, kwargs...)
     z = f32(z)
     batchsize = min(numobs(z), batchsize)
-    device = _checkgpu(use_gpu, verbose = false)
+    device = _getdevice(use_gpu, use_reactant, verbose = false)
     network = network |> device
     Flux.testmode!(network)
     data_loader = _DataLoader(z, batchsize, shuffle = false, partial = true)
@@ -92,7 +92,7 @@ end
 # end
 # PointEstimator(summary_network, d::Integer; num_summaries = nothing, kwargs...) = PointEstimator(summary_network, d, num_summaries; kwargs...)
 
-nparams(model) = length(Flux.trainables(model)) > 0 ? sum(length, Flux.trainables(model)) : 0
+nparams(model) = length(Optimisers.trainables(model)) > 0 ? sum(length, Optimisers.trainables(model)) : 0
 
 # Drop fields from NamedTuple: https://discourse.julialang.org/t/filtering-keys-out-of-named-tuples/73564/8
 drop(nt::NamedTuple, key::Symbol) = Base.structdiff(nt, NamedTuple{(key,)})
@@ -334,16 +334,25 @@ end
 
 # ---- End test code ----
 
-# Here, we define _checkgpu() for the case that CUDA has not been loaded (so, we will be using the CPU)
-# For the case that CUDA is loaded, _checkgpu() is overloaded in ext/NeuralEstimatorsCUDAExt.jl
+# Here, we define _getdevice() for the case that CUDA has not been loaded (so, we will be using the CPU)
+# For the case that CUDA is loaded, _getdevice() is overloaded in ext/NeuralEstimatorsCUDAExt.jl
 # NB Julia complains if we overload functions in package extensions... to get around this, here we
 # use a slightly different function signature (omitting ::Bool)
-function _checkgpu(use_gpu; verbose::Bool = true)
+function _getdevice(use_gpu; verbose::Bool = true)
     if verbose
         @info "Running on CPU"
     end
     device = cpu
     return (device)
+end
+
+function _getdevice(use_gpu, use_reactant; verbose::Bool = true)
+    if use_reactant
+        verbose && @info "Running on Reactant/XLA"
+        return reactant_device()
+    end
+    # fall through to existing logic
+    return _getdevice(use_gpu; verbose = verbose)
 end
 
 # Here, we define _manualgc() for the case that CUDA has not been loaded (so, we will be using the CPU)

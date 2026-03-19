@@ -8,6 +8,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 **Backend**
 - 🔴 Support for [Lux.jl](https://lux.csail.mit.edu/stable/).
+- Support for [SimpleChains.jl](https://github.com/PumasAI/SimpleChains.jl) to train small neural networks quickly on the CPU (see [this](@ref) blog post; see also the [Lux docs](https://lux.csail.mit.edu/stable/api/Lux/interop#Lux-Models-to-Simple-Chains) for converting Lux models to simple chains).
 
 **Training**
 - 🟡 Sequential training methods.
@@ -51,7 +52,8 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - GitHub: Remove the workshop branch and update the tutorial.
 
 ### Performance
-- 🔴 [Lux.jl](https://lux.csail.mit.edu/stable/) may be faster.
+- 🔴 [Lux.jl](https://lux.csail.mit.edu/stable/) with Reactant.jl might be faster.
+- 🟡 Prcompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)). 
 - Improve the efficiency of the code where possible. See the general [Julia performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/) that could apply, and the [Flux performance tips](https://fluxml.ai/Flux.jl/stable/guide/performance/).
 - Some operations involving only matrices and MLPs (e.g., inference network transformations of summary statistics) should default to using the CPU.
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).

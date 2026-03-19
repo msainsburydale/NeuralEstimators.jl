@@ -57,7 +57,7 @@ Samples from the approximate posterior distribution implied by `estimator`.
 
 The positional argument `N` controls the size of the posterior sample.
 
-If `Z` represents a single data set as determined by `Flux.numobs()`, returns a $d$ × `N` matrix of posterior samples, where $d$ is the dimension of the parameter vector. Otherwise, if `Z` contains multiple data sets, a vector of matrices will be returned. 
+If `Z` represents a single data set as determined by `numobs`, returns a $d$ × `N` matrix of posterior samples, where $d$ is the dimension of the parameter vector. Otherwise, if `Z` contains multiple data sets, a vector of matrices will be returned. 
 
 When using a `RatioEstimator`, the prior distribution $p(\boldsymbol{\theta})$ is controlled through the keyword argument `logprior` (by default, a uniform prior is used). The sampling algorithm is based on a fine-gridding of the
 parameter space, specified through the keyword argument `θ_grid`. The approximate posterior density is 

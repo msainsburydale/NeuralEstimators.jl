@@ -16,11 +16,11 @@ The validation parameters and data are always held fixed.
 The trained estimator is always returned on the CPU. 
 
 # Keyword arguments common to all methods:
-- `loss = Flux.mae` (applicable only to [`PointEstimator`](@ref)): loss function used to train the neural network. 
+- `loss = mae` (applicable only to [`PointEstimator`](@ref)): loss function used to train the neural network. 
 - `epochs = 100`: number of epochs to train the neural network. An epoch is one complete pass through the entire training data set when doing stochastic gradient descent.
 - `stopping_epochs = 5`: cease training if the risk does not improve in this number of epochs.
 - `batchsize = 32`: the batchsize to use when performing stochastic gradient descent, that is, the number of training samples processed between each update of the neural-network parameters.
-- `optimiser = Flux.setup(Adam(5e-4), estimator)`: any [Optimisers.jl](https://fluxml.ai/Optimisers.jl/stable/) optimisation rule for updating the neural-network parameters. When the training data and/or parameters are held fixed, one may wish to employ regularisation to prevent overfitting; for example, `optimiser = Flux.setup(OptimiserChain(WeightDecay(1e-4), Adam()), estimator)`, which corresponds to L₂ regularisation with penalty coefficient λ=10⁻⁴. 
+- `optimiser = Optimisers.setup(Adam(5e-4), estimator)`: any [Optimisers.jl](https://fluxml.ai/Optimisers.jl/stable/) optimisation rule for updating the neural-network parameters. When the training data and/or parameters are held fixed, one may wish to employ regularisation to prevent overfitting; for example, `optimiser = Optimisers.setup(OptimiserChain(WeightDecay(1e-4), Adam()), estimator)`, which corresponds to L₂ regularisation with penalty coefficient λ=10⁻⁴. 
 - `lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule}`: defines the learning-rate schedule for adaptively changing the learning rate during training. Accepts either a [ParameterSchedulers.jl](https://fluxml.ai/ParameterSchedulers.jl/dev/) object or `nothing` for a fixed learning rate. By default, it uses [`CosAnneal`](https://fluxml.ai/ParameterSchedulers.jl/dev/api/cyclic/#ParameterSchedulers.CosAnneal) with a maximum set to the initial learning rate from `optimiser`, a minimum of zero, and a period equal to the number of epochs. The learning rate is updated at the end of each epoch. 
 - `freeze_summary_network = false`: if `true` and the estimator has a `summary_network` field, freezes the summary network parameters during training (i.e., only the inference network is updated). In this case, the summary statistics for a given instance of simulated data are computed only once, giving a significant speedup. This is useful for transfer learning, where a pretrained summary network is held fixed while a new inference network is trained for a different model or estimator type.
 - `use_gpu = true`: flag indicating whether to use a GPU if one is available.
@@ -55,13 +55,13 @@ The trained estimator is always returned on the CPU.
 using NeuralEstimators, Flux
 
 # Data Z|μ,σ ~ N(μ, σ²), priors μ ~ U(0, 1) and σ ~ U(0, 1)
-m = 50 # number of replicates in each data set
+d, m = 2, 50 # number of unknown parameters and number replicates in each data set
 sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
 simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(m))
 simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
 # Summary network
-num_summaries = 6
+num_summaries = 3d
 summary_network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, num_summaries))
 
 # Initialise the estimator
@@ -94,18 +94,20 @@ function train end
 function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     batchsize::Integer = 32,
     epochs::Integer = 100,
-    loss = Flux.Losses.mae,
-    optimiser = Flux.setup(Adam(5e-4), estimator),
+    loss = mae,
+    optimiser = Optimisers.setup(Adam(5e-4), estimator),
     savepath::Union{Nothing, String} = tempdir(),
     stopping_epochs::Integer = 5,
     use_gpu::Bool = true,
+    use_reactant::Bool = false,
     verbose::Bool = true,
-    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false),
+    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(_findlr(optimiser), zero(_findlr(optimiser)), epochs, false),
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false,
     adtype::AbstractADType = AutoZygote()
 ) where {P, T}
-    device = _checkgpu(use_gpu, verbose = verbose)
+
+    device = _getdevice(use_gpu, use_reactant; verbose = verbose)
 
     if freeze_summary_network && !hasfield(typeof(estimator), :summary_network)
         @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
@@ -170,7 +172,7 @@ function train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
         epoch_time = @elapsed train_risk = _risk(estimator, loss, train_set, device, optimiser, adtype)
         epoch_time += @elapsed val_risk = _risk(estimator, loss, val_set, device)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
-        verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" findlr(optimiser))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
+        verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(optimiser))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
 
         # Update the learning rate
         if !isnothing(lr_schedule)
@@ -204,19 +206,21 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
     batchsize::Integer = 32,
     epochs_per_Z_refresh::Integer = 1,
     epochs::Integer = 100,
-    loss = Flux.Losses.mae,
-    optimiser = Flux.setup(Adam(5e-4), estimator),
+    loss = mae,
+    optimiser = Optimisers.setup(Adam(5e-4), estimator),
     savepath::Union{Nothing, String} = tempdir(),
     simulate_just_in_time::Bool = false,
     stopping_epochs::Integer = 5,
     use_gpu::Bool = true,
+    use_reactant::Bool = false,
     verbose::Bool = true,
-    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false),
+    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(_findlr(optimiser), zero(_findlr(optimiser)), epochs, false),
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false,
     adtype::AbstractADType = AutoZygote()
 ) where {P}
-    device = _checkgpu(use_gpu, verbose = verbose)
+    
+    device = _getdevice(use_gpu, use_reactant; verbose = verbose)
 
     if freeze_summary_network && !hasfield(typeof(estimator), :summary_network)
         @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
@@ -317,7 +321,7 @@ function train(estimator, θ_train::P, θ_val::P, simulator;
         # Compute the validation risk and report to the user
         epoch_time += @elapsed val_risk = _risk(estimator, loss, val_set, device)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
-        verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" findlr(optimiser))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
+        verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(optimiser))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
 
         if !isnothing(lr_schedule)
             next_lr = ParameterSchedulers.next!(lr_schedule)
@@ -351,22 +355,23 @@ function train(estimator, sampler, simulator;
     epochs_per_θ_refresh::Integer = 1, epochs_per_theta_refresh::Integer = 1,
     epochs_per_Z_refresh::Integer = 1,
     simulate_just_in_time::Bool = false,
-    loss = Flux.Losses.mae,
-    optimiser = Flux.setup(Adam(5e-4), estimator),
+    loss = mae,
+    optimiser = Optimisers.setup(Adam(5e-4), estimator),
     batchsize::Integer = 32,
     epochs::Integer = 100,
     savepath::Union{Nothing, String} = tempdir(),
     stopping_epochs::Integer = 5,
     use_gpu::Bool = true,
+    use_reactant::Bool = false,
     verbose::Bool = true,
     K::Integer = 10_000,
     K_val::Integer = K ÷ 2 + 1,
-    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(findlr(optimiser), zero(findlr(optimiser)), epochs, false),
+    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(_findlr(optimiser), zero(_findlr(optimiser)), epochs, false),
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false,
     adtype::AbstractADType = AutoZygote()
 )
-    device = _checkgpu(use_gpu, verbose = verbose)
+    device = _getdevice(use_gpu, use_reactant; verbose = verbose)
 
     if freeze_summary_network && !hasfield(typeof(estimator), :summary_network)
         @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
@@ -505,7 +510,7 @@ function train(estimator, sampler, simulator;
 
         epoch_time += @elapsed val_risk = _risk(estimator, loss, val_set, device)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
-        verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" findlr(optimiser))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
+        verbose && println("Epoch: $epoch  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(optimiser))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
 
         if !isnothing(lr_schedule)
             next_lr = ParameterSchedulers.next!(lr_schedule)
@@ -542,7 +547,7 @@ function _dataloader(estimator, Z, θ, batchsize)
     _DataLoader(data, batchsize)
 end
 
-# Thin wrapper around Flux's DataLoader with sensible training defaults
+# Thin wrapper around DataLoader with sensible training defaults
 # NB: redirect_stderr suppresses batchsize warning from DataLoader
 function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
     oldstd = stdout
@@ -559,13 +564,13 @@ function _risk(estimator, loss, data_loader, device, optimiser = nothing, adtype
     K = 0
     for (input, output) in data_loader
         input, output = input |> device, output |> device
-        k = Flux.numobs(input)
+        k = numobs(input)
         if !isnothing(optimiser)
             # NB storing the loss in this way is computationally efficient, but it means that
             # the final training risk that we report for each epoch is slightly inaccurate
             # (since the neural-network parameters are updated after each batch)
             ls, ∇ = Flux.withgradient(estimator -> loss(estimator(input), output), adtype, estimator)
-            Flux.update!(optimiser, estimator, ∇[1])
+            Optimisers.update!(optimiser, estimator, ∇[1])
         else
             ls = loss(estimator(input), output)
         end
@@ -577,19 +582,28 @@ function _risk(estimator, loss, data_loader, device, optimiser = nothing, adtype
     return cpu(sum_loss/K)
 end
 
-function findlr(opt)
+function _findlr(opt)
     if opt isa Optimisers.Leaf
-        return opt.rule.eta
+        rule = opt.rule
+        if hasproperty(rule, :eta)
+            return rule.eta
+        elseif rule isa OptimiserChain
+            for subrule in rule.opts
+                if hasproperty(subrule, :eta)
+                    return subrule.eta
+                end
+            end
+        end
     elseif opt isa AbstractArray || opt isa Tuple
         for subopt in opt
-            eta = findlr(subopt)
+            eta = _findlr(subopt)
             if !isnothing(eta)
                 return eta
             end
         end
     elseif opt isa NamedTuple
         for (_, subopt) in pairs(opt)
-            eta = findlr(subopt)
+            eta = _findlr(subopt)
             if !isnothing(eta)
                 return eta
             end

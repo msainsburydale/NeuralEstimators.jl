@@ -6,17 +6,21 @@ using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
 import Base: join, merge, show, size, summary, getindex, length, eachindex
 using BSON: @save, load
+using ChainRulesCore: @non_differentiable, @ignore_derivatives
 using CSV
 using DataFrames
 using Distances
 using Flux
-using Flux: getobs, ofeltype, DataLoader, update!, onehotbatch, _match_eltype, @non_differentiable, @ignore_derivatives
-import Flux: numobs
 using Folds
 using InvertedIndices
 using LinearAlgebra
+using MLDataDevices: reactant_device
+using MLUtils: getobs, DataLoader, flatten
+import MLUtils: numobs
 using NamedArrays
 import NamedArrays: NamedMatrix
+using NNlib: logσ, softplus, relu
+using Optimisers: update!
 using ParameterSchedulers
 using ParameterSchedulers: Stateful, next!
 using Printf
@@ -37,6 +41,7 @@ export DataSet
 include("DataSet.jl")
 
 export DeepSet, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference, DensePositive, MLP
+export IndicatorWeights, KernelWeights
 export vectotril, vectotriu
 include("Architectures.jl")
 
@@ -83,7 +88,7 @@ export EM, removedata, encodedata
 include("missingdata.jl")
 
 # Functions, function stubs, structs, and exports related to the functionality in the extension ext/NeuralEstimatorsGNNExt.jl
-export spatialgraph, GNNSummary, SpatialGraphConv, IndicatorWeights, KernelWeights, PowerDifference, NeighbourhoodVariogram, adjacencymatrix, maternclusterprocess
+export spatialgraph, GNNSummary, SpatialGraphConv, PowerDifference, NeighbourhoodVariogram, adjacencymatrix, maternclusterprocess
 include("Graphs.jl")
 
 # Simulators and density functions that are useful to have but not needed in generic workflows
@@ -93,7 +98,7 @@ export gaussiandensity, schlatherbivariatedensity
 include("modelspecificfunctions.jl")
 
 # Backwards compatability and deprecations
-export loadbestweights, loadweights, simulate, trainx, mapestimate, initialise_estimator
+export loadbestweights, loadweights, simulate, trainx, mapestimate
 include("deprecated.jl")
 
 end

@@ -40,14 +40,9 @@ w = 128   # width of each hidden layer
 ϕ = Chain(Dense(w, w, relu), Dense(w, d))
 u = DeepSet(ψ, ϕ)
 
-# Initialise the estimator
+# Initialise and train the estimator
 estimator = IntervalEstimator(u)
-
-# Train the estimator
 estimator = train(estimator, sample, simulate, simulator_args = m, K = 3000)
-
-# Plot the risk history
-plotrisk()
 
 # Assess the estimator
 θ_test = sample(500)
@@ -77,7 +72,7 @@ function IntervalEstimator(u, v = u, c::Union{Function, Compress} = identity; pr
     IntervalEstimator(deepcopy(u), deepcopy(v), c, probs, g)
 end
 IntervalEstimator(u, c::Union{Function, Compress}; kwargs...) = IntervalEstimator(deepcopy(u), deepcopy(u), c; kwargs...)
-Flux.trainable(est::IntervalEstimator) = (u = est.u, v = est.v)
+Optimisers.trainable(est::IntervalEstimator) = (u = est.u, v = est.v)
 function (est::IntervalEstimator)(Z)
     bₗ = est.u(Z)                # lower bound
     bᵤ = bₗ .+ est.g.(est.v(Z))  # upper bound
@@ -86,7 +81,7 @@ end
 
 @doc raw"""
 	QuantileEstimator <: BayesEstimator
-	QuantileEstimator(v; probs = [0.025, 0.5, 0.975], g = Flux.softplus, i = nothing)
+	QuantileEstimator(v; probs = [0.025, 0.5, 0.975], g = softplus, i = nothing)
 A neural estimator that jointly estimates a fixed set of marginal posterior
 quantiles, with probability levels $\{\tau_1, \dots, \tau_T\}$ controlled by the
 keyword argument `probs`. This generalises [`IntervalEstimator`](@ref) to support an arbitrary number of probability levels. 
@@ -193,7 +188,7 @@ struct QuantileEstimator{V, P, G, I} <: BayesEstimator #TODO function for neat o
 end
 const QuantileEstimatorDiscrete = QuantileEstimator # QuantileEstimatorDiscrete is deprecated, use QuantileEstimator instead
 
-function QuantileEstimator(v; probs = [0.025, 0.5, 0.975], g = Flux.softplus, i::Union{Integer, Nothing} = nothing)
+function QuantileEstimator(v; probs = [0.025, 0.5, 0.975], g = softplus, i::Union{Integer, Nothing} = nothing)
     if !isa(probs, AbstractArray)
         probs = [probs]
     end
@@ -203,7 +198,7 @@ function QuantileEstimator(v; probs = [0.025, 0.5, 0.975], g = Flux.softplus, i:
     end
     QuantileEstimator(deepcopy.(repeat([v], length(probs))), probs, g, i)
 end
-Flux.trainable(est::QuantileEstimator) = (v = est.v,)
+Optimisers.trainable(est::QuantileEstimator) = (v = est.v,)
 function (est::QuantileEstimator)(input) # input might be Z, or a tuple (Z, θ₋ᵢ)
 
     # Apply each neural network to Z
@@ -455,7 +450,7 @@ function _risk(estimator::QuantileEstimatorContinuous, loss, data_loader, device
     sum_loss = 0.0f0
     K = 0
     for (input, output) in data_loader
-        k = Flux.numobs(input)
+        k = numobs(input)
         input, output = input |> device, output |> device
 
         if isnothing(estimator.i)
@@ -479,7 +474,7 @@ function _risk(estimator::QuantileEstimatorContinuous, loss, data_loader, device
         lossfn = est -> quantileloss(est(input), output, τ)
         if !isnothing(optimiser)
             ls, ∇ = Flux.withgradient(lossfn, adtype, estimator)
-            Flux.update!(optimiser, estimator, ∇[1])
+            Optimisers.update!(optimiser, estimator, ∇[1])
         else
             ls = lossfn(estimator)
         end

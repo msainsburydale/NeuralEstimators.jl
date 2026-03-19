@@ -309,7 +309,7 @@ end
 Compress(a, b) = Compress(float.(a), float.(b), ones(eltype(float.(a)), length(a)))
 Compress(a::Number, b::Number) = Compress([float(a)], [float(b)])
 (l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-l.k .* θ))
-Flux.trainable(l::Compress) = NamedTuple()
+Optimisers.trainable(l::Compress) = NamedTuple()
 
 #TODO documentation and unit testing
 export TruncateSupport
@@ -329,7 +329,7 @@ function (l::TruncateSupport)(θ::AbstractMatrix)
 end
 TruncateSupport(a, b) = TruncateSupport(float.(a), float.(b), length(a))
 TruncateSupport(a::Number, b::Number) = TruncateSupport([float(a)], [float(b)], 1)
-Flux.trainable(l::TruncateSupport) = NamedTuple()
+Optimisers.trainable(l::TruncateSupport) = NamedTuple()
 tuncatesupport(θ, a, b) = min(max(θ, a), b)
 
 # ---- Layers to construct Covariance and Correlation matrices ----
@@ -561,43 +561,11 @@ function (l::CorrelationMatrix)(v, cholesky_only::Bool = false)
 end
 (l::CorrelationMatrix)(v::AbstractVector) = l(reshape(v, :, 1))
 
-# # Example input data helpful for prototyping:
-# d = 4
-# K = 100
-# triangularnumber(d) = d*(d+1)÷2
-#
-# p = triangularnumber(d-1)
-# v = collect(range(1, p*K))
-# v = reshape(v, p, K)
-# l = CorrelationMatrix(d)
-# l(v) - l(v, true) # note that the first columns of a correlation matrix and its Cholesky factor will always be identical
-#
-# using LinearAlgebra
-# R = rand(d, d); R = R * R'
-# D = Diagonal(1 ./ sqrt.(R[diagind(R)]))
-# R = Symmetric(D * R *D)
-# L = cholesky(R).L
-# LowerTriangular(R) - L
-#
-# p = triangularnumber(d)
-# v = collect(range(1, p*K))
-# v = reshape(v, p, K)
-# l = CovarianceMatrix(d)
-# l(v) - l(v, true)
-
 # ---- Layers ----
 
-#NB this is from Flux, but I copied it here because I got an error that it wasn't defined when submitting to CRAN (think it's a recent addition to Flux)
-function _size_check(layer, x::AbstractArray, (d, n)::Pair)
-    0 < d <= ndims(x) || throw(DimensionMismatch(string("layer ", layer,
-        " expects ndims(input) >= ", d, ", but got ", summary(x))))
-    size(x, d) == n || throw(DimensionMismatch(string("layer ", layer,
-        lazy" expects size(input, $d) == $n, but got ", summary(x))))
-end
-@non_differentiable _size_check(::Any...)
-
 #TODO document last_only 
-#TODO g should be a positional argument in line with standard flux layers 
+#TODO g should be a positional argument in line with standard flux layers
+
 """
 	DensePositive(layer::Dense; g::Function = relu, last_only::Bool = false)
 Wrapper around the standard
@@ -620,15 +588,19 @@ struct DensePositive{L, G}
     g::G
     last_only::Bool
 end
+# function DensePositive(args...; kwargs...)
+#     error("DensePositive requires Flux.jl. Please load it with `using Flux`.")
+# end
+
+using NNlib: fast_act
+using Flux: _size_check, _match_eltype
 DensePositive(layer::Dense; g::Function = Flux.relu, last_only::Bool = false) = DensePositive(layer, g, last_only)
-# Simple version of forward pass:
-# (d::DensePositive)(x) = d.layer.σ.(Flux.softplus(d.layer.weight) * x .+ d.layer.bias)
-# Complex version of forward pass based on Flux's Dense code:
 function (d::DensePositive)(x::AbstractVecOrMat)
     a = d.layer # extract the underlying fully-connected layer
     _size_check(a, x, 1 => size(a.weight, 2))
-    σ = NNlib.fast_act(a.σ, x) # replaces tanh => tanh_fast
-    xT = _match_eltype(a, x)   # fixes Float64 input
+    σ = fast_act(a.σ, x) # replaces tanh => tanh_fast
+    xT = _match_eltype(a, x)   
+    xT = eltype(a.weight) != eltype(x) ? convert(AbstractArray{eltype(a.weight)}, x) : x
     if d.last_only
         weight = hcat(a.weight[:, 1:(end - 1)], d.g.(a.weight[:, end:end]))
     else
@@ -641,6 +613,19 @@ function (a::DensePositive)(x::AbstractArray)
     _size_check(a, x, 1 => size(a.weight, 2))
     reshape(a(reshape(x, size(x, 1), :)), :, size(x)[2:end]...)
 end
+
+# Test set:
+# @testset "DensePositive" begin
+#     in, out = 5, 2
+#     b = 64
+#     l = DensePositive(Dense(in => out))
+#     z = rand32(in, b)
+#     l = l |> dvc
+#     z = z |> dvc
+#     y = l(z)
+#     @test size(y) == (out, b)
+#     testbackprop(l, z, dvc)
+# end
 
 #TODO constrain a ∈ [0, 1] and b > 0
 """
@@ -660,25 +645,8 @@ XY = (X, Y)
 a = 0.2f0
 b = 1.3f0
 Z = (abs.(a .* X - (1 .- a) .* Y)).^b
-
-# Initialise layer
 f = PowerDifference([0.5f0], [2.0f0])
-
-# Optimise the layer
-loader = Flux.DataLoader((XY, Z), batchsize=32, shuffle=false)
-optim = Flux.setup(Flux.Adam(0.01), f)
-for epoch in 1:100
-    for (xy, z) in loader
-        loss, grads = Flux.withgradient(f) do m
-            Flux.mae(m(xy), z)
-        end
-        Flux.update!(optim, f, grads[1])
-    end
-end
-
-# Estimates of a and b
-f.a
-f.b
+f(XY)
 ```
 """
 struct PowerDifference{A, B}
@@ -757,10 +725,10 @@ The method `(mlp::MLP)(x, y)` concatenates `x` and `y` along their first dimensi
 - `output_activation = identity`: the activation function used in the output layer.
 - `final_layer = nothing`: an optional final layer to append to the network. If provided, it must accept `width` inputs. When set, `output_activation` is ignored and replaced with identity. The effective depth of the network becomes `depth + 1`.
 """
-struct MLP{T <: Chain} # type parameter to avoid type instability
+struct MLP{T}
     network::T
 end
-function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128, activation::Function = Flux.relu, output_activation = identity, final_layer = nothing)
+function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128, activation::Function = relu, output_activation = identity, final_layer = nothing)
     @assert depth > 0
     @assert width > 0
 
@@ -779,3 +747,90 @@ end
 (mlp::MLP)(x) = mlp.network(x)
 (mlp::MLP)(x, y) = mlp.network(cat(x, y; dims = 1))
 (mlp::MLP)(xy::Tuple) = mlp(xy[1], xy[2])
+
+
+@doc raw"""
+	IndicatorWeights(h_max, n_bins::Integer)
+	(w::IndicatorWeights)(h::Matrix) 
+For spatial locations $\boldsymbol{s}$ and  $\boldsymbol{u}$, creates a spatial weight function defined as
+
+```math 
+\boldsymbol{w}(\boldsymbol{s}, \boldsymbol{u}) \equiv (\mathbb{I}(h \in B_k) : k = 1, \dots, K)',
+```
+
+where $\mathbb{I}(\cdot)$ denotes the indicator function, 
+$h \equiv \|\boldsymbol{s} - \boldsymbol{u} \|$ is the spatial distance between $\boldsymbol{s}$ and 
+$\boldsymbol{u}$, and $\{B_k : k = 1, \dots, K\}$ is a set of $K =$`n_bins` equally-sized distance bins covering the spatial distances between 0 and `h_max`. 
+
+# Examples 
+```julia
+using NeuralEstimators, GraphNeuralNetworks
+
+h_max = 1
+n_bins = 10
+w = IndicatorWeights(h_max, n_bins)
+h = rand(1, 30) # distances between 30 pairs of spatial locations 
+w(h)
+```
+"""
+struct IndicatorWeights{T}
+    h_cutoffs::T
+end
+function IndicatorWeights(h_max, n_bins::Integer)
+    h_cutoffs = range(0, stop = h_max, length = n_bins+1)
+    h_cutoffs = collect(h_cutoffs)
+    IndicatorWeights(h_cutoffs)
+end
+function (l::IndicatorWeights)(h::M) where {M <: AbstractMatrix{T}} where {T}
+    h_cutoffs = l.h_cutoffs
+    bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
+    bins_lower = h_cutoffs[1:(end - 1)] # lower bounds of the distance bins 
+    N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
+    N = reduce(vcat, N)
+    f32(N)
+end
+Optimisers.trainable(l::IndicatorWeights) = NamedTuple()
+
+@doc raw"""
+	KernelWeights(h_max, n_bins::Integer)
+	(w::KernelWeights)(h::Matrix) 
+For spatial locations $\boldsymbol{s}$ and  $\boldsymbol{u}$, creates a spatial weight function defined as
+
+```math 
+\boldsymbol{w}(\boldsymbol{s}, \boldsymbol{u}) \equiv (\exp(-(h - \mu_k)^2 / (2\sigma_k^2)) : k = 1, \dots, K)',
+```
+
+where $h \equiv \|\boldsymbol{s} - \boldsymbol{u}\|$ is the spatial distance between $\boldsymbol{s}$ and $\boldsymbol{u}$, and ${\mu_k : k = 1, \dots, K}$ and ${\sigma_k : k = 1, \dots, K}$ are the means and standard deviations of the Gaussian kernels for each bin, covering the spatial distances between 0 and h_max.
+
+# Examples 
+```julia
+using NeuralEstimators, GraphNeuralNetworks
+
+h_max = 1
+n_bins = 10
+w = KernelWeights(h_max, n_bins)
+h = rand(1, 30) # distances between 30 pairs of spatial locations 
+w(h)
+```
+"""
+struct KernelWeights{T1, T2}
+    mu::T1
+    sigma::T2
+end
+function KernelWeights(h_max, n_bins::Integer)
+    h_cutoffs = range(0, stop = h_max, length = n_bins+1)
+    h_cutoffs = collect(h_cutoffs)
+    mu = [(h_cutoffs[i] + h_cutoffs[i + 1]) / 2 for i = 1:n_bins] # midpoints of the intervals 
+    sigma = [(h_cutoffs[i + 1] - h_cutoffs[i]) / 4 for i = 1:n_bins] # std dev so that 95% of mass is within the bin 
+    mu = f32(mu)
+    sigma = f32(sigma)
+    KernelWeights(mu, sigma)
+end
+function (l::KernelWeights)(h::M) where {M <: AbstractMatrix{T}} where {T}
+    mu = l.mu
+    sigma = l.sigma
+    N = [exp.(-(h .- mu[i:i]) .^ 2 ./ (2 * sigma[i:i] .^ 2)) for i in eachindex(mu)] # Gaussian kernel for each bin (NB avoid scalar indexing by i:i)
+    N = reduce(vcat, N)
+    f32(N)
+end
+Optimisers.trainable(l::KernelWeights) = NamedTuple()

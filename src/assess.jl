@@ -131,7 +131,7 @@ function assess(
     use_gpu::Bool = true,
     probs = nothing,
     B::Integer = 400,
-    loss = Flux.Losses.mae,   # TODO this will be simplified if we add loss to the estimator object
+    loss = nothing,
     ξ = nothing, xi = nothing # deprecated since it isn't typically needed when assessing NeuralEstimators (a collection of objects passed to estimator)
 ) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
 
@@ -155,7 +155,7 @@ function assess(
 
     # Compute the empirical risk
     loss = _loss(estimator, loss)
-    empirical_risk = loss(estimates, θ)
+    empirical_risk = !isnothing(loss) ? loss(estimates, θ) : nothing
 
     # Convert true and estimated parameter to DataFrame, then merge
     estimates = _estimates_to_df(estimates, parameter_names, K, J, m)
@@ -294,7 +294,7 @@ _resolve_estimator_name(name, names) = isnothing(names) ? name : names
 
 function _computerisk(estimator, θ, Z; use_gpu = true, batchsize = 32)
     loss = _loss(estimator)
-    device = _checkgpu(use_gpu, verbose = false)
+    device = _getdevice(use_gpu, verbose = false)
     estimator = device(estimator)
     dataset = _dataloader(estimator, Z, θ, batchsize)
     _risk(estimator, loss, dataset, device)

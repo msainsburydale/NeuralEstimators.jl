@@ -45,8 +45,8 @@ end
 
 # Methods
 numobs(d::DataSet) = numobs(d.Z)
-Base.getindex(d::DataSet, i::Integer) = DataSet(Flux.getobs(d.Z, i:i), d.S[:, i:i])
-Base.getindex(d::DataSet, i) = DataSet(Flux.getobs(d.Z, i), d.S[:, i])
+Base.getindex(d::DataSet, i::Integer) = DataSet(getobs(d.Z, i:i), d.S[:, i:i])
+Base.getindex(d::DataSet, i) = DataSet(getobs(d.Z, i), d.S[:, i])
 
 numberreplicates(d::DataSet) = numberreplicates(d.Z)
 subsetreplicates(d::DataSet, idx) = DataSet(subsetreplicates(d.Z, idx), d.S)
