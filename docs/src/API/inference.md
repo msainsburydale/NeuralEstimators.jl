@@ -13,6 +13,8 @@ bootstrap
 
 interval
 
+quantiles
+
 sampleposterior
 
 posteriormean 

@@ -5,7 +5,7 @@ using Flux
 using Flux: @ignore_derivatives, glorot_uniform
 using GraphNeuralNetworks
 using GraphNeuralNetworks: check_num_nodes
-using NNlib: scatter, gather
+using NNlib: scatter, gather, ⊠
 using Statistics, Random, LinearAlgebra
 import NeuralEstimators: subsetreplicates, numberreplicates, _deepsetsummaries, spatialgraph
 import NeuralEstimators: GNNSummary, SpatialGraphConv, IndicatorWeights, KernelWeights, NeighbourhoodVariogram

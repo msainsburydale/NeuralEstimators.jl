@@ -26,15 +26,12 @@ end
 function GaussianMixture(d::Integer, dstar::Integer; num_components::Integer = 10, kwargs...)
     in = dstar
     out = (2d + 1) * num_components
-    final_layer = Parallel(
-        vcat,
-        Chain(Dense(out, num_components), softmax),    # ∑wⱼ = 1
-        Dense(out, d * num_components, identity),      # μ ∈ ℝ
-        Dense(out, d * num_components, softplus)       # σ > 0
-    )
+    final_layer = _gaussianmixture_final_layer(out, num_components, d)
     inference_network = MLP(in, out; final_layer = final_layer, kwargs...)
     GaussianMixture(d, dstar, num_components, inference_network)
 end
+function _gaussianmixture_final_layer end
+
 numdistributionalparams(q::GaussianMixture) = (2 * q.d + 1) * q.num_components
 
 function distributionparameters(q::GaussianMixture, κ::AbstractMatrix)

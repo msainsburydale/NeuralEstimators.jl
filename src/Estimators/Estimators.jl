@@ -10,6 +10,46 @@ An abstract supertype for neural Bayes estimators.
 """
 abstract type BayesEstimator <: NeuralEstimator end
 
+"""
+    LuxEstimator(estimator::NeuralEstimator, ps, st)
+    LuxEstimator(estimator::NeuralEstimator; rng::AbstractRNG = Random.default_rng())
+
+Wraps a `NeuralEstimator` containing [Lux.jl](https://lux.csail.mit.edu/stable/) 
+networks together with their parameters `ps` and states `st`.
+
+The convenience constructor automatically calls `Lux.setup(rng, estimator)` to 
+initialise `ps` and `st`.
+
+# Examples
+```julia
+using NeuralEstimators, Lux
+
+network = Lux.Chain(Lux.Dense(10, 64, gelu), Lux.Dense(64, 2))
+estimator = LuxEstimator(PointEstimator(network))
+
+# Training, assessment, and inference proceed identically to the Flux API:
+estimator = train(estimator, ...)
+estimate(estimator, ...)
+assess(estimator, ...)
+
+# Access parameters and states directly if needed
+estimator.ps
+estimator.st
+```
+"""
+struct LuxEstimator{E <: NeuralEstimator, PS, ST} <: NeuralEstimator
+    estimator::E
+    ps::PS
+    st::ST
+end
+LuxEstimator(args...; kwargs...) = error("LuxEstimator requires Lux.jl to be loaded. Please run `using Lux`.")
+
+# Forward mode used at inference time (first used to extract the estimator output)
+(object::LuxEstimator)(x) = first(object.estimator(x, object.ps, object.st))
+
+# only move ps and st to the device, never the model struct itself (which has no arrays).
+Functors.@functor LuxEstimator (ps, st)
+
 # ---- Summary network helper functions ----
 
 """
@@ -60,23 +100,6 @@ function _precomputesummaries(estimator::NeuralEstimator, d::DataSet; kwargs...)
     t = _applywithdevice(estimator.summary_network, d.Z; kwargs...)
     isnothing(d.S) ? t : vcat(t, d.S)
 end
-
-# ---- Summaries wrapper type ----
-
-"""
-    Summaries(S::AbstractMatrix)
-
-A thin wrapper around a matrix of precomputed summary statistics. Used internally
-during training to signal that the summary network has already been applied to the
-data, so that `_summarystatistics` can short-circuit and return the matrix directly
-rather than re-running the (frozen) summary network on every forward pass.
-"""
-struct Summaries{T <: AbstractMatrix}
-    S::T
-end
-
-Base.length(s::Summaries) = size(s.S, 2)
-Base.getindex(s::Summaries, i) = Summaries(s.S[:, i])
 
 # ---- _summarystatistics ----
 

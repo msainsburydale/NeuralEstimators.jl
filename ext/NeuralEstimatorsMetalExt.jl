@@ -2,7 +2,7 @@ module NeuralEstimatorsMetalExt
 
 using NeuralEstimators
 using Metal
-using Flux: gpu, cpu
+using NeuralEstimators: gpu, cpu
 import NeuralEstimators: _getdevice
 
 function _getdevice(use_gpu::Bool; verbose::Bool = true)

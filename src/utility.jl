@@ -1,3 +1,27 @@
+# ---- Flux helpers ----
+
+# Same as Flux but just defined here so that we can use it without loading either package
+
+cpu(x) = cpu_device()(x)
+gpu(x) = gpu_device()(x)
+
+struct FluxEltypeAdaptor{T} end
+
+Adapt.adapt_storage(::FluxEltypeAdaptor{T}, x::AbstractArray{<:AbstractFloat}) where {T<:AbstractFloat} = 
+  convert(AbstractArray{T}, x)
+Adapt.adapt_storage(::FluxEltypeAdaptor{T}, x::AbstractArray{<:Complex{<:AbstractFloat}}) where {T<:AbstractFloat} = 
+  convert(AbstractArray{Complex{T}}, x)
+
+_paramtype(::Type{T}, m) where T = fmap(adapt(FluxEltypeAdaptor{T}()), m)
+
+# fastpath for arrays
+_paramtype(::Type{T}, x::AbstractArray{<:AbstractFloat}) where {T<:AbstractFloat} = 
+  convert(AbstractArray{T}, x)
+_paramtype(::Type{T}, x::AbstractArray{<:Complex{<:AbstractFloat}}) where {T<:AbstractFloat} = 
+  convert(AbstractArray{Complex{T}}, x)
+
+f32(m) = _paramtype(Float32, m)
+
 # ---- Internal helper: device placement, f32 conversion, and minibatching ----
 
 """
@@ -10,7 +34,7 @@ function _applywithdevice(network, z; batchsize::Integer = 32, use_gpu::Bool = t
     batchsize = min(numobs(z), batchsize)
     device = _getdevice(use_gpu, use_reactant, verbose = false)
     network = network |> device
-    Flux.testmode!(network)
+    _testmode!(network)
     data_loader = _DataLoader(z, batchsize, shuffle = false, partial = true)
     try
         y = map(data_loader) do zᵢ
@@ -18,9 +42,12 @@ function _applywithdevice(network, z; batchsize::Integer = 32, use_gpu::Bool = t
         end
         return reduce(hcat, y)
     finally
-        Flux.testmode!(network, :auto) # back to default
+        _testmode!(network, :auto) # back to default
     end
 end
+
+# Methods provided in extensions
+function _testmode! end
 
 # Wrapper around _applywithdevice for use at inference time. Handles the case where
 # a user passes a single dataset as a bare array to a DeepSet-based network — since
@@ -55,44 +82,6 @@ end
     false
 end
 @inline check_deepset(x) = check_deepset(typeof(x))
-
-#TODO Not currently used: Would be great to have a way to automatically and reliably infer the number of summaries from an arbitrary summary_network, so that the user need not specify it when constructing an estimator.
-function _infer_num_summaries(model)
-    # Base case: Dense layer
-    if model isa Dense
-        return size(model.weight, 1)
-        @info "Inferred num_summaries = $inferred from summary_network. Set explicitly if incorrect."
-    end
-
-    # Recurse into Chain - last layer determines output
-    if model isa Chain
-        return _infer_num_summaries(model.layers[end])
-    end
-
-    # Recurse into any struct by searching its fields in reverse for the last Dense
-    for field in reverse(fieldnames(typeof(model)))
-        val = getfield(model, field)
-        try
-            return _infer_num_summaries(val)
-        catch
-            continue
-        end
-    end
-
-    error("Could not infer output dimension from $(typeof(model)). Please specify `num_summaries` explicitly.")
-end
-# If we could implement this properly, the estimator constructors could be defined as follows:
-# function PointEstimator(summary_network, d::Integer, num_summaries = nothing; kwargs...)
-#     if isnothing(num_summaries)
-#         num_summaries = _infer_num_summaries(summary_network)
-#         @info "Inferred num_summaries = $num_summaries from summary_network. Set explicitly if incorrect."
-#     end
-#     inference_network = MLP(num_summaries, d; kwargs...)
-#     PointEstimator(summary_network, inference_network)
-# end
-# PointEstimator(summary_network, d::Integer; num_summaries = nothing, kwargs...) = PointEstimator(summary_network, d, num_summaries; kwargs...)
-
-nparams(model) = length(Optimisers.trainables(model)) > 0 ? sum(length, Optimisers.trainables(model)) : 0
 
 # Drop fields from NamedTuple: https://discourse.julialang.org/t/filtering-keys-out-of-named-tuples/73564/8
 drop(nt::NamedTuple, key::Symbol) = Base.structdiff(nt, NamedTuple{(key,)})

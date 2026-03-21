@@ -2,7 +2,7 @@ module NeuralEstimatorsCUDAExt
 
 using NeuralEstimators
 using CUDA
-using Flux: gpu, cpu
+using NeuralEstimators: gpu, cpu
 import NeuralEstimators: _getdevice, _forcegc
 
 function _getdevice(use_gpu::Bool; verbose::Bool = true)

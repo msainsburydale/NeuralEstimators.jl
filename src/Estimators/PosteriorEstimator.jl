@@ -15,7 +15,7 @@ The convenience constructor builds `q` internally given `num_parameters` and `nu
 
 # Examples
 ```julia
-using NeuralEstimators, Flux, CairoMakie
+using NeuralEstimators, Flux
 
 # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ N(0, 1) and σ ~ U(0, 1)
 d, m = 2, 100  # dimension of θ and number of replicates
@@ -37,14 +37,10 @@ estimator = PosteriorEstimator(summary_network, q)
 # Train the estimator
 estimator = train(estimator, sampler, simulator, K = 3000)
 
-# Plot the risk history
-plotrisk()
-
 # Assess the estimator
 θ_test = sampler(250)
 Z_test = simulator(θ_test);
 assessment = assess(estimator, θ_test, Z_test)
-plot(assessment)
 
 # Inference with observed data 
 θ = sampler(1)

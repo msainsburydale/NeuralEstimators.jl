@@ -142,9 +142,12 @@ hidden-feature graphs. The `readout` module aggregates these feature graphs into
 a single hidden feature vector of fixed length. The network `ψ` is then defined as the composition of the
 propagation and readout modules.
 
-The data should be stored as a `GNNGraph` or `Vector{GNNGraph}`, where
-each graph is associated with a single parameter vector. The graphs may contain
-subgraphs corresponding to independent replicates.
+The data should be stored as a `Vector{A}` where each element is associated with
+one parameter vector. For spatial data collected over irregular locations, `A` is
+typically a [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.GNNGraph),
+where independent replicates (possibly with differing spatial locations) are
+stored as subgraphs. See [`spatialgraph`](@ref) for constructing these graphs
+from matrices of spatial locations and data.
 
 # Examples
 ```julia
@@ -187,6 +190,7 @@ struct GNNSummary{F, G}
 end
 Base.show(io::IO, D::GNNSummary) = print(io, "\nThe propagation and readout modules of a graph neural network (GNN), with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)")
 GNNSummary(args...; kwargs...) = error("GNNSummary requires GraphNeuralNetworks.jl to be loaded, i.e., `using GraphNeuralNetworks`")
+nparams(model) = length(Optimisers.trainables(model)) > 0 ? sum(length, Optimisers.trainables(model)) : 0
 
 #TODO clean up this documentation (e.g., don't bother with the bin notation)
 #TODO there is a more general structure that we could define, that has message(xi, xj, e) as a slot

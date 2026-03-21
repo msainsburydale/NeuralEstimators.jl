@@ -1,6 +1,7 @@
 module NeuralEstimators
 
 using Accessors: @set
+using Adapt
 using ADTypes
 using Base: @propagate_inbounds, @kwdef
 using Base.GC: gc
@@ -10,20 +11,19 @@ using ChainRulesCore: @non_differentiable, @ignore_derivatives
 using CSV
 using DataFrames
 using Distances
-using Flux
 using Folds
+using Functors
 using InvertedIndices
 using LinearAlgebra
-using MLDataDevices: reactant_device
+using MLDataDevices: reactant_device, cpu_device, reactant_device
 using MLUtils: getobs, DataLoader, flatten
 import MLUtils: numobs
 using NamedArrays
 import NamedArrays: NamedMatrix
-using NNlib: logσ, softplus, relu
-using Optimisers: update!
+using NNlib: logσ, softplus, softmax, relu, ⊠, batched_transpose, logsumexp, sigmoid
+using Optimisers
 using ParameterSchedulers
-using ParameterSchedulers: Stateful, next!
-using Printf
+using Printf: @sprintf
 using Random: randexp, shuffle, randperm
 using SparseArrays
 using SpecialFunctions: besselk, gamma, loggamma
@@ -37,10 +37,10 @@ include("losses.jl")
 export AbstractParameterSet, NamedMatrix
 include("Parameters.jl")
 
-export DataSet
+export DataSet, Summaries
 include("DataSet.jl")
 
-export DeepSet, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference, DensePositive, MLP
+export DeepSet, MLP, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference
 export IndicatorWeights, KernelWeights
 export vectotril, vectotriu
 include("Architectures.jl")
@@ -54,13 +54,14 @@ for file in sort(readdir(joinpath(@__DIR__, "ApproximateDistributions")))
     include(joinpath("ApproximateDistributions", file))
 end
 
-export train, trainmultiple
+export train
 export plotrisk, loadrisk, loadoptimiser
 include("train.jl")
 
 export NeuralEstimator
+export LuxEstimator
 export BayesEstimator, PosteriorEstimator, RatioEstimator
-export PointEstimator, IntervalEstimator, QuantileEstimatorContinuous, QuantileEstimator, QuantileEstimatorDiscrete
+export PointEstimator, IntervalEstimator, QuantileEstimator
 export Ensemble, PiecewiseEstimator
 export summarynetwork, setsummarynetwork, summarystatistics
 include(joinpath("Estimators", "Estimators.jl"))
@@ -75,10 +76,10 @@ end
 export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
 include("assess.jl")
 
-export sampleposterior, posteriormean, posteriormedian, posteriormode, posteriorquantile, bootstrap, interval, estimate, logratio
+export estimate, sampleposterior, logratio, posteriormean, posteriormedian, posteriormode, posteriorquantile, bootstrap, interval, quantiles
 include("inference.jl")
 
-export stackarrays, expandgrid, numberreplicates, nparams, samplesize, drop, containertype, rowwisenorm, subsetreplicates
+export stackarrays, expandgrid, numberreplicates, samplesize, drop, containertype, rowwisenorm, subsetreplicates
 include("utility.jl")
 
 export samplesize, logsamplesize, invsqrtsamplesize, samplecorrelation, samplecovariance

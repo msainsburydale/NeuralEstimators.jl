@@ -1,6 +1,5 @@
 using NeuralEstimators
-import NeuralEstimators: simulate
-using NeuralEstimators: _infer_num_summaries, _runondevice, _check_sizes, _extractθ, nested_eltype, rowwisenorm, triangularnumber, forward, inverse
+using NeuralEstimators: _runondevice, _check_sizes, _extractθ, nested_eltype, rowwisenorm, triangularnumber, forward, inverse
 using NeuralEstimators: ActNorm, Permutation, AffineCouplingBlock, CouplingLayer
 using CUDA
 using DataFrames
@@ -25,9 +24,11 @@ else
     @info "The GPU is unavailable so we will test on the CPU only... "
     devices = (CPU = cpu,)
 end
-verbose = false # verbose used in code (not @testset)
+verbose = false
+
 array(size...; T = Float32) = T.(reshape(1:prod(size), size...) ./ prod(size))
 arrayn(size...; T = Float32) = array(size..., T = T) .- mean(array(size..., T = T))
+
 function testbackprop(l, z, dvc)
     l = l |> dvc
     z = z |> dvc
@@ -140,12 +141,13 @@ end
 
         # ---- f32 ----
         @testset "f32" begin
-            Z64 = [randn(2, 5) for _ = 1:K]
-            S64 = randn(3, K)
-            ds = DataSet(Z64, S64)
+            ds = DataSet(Z)
             ds32 = f32(ds)
-            @test eltype(ds32.S) == Float32
             @test eltype(ds32.Z[1]) == Float32
+            ds = DataSet(Z, S)
+            ds32 = f32(ds)
+            @test eltype(ds32.Z[1]) == Float32
+            @test eltype(ds32.S) == Float32
         end
 
         # ---- forward pass ----
@@ -156,13 +158,13 @@ end
             network = DeepSet(ψ, ϕ)
             estimator = PointEstimator(network)
 
-            ds = DataSet(Z, S)  # S has 3 rows, network outputs 4 → vcat gives 7
+            ds = DataSet(Z, S) |> f32  # S has 3 rows, network outputs 4 → vcat gives 7
             t = estimator(ds)
             @test size(t, 1) == num_summaries + size(S, 1)  # 4 + 3 = 7
             @test size(t, 2) == K
 
             # Without expert summaries: output size unchanged
-            ds_no_s = DataSet(Z)
+            ds_no_s = DataSet(Z) |> f32 
             t_no_s = estimator(ds_no_s)
             @test size(t_no_s, 1) == num_summaries
             @test size(t_no_s, 2) == K
@@ -170,57 +172,6 @@ end
     end
 
     @test isnothing(_check_sizes(1, 1))
-
-    @testset "_infer_num_summaries" begin
-
-        # Simple Dense layer
-        @test _infer_num_summaries(Dense(10, 4)) == 4
-
-        # Chain of Dense layers
-        @test _infer_num_summaries(Chain(Dense(10, 64, relu), Dense(64, 4))) == 4
-
-        # DeepSet (common summary network type)
-        ψ = Chain(Dense(1, 64, relu), Dense(64, 64, relu))
-        ϕ = Chain(Dense(64, 64, relu), Dense(64, 8))
-        @test _infer_num_summaries(DeepSet(ψ, ϕ)) == 8
-
-        # Nested Chain
-        @test _infer_num_summaries(Chain(Chain(Dense(10, 64, relu), Dense(64, 32, relu)), Dense(32, 4))) == 4
-
-        # CNN ending in Dense
-        cnn = Chain(Conv((3,), 1 => 16, relu), MLUtils.flatten, Dense(16, 4))
-        @test _infer_num_summaries(cnn) == 4
-
-        # Error case: no Dense layer found
-        @test_throws ErrorException _infer_num_summaries(Chain(Conv((3,), 1 => 16, relu), MLUtils.flatten))
-
-        # Simple struct with a single network field
-        struct SimpleWrapper
-            network::Any
-        end
-        (m::SimpleWrapper)(x) = m.network(x)
-
-        # Struct with multiple fields (like DeepSet) where last field is the output network
-        struct MultiFieldWrapper
-            encoder::Any
-            decoder::Any
-        end
-        (m::MultiFieldWrapper)(x) = m.decoder(m.encoder(x))
-
-        # Simple wrapper struct
-        network = Chain(Dense(10, 64, relu), Dense(64, 4))
-        @test _infer_num_summaries(SimpleWrapper(network)) == 4
-
-        # Multi-field struct — should find the last Dense via the decoder field
-        encoder = Chain(Dense(10, 64, relu), Dense(64, 32, relu))
-        decoder = Chain(Dense(32, 16, relu), Dense(16, 8))
-        @test _infer_num_summaries(MultiFieldWrapper(encoder, decoder)) == 8
-
-        # Deeply nested struct
-        inner = SimpleWrapper(Chain(Dense(10, 64, relu), Dense(64, 4)))
-        outer = SimpleWrapper(inner)
-        @test _infer_num_summaries(outer) == 4
-    end
 
     @testset "maternclusterprocess" begin
         S = maternclusterprocess()
@@ -414,73 +365,6 @@ end
         @test all(U[diagind(U)] .== 0)
         @test all([cpu(v)[i] ∈ cpu(U) for i ∈ 1:n])
         @test containertype(U) == containertype(v)
-    end
-end
-
-@testset "Model-specific functions" begin
-    @testset "Simulation" begin
-        n = 10
-        S = array(n, 2, T = Float32)
-        D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
-        ρ = Float32.([0.6, 0.8])
-        ν = Float32.([0.5, 0.7])
-        L = maternchols(D, ρ, ν)
-        σ² = 0.5f0
-        L = maternchols(D, ρ, ν, σ²)
-        @test maternchols(D, ρ, ν, σ²) == maternchols([D, D], ρ, ν, σ²)
-        L₁ = L[:, :, 1]
-        m = 5
-
-        @test eltype(simulateschlather(L₁, m)) == Float32
-        @test eltype(simulategaussian(L₁, m)) == Float32
-
-        ## Potts model
-        β = 0.7
-        complete_grid = simulatepotts(n, n, 2, 0.99)      # simulate marginally from the Ising model
-        complete_grid = simulatepotts(n, n, 2, β)         # simulate marginally from the Ising model
-        @test size(complete_grid) == (n, n)
-        @test length(unique(complete_grid)) == 2
-        incomplete_grid = removedata(complete_grid, 0.1)     # remove 10% of the pixels at random
-        imputed_grid = simulatepotts(incomplete_grid, β)  # conditionally simulate over missing pixels
-        observed_idx = findall(!ismissing, incomplete_grid)
-        @test incomplete_grid[observed_idx] == imputed_grid[observed_idx]
-    end
-
-    @testset "Densities" begin
-
-        # "scaledlogistic"
-        @test all(4 .<= scaledlogistic.(-10:10, 4, 5) .<= 5)
-        @test all(scaledlogit.(scaledlogistic.(-10:10, 4, 5), 4, 5) .≈ -10:10)
-        Ω = (σ = 1:10, ρ = (2, 7))
-        Ω = [Ω...] # convert to array since broadcasting over dictionaries and NamedTuples is reserved
-        θ = [-10, 15]
-        @test all(minimum.(Ω) .<= scaledlogistic.(θ, Ω) .<= maximum.(Ω))
-        @test all(scaledlogit.(scaledlogistic.(θ, Ω), Ω) .≈ θ)
-
-        # Check that the pdf is consistent with the cdf using finite differences
-        using NeuralEstimators: _schlatherbivariatecdf
-        function finitedifference(z₁, z₂, ψ, ϵ = 0.0001)
-            (_schlatherbivariatecdf(z₁ + ϵ, z₂ + ϵ, ψ) - _schlatherbivariatecdf(z₁ - ϵ, z₂ + ϵ, ψ) - _schlatherbivariatecdf(z₁ + ϵ, z₂ - ϵ, ψ) + _schlatherbivariatecdf(z₁ - ϵ, z₂ - ϵ, ψ)) / (4 * ϵ^2)
-        end
-        function finitedifference_check(z₁, z₂, ψ)
-            @test abs(finitedifference(z₁, z₂, ψ) - schlatherbivariatedensity(z₁, z₂, ψ; logdensity = false)) < 0.0001
-        end
-        finitedifference_check(0.3, 0.8, 0.2)
-        finitedifference_check(0.3, 0.8, 0.9)
-        finitedifference_check(3.3, 3.8, 0.2)
-        finitedifference_check(3.3, 3.8, 0.9)
-
-        # Other small tests
-        @test schlatherbivariatedensity(3.3, 3.8, 0.9; logdensity = false) ≈ exp(schlatherbivariatedensity(3.3, 3.8, 0.9))
-        y = [0.2, 0.4, 0.3]
-        n = length(y)
-        # construct a diagonally dominant covariance matrix (pos. def. guaranteed via Gershgorins Theorem)
-        Σ = array(n, n)
-        Σ[diagind(Σ)] .= diag(Σ) + sum(Σ, dims = 2)
-        L = cholesky(Symmetric(Σ)).L
-        @test gaussiandensity(y, L, logdensity = false) ≈ exp(gaussiandensity(y, L))
-        @test gaussiandensity(y, Σ) ≈ gaussiandensity(y, L)
-        @test gaussiandensity(hcat(y, y), Σ) ≈ 2 * gaussiandensity(y, L)
     end
 end
 
@@ -812,225 +696,110 @@ end
     end
 end
 
-# ---- PointEstimator ----
+# ---- Estimators ----
 
-S = samplesize # Expert summary statistics
-parameter_names = ["μ", "σ"]
-struct Parameters <: AbstractParameterSet
-    θ::Any
+struct Parameters{A} <: AbstractParameterSet
+    θ::A
 end
-ξ = (parameter_names = parameter_names,)
-K = 100
-sampler(K::Integer, ξ) = Parameters(rand32(length(ξ.parameter_names), K))
-parameters = sampler(K, ξ)
-show(devnull, parameters)
-@test size(parameters) == (length(parameter_names), 100)
-@test _extractθ(parameters.θ) == _extractθ(parameters)
-p = length(parameter_names)
-n = 1  # univariate data
-w = 32 # width of each layer
-qₓ = 2  # number of set-level covariates
-m = 10 # default sample size
 
-simulatearray(parameters::Parameters, m) = [θ[1] .+ θ[2] .* randn(Float32, n, m) for θ ∈ eachcol(parameters.θ)]
-function simulatorwithcovariates(parameters::Parameters, m)
-    Z = simulatearray(parameters, m)
-    x = [rand(Float32, qₓ) for _ ∈ eachindex(Z)]
-    (Z, x)
-end
-function simulatorwithcovariates(parameters, m, J::Integer)
-    v = [simulatorwithcovariates(parameters, m) for i ∈ 1:J]
-    z = vcat([v[i][1] for i ∈ eachindex(v)]...)
-    x = vcat([v[i][2] for i ∈ eachindex(v)]...)
-    (z, x)
-end
-function simulatornocovariates(parameters::Parameters, m)
-    simulatearray(parameters, m)
-end
-function simulatornocovariates(parameters, m, J::Integer)
-    v = [simulatornocovariates(parameters, m) for i ∈ 1:J]
-    vcat(v...)
-end
+d, m = 2, 5  # dimension of θ and number of replicates
+sampler(K, d = nothing) = NamedMatrix(μ = randn(Float32, K), σ = rand(Float32, K)) # NB dummy argument d just to check (keyword)  arguments can be passed
+simulator(θ::AbstractVector, m::Integer) = θ["μ"] .+ θ["σ"] .* sort(randn(Float32, m))
+simulator(θ::AbstractMatrix, m::Integer) = reduce(hcat, simulator.(eachcol(θ), m))
+
+K = 35
+θ = sampler(K)
+Z = simulator(θ, m)
 
 @testset "PointEstimator" begin
-    @testset "$covar" for covar ∈ ["no set-level covariates" "set-level covariates"]
-        q = w
-        if covar == "set-level covariates"
-            q = q + qₓ
-            simulator = simulatorwithcovariates
-        else
-            simulator = simulatornocovariates
+    network = Chain(Dense(m, 16, gelu), Dense(16, d))
+    estimator = PointEstimator(network)
+    show(devnull, estimator)
+
+    @testset "$dvc" for dvc ∈ devices
+
+        use_gpu = dvc == gpu
+        
+        # Forward pass
+        @test size(estimate(estimator, Z)) == (d, K)
+
+        @testset "train" begin
+            testbackprop(estimator, Z, dvc)
+            estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (d,))
+            estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (d,), savepath = "testing-path")
+            estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (d,), simulate_just_in_time = true)
+            estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (d,), freeze_summary_network = true)
+            estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose)
+            estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
+            estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
+            estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 3, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
+            estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
+            estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
+            Z_train = Z_val = simulator(θ, m);
+            train(estimator, θ, θ, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
+            train(estimator, θ, θ, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose)
+            train(estimator, θ, θ, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
         end
-        ψ = Chain(Dense(n, w), Dense(w, w), MLUtils.flatten)
-        ϕ = Chain(Dense(q + 1, w), Dense(w, p))
-        estimator = PointEstimator(DeepSet(ψ, ϕ, S = S), p; num_summaries = p)
-        show(devnull, estimator)
 
-        @testset "$dvc" for dvc ∈ devices
-            estimator = estimator |> dvc
-            θ = array(p, K) |> dvc
+        @testset "assess" begin
+            Z_test = simulator(θ, m)
+            assessment = assess([estimator], θ, Z_test, use_gpu = use_gpu, verbose = verbose)
+            assessment = assess(estimator, θ, Z_test, use_gpu = use_gpu)
 
-            Z = simulator(parameters, m) |> dvc
-            @test size(estimator(Z), 1) == p
-            @test size(estimator(Z), 2) == K
+            @test typeof(assessment) == Assessment
+            @test typeof(assessment.estimates) == DataFrame
+            @test typeof(assessment.runtime) == DataFrame
+            @test typeof(merge(assessment, assessment)) == Assessment
 
-            # Single data set methods
-            z = simulator(parameters[1], m) |> dvc
-            if covar == "set-level covariates"
-                z = (z[1][1], z[2][1])
-            end
-            estimator(z)
+            risk(assessment)
+            risk(assessment, loss = (x, y) -> (x - y)^2)
+            risk(assessment; average_over_parameters = false)
+            risk(assessment; average_over_sample_sizes = false)
+            risk(assessment; average_over_parameters = false, average_over_sample_sizes = false)
 
-            use_gpu = dvc == gpu
-            @testset "train" begin
-                testbackprop(estimator, Z, dvc)
-                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,))
-                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), savepath = "testing-path")
-                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), simulate_just_in_time = true)
-                estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (ξ,), freeze_summary_network = true)
-                estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose)
-                estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
-                estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
-                estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 3, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
-                estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
-                estimator = train(estimator, parameters, parameters, simulator, simulator_args = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
-                Z_train = simulator(parameters, 2m);
-                Z_val = simulator(parameters, m);
-                train(estimator, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
-                train(estimator, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose)
-                train(estimator, parameters, parameters, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
-                trainmultiple(estimator, sampler, simulator, [1, 2, 5]; sampler_args = (ξ,), epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
-                trainmultiple(estimator, parameters, parameters, simulator, [1, 2, 5]; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
-                trainmultiple(estimator, parameters, parameters, Z_train, Z_val, [1, 2, 5]; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
-                Z_train = [simulator(parameters, m) for m ∈ [1, 2, 5]];
-                Z_val = [simulator(parameters, m) for m ∈ [1, 2, 5]];
-                trainmultiple(estimator, parameters, parameters, Z_train, Z_val; epochs = [3, 2, 1], use_gpu = use_gpu, verbose = verbose)
-            end
+            bias(assessment)
+            bias(assessment; average_over_parameters = false)
+            bias(assessment; average_over_sample_sizes = false)
+            bias(assessment; average_over_parameters = false, average_over_sample_sizes = false)
 
-            @testset "assess" begin
-                # J == 1
-                Z_test = simulator(parameters, m)
-                assessment = assess([estimator], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
-                assessment = assess(estimator, parameters, Z_test, use_gpu = use_gpu)
-                if covar == "set-level covariates"
-                    @test_throws Exception assess(estimator, parameters, Z_test, use_gpu = use_gpu, probs = [0.025, 0.975])
-                else
-                    assessment = assess(estimator, parameters, Z_test, use_gpu = use_gpu, probs = [0.025, 0.975])
+            rmse(assessment)
+            rmse(assessment; average_over_parameters = false)
+            rmse(assessment; average_over_sample_sizes = false)
+            rmse(assessment; average_over_parameters = false, average_over_sample_sizes = false)
+        end
 
-                    coverage(assessment)
-                    coverage(assessment; average_over_parameters = true)
-                    coverage(assessment; average_over_sample_sizes = false)
-                    coverage(assessment; average_over_parameters = true, average_over_sample_sizes = false)
-
-                    intervalscore(assessment)
-                    intervalscore(assessment; average_over_parameters = true)
-                    intervalscore(assessment; average_over_sample_sizes = false)
-                    intervalscore(assessment; average_over_parameters = true, average_over_sample_sizes = false)
-                end
-                @test typeof(assessment) == Assessment
-                @test typeof(assessment.estimates) == DataFrame
-                @test typeof(assessment.runtime) == DataFrame
-                @test typeof(merge(assessment, assessment)) == Assessment
-
-                risk(assessment)
-                risk(assessment, loss = (x, y) -> (x - y)^2)
-                risk(assessment; average_over_parameters = false)
-                risk(assessment; average_over_sample_sizes = false)
-                risk(assessment; average_over_parameters = false, average_over_sample_sizes = false)
-
-                bias(assessment)
-                bias(assessment; average_over_parameters = false)
-                bias(assessment; average_over_sample_sizes = false)
-                bias(assessment; average_over_parameters = false, average_over_sample_sizes = false)
-
-                rmse(assessment)
-                rmse(assessment; average_over_parameters = false)
-                rmse(assessment; average_over_sample_sizes = false)
-                rmse(assessment; average_over_parameters = false, average_over_sample_sizes = false)
-
-                # J > 1
-                Z_test = simulator(parameters, m, 5)
-                assessment = assess([estimator], parameters, Z_test, use_gpu = use_gpu, verbose = verbose)
-                @test typeof(assessment) == Assessment
-                @test typeof(assessment.estimates) == DataFrame
-                @test typeof(assessment.runtime) == DataFrame
-            end
-
-            @testset "bootstrap" begin
-                # parametric bootstrap functions are designed for a single parameter configuration
-                pars = sampler(1, ξ)
-                m = 20
-                B = 400
-                Z̃ = simulator(pars, m, B)
-                size(bootstrap(estimator, pars, Z̃; use_gpu = use_gpu)) == (p, K)
-                size(bootstrap(estimator, pars, simulator, m; use_gpu = use_gpu)) == (p, K)
-
-                if covar == "no set-level covariates" # TODO non-parametric bootstrapping does not work for tuple data
-                    # non-parametric bootstrap is designed for a single parameter configuration and a single data set
-                    if typeof(Z̃) <: Tuple
-                        Z = ([Z̃[1][1]], [Z̃[2][1]]) # NB not ideal that we need to still store these a vectors, given that the estimator doesn't require it
-                    else
-                        Z = Z̃[1]
-                    end
-                    Z = Z |> dvc
-
-                    @test size(bootstrap(estimator, Z; use_gpu = use_gpu)) == (p, B)
-                    @test size(bootstrap(estimator, [Z]; use_gpu = use_gpu)) == (p, B)
-                    @test_throws Exception bootstrap(estimator, [Z, Z]; use_gpu = use_gpu)
-                    @test size(bootstrap(estimator, Z, use_gpu = use_gpu, blocks = rand(1:2, size(Z)[end]))) == (p, B)
-
-                    # interval
-                    θ̃ = bootstrap(estimator, pars, simulator, m; use_gpu = use_gpu)
-                    @test size(interval(θ̃)) == (p, 2)
-                end
-            end
+        @testset "bootstrap" begin
+            # parametric bootstrap functions are designed for a single parameter configuration
+            B = 40
+            parameters = sampler(1)            
+            Z_sims = reduce(hcat, [simulator(parameters, m) for _ in 1:B])
+            @test size(bootstrap(estimator, parameters, Z_sims; use_gpu = use_gpu)) == (d, B)
+            @test size(bootstrap(estimator, parameters, simulator, m; B=B, use_gpu = use_gpu)) == (d, B)
         end
     end
 end
 
-# ---- Other NeuralEstimators ----
-
 @testset "IntervalEstimator" begin
-    # Generate some toy data and a basic architecture
-    n = 2  # bivariate data
-    m = 64 # number of independent replicates
-    Z = rand(Float32, n, m)
-    parameter_names = ["ρ", "σ", "τ"]
-    p = length(parameter_names)
-    
-    # Neural network
-    w = 32
-    ψ = Chain(Dense(n, w, relu), Dense(w, w, relu))
-    ϕ = Chain(Dense(w, w, relu), Dense(w, p))
-    arch = DeepSet(ψ, ϕ)
-  
-    # IntervalEstimator
-    estimator = IntervalEstimator(arch)
-    estimator = IntervalEstimator(arch, arch)
-    θ̂ = estimator(Z)
-    @test size(θ̂) == (2p, 1)
-    @test all(θ̂[1:p] .< θ̂[(p + 1):end])
-    ci = interval(estimator, Z)
-    ci = interval(estimator, Z, parameter_names = parameter_names)
-    @test size(ci) == (p, 2)
+    num_summaries = 3d
+    summary_network = Chain(Dense(m, 64, relu), Dense(64, 64, relu), Dense(64, num_summaries))
+    min_supp = [-1.0, -1.0]
+    max_supp = [1.0, 1.0]
+    c = Compress(min_supp, max_supp)
+    estimator = IntervalEstimator(summary_network, d; num_summaries = num_summaries, c = c)
+    show(devnull, estimator)
 
-    # IntervalEstimator with a compact prior
-    min_supp = [25, 0.5, -pi/2]
-    max_supp = [500, 2.5, 0]
-    g = Compress(min_supp, max_supp)
-    estimator = IntervalEstimator(arch, g)
-    estimator = IntervalEstimator(arch, arch, g)
+    # Forward pass
     θ̂ = estimator(Z)
-    @test size(θ̂) == (2p, 1)
-    @test all(θ̂[1:p] .< θ̂[(p + 1):end])
-    @test all(min_supp .< θ̂[1:p] .< max_supp)
-    @test all(min_supp .< θ̂[(p + 1):end] .< max_supp)
     ci = interval(estimator, Z)
-    ci = interval(estimator, Z, parameter_names = parameter_names)
-    @test size(ci) == (p, 2)
+    @test size(θ̂) == (2d, K)
+    @test all(min_supp .< θ̂[1:d, :] .< θ̂[(d + 1):end, :] .< max_supp)
+    @test all([size(c) == (d, 2) for c in ci])
 
-    # assess()
-    assessment = assess(estimator, rand(p, 10), repeat([Z], 10))
+    # Training
+    estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, verbose = verbose)
+
+    # Assessment
+    assessment = assess(estimator, θ, Z)
     coverage(assessment)
     coverage(assessment; average_over_parameters = true)
     coverage(assessment; average_over_sample_sizes = false)
@@ -1043,242 +812,88 @@ end
 end
 
 @testset "QuantileEstimator: marginal" begin
-    # Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
-    n = 1   # dimension of each independent replicate
-    p = 1   # number of unknown parameters in the statistical model
-    m = 30  # number of independent replicates in each data set
-    prior(K) = randn32(p, K)
-    simulate(θ, m) = [μ .+ randn32(n, m) for μ ∈ eachcol(θ)]
+    num_summaries = 3d
+    summary_network = Chain(Dense(m, 64, relu), Dense(64, 64, relu), Dense(64, num_summaries))
+    probs = [0.05, 0.25, 0.5, 0.75, 0.95]
+    estimator = QuantileEstimator(summary_network, d; num_summaries = num_summaries, probs = probs)
 
-    # Architecture
-    ψ = Chain(Dense(n, 32, relu), Dense(32, 32, relu))
-    ϕ = Chain(Dense(32, 32, relu), Dense(32, p))
-    v = DeepSet(ψ, ϕ)
+    # Forward pass
+    θ̂ = estimator(Z)
+    @test size(θ̂) == (length(probs) * d, K)
 
-    # Initialise the estimator
-    τ = [0.05, 0.25, 0.5, 0.75, 0.95]
-    q̂ = QuantileEstimator(v; probs = τ)
+    # Training
+    estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, verbose = verbose)
 
-    # Train the estimator
-    q̂ = train(q̂, prior, simulate, simulator_args = m, epochs = 1, verbose = false)
+    # Assessment
+    assessment = assess(estimator, θ, Z)
 
-    # Assess the estimator
-    θ = prior(1000)
-    Z = simulate(θ, m)
-    assessment = assess(q̂, θ, Z)
-
-    # Estimate posterior quantiles
-    q̂(Z)
+    # Inference
+    z = simulator(sampler(1), m)
+    estimate(estimator, Z)
+    quantiles(estimator, Z)
 end
 
 @testset "QuantileEstimator: full conditionals" begin
-    # Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
-    n = 1         # dimension of each independent replicate
-    p = 2         # number of unknown parameters in the statistical model
-    m = 30        # number of independent replicates in each data set
-    function prior(K)
-        μ = randn(1, K)
-        σ = rand(1, K)
-        θ = Float32.(vcat(μ, σ))
-    end
-    simulate(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
-    simulate(θ::Matrix, m) = simulate.(eachcol(θ), m)
-
-    # Architecture
-    ψ = Chain(Dense(n, 32, relu), Dense(32, 32, relu))
-    ϕ = Chain(Dense(32 + 1, 32, relu), Dense(32, 1))
-    v = DeepSet(ψ, ϕ)
 
     # Initialise estimators respectively targetting quantiles of μ∣Z,σ and σ∣Z,μ
+    num_summaries = 3d
+    summary_network = Chain(Dense(m, 64, relu), Dense(64, 64, relu), Dense(64, num_summaries))
     τ = [0.05, 0.25, 0.5, 0.75, 0.95]
-    q₁ = QuantileEstimator(v; probs = τ, i = 1)
-    q₂ = QuantileEstimator(v; probs = τ, i = 2)
+    q₁ = QuantileEstimator(summary_network, d; num_summaries = num_summaries, probs = τ, i = 1)
+    q₂ = QuantileEstimator(summary_network, d; num_summaries = num_summaries, probs = τ, i = 2)
 
-    # Train the estimators
-    q₁ = train(q₁, prior, simulate, simulator_args = m, epochs = 1, verbose = verbose)
-    q₂ = train(q₂, prior, simulate, simulator_args = m, epochs = 1, verbose = verbose)
-
-    # Assess the estimators
-    θ = prior(500)
-    Z = simulate(θ, m)
-    assessment = assess([q₁, q₂], θ, Z, verbose = verbose)
-
-    # Estimate quantiles of μ∣Z,σ with σ = 0.5 and for many data sets
+    # Forward pass
     θ₋ᵢ = 0.5f0
-    q₁(Z, θ₋ᵢ)
+    θ̂ = q₁(Z, θ₋ᵢ)
+    @test size(θ̂) == (length(τ), K)
 
-    # Estimate quantiles of μ∣Z,σ with σ = 0.5 for only a single data set
-    q₁(Z[1], θ₋ᵢ)
-end
+    # Training
+    q₁ = train(q₁, sampler, simulator, simulator_args = m, epochs = 1, verbose = verbose)
+    q₂ = train(q₂, sampler, simulator, simulator_args = m, epochs = 1, verbose = verbose)
 
-@testset "QuantileEstimatorContinuous: marginal" begin
-    using InvertedIndices, Statistics
-
-    # Simple model Z|θ ~ N(θ, 1) with prior θ ~ N(0, 1)
-    n = 1         # dimension of each independent replicate
-    p = 1         # number of unknown parameters in the statistical model
-    m = 30        # number of independent replicates in each data set
-    prior(K) = randn32(p, K)
-    simulateZ(θ, m) = [μ .+ randn32(n, m) for μ ∈ eachcol(θ)]
-    simulateτ(K) = [rand32(10) for k = 1:K]
-    simulate(θ, m) = simulateZ(θ, m), simulateτ(size(θ, 2))
-
-    # Architecture: partially monotonic network to preclude quantile crossing
-    w = 64  # width of each hidden layer
-    q = 16  # number of learned summary statistics
-    ψ = Chain(
-        Dense(n, w, relu),
-        Dense(w, w, relu),
-        Dense(w, q, relu)
-    )
-    ϕ = Chain(
-        DensePositive(Dense(q + 1, w, relu); last_only = true),
-        DensePositive(Dense(w, w, relu)),
-        DensePositive(Dense(w, p))
-    )
-    deepset = DeepSet(ψ, ϕ)
-
-    # Initialise the estimator
-    q̂ = QuantileEstimatorContinuous(deepset)
-
-    # Train the estimator
-    q̂ = train(q̂, prior, simulate, simulator_args = m, epochs = 1, verbose = false)
-
-    # Assess the estimator
-    θ = prior(1000)
-    Z = simulateZ(θ, m)
-    assessment = assess(q̂, θ, Z)
-    empiricalprob(assessment)
-
-    # Estimate the posterior 0.1-quantile for 1000 test data sets
-    τ = 0.1f0
-    q̂(Z, τ)                        # neural quantiles
-
-    # Estimate several quantiles for a single data set
-    z = Z[1]
-    τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
-    reduce(vcat, q̂.(Ref(z), τ))    # neural quantiles
-
-    # Check monotonicty
-    @test all(q̂(z, 0.1f0) .<= q̂(z, 0.11f0) .<= q̂(z, 0.9f0) .<= q̂(z, 0.91f0))
-end
-
-@testset "QuantileEstimatorContinuous: full conditionals" begin
-    using InvertedIndices, Statistics
-
-    # Simple model Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1), σ ∼ IG(3,1)
-    n = 1         # dimension of each independent replicate
-    p = 2         # number of unknown parameters in the statistical model
-    m = 30        # number of independent replicates in each data set
-    function prior(K)
-        μ = randn32(K)
-        σ = rand(K)
-        θ = hcat(μ, σ)'
-        θ = Float32.(θ)
-        return θ
-    end
-    simulateZ(θ, m) = θ[1] .+ θ[2] .* randn32(1, m)
-    simulateZ(θ::Matrix, m) = simulateZ.(eachcol(θ), m)
-    simulateτ(K) = [rand32(10) for k = 1:K]
-    simulate(θ, m) = simulateZ(θ, m), simulateτ(size(θ, 2))
-
-    # Architecture: partially monotonic network to preclude quantile crossing
-    w = 64  # width of each hidden layer
-    q = 16  # number of learned summary statistics
-    ψ = Chain(
-        Dense(n, w, relu),
-        Dense(w, w, relu),
-        Dense(w, q, relu)
-    )
-    ϕ = Chain(
-        DensePositive(Dense(q + p, w, relu); last_only = true),
-        DensePositive(Dense(w, w, relu)),
-        DensePositive(Dense(w, 1))
-    )
-    deepset = DeepSet(ψ, ϕ)
-
-    # Initialise the estimator for the first parameter, targetting μ∣Z,σ
-    i = 1
-    q̂ = QuantileEstimatorContinuous(deepset; i = i)
-
-    # Train the estimator
-    q̂ = train(q̂, prior, simulate, simulator_args = m, epochs = 1, verbose = false)
-
-    # Estimate quantiles of μ∣Z,σ with σ = 0.5 and for 1000 data sets
-    θ = prior(1000)
-    Z = simulateZ(θ, m)
-    θ₋ᵢ = 0.5f0    # for mulatiparameter scenarios, use θ[Not(i), :] to determine the order that the conditioned parameters should be given
-    τ = Float32.([0.1, 0.25, 0.5, 0.75, 0.9])
-    q̂(Z, θ₋ᵢ, τ)
-
-    # Estimate quantiles for a single data set
-    q̂(Z[1], θ₋ᵢ, τ)
+    # Inference: Estimate quantiles of μ∣Z,σ with σ = 0.5
+    z = simulator(sampler(1), m)
+    θ₋ᵢ = [0.5f0;]
+    estimate(q₁, z, θ₋ᵢ)
+    quantiles(q₁, z, θ₋ᵢ)
 end
 
 @testset "RatioEstimator" begin
 
-    # Generate data from Z|μ,σ ~ N(μ, σ²) with μ, σ ~ U(0, 1)
-    p = 2     # number of unknown parameters in the statistical model
-    n = 1     # dimension of each independent replicate
-    m = 100   # number of independent replicates
+    num_summaries = 3d
+    summary_network = Chain(Dense(m, 16, gelu), Dense(16, num_summaries))
+    estimator = RatioEstimator(summary_network, d; num_summaries = num_summaries)
 
-    prior(K) = rand32(p, K)
-    simulate(θ, m) = θ[1] .+ θ[2] .* randn32(n, m)
-    simulate(θ::AbstractMatrix, m) = simulate.(eachcol(θ), m)
+    # Forward pass
+    r = estimator(Z, θ)
+    @test size(r) == (1, K)
 
-    # Architecture
-    w = 64 # width of each hidden layer
-    q = 2p # number of learned summary statistics
-    ψ = Chain(
-        Dense(n, w, relu),
-        Dense(w, w, relu),
-        Dense(w, q, relu)
-    )
-    ϕ = Chain(
-        Dense(q, w, relu),
-        Dense(w, w, relu),
-        Dense(w, q)
-    )
-    summary_network = DeepSet(ψ, ϕ)
+    # Training
+    estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, verbose = false)
 
-    # Initialise the estimator
-    r̂ = RatioEstimator(summary_network, p; num_summaries = q)
-
-    # Train the estimator
-    r̂ = train(r̂, prior, simulate, simulator_args = m, epochs = 1, verbose = false)
-
-    # Inference with "observed" data
-    θ = prior(1)
-    z = simulate(θ, m)
-    θ_grid = Float32.(expandgrid(0:0.01:1, 0:0.01:1)')  # fine gridding of the parameter space
-    logratio(r̂, z, θ_grid = θ_grid)           # likelihood-to-evidence ratios over grid
-    mlestimate(r̂, z; θ_grid = θ_grid)         # maximum-likelihood estimate
-    mapestimate(r̂, z; θ_grid = θ_grid)        # maximum-a-posteriori estimate
-    samples = sampleposterior(r̂, z; θ_grid = θ_grid)    # posterior samples
+    # Inference (grid-based)
+    θ_grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
+    z = getobs(Z, 1:1)
+    logratio(estimator, z, θ_grid = θ_grid)                # log of likelihood-to-evidence ratios
+    posteriormode(estimator, z; θ_grid = θ_grid)           # posterior mode 
+    samples = sampleposterior(estimator, z; θ_grid = θ_grid)         # posterior sample
     @test size(samples) == (2, 1000)
+
+    # Assessment (grid-based)
+    assessment = assess(estimator, θ, Z; θ_grid = θ_grid)
 end
 
 @testset "PosteriorEstimator" begin
     for approxdist in [NormalisingFlow, GaussianMixture]
-        # Data Z|μ,σ ~ N(μ, σ²) with priors μ ~ U(0, 1) and σ ~ U(0, 1)
-        d = 2     # dimension of the parameter vector θ
-        n = 1     # dimension of each independent replicate of Z
-        m = 30    # number of independent replicates in each data set
-        sampler(K) = rand32(d, K)
-        simulator(θ, m) = [ϑ[1] .+ ϑ[2] .* randn32(n, m) for ϑ in eachcol(θ)]
-        w = 128
-        num_summaries = d
-        ψ = Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu))
-        ϕ = Chain(Dense(w, w, relu), Dense(w, w, relu), Dense(w, num_summaries))
-        summary_network = DeepSet(ψ, ϕ)
+        num_summaries = 3d
+        summary_network = Chain(Dense(m, 16, gelu), Dense(16, num_summaries))
         q = approxdist(d, num_summaries)
         estimator = PosteriorEstimator(summary_network, d; num_summaries = num_summaries, q = approxdist) # convenience constructor
         estimator = PosteriorEstimator(summary_network, q)
         estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, verbose = false)
         @test numdistributionalparams(estimator) == numdistributionalparams(q)
-        θ = sampler(10)
-        Z = simulator(θ, m)
-        sampleposterior(estimator, Z) # posterior draws
+        samples = sampleposterior(estimator, Z) # posterior draws
+        @test all([size(s) == (d, 1000) for s in samples])
         posteriormean(estimator, Z)   # point estimate
         posteriormedian(estimator, Z) # point estimate
         posteriorquantile(estimator, Z, [0.1, 0.5]) # quantiles
@@ -1288,7 +903,34 @@ end
 
 # ---- Wrappers and helper functions for NeuralEstimators ----
 
+@testset "Ensemble: $dvc" for dvc ∈ devices
+    # Architecture of each ensemble component
+    function initestimator()
+        network = Chain(Dense(m, 16, gelu), Dense(16, 2))
+        PointEstimator(network)
+    end
+
+    # Initialise ensemble
+    J = 2 # ensemble size
+    estimators = [initestimator() for j = 1:J]
+    ensemble = Ensemble(estimators)
+    ensemble[1]
+    @test length(ensemble) == J
+
+    # Training
+    ensemble = train(ensemble, sampler, simulator, simulator_args = m, epochs = 1, verbose = verbose, use_gpu = dvc == gpu)
+    ensemble = train(ensemble, sampler, simulator, simulator_args = m, epochs = 1, verbose = verbose, use_gpu = dvc == gpu, optimiser = Optimisers.setup(Adam(5e-3), ensemble))
+
+    # Assessment
+    assessment = assess(ensemble, θ, Z)
+    rmse(assessment)
+
+    # Apply to data
+    estimate(ensemble, Z)
+end
+
 @testset "PiecewiseEstimator" begin
+
     n = 2    # bivariate data
     d = 3    # dimension of parameter vector
     w = 128  # width of each hidden layer
@@ -1301,7 +943,7 @@ end
     θ̂ = PiecewiseEstimator([θ̂₁, θ̂₂], 30)
     Z = [rand32(n, m) for m ∈ (10, 50)]
     θ̂(Z)
-    #estimate(θ̂, Z) #TODO breaks on the GPU
+    #estimate(θ̂, Z) #NB last time I checked, breaks on the GPU
 
     @test_throws Exception PiecewiseEstimator((θ̂₁, θ̂₂), (30, 50))
     @test_throws Exception PiecewiseEstimator((θ̂₁, θ̂₂, θ̂₁), (50, 30))
@@ -1312,45 +954,6 @@ end
     @test est1 ≈ est2
 end
 
-@testset "Ensemble: $dvc" for dvc ∈ devices
-    # Define the model, Z|θ ~ N(θ, 1), θ ~ N(0, 1)
-    d = 1   # dimension of each replicate
-    p = 1   # number of unknown parameters in the statistical model
-    m = 30  # number of independent replicates in each data set
-    sampler(K) = randn32(p, K)
-    simulator(θ, m) = [μ .+ randn32(d, m) for μ ∈ eachcol(θ)]
-
-    # Architecture of each ensemble component
-    function estimator()
-        ψ = Chain(Dense(d, 64, relu), Dense(64, 64, relu))
-        ϕ = Chain(Dense(64, 64, relu), Dense(64, p))
-        deepset = DeepSet(ψ, ϕ)
-        PointEstimator(deepset)
-    end
-
-    # Initialise ensemble
-    J = 2 # ensemble size
-    estimators = [estimator() for j = 1:J]
-    ensemble = Ensemble(estimators)
-    ensemble[1]
-    @test length(ensemble) == J
-
-    # Training
-    ensemble = train(ensemble, sampler, simulator, simulator_args = m, epochs = 1, verbose = verbose, use_gpu = dvc == gpu)
-    ensemble = train(ensemble, sampler, simulator, simulator_args = m, epochs = 1, verbose = verbose, use_gpu = dvc == gpu, optimiser = Optimisers.setup(Adam(5e-3), ensemble))
-
-    # Assessment
-    θ = sampler(1000)
-    Z = simulator(θ, m)
-    assessment = assess(ensemble, θ, Z)
-    rmse(assessment)
-
-    # Apply to data
-    # TODO use estimate()?
-    Z = Z |> dvc
-    ensemble = ensemble |> dvc
-    ensemble(Z)
-end
 
 @testset "EM" begin
     d = 2    # number of parameters in the statistical model
@@ -1367,7 +970,6 @@ end
         d = d
     )
 
-    # Sampler from the prior
     struct GPParameters <: AbstractParameterSet
         θ::Any
         cholesky_factors::Any
@@ -1510,4 +1112,74 @@ end
     @test_throws Exception neuralem(Z, θ₀, ξ = ξ, nsims = H)
     Z₁ = removedata(Z₁, 1.0)
     @test_throws Exception neuralem(Z₁, θ₀, nsims = H, ξ = ξ)
+end
+
+
+# ---- Misc. ----
+
+@testset "Model-specific functions" begin
+    @testset "Simulation" begin
+        n = 10
+        S = array(n, 2, T = Float32)
+        D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
+        ρ = Float32.([0.6, 0.8])
+        ν = Float32.([0.5, 0.7])
+        L = maternchols(D, ρ, ν)
+        σ² = 0.5f0
+        L = maternchols(D, ρ, ν, σ²)
+        @test maternchols(D, ρ, ν, σ²) == maternchols([D, D], ρ, ν, σ²)
+        L₁ = L[:, :, 1]
+        m = 5
+
+        @test eltype(simulateschlather(L₁, m)) == Float32
+        @test eltype(simulategaussian(L₁, m)) == Float32
+
+        ## Potts model
+        β = 0.7
+        complete_grid = simulatepotts(n, n, 2, 0.99)      # simulate marginally from the Ising model
+        complete_grid = simulatepotts(n, n, 2, β)         # simulate marginally from the Ising model
+        @test size(complete_grid) == (n, n)
+        @test length(unique(complete_grid)) == 2
+        incomplete_grid = removedata(complete_grid, 0.1)     # remove 10% of the pixels at random
+        imputed_grid = simulatepotts(incomplete_grid, β)  # conditionally simulate over missing pixels
+        observed_idx = findall(!ismissing, incomplete_grid)
+        @test incomplete_grid[observed_idx] == imputed_grid[observed_idx]
+    end
+
+    @testset "Densities" begin
+
+        # "scaledlogistic"
+        @test all(4 .<= scaledlogistic.(-10:10, 4, 5) .<= 5)
+        @test all(scaledlogit.(scaledlogistic.(-10:10, 4, 5), 4, 5) .≈ -10:10)
+        Ω = (σ = 1:10, ρ = (2, 7))
+        Ω = [Ω...] # convert to array since broadcasting over dictionaries and NamedTuples is reserved
+        θ = [-10, 15]
+        @test all(minimum.(Ω) .<= scaledlogistic.(θ, Ω) .<= maximum.(Ω))
+        @test all(scaledlogit.(scaledlogistic.(θ, Ω), Ω) .≈ θ)
+
+        # Check that the pdf is consistent with the cdf using finite differences
+        using NeuralEstimators: _schlatherbivariatecdf
+        function finitedifference(z₁, z₂, ψ, ϵ = 0.0001)
+            (_schlatherbivariatecdf(z₁ + ϵ, z₂ + ϵ, ψ) - _schlatherbivariatecdf(z₁ - ϵ, z₂ + ϵ, ψ) - _schlatherbivariatecdf(z₁ + ϵ, z₂ - ϵ, ψ) + _schlatherbivariatecdf(z₁ - ϵ, z₂ - ϵ, ψ)) / (4 * ϵ^2)
+        end
+        function finitedifference_check(z₁, z₂, ψ)
+            @test abs(finitedifference(z₁, z₂, ψ) - schlatherbivariatedensity(z₁, z₂, ψ; logdensity = false)) < 0.0001
+        end
+        finitedifference_check(0.3, 0.8, 0.2)
+        finitedifference_check(0.3, 0.8, 0.9)
+        finitedifference_check(3.3, 3.8, 0.2)
+        finitedifference_check(3.3, 3.8, 0.9)
+
+        # Other small tests
+        @test schlatherbivariatedensity(3.3, 3.8, 0.9; logdensity = false) ≈ exp(schlatherbivariatedensity(3.3, 3.8, 0.9))
+        y = [0.2, 0.4, 0.3]
+        n = length(y)
+        # construct a diagonally dominant covariance matrix (pos. def. guaranteed via Gershgorins Theorem)
+        Σ = array(n, n)
+        Σ[diagind(Σ)] .= diag(Σ) + sum(Σ, dims = 2)
+        L = cholesky(Symmetric(Σ)).L
+        @test gaussiandensity(y, L, logdensity = false) ≈ exp(gaussiandensity(y, L))
+        @test gaussiandensity(y, Σ) ≈ gaussiandensity(y, L)
+        @test gaussiandensity(hcat(y, y), Σ) ≈ 2 * gaussiandensity(y, L)
+    end
 end

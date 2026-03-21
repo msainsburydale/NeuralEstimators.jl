@@ -7,7 +7,7 @@ function estimate(estimator::NeuralEstimator, z, x = nothing; kwargs...)
     _applywithdevice_inference(estimator, input; kwargs...)
 end
 
-# ---- Point estimation from estimators that allow for posterior sampling ----
+# ---- Point summaries from non-PointEstimators ----
 
 _doc_string = """
 based either on a ``d`` × ``N`` matrix `θ` of posterior draws, where ``d`` denotes the number of parameters to make inference on, or directly from an estimator that allows for posterior sampling via [`sampleposterior()`](@ref).
@@ -48,6 +48,27 @@ posteriorquantile(θ::AbstractMatrix, probs) = mapslices(row -> quantile(row, pr
 posteriorquantile(θ::AbstractVector{<:AbstractMatrix}, probs) = posteriorquantile.(θ, Ref(probs))
 posteriorquantile(estimator, Z, probs, N::Integer = 1000; kwargs...) = posteriorquantile(sampleposterior(estimator, Z, N; kwargs...), probs)
 
+@doc raw"""
+	posteriormode(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, logprior::Function = θ -> 0f0, use_gpu = true)
+Computes the (approximate) posterior mode (maximum a posteriori estimate) given data $\boldsymbol{Z}$,
+```math
+\underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta}),
+```
+where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function implied by `estimator`, and $p(\boldsymbol{\theta})$ denotes the prior density function controlled through the keyword argument `prior`. Note that this estimate can be viewed as an approximate maximum penalised likelihood estimate, with penalty term $p(\boldsymbol{\theta})$. 
+
+If a vector `θ₀` of initial parameter estimates is given, the approximate
+posterior density is maximised by gradient descent (requires `Optim.jl` to be loaded). Otherwise, if a matrix of parameters
+`θ_grid` is given, the approximate posterior density is maximised by grid search.
+
+See also [`posteriormedian()`](@ref), [`posteriormean()`](@ref).
+"""
+function posteriormode end
+
+# For gradient and optimisation based point estimates, _optimdensity() is overloaded in ext/NeuralEstimatorsOptimExt.jl
+# NB Can also use density evaluation with PosteriorEstimator for and gradient-based methods for computing the posterior mode
+# NB Julia complains if we overload functions in package extensions... to get around this, here we use a slightly different function signature (omitting ::Function)
+_optimdensity(θ₀, logprior, est) = error("A vector of initial parameter estimates has been provided, indicating that the approximate likelihood or posterior density will be maximised by numerical optimisation; please load the Julia package `Optim` to facilitate this")
+
 # ---- Posterior sampling ----
 
 @doc raw"""
@@ -69,35 +90,7 @@ Keyword arguments are passed onto [summarystatistics](@ref).
 """
 function sampleposterior end
 
-# ---- Optimisation-based point estimates ----
-
-# TODO can use density evaluation with PosteriorEstimator to use these grid and gradient-based methods for computing the posterior mode
-
-@doc raw"""
-	posteriormode(estimator::RatioEstimator, Z; θ₀ = nothing, θ_grid = nothing, logprior::Function = θ -> 0f0, use_gpu = true)
-Computes the (approximate) posterior mode (maximum a posteriori estimate) given data $\boldsymbol{Z}$,
-```math
-\underset{\boldsymbol{\theta}}{\mathrm{arg\,max\;}} \ell(\boldsymbol{\theta} ; \boldsymbol{Z}) + \log p(\boldsymbol{\theta}),
-```
-where $\ell(\cdot ; \cdot)$ denotes the approximate log-likelihood function implied by `estimator`, and $p(\boldsymbol{\theta})$ denotes the prior density function controlled through the keyword argument `prior`. Note that this estimate can be viewed as an approximate maximum penalised likelihood estimate, with penalty term $p(\boldsymbol{\theta})$. 
-
-If a vector `θ₀` of initial parameter estimates is given, the approximate
-posterior density is maximised by gradient descent (requires `Optim.jl` to be loaded). Otherwise, if a matrix of parameters
-`θ_grid` is given, the approximate posterior density is maximised by grid search.
-
-See also [`posteriormedian()`](@ref), [`posteriormean()`](@ref).
-"""
-function posteriormode end
-
-# Here, we define _optimdensity() for the case that Optim has not been loaded
-# For the case that Optim is loaded, _optimdensity() is overloaded in ext/NeuralEstimatorsOptimExt.jl
-# NB Julia complains if we overload functions in package extensions... to get around this, here we
-# use a slightly different function signature (omitting ::Function)
-function _optimdensity(θ₀, logprior, est)
-    error("A vector of initial parameter estimates has been provided, indicating that the approximate likelihood or posterior density will be maximised by numerical optimisation; please load the Julia package `Optim` to facilitate this")
-end
-
-# ---- Interval constructions ----
+# ---- Interval/quantile constructions ----
 
 """
 	interval(θ::Matrix; probs = [0.05, 0.95], parameter_names = nothing)
@@ -115,7 +108,7 @@ contain the lower and upper bounds of the interval. The rows of this matrix can
 be named by passing a vector of strings to the keyword argument `parameter_names`. 
 """
 function interval(bs; probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 1:size(bs, 1)])
-    p, B = size(bs)
+    d, B = size(bs)
 
     # Compute the quantiles
     ci = mapslices(x -> quantile(x, probs), bs, dims = 2)
@@ -132,13 +125,13 @@ function interval(estimator::IntervalEstimator, Z; parameter_names = nothing, us
 
     if typeof(estimator) <: IntervalEstimator
         @assert size(ci, 1) % 2 == 0
-        p = size(ci, 1) ÷ 2
+        d = size(ci, 1) ÷ 2
     end
 
     if isnothing(parameter_names)
-        parameter_names = ["θ$i" for i ∈ 1:p]
+        parameter_names = ["θ$i" for i ∈ 1:d]
     else
-        @assert length(parameter_names) == p
+        @assert length(parameter_names) == d
     end
 
     intervals = labelinterval(ci, parameter_names)
@@ -155,18 +148,68 @@ end
 
 function labelinterval(ci::V, parameter_names = ["θ$i" for i ∈ (length(ci) ÷ 2)]) where {V <: AbstractVector}
     @assert length(ci) % 2 == 0
-    p = length(ci) ÷ 2
-    l = ci[1:p]
-    u = ci[(p + 1):end]
+    d = length(ci) ÷ 2
+    l = ci[1:d]
+    u = ci[(d + 1):end]
     labelinterval(l, u, parameter_names)
 end
 
 function labelinterval(ci::M, parameter_names = ["θ$i" for i ∈ (size(ci, 1) ÷ 2)]) where {M <: AbstractMatrix}
     @assert size(ci, 1) % 2 == 0
-    p = size(ci, 1) ÷ 2
+    d = size(ci, 1) ÷ 2
     K = size(ci, 2)
 
     [labelinterval(ci[:, k], parameter_names) for k ∈ 1:K]
+end
+
+"""
+    quantiles(estimator::QuantileEstimator, Z; parameter_names = nothing, use_gpu = true)
+    quantiles(estimator::QuantileEstimator, Z, θ₋ᵢ; parameter_names = nothing, use_gpu = true)
+
+Computes marginal posterior quantiles from a `QuantileEstimator` and data `Z`. For
+full-conditional estimators (those initialised with `i` set), the conditioning values
+`θ₋ᵢ` must also be provided.
+
+The return type is a ``d`` × ``T`` matrix, whose columns correspond to the probability
+levels stored in `estimator.probs` and whose rows correspond to the parameters. The rows
+of this matrix can be named by passing a vector of strings to the keyword argument
+`parameter_names`.
+"""
+function quantiles(estimator::QuantileEstimator, Z, θ₋ᵢ = nothing; parameter_names = nothing, use_gpu::Bool = true)
+    q = isnothing(θ₋ᵢ) ? estimate(estimator, Z, use_gpu = use_gpu) : estimate(estimator, Z, θ₋ᵢ, use_gpu = use_gpu)
+    q = cpu(q)
+
+    T = length(estimator.probs)
+    @assert size(q, 1) % T == 0
+    d = size(q, 1) ÷ T
+
+    if isnothing(parameter_names)
+        parameter_names = isnothing(estimator.i) ? ["θ$i" for i ∈ 1:d] : ["θ$(estimator.i)"]
+    else
+        @assert length(parameter_names) == d
+    end
+
+    result = labelquantiles(q, parameter_names, estimator.probs)
+    if length(result) == 1
+        result = result[1]
+    end
+    return result
+end
+
+function labelquantiles(q::V, parameter_names, probs) where {V <: AbstractVector}
+    T = length(probs)
+    @assert length(q) % T == 0
+    d = length(q) ÷ T
+    # q is quantile-major: first T entries are all quantile levels for θ₁, etc.
+    mat = reshape(q, d, T)
+    NamedArray(mat, (parameter_names, string.(probs)), ("parameter", "prob"))
+end
+
+function labelquantiles(q::M, parameter_names, probs) where {M <: AbstractMatrix}
+    T = length(probs)
+    @assert size(q, 1) % T == 0
+    K = size(q, 2)
+    [labelquantiles(q[:, k], parameter_names, probs) for k ∈ 1:K]
 end
 
 # ---- Parametric bootstrap ----
@@ -191,29 +234,17 @@ block 2, `blocks` should be `[1, 1, 2, 2, 2]`. The resampling algorithm generate
 
 The return type is a ``d`` × `B` matrix, where ``d`` is the dimension of the parameter vector. 
 """
-function bootstrap(estimator, parameters::P, simulator, m::Integer; B::Integer = 400, use_gpu::Bool = true) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
-    K = size(parameters, 2)
-    @assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
-
-    # simulate the data
-    v = [simulator(parameters, m) for i ∈ 1:B]
-    if typeof(v[1]) <: Tuple
-        z = vcat([v[i][1] for i ∈ eachindex(v)]...)
-        x = vcat([v[i][2] for i ∈ eachindex(v)]...)
-        v = (z, x)
-    else
-        v = vcat(v...)
-    end
-
-    bs = estimate(estimator, v, use_gpu = use_gpu)
-    return bs
+function bootstrap(estimator, parameters::P, simulator, m::Integer; B::Integer = 400, kwargs...) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+    @assert numobs(parameters) == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received $(numobs(parameters)) parameter configurations"
+    # Simulate data and pass to fixed data bootstrap method
+    Z = [simulator(parameters, m) for i ∈ 1:B]
+    Z = stackarrays(Z) # TODO more general function that "batches" a collection of data sets based on the type of the elements
+    bootstrap(estimator, parameters, Z; kwargs...)
 end
 
-function bootstrap(estimator, parameters::P, Z̃; use_gpu::Bool = true) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
-    K = size(parameters, 2)
-    @assert K == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received `size(parameters, 2) = $(size(parameters, 2))` parameter configurations"
-    bs = estimate(estimator, Z̃, use_gpu = use_gpu)
-    return bs
+function bootstrap(estimator, parameters::P, Z; use_gpu::Bool = true) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+    @assert numobs(parameters) == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received $(numobs(parameters)) parameter configurations"
+    estimate(estimator, Z, use_gpu = use_gpu)
 end
 
 # ---- Non-parametric bootstrapping ----
@@ -255,7 +286,7 @@ end
 # simple wrapper to handle the common case that the user forgot to extract the
 # array from the single-element vector returned by a simulator
 function bootstrap(estimator, Z::V; args...) where {V <: AbstractVector{A}} where {A}
-    @assert length(Z) == 1 "bootstrap() is designed for a single data set only"
+    @assert numobs(Z) == 1 "bootstrap() is designed for a single data set only"
     Z = Z[1]
     return bootstrap(estimator, Z; args...)
 end

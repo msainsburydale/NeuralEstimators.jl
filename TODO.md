@@ -57,17 +57,15 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Improve the efficiency of the code where possible. See the general [Julia performance tips](https://docs.julialang.org/en/v1/manual/performance-tips/) that could apply, and the [Flux performance tips](https://fluxml.ai/Flux.jl/stable/guide/performance/).
 - Some operations involving only matrices and MLPs (e.g., inference network transformations of summary statistics) should default to using the CPU.
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
+- SimpleChains.jl could be utilized for faster training of "small" feedforward networks on the CPU.
 
 ### Refactoring/API improvements
-- Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl.
 - Clean and improve the plotting code/logic.
-- Update all `QuantileEstimator` types to employ `summary_network`s.
 - Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
-- Rename `PiecewiseEstimator` to `Piecewise`? Our naming convention is "Quantity"Estimator, but "Piecewise" is not a quantity that we are estimating.
+- Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl/Lux.jl.
 
 ### Testing
 - Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
-- Clean `test/runtest.jl`: make the tests more systematic, and mirror the `src/` structure where possible (e.g., possibly split the tests based on `src/`; tests for `Architectures.jl` in `test/test_architectures.jl`, etc.).
 - Improve code coverage (including extensions).
 - Automatic type-stability testing using [JET.jl](https://github.com/aviatesk/JET.jl).
 - Automatic quality testing with [Aqua.jl](https://github.com/JuliaTesting/Aqua.jl).

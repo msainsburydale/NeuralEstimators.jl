@@ -1,3 +1,10 @@
+# ---- DeepSet ----
+
+struct ElementwiseAggregator{F}
+    a::F
+end
+(e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
+
 """
 	(S::AbstractVector)(z)
 	(S::Tuple)(z)
@@ -13,32 +20,10 @@ S = [f, g]
 S(1)
 ```
 """
-function (S::AbstractVector)(z)
-    reduce(vcat, [s(z) for s in S])
-end
-function (S::Tuple)(z)
-    reduce(vcat, [s(z) for s in S])
-end
+(S::AbstractVector)(z) = reduce(vcat, [s(z) for s in S])
+(S::Tuple)(z) = reduce(vcat, [s(z) for s in S])
 
-struct ElementwiseAggregator{F}
-    a::F
-end
-(e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
-
-# The data are stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and the subtype `A` depends on the multivariate structure of the data. Common formats include:
-
-# * **Unstructured data**: `A` is typically an $n \times m$ matrix, where:
-#     * ``n`` is the dimension of each replicate (e.g., $n=1$ for univariate data, $n=2$ for bivariate data).  
-#     * ``m`` is the number of independent replicates in each data set ($m$ is allowed to vary between data sets). 
-# * __Data collected over a regular grid__: `A` is typically an ($N + 2$)-dimensional array, where: 
-#     * The first $N$ dimensions correspond to the dimensions of the grid (e.g., $N = 1$ for time series, $N = 2$ for two-dimensional spatial grids). 
-#     * The penultimate dimension stores the so-called "channels" (e.g., singleton for univariate processes, two for bivariate processes). 
-#     * The final dimension stores the $m$ independent replicates. 
-# * **Spatial data collected over irregular locations**: `A` is typically a [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.GNNGraph), where independent replicates (possibly with differing spatial locations) are stored as subgraphs. See the helper function [`spatialgraph()`](@ref) for constructing these graphs from matrices of spatial locations and data. 
-
-# While the formats above cover many applications, the package is flexible: the data structure simply needs to align with the chosen neural-network architecture. 
-
-#TODO Allow for a learned embedding of the sample size $m$ 
+#TODO Flag for a learned embedding of the sample size $m$ (important to have this for variable sample sizes)
 @doc raw"""
     DeepSet(ψ, ϕ, a = mean; S = nothing)
 	(ds::DeepSet)(Z::Vector{A}) where A <: Any
@@ -59,7 +44,7 @@ specifying the dimension of aggregation (e.g., `mean`, `sum`, `maximum`, `minimu
 element of the vector is associated with one data set (i.e., one set of
 independent replicates), and where `A` depends on the chosen architecture for `ψ`. 
 Independent replicates within each data set are stored in the batch dimension. 
-For example, data collected over a two-dimensional grid and `ψ` a CNN, `A` should be a 4-dimensional array, 
+For example, with data collected over a two-dimensional grid and with `ψ` chosen to be a CNN, `A` should be a 4-dimensional array, 
 with replicates stored in the 4ᵗʰ dimension. 
 
 For computational efficiency, 
@@ -146,8 +131,7 @@ end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractMatrix{T}} where {T}
     Z, x = tup
     if size(x, 2) == 1
-        # Catches the simple case that the user accidentally passed an Nx1 matrix
-        # rather than an N-dimensional vector. Also used by RatioEstimator.
+        # Catches the simple case that the user accidentally passed an Nx1 matrix rather than an N-dimensional vector. 
         d((Z, vec(x)))
     else
         # Designed for situations where we have a fixed data set and want to
@@ -172,24 +156,13 @@ end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V, M}} where {V <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
     Z, x = tup
     if size(x, 2) == length(Z)
-        # Catches the simple case that the user accidentally passed an NxM matrix
-        # rather than an M-dimensional vector of N-vector.
-        # Also used by RatioEstimator.
+        # Catches the simple case that the user accidentally passed an NxM matrix rather than an M-dimensional vector of N-vector.
         d((Z, eachcol(x)))
     else
         # Designed for situations where we have a several data sets and we want
         # to evaluate the object for many different set-level covariates
         [d((z, x)) for z in Z]
     end
-end
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{M}} where {M <: AbstractMatrix{T}} where {A, T}
-    # Multiple data sets Z, each applied over multiple set-level covariates
-    # (NB similar to above method, but the set-level covariates are allowed to be different for each data set)
-    # (This is used during training by QuantileEstimatorContinuous, where each data set is allowed multiple and different probability levels)
-    Z, X = tup
-    @assert length(Z) == length(X)
-    result = [d((Z[k], X[k])) for k ∈ eachindex(Z)]
-    reduce(hcat, vec.(permutedims.(result)))
 end
 
 # Single data set
@@ -260,7 +233,8 @@ function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})
     return true  # All arrays have the same first N-1 dimensions
 end
 
-# ---- Activation functions -----
+
+# ---- Output layers ----
 
 @doc raw"""
     Compress(a, b, k = 1)
@@ -304,45 +278,23 @@ struct Compress{T}
     a::T
     b::T
     k::T
-    # TODO should check that b > a
+    function Compress(a::T, b::T, k::T) where T
+        @assert all(b .> a) "All upper bounds b must be strictly greater than lower bounds a"
+        new{T}(a, b, k)
+    end
 end
 Compress(a, b) = Compress(float.(a), float.(b), ones(eltype(float.(a)), length(a)))
 Compress(a::Number, b::Number) = Compress([float(a)], [float(b)])
 (l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-l.k .* θ))
 Optimisers.trainable(l::Compress) = NamedTuple()
 
-#TODO documentation and unit testing
-export TruncateSupport
-struct TruncateSupport{A, B, P}
-    a::A
-    b::B
-    p::P
-end
-function (l::TruncateSupport)(θ::AbstractMatrix)
-    p = l.p
-    m = size(θ, 1)
-    @assert m ÷ p == m/p "Number of rows in the input must be a multiple of the number of parameters in the statistical model"
-    r = m ÷ p
-    idx = repeat(1:p, inner = r)
-    y = [tuncatesupport.(θ[i:i, :], Ref(l.a[idx[i]]), Ref(l.b[idx[i]])) for i in eachindex(idx)]
-    reduce(vcat, y)
-end
-TruncateSupport(a, b) = TruncateSupport(float.(a), float.(b), length(a))
-TruncateSupport(a::Number, b::Number) = TruncateSupport([float(a)], [float(b)], 1)
-Optimisers.trainable(l::TruncateSupport) = NamedTuple()
-tuncatesupport(θ, a, b) = min(max(θ, a), b)
-
-# ---- Layers to construct Covariance and Correlation matrices ----
-
-#TODO update notation: d -> n, p -> d
 triangularnumber(d) = d*(d+1)÷2
 
 @doc raw"""
     CovarianceMatrix(d)
 	(object::CovarianceMatrix)(x::Matrix, cholesky::Bool = false)
-Transforms a vector 𝐯 ∈ ℝᵈ to the parameters of an unconstrained `d`×`d`
-covariance matrix or, if `cholesky = true`, the lower Cholesky factor of an
-unconstrained `d`×`d` covariance matrix.
+Transforms unconstrained input into the parameters of a `d`×`d`
+covariance matrix or, if `cholesky = true`, the lower Cholesky factor of a `d`×`d` covariance matrix.
 
 The expected input is a `Matrix` with T(`d`) = `d`(`d`+1)÷2 rows, where T(`d`)
 is the `d`th triangular number (the number of free parameters in an
@@ -383,20 +335,20 @@ See also [`CorrelationMatrix`](@ref).
 
 # Examples
 ```julia
-using NeuralEstimators, Flux, LinearAlgebra
+using NeuralEstimators, LinearAlgebra
 
 d = 4
 l = CovarianceMatrix(d)
 p = d*(d+1)÷2
-θ = randn(p, 50)
+x = randn(p, 50)
 
 # Returns a matrix of parameters, which can be converted to covariance matrices
-Σ = l(θ)
-Σ = [Symmetric(cpu(vectotril(x)), :L) for x ∈ eachcol(Σ)]
+Σ = l(x)
+Σ = [Symmetric(vectotril(x), :L) for x ∈ eachcol(Σ)]
 
 # Obtain the Cholesky factor directly
-L = l(θ, true)
-L = [LowerTriangular(cpu(vectotril(x))) for x ∈ eachcol(L)]
+L = l(x, true)
+L = [LowerTriangular(vectotril(x)) for x ∈ eachcol(L)]
 L[1] * L[1]'
 ```
 """
@@ -449,9 +401,9 @@ end
 @doc raw"""
     CorrelationMatrix(d)
 	(object::CorrelationMatrix)(x::Matrix, cholesky::Bool = false)
-Transforms a vector 𝐯 ∈ ℝᵈ to the parameters of an unconstrained `d`×`d`
-correlation matrix or, if `cholesky = true`, the lower Cholesky factor of an
-unconstrained `d`×`d` correlation matrix.
+Transforms unconstrained input into the parameters of a `d`×`d`
+correlation matrix or, if `cholesky = true`, the lower Cholesky factor of a 
+`d`×`d` correlation matrix.
 
 The expected input is a `Matrix` with T(`d`-1) = (`d`-1)`d`÷2 rows, where T(`d`-1)
 is the (`d`-1)th triangular number (the number of free parameters in an
@@ -489,26 +441,26 @@ See also [`CovarianceMatrix`](@ref).
 
 # Examples
 ```julia
-using NeuralEstimators, LinearAlgebra, Flux
+using NeuralEstimators, LinearAlgebra
 
 d  = 4
 l  = CorrelationMatrix(d)
 p  = (d-1)*d÷2
-θ  = randn(p, 100)
+x  = randn(p, 100)
 
 # Returns a matrix of parameters, which can be converted to correlation matrices
-R = l(θ)
+R = l(x)
 R = map(eachcol(R)) do r
-	R = Symmetric(cpu(vectotril(r, strict = true)), :L)
+	R = Symmetric(vectotril(r, strict = true), :L)
 	R[diagind(R)] .= 1
 	R
 end
 
 # Obtain the Cholesky factor directly
-L = l(θ, true)
+L = l(x, true)
 L = map(eachcol(L)) do x
 	# Only the strict lower diagonal elements are returned
-	L = LowerTriangular(cpu(vectotril(x, strict = true)))
+	L = LowerTriangular(vectotril(x, strict = true))
 
 	# Diagonal elements are determined under the constraint diag(L*L') = 𝟏
 	L[diagind(L)] .= sqrt.(1 .- rowwisenorm(L).^2)
@@ -563,153 +515,6 @@ end
 
 # ---- Layers ----
 
-#TODO document last_only 
-#TODO g should be a positional argument in line with standard flux layers
-
-"""
-	DensePositive(layer::Dense; g::Function = relu, last_only::Bool = false)
-Wrapper around the standard
-[Dense](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dense) layer that
-ensures positive weights (biases are left unconstrained).
-
-This layer can be useful for constucting (partially) monotonic neural networks. 
-
-# Examples
-```julia
-using NeuralEstimators, Flux
-
-l = DensePositive(Dense(5 => 2))
-x = rand32(5, 64)
-l(x)
-```
-"""
-struct DensePositive{L, G}
-    layer::L
-    g::G
-    last_only::Bool
-end
-# function DensePositive(args...; kwargs...)
-#     error("DensePositive requires Flux.jl. Please load it with `using Flux`.")
-# end
-
-using NNlib: fast_act
-using Flux: _size_check, _match_eltype
-DensePositive(layer::Dense; g::Function = Flux.relu, last_only::Bool = false) = DensePositive(layer, g, last_only)
-function (d::DensePositive)(x::AbstractVecOrMat)
-    a = d.layer # extract the underlying fully-connected layer
-    _size_check(a, x, 1 => size(a.weight, 2))
-    σ = fast_act(a.σ, x) # replaces tanh => tanh_fast
-    xT = _match_eltype(a, x)   
-    xT = eltype(a.weight) != eltype(x) ? convert(AbstractArray{eltype(a.weight)}, x) : x
-    if d.last_only
-        weight = hcat(a.weight[:, 1:(end - 1)], d.g.(a.weight[:, end:end]))
-    else
-        weight = d.g.(a.weight)
-    end
-    σ.(weight * xT .+ a.bias)
-end
-function (a::DensePositive)(x::AbstractArray)
-    a = d.layer # extract the underlying fully-connected layer
-    _size_check(a, x, 1 => size(a.weight, 2))
-    reshape(a(reshape(x, size(x, 1), :)), :, size(x)[2:end]...)
-end
-
-# Test set:
-# @testset "DensePositive" begin
-#     in, out = 5, 2
-#     b = 64
-#     l = DensePositive(Dense(in => out))
-#     z = rand32(in, b)
-#     l = l |> dvc
-#     z = z |> dvc
-#     y = l(z)
-#     @test size(y) == (out, b)
-#     testbackprop(l, z, dvc)
-# end
-
-#TODO constrain a ∈ [0, 1] and b > 0
-"""
-	PowerDifference(a, b)
-Function ``f(x, y) = |ax - (1-a)y|^b`` for trainable parameters a ∈ [0, 1] and b > 0.
-
-# Examples
-```julia
-using NeuralEstimators, Flux
-
-# Generate some data
-d = 5
-K = 10000
-X = randn32(d, K)
-Y = randn32(d, K)
-XY = (X, Y)
-a = 0.2f0
-b = 1.3f0
-Z = (abs.(a .* X - (1 .- a) .* Y)).^b
-f = PowerDifference([0.5f0], [2.0f0])
-f(XY)
-```
-"""
-struct PowerDifference{A, B}
-    a::A
-    b::B
-end
-PowerDifference() = PowerDifference([0.5f0], [2.0f0])
-PowerDifference(a::Number, b::AbstractArray) = PowerDifference([a], b)
-PowerDifference(a::AbstractArray, b::Number) = PowerDifference(a, [b])
-(f::PowerDifference)(x, y) = (abs.(f.a .* x - (1 .- f.a) .* y)) .^ f.b
-(f::PowerDifference)(tup::Tuple) = f(tup[1], tup[2])
-
-#TODO add further details
-#TODO Groups in ResidualBlock (i.e., allow additional arguments to Conv).
-"""
-	ResidualBlock(filter, in => out; stride = 1)
-
-Basic residual block (see [here](https://en.wikipedia.org/wiki/Residual_neural_network#Basic_block)),
-consisting of two sequential convolutional layers and a skip (shortcut) connection
-that connects the input of the block directly to the output,
-facilitating the training of deep networks.
-
-# Examples
-```julia
-using NeuralEstimators
-z = rand(16, 16, 1, 1)
-b = ResidualBlock((3, 3), 1 => 32)
-b(z)
-```
-"""
-struct ResidualBlock{B}
-    block::B
-end
-(b::ResidualBlock)(x) = relu.(b.block(x))
-function ResidualBlock(filter, channels; stride = 1)
-    layer = Chain(
-        Conv(filter, channels; stride = stride, pad = 1, bias = false),
-        BatchNorm(channels[2], relu),
-        Conv(filter, channels[2]=>channels[2]; pad = 1, bias = false),
-        BatchNorm(channels[2])
-    )
-
-    if stride == 1 && channels[1] == channels[2]
-        # dimensions match, can add input directly to output
-        connection = +
-    else
-        #TODO options for different dimension matching (padding vs. projection)
-        # Projection connection using 1x1 convolution
-        connection = Shortcut(
-            Chain(
-            Conv((1, 1), channels; stride = stride, bias = false),
-            BatchNorm(channels[2])
-        )
-        )
-    end
-
-    ResidualBlock(SkipConnection(layer, connection))
-end
-struct Shortcut{S}
-    s::S
-end
-(s::Shortcut)(mx, x) = mx + s.s(x)
-
 """
     MLP(in::Integer, out::Integer; kwargs...)
 	(mlp::MLP)(x)
@@ -728,26 +533,61 @@ The method `(mlp::MLP)(x, y)` concatenates `x` and `y` along their first dimensi
 struct MLP{T}
     network::T
 end
-function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128, activation::Function = relu, output_activation = identity, final_layer = nothing)
-    @assert depth > 0
-    @assert width > 0
-
-    layers = []
-    push!(layers, Dense(in => width, activation))
-    if depth > 1
-        push!(layers, [Dense(width => width, activation) for _ ∈ 2:depth]...)
-    end
-    push!(layers, Dense(width => out, output_activation))
-    if !isnothing(final_layer)
-        push!(layers, final_layer)
-    end
-
-    return MLP(Chain(layers...))
-end
+MLP(args...; kwargs...) = error("No backend loaded. Load either Flux (`using Flux`) or Lux (`using Lux`).")
 (mlp::MLP)(x) = mlp.network(x)
 (mlp::MLP)(x, y) = mlp.network(cat(x, y; dims = 1))
 (mlp::MLP)(xy::Tuple) = mlp(xy[1], xy[2])
 
+"""
+	ResidualBlock(filter, in => out; stride = 1)
+
+Basic residual block (see [here](https://en.wikipedia.org/wiki/Residual_neural_network#Basic_block)),
+consisting of two sequential convolutional layers and a skip (shortcut) connection
+that connects the input of the block directly to the output,
+facilitating the training of deep networks.
+
+# Examples
+```julia
+using NeuralEstimators, Flux
+z = rand(16, 16, 1, 1)
+b = ResidualBlock((3, 3), 1 => 32)
+b(z)
+```
+"""
+struct ResidualBlock{B}
+    block::B
+end
+struct Shortcut{S}
+    s::S
+end
+(s::Shortcut)(mx, x) = mx + s.s(x)
+
+"""
+	PowerDifference(a, b)
+Function ``f(x, y) = |\\tilde{a}x - (1-\\tilde{a})y|^{\\tilde{b}}``, where
+``\\tilde{a} = \\text{sigmoid}(a) \\in (0, 1)`` and ``\\tilde{b} = \\text{softplus}(b) > 0``
+are constrained transformations of the trainable parameters `a` and `b`.
+
+# Examples
+```julia
+using NeuralEstimators
+
+X = rand(5, 100)
+Y = rand(5, 100)
+f = PowerDifference(0, 1.55)
+f(X, Y)   # two arg method
+f((X, Y)) # tuple method
+```
+"""
+struct PowerDifference{A, B}
+    a::A
+    b::B
+end
+PowerDifference() = PowerDifference([0.0f0], [1.55f0]) # default initial values chosen such that ã = 0.5 and b̃ ≈ 2
+PowerDifference(a::Number, b::AbstractArray) = PowerDifference([a], b)
+PowerDifference(a::AbstractArray, b::Number) = PowerDifference(a, [b])
+(f::PowerDifference)(x, y) = (abs.(sigmoid.(f.a) .* x - (1 .- sigmoid.(f.a)) .* y)) .^ softplus.(f.b)
+(f::PowerDifference)(tup::Tuple) = f(tup[1], tup[2])
 
 @doc raw"""
 	IndicatorWeights(h_max, n_bins::Integer)

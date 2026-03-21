@@ -11,6 +11,20 @@ using Distributions: InverseGamma
 using CairoMakie
 ```
 
+Flux and Lux are both supported:
+
+::: code-group
+
+```julia [Flux]
+using Flux
+```
+
+```julia [Lux]
+using Lux
+```
+
+:::
+
 To improve computational efficiency, various GPU backends are supported. Once the relevant package is loaded and a compatible GPU is available, it will be used automatically:
 
 ::: code-group
@@ -94,13 +108,39 @@ estimator = RatioEstimator(network, d; num_summaries = num_summaries)
 
 :::
 
+If using Lux.jl, we also wrap the estimator as a [`LuxEstimator`](@ref) to store the trainable parameters and states:
+
+::: code-group
+
+```julia [Lux]
+estimator = LuxEstimator(estimator)
+```
+
+```julia [Flux]
+# Nothing to do!
+```
+
+:::
+
 ## Training the estimator
 
 Next, we train the estimator using [`train`](@ref). Below, we pass our user-defined functions for sampling parameters and simulating data, but one may also pass fixed parameter and/or data instances:
 
-```julia
+::: code-group
+
+```julia [Flux]
 estimator = train(estimator, sampler, simulator)
 ```
+
+```julia [Lux]
+# Initialise the network parameters and states
+ps, st = Lux.setup(rng, estimator)
+
+# Training
+estimator, ps, st = train(estimator, sampler, simulator; ps=ps, st=st)
+```
+
+:::
 
 The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref). 
 
@@ -109,11 +149,12 @@ One may wish to save a trained estimator and load it in a later session: see [Sa
 
 ## Assessing the estimator
 
-The function [`assess`](@ref) can be used to assess the trained estimator:
+The function [`assess`](@ref) can then be used to assess the trained estimator based on unseen test data simulated from the statistical model:
 
 ```julia
 θ_test = sampler(1000)           # test parameters
-Z_test = simulator(θ_test, 50)   # test data, with 50 replicates in each data set
+Z_test = simulator(θ_test, 50)   # test data
+
 assessment = assess(estimator, θ_test, Z_test)
 ```
 
