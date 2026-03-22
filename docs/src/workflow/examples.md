@@ -407,3 +407,86 @@ ps = Parameters(θ̂, S)              # construct Parameters object from point e
 bs = bootstrap(estimator, ps, simulate, m)  # parametric bootstrap estimates
 interval(bs)                       # parametric bootstrap confidence interval              
 ```
+
+## Spatio-Temporal Data
+
+Here, we develop a neural estimator to infer 
+$\boldsymbol{\theta} \equiv (\theta_1, \theta_2)'$ from data 
+modelled as a **Spatio-Temporal Gaussian Random Field (GRF)**. 
+This model is appropriate for environmental phenomena such as 
+Sea Surface Temperature (SST) that exhibit correlation across 
+both space and time.
+
+The two parameters are:
+
+- $\theta_1$ **(Spatial Range):** controls spatial correlation 
+  via the Matérn covariance function ($\nu = 1.5$).
+- $\theta_2$ **(Temporal Range):** controls temporal persistence 
+  via a first-order autoregressive [AR(1)] structure.
+
+We adopt the priors $\theta_1 \sim \text{Uniform}(0.05, 0.5)$ 
+and $\theta_2 \sim \text{Uniform}(0.1, 0.9)$.
+```julia
+function sampler(K)
+    θ₁ = rand(K) .* (0.5 - 0.05) .+ 0.05
+    θ₂ = rand(K) .* (0.9 - 0.1)  .+ 0.1
+    θ  = vcat(θ₁', θ₂')
+    return θ
+end
+```
+```julia
+grid_size = 10
+locs = [(i/grid_size, j/grid_size) for i in 1:grid_size for j in 1:grid_size]
+n_spatial = length(locs)
+
+function matern15(d, ρ)
+    d == 0.0 && return 1.0
+    r = sqrt(3) * d / ρ
+    return (1 + r) * exp(-r)
+end
+
+function simulate(θ::AbstractVector, T::Integer)
+    ρ = θ[1]
+    φ = θ[2]
+    Σ = [matern15(norm(collect(locs[i]) .- collect(locs[j])), ρ)
+         for i in 1:n_spatial, j in 1:n_spatial]
+    L = cholesky(Σ + 1e-6 * I).L
+    Z = zeros(n_spatial, T)
+    Z[:, 1] = L * randn(n_spatial)
+    for t in 2:T
+        Z[:, t] = φ .* Z[:, t-1] .+ sqrt(1 - φ^2) .* (L * randn(n_spatial))
+    end
+    return reshape(Z, grid_size, grid_size, 1, T)
+end
+
+simulate(θ::AbstractVector, T)         = simulate(θ, rand(T))
+simulate(θ::AbstractMatrix, T = 10:30) = [simulate(ϑ, T) for ϑ in eachcol(θ)]
+```
+```julia
+d             = 2
+num_summaries = 3d
+w             = 64
+
+ψ = Chain(
+    Conv((3, 3), 1  => 16, relu; pad = 1),
+    Conv((3, 3), 16 => 32, relu; pad = 1),
+    MaxPool((2, 2)),
+    Flux.flatten,
+    Dense(32 * 5 * 5, w, relu)
+)
+
+ϕ = Chain(Dense(w, w, relu), Dense(w, num_summaries))
+network = DeepSet(ψ, ϕ)
+estimator = PointEstimator(network)
+```
+```julia
+estimator = train(estimator, sampler, simulate)
+```
+```julia
+θ_test     = sampler(1000)
+Z_test     = simulate(θ_test, 20)
+assessment = assess(estimator, θ_test, Z_test)
+bias(assessment)
+rmse(assessment)
+plot(assessment)
+```
