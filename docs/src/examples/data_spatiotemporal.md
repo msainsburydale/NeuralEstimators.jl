@@ -6,32 +6,22 @@ This model can be used for environmental phenomena such as
 sea surface temperature (SST) that exhibit correlation across 
 both space and time.
 
-We assume that the data are observed at $n$ locations 
-$\boldsymbol{s}_1, \dots, \boldsymbol{s}_n$ on a regular spatial grid 
+We assume that the data are observed at locations 
+$\{\boldsymbol{s}_1, \dots, \boldsymbol{s}_n\}$ on a regular spatial grid 
 over $T$ time steps. Let $\boldsymbol{Z}_t \equiv (Z(\boldsymbol{s}_1, t), \dots, Z(\boldsymbol{s}_n, t))'$ 
-denote the vector of observations at time $t$, and let $\boldsymbol{Z} \equiv (\boldsymbol{Z}_1', \dots, \boldsymbol{Z}_T')'$ 
-denote the full spatio-temporal data vector. The data are modelled as correlated mean-zero Gaussian random variables with a separable spatio-temporal covariance function given by the product of a 
-**Matérn spatial covariance function**, with smoothness parameter fixed to $3/2$, and an **AR(1) temporal covariance function**:
+denote the vector of observations at time $t = 1, \dots, T$. The data are modelled as correlated mean-zero Gaussian random variables with a separable spatio-temporal covariance function given by the product of a Matérn spatial covariance function and an AR(1) temporal covariance function:
 
-$$\text{Cov}(Z(\boldsymbol{s}, t),\, Z(\boldsymbol{s}', t')) = C_{\text{Matérn 3/2}}(\|\boldsymbol{s} - \boldsymbol{s}'\|;\, \theta_1) \cdot \theta_2^{|t - t'|}, \qquad \boldsymbol{s}, \boldsymbol{s}' \in \{\boldsymbol{s}_1, \dots, \boldsymbol{s}_n\}, \quad t, t' \in \{1, \dots, T\},$$
+$$\text{Cov}(Z(\boldsymbol{s}, t),\, Z(\boldsymbol{s}', t')) = C(\|\boldsymbol{s} - \boldsymbol{s}'\|;\, \theta_1) \cdot \theta_2^{|t - t'|}, $$
 
-where
+where $C(h;\, \theta_1) \equiv \left(1 + \frac{\sqrt{3}\, h}{\theta_1}\right)\exp\!\left(-\frac{\sqrt{3}\,h}{\theta_1}\right)$ denotes the Matérn covariance function with smoothness parameter fixed to $3/2$, and $\theta_1 > 0$ and $\theta_2 \in (0, 1)$ are parameters controlling the strength of spatial and temporal dependence, respectively. This model can be equivalently expressed as the dynamic system
 
-$$C_{\text{Matérn 3/2}}(h;\, \theta_1) \equiv \left(1 + \frac{\sqrt{3}\, h}{\theta_1}\right)\exp\!\left(-\frac{\sqrt{3}\,h}{\theta_1}\right).$$
+$$\boldsymbol{Z}_t = \theta_2 \boldsymbol{Z}_{t-1} + \boldsymbol{\varepsilon}_t, \quad t = 2, \dots, T,$$
 
-Note that our spatio-temporal model is equivalent to the **dynamic system**:
+where $\boldsymbol{\varepsilon}_t \sim \mathrm{Gau}\{\boldsymbol{0},\, (1 - \theta_2^2)\boldsymbol{\Sigma}\}$, $\boldsymbol{Z}_1 \sim \mathrm{Gau}(\boldsymbol{0}, \boldsymbol{\Sigma})$, and $\boldsymbol{\Sigma}_{ij} \equiv C(\|\boldsymbol{s}_i - \boldsymbol{s}_j\|;\, \theta_1)$.
 
-$$\boldsymbol{Z}_1 \sim \mathrm{N}(\boldsymbol{0}, \boldsymbol{\Sigma}), \qquad \boldsymbol{Z}_t = \theta_2 \boldsymbol{Z}_{t-1} + \boldsymbol{\varepsilon}_t, \quad t = 2, \dots, T,$$
 
-where $\boldsymbol{\varepsilon}_t \sim \mathrm{N}(\boldsymbol{0},\, (1 - \theta_2^2)\boldsymbol{\Sigma})$ and $\boldsymbol{\Sigma}_{ij} \equiv C_{\text{Matérn 3/2}}(\|\boldsymbol{s}_i - \boldsymbol{s}_j\|;\, \theta_1)$.
+We place independent uniform priors on the parameters: $\theta_1 \sim \text{Uniform}(0.05, 0.5)$ and $\theta_2 \sim \text{Uniform}(0.1, 0.9)$.
 
-The two parameters $\boldsymbol{\theta} \equiv (\theta_1, \theta_2)'$ to infer are:
-
-- $\theta_1 > 0$ **(Spatial Range):** controls the rate of decay of 
-  spatial correlation via the Matérn covariance.
-- $\theta_2 \in (0, 1)$ **(Temporal Range):** controls temporal persistence via an AR(1) structure.
-
-We adopt the priors $\theta_1 \sim \text{Uniform}(0.05, 0.5)$ and $\theta_2 \sim \text{Uniform}(0.1, 0.9)$.
 
 ## Package dependencies
 ```julia
@@ -77,66 +67,15 @@ function sampler(K)
 end
 ```
 
-<!-- ## Simulating data
-
-Next, we define the statistical model implicitly through simulation, here using the dynamic formulation of the model. 
-
-Since the data are gridded, we will use a CNN to process the data (see the section below), and hence each simulated field is stored as a 4D array of shape $(n_x, n_y, 1, T)$, where the third dimension is a singleton channel dimension required by the CNN.
-
-```julia
-# Matérn covariance (ν = 1.5)
-function matern15(d, ρ)
-    d == 0.0 && return 1.0
-    r = sqrt(3) * d / ρ
-    return (1 + r) * exp(-r)
-end
-
-# Simulate a single spatio-temporal field with T time steps
-function simulator(θ::AbstractVector, T::Integer; grid_size = 10)
-    ρ = θ["θ₁"]
-    φ = θ["θ₂"]
-
-    # Regular spatial grid
-    locs = [(i/grid_size, j/grid_size) for i in 1:grid_size for j in 1:grid_size]
-    n_spatial = length(locs)
-
-    # Spatial covariance matrix and its Cholesky factor
-    Σ = [matern15(norm(collect(locs[i]) .- collect(locs[j])), ρ) for i in 1:n_spatial, j in 1:n_spatial]
-    L = cholesky(Σ + 1e-6 * I).L
-
-    # Dynamic system
-    Z = zeros(n_spatial, T)
-    Z[:, 1] = L * randn(n_spatial)
-    for t in 2:T
-        Z[:, t] = φ .* Z[:, t-1] .+ sqrt(1 - φ^2) .* (L * randn(n_spatial))
-    end
-    return reshape(Z, grid_size, grid_size, 1, T)
-end
-simulator(θ::AbstractVector, T)         = simulator(θ, rand(T))
-simulator(θ::AbstractMatrix, T = 10:30) = Folds.map(ϑ -> simulator(ϑ, T), eachcol(θ))
-```
-
-## Constructing the neural network
-
-The data are observed on a **regular spatial grid** over $T$ time steps. A key architectural consideration is that the $T$ time slices within a single realisation are **not exchangeable**: they exhibit temporal dependence through the AR(1) structure, so a naive [`DeepSet`](@ref) over time slices would be inappropriate, since `DeepSet` assumes exchangeable inputs.
-
-Several architectures can handle these data correctly:
-
-- **CNN + RNN/LSTM/Transformer**: a CNN extracts spatial features from each time slice, and an RNN/LSTM/Transformer processes them sequentially to capture temporal dependence. Handles variable $T$ naturally.
-- **CNN with $T$ channel dimensions**: treats each time step as a channel. Simple and effective but requires fixed $T$.
-- **First differences + DeepSet**: exploits the model structure: for an AR(1) process, the first differences $\Delta_t = Z_t - Z_{t-1}$ are exchangeable, so a `DeepSet` with a CNN inner network applied to each difference field is both principled and handles variable $T$ naturally.
-
-We adopt the last approach, as it reflects the dependence structure of the model, naturally handles variable $T$, and is computationally efficient. Each difference field $\Delta_t$ is a $(n_x, n_y, 1, 1)$ array, and these form the set elements passed to the `DeepSet`. The CNN inner network $\psi$ extracts spatial features from each difference field independently via shared weights. **Global mean pooling** is used after the convolutional layers, which aggregates spatial information into a fixed-dimensional feature vector regardless of the spatial grid size,  meaning the architecture can in principle handle grids of varying shape. The outer network $\phi$ then maps the aggregated features to summary statistics. -->
-
 ## Simulating data and constructing the neural network
 
 The simulator and the neural network are designed in tandem: the architecture is chosen based on the structure of the data, and the simulator must return data in a format appropriate for the chosen architecture. 
 
 The data are spatio-temporally dependent and observed over a regular spatio-temporal grid. Several architectures could handle these data correctly:
 
-- **CNN with $T$ channel dimensions**: treats each time step as a channel. Simple and effective but requires fixed $T$.
-- **CNN + RNN/LSTM/Transformer**: a CNN extracts spatial features from each time slice, and an RNN/LSTM/Transformer processes them sequentially to capture temporal dependence. Handles variable $T$ naturally but more computationally expensive.
-- **First differences + DeepSet with CNN inner network**: for an AR(1) process, the first differences $\boldsymbol{\Delta_t} \equiv \boldsymbol{Z}_t - \boldsymbol{Z}_{t-1}$ are exchangeable, so a [`DeepSet`](@ref) with a CNN inner network applied to each difference field can be used. Handles variable $T$ naturally and computationally efficiently.
+* **CNN with $T$ channel dimensions**: treats each time step as a channel. Simple and effective but requires fixed $T$.
+* **CNN + RNN/LSTM/Transformer**: a CNN extracts spatial features from each time slice, and an RNN/LSTM/Transformer processes them sequentially to capture temporal dependence. Handles variable $T$ naturally but more computationally expensive.
+* **DeepSet with CNN inner network**: for an AR(1) process, the first differences $\boldsymbol{\Delta_t} \equiv \boldsymbol{Z}_t - \boldsymbol{Z}_{t-1}$ are exchangeable, so a [`DeepSet`](@ref) with a CNN inner network applied to each difference field can be used. Handles variable $T$ naturally and computationally efficiently.
 
 We adopt the last approach, as it is simple to implement, exploits the model structure, and is computationally efficient.
 
