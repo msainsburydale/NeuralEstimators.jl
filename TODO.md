@@ -10,17 +10,14 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - 🟡 Support for [Lux.jl](https://lux.csail.mit.edu/stable/).
 
 **Training**
-- 🟡 Sequential training methods.
 - Support for reading data from disk during training, to handle data sets that are too large to fit in memory.
-- 🟡 Post-training calibration for better inference (especially PointEstimator and RatioEstimator, but can easily do this for general estimators).
 
 **Estimator types & methods**
 - 🟡 Improve inference methods with RatioEstimator (alternative to grid-based sampling, e.g., MCMC).
-- 🟡 Methods for high-dimensional parameter vectors (e.g., [telescoping ratio estimation](https://arxiv.org/abs/2510.04042)).
+- 🟡 Methods for higher-dimensional parameter vectors (e.g., [telescoping ratio estimation](https://arxiv.org/abs/2510.04042)).
 - Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
 - Model selection/comparison: see [here](https://bayesflow.org/main/api/bayesflow.approximators.ModelComparisonApproximator.html#bayesflow.approximators.ModelComparisonApproximator), [this paper](https://arxiv.org/abs/2004.10629), and [this paper](https://arxiv.org/pdf/2503.23156).
 - Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference.
-- Explicit learning of summary statistics (see [Zammit-Mangion et al., 2025, Sec. 4](https://arxiv.org/pdf/2404.12484)).
 - Ensemble methods with general estimator types (e.g., PosteriorEstimator, RatioEstimator).
 
 **Inference & diagnostics**
@@ -30,8 +27,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - assess.jl/inference.jl for more general parameter shapes (currently assumes the parameters are stored as a matrix).
 
 **Summary network architecture**
-- Add several ready-to-go summary networks (e.g., for gridded data, time-series, etc.).
-- Functions for automated neural architecture search (see, e.g., [this paper](https://www.jmlr.org/papers/volume20/18-598/18-598.pdf)) using for example, [evolutionary algorithms](https://en.wikipedia.org/wiki/Neural_architecture_search#Evolution) or [Bayesian optimization](https://en.wikipedia.org/wiki/Neural_architecture_search#Bayesian_optimization).
 - Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
 
 ### Documentation
@@ -41,7 +36,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Examples: Add [`::: tabs`](https://luxdl.github.io/DocumenterVitepress.jl/dev/manual/markdown-examples#Tabs) in the assessment stage to show the various diagnostic plots (recovery plots for point estimates; SBC and posterior contraction for posterior samples).
 -  Examples: Don't use DeepSets in CNN (just reference DeepSet); also think about this for GNN. Maybe retain DeepSet so that we can illustrate variable grid sizes using `GlobalMeanPool` (not clear how variable grid sizes could be handled during training otherwise)? Could do a `::: codegroup` to illustrate both networks (could also do this for the univariate data example, showing both DeepSet and regular MLP).
 - Example: Sequence (e.g., time-series) input using recurrent neural networks (RNNs). See [Flux's in-built support for recurrence](https://fluxml.ai/Flux.jl/stable/guide/models/recurrence/).
-- Example: Spatio-temporal data.
 - Example: Nonstationary spatial data with image-to-image networks (see, e.g., [LatticeVision](https://arxiv.org/abs/2505.09803)).
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)). (Might need extra functionality for this.)
 - Example: Lévy Processes using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
@@ -60,12 +54,9 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Clean and improve the plotting code/logic.
 - Update all `QuantileEstimator` types to employ `summary_network`s.
 - Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
-- Rename `PiecewiseEstimator` to `Piecewise`? Our naming convention is "Quantity"Estimator, but "Piecewise" is not a quantity that we are estimating.
-
 
 ### Testing
 - Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
-- Clean `test/runtest.jl`: make the tests more systematic, and mirror the `src/` structure where possible (e.g., possibly split the tests based on `src/`; tests for `Architectures.jl` in `test/test_architectures.jl`, etc.).
 - Improve code coverage (e.g., plotting extensions).
 
 ---
