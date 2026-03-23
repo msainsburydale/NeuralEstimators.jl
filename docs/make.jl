@@ -18,6 +18,7 @@ makedocs(
         "Examples" => [
             "examples/data_replicated.md",
             "examples/data_gridded.md",
+            "examples/data_spatiotemporal.md",
             "examples/data_irregularspatial.md"
         ],
         "Advanced usage" => "examples/advancedusage.md",
