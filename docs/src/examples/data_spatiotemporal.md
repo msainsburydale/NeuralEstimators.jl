@@ -1,4 +1,4 @@
-# Spatio-temporal Data
+# Spatio-temporal data
 
 Here, we develop a neural estimator for data 
 modelled as a **Spatio-Temporal Gaussian Random Field (GRF)**. 
