@@ -1,26 +1,114 @@
 # Advanced usage
 
-## Saving and loading neural estimators
+## Backends
 
-In regards to saving and loading, neural estimators behave in the same manner as regular Flux models. Therefore, the examples and recommendations outlined in the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/saving/) also apply directly to neural estimators. For example, to save the model state of the neural estimator `estimator`, run:
+[Flux.jl](https://fluxml.ai/Flux.jl/stable/) and [Lux.jl](https://lux.csail.mit.edu/stable/) are the primarily supported backends. These frameworks differ in a key way: Flux stores trainable parameters and states inside the network object, while Lux represents them explicitly as separate objects. [SimpleChains.jl](https://github.com/PumasAI/SimpleChains.jl) is also supported via the Lux interface (see [here](https://lux.csail.mit.edu/stable/api/Lux/interop#Lux-Models-to-Simple-Chains)), and optimised for small, fast networks on the CPU.
 
+Flux's stateful, object-oriented style will feel familiar to PyTorch users, while Lux's explicit, functional style will feel familiar to JAX/Flax users.
+
+Despite these differences, the high-level API of NeuralEstimators.jl is largely consistent across backends, particularly with the convenience wrapper [`LuxEstimator`](@ref). The typical workflows are as follows:
+
+::: code-group
+
+```julia [Flux.jl]
+using NeuralEstimators, Flux
+
+network   = Flux.Chain(...)
+estimator = PointEstimator(network)
+estimator = train(estimator, sampler, simulator)
+assess(estimator, θ_test, Z_test)
+estimate(estimator, Z)
+```
+
+```julia [Lux.jl (convenience wrapper)]
+using NeuralEstimators, Lux, Enzyme
+
+network   = Lux.Chain(...)
+estimator = PointEstimator(network) 
+estimator = LuxEstimator(estimator)
+estimator = train(estimator, sampler, simulator)          
+assess(estimator, θ_test, Z_test)
+estimate(estimator, Z)
+```
+
+```julia [Lux.jl (idiomatic)]
+using NeuralEstimators, Lux, Random, Enzyme, Optimisers
+
+network    = Lux.Chain(...)
+estimator  = PointEstimator(network)
+
+# Initialize the parameters/states
+rng        = Random.default_rng()
+ps, st     = Lux.setup(rng, estimator)
+
+# Training
+optimiser  = Adam(5e-4)
+trainstate = Lux.Training.TrainState(estimator, ps, st, optimiser)
+trainstate = train(trainstate, sampler, simulator)
+ps         = trainstate.parameters
+st         = trainstate.states
+
+assess(estimator, θ_test, Z_test, ps, st)
+estimate(estimator, Z, ps, st)
+```
+
+```julia [SimpleChains.jl]
+using NeuralEstimators, Lux, SimpleChains
+
+# Define Lux network and convert it to SimpleChains
+network  = Lux.Chain(...)
+adaptor  = ToSimpleChainsAdaptor(...) # declare input size
+network  = adaptor(network)
+
+# Then proceed with Lux workflow... 
+```
+
+:::
+
+### Notes for Lux.jl users
+
+See the [Optional Dependencies for Improved Performance](https://lux.csail.mit.edu/stable/manual/performance_pitfalls#Optional-Dependencies-for-Performance).
+
+If you plan to use the GPU both natively via CUDA and via [XLA](https://lux.csail.mit.edu/stable/manual/compiling_lux_models) in the same session, ensure that CUDA.jl/cuDNN.jl are loaded before Reactant.jl:
+
+```julia
+using CUDA, cuDNN
+using Reactant
+Reactant.set_default_backend("gpu")
+```
+
+## Saving and loading estimators
+
+Neural estimators can be saved and loaded in the same way as regular Flux/Lux models (see the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/saving/)). For example, to save and load the model state of a Flux-based neural estimator:
 ```julia
 using Flux
 using BSON: @save, @load
+
+# Save
 model_state = Flux.state(estimator)
 @save "estimator.bson" model_state
-```
 
-Then, to load it in a new session, one may initialise a neural estimator with the same architecture used previously, and load the saved model state as follows:
-
-```julia
+# Load (initialise an estimator with the same architecture, then load the state)
 @load "estimator.bson" model_state
 Flux.loadmodel!(estimator, model_state)
 ```
 
-It is also straightforward to save the entire neural estimator, including its architecture (see [here](https://fluxml.ai/Flux.jl/stable/guide/saving/#Saving-Models-as-Julia-Structs)). However, the first approach outlined above is recommended for long-term storage.
+For **Lux** users, we save the parameters/states directly:
+```julia
+using Lux
+using BSON: @save, @load
 
-For convenience, the function [`train()`](@ref) allows for the automatic saving of the model state during the training stage, via the argument `savepath`.
+# Save
+@save "estimator.bson" parameters=estimator.ps states=estimator.st
+
+# Load (initialise an estimator with the same architecture, then load the parameters/states)
+@load "estimator.bson" parameters states
+estimator = Lux.setparam(estimator, parameters)
+```
+
+It is also straightforward to save the entire estimator including its architecture (see [here](https://fluxml.ai/Flux.jl/stable/guide/saving/#Saving-Models-as-Julia-Structs) for Flux), though saving the model state as above is recommended for long-term storage.
+
+For convenience, [`train`](@ref) supports automatic saving of the model state during training via the `savepath` argument.
 
 
 ## Storing expensive intermediate objects for data simulation
@@ -58,40 +146,47 @@ A simple preprocessing layer or transformation pipeline such as this can make a 
 
 ## Regularisation
 
-The term *regularisation* refers to a variety of techniques aimed to reduce overfitting when training a neural network, primarily by discouraging complex models.
+The term *regularisation* refers to a variety of techniques aimed to reduce overfitting when training a neural network, primarily by discouraging complex models. 
 
-A popular regularisation technique is known as dropout, implemented in Flux's [`Dropout`](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dropout) layer. Dropout involves temporarily dropping ("turning off") a randomly selected set of neurons (along with their connections) at each iteration of the training stage, which results in a computationally-efficient form of model (neural-network) averaging [(Srivastava et al., 2014)](https://jmlr.org/papers/v15/srivastava14a.html).
+!!! note "Simulation on-the-fly"
+	When the training data and parameters are simulated dynamically (i.e., ["on the fly"](@ref "On-the-fly and just-in-time simulation")), overfitting is generally not a concern, making regularisation unnecessary.
 
-Another class of regularisation techniques involve modifying the loss function. For instance, L₁ regularisation (sometimes called lasso regression) adds to the loss a penalty based on the absolute value of the neural-network parameters. Similarly, L₂ regularisation (sometimes called ridge regression) adds to the loss a penalty based on the square of the neural-network parameters. Note that these penalty terms are not functions of the data or of the statistical-model parameters that we are trying to infer. These regularisation techniques can be implemented straightforwardly by providing a custom `optimiser` to [`train()`](@ref) that includes a [`SignDecay`](https://fluxml.ai/Flux.jl/stable/reference/training/optimisers/#Optimisers.SignDecay) object for L₁ regularisation, or a [`WeightDecay`](https://fluxml.ai/Flux.jl/stable/reference/training/optimisers/#Optimisers.WeightDecay) object for L₂ regularisation. See the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/training/training/#Regularisation) for further details. Note that, when the training data and parameters are simulated dynamically (i.e., "on the fly"; see [On-the-fly and just-in-time simulation](@ref)), overfitting is generally not a concern, making this form of regularisation unnecessary.
+One popular regularisation technique is known as dropout, implemented with `Dropout` ([Flux](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dropout)/[Lux](https://lux.csail.mit.edu/stable/api/Lux/layers#Dropout-Layers)). Dropout involves temporarily dropping ("turning off") a randomly selected set of neurons (along with their connections) at each iteration of the training stage, which results in a computationally-efficient form of model (neural-network) averaging [(Srivastava et al., 2014)](https://jmlr.org/papers/v15/srivastava14a.html).
 
-For illustration, the following code constructs a neural Bayes estimator using dropout and L₁ regularisation with penalty coefficient $\lambda = 10^{-4}$:
+Another class of regularisation techniques involve modifying the loss function. For instance, L₁ regularisation (sometimes called lasso regression) adds to the loss a penalty based on the absolute value of the neural-network parameters. Similarly, L₂ regularisation (sometimes called ridge regression) adds to the loss a penalty based on the square of the neural-network parameters. Note that these penalty terms are not functions of the data or of the statistical-model parameters that we are trying to infer. These regularisation techniques can be implemented straightforwardly by providing a custom `optimiser` rule to [`train`](@ref) that includes a [`SignDecay`](https://fluxml.ai/Flux.jl/stable/reference/training/optimisers/#Optimisers.SignDecay) object for L₁ regularisation, or a [`WeightDecay`](https://fluxml.ai/Flux.jl/stable/reference/training/optimisers/#Optimisers.WeightDecay) object for L₂ regularisation. See the [Optimisers.jl](https://fluxml.ai/Flux.jl/stable/reference/training/optimisers/#Composing-Optimisers) and [Flux.jl](https://fluxml.ai/Flux.jl/stable/guide/training/training/#Regularisation) documentation for further details. 
+
+For illustration, the following code constructs a neural Bayes estimator using dropout and L₁ regularisation with penalty coefficient $10^{-4}$:
 
 ```julia
 using NeuralEstimators, Flux
 
-# Data Z|θ ~ N(θ, 1) with θ ~ N(0, 1)
-d = 1     # dimension of the parameter vector θ
-n = 1     # dimension of each independent replicate of Z
-m = 5     # number of independent replicates in each data set
-sampler(K) = randn32(d, K)
-simulator(θ, m) = [μ .+ randn32(n, m) for μ ∈ eachcol(θ)]
-K = 3000  # number of training samples
+# Functions to simulate data Z|μ,σ ~ N(μ, σ²) with μ ~ N(0, 1) and σ ~ U(0, 1)
+d, n = 2, 100  # number of parameters and number of replicates
+sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
+simulator(θ::AbstractVector, n) = θ["μ"] .+ θ["σ"] .* sort(randn(n))
+simulator(θ::AbstractMatrix, n) = reduce(hcat, simulator.(eachcol(θ), n))
+
+# Fixed training/validation sets
+K = 10000
 θ_train = sampler(K)
 θ_val   = sampler(K)
-Z_train = simulator(θ_train, m)
-Z_val   = simulator(θ_val, m)
+Z_train = simulator(θ_train, n)
+Z_val   = simulator(θ_val, n)
 
 # Neural network with dropout layers
-w = 128
-ψ = Chain(Dense(1, w, relu), Dropout(0.1), Dense(w, w, relu), Dropout(0.5))     
-ϕ = Chain(Dense(w, w, relu), Dropout(0.5), Dense(w, 1))           
-network = DeepSet(ψ, ϕ)
+network = Chain(
+	Dense(n, 128, relu), 
+	Dropout(0.1), 
+	Dense(128, 128, gelu), 
+	Dropout(0.1),
+	Dense(128, d)
+	)
 
 # Initialise estimator
 estimator = PointEstimator(network)
 
 # Optimiser with L₁ regularisation
-optimiser = Flux.setup(OptimiserChain(SignDecay(1e-4), Adam()), estimator)
+optimiser = OptimiserChain(SignDecay(1e-4), Adam(5e-4))
 
 # Train the estimator
 train(estimator, θ_train, θ_val, Z_train, Z_val; optimiser = optimiser)
@@ -134,12 +229,11 @@ network = DeepSet(ψ, ϕ)
 A neural estimator based on the [DeepSet](@ref) representation can be applied to data sets of arbitrary sample size $m$. However, the posterior distribution, and summaries derived from it, typically depends on $m$, and neural estimators must account for this dependence if data sets with varying $m$ are envisaged. 
 
 !!! note "Aggregation functions and variable sample sizes"
-    When the sample size is $m$ fixed, the choice of aggregation function used in the [DeepSet](@ref) representation is typically driven by considerations of numerical stability. For example, mean aggregation is often preferred over sum to avoid exploding gradients when $m$ is large. However, not all functions that perform well for fixed sample sizes preserve the ability of the network to generalise across different sample sizes. Specifically, the mean aggregation function, while numerically stable, discards information about $m$. 
+    When the sample size $m$ is fixed, the choice of aggregation function used in the [DeepSet](@ref) representation is typically driven by considerations of numerical stability. For example, mean aggregation is often preferred over sum to avoid exploding gradients when $m$ is large. However, not all functions that perform well for fixed sample sizes preserve the ability of the network to generalise across different sample sizes. Specifically, the mean aggregation function, while numerically stable, discards information about $m$. 
 
 	One has several options when designing a neural network to accomodate variable sample sizes. 
-	- Use sum aggregation. This is effective with small to moderate values $m$, but can lead to exploding gradients when $m$ becomes large. 
-    - Use mean aggregation with $m$ explicitly input to the neural network. This can be done by supplying [`logsamplesize`](@ref) or [`invsqrtsamplesize`](@ref) as an [expert summary statistic](@ref "Expert summary statistics") when constructing the [DeepSet](@ref). 
-    - Use a hybrid aggregation that maintains numerical stability while implicitly encoding $m$. For example, `weightedsum(X; dims) = logsamplesize(X) .* mean(X; dims)`. Since $m$ is not explicitly provided to the network in this approach, it may be beneficial to combine it with the previous strategy. 
+	- Sum aggregation. This is effective with small to moderate values $m$, but can lead to exploding gradients when $m$ becomes large. 
+    - Mean aggregation with $m$ explicitly input to the neural network. This can be done by supplying [`logsamplesize`](@ref) or [`invsqrtsamplesize`](@ref) as an [expert summary statistic](@ref "Expert summary statistics") when constructing the [DeepSet](@ref). 
 
 Let a data set consisting of $m$ conditionally independent replicates be denoted by $\boldsymbol{Z}^{(m)} \equiv (\boldsymbol{Z}_1', \dots, \boldsymbol{Z}_m')'$. If data sets with varying $m$ are envisaged, a generally applicable approach is to treat the sample size as a random variable, $M$, with support over a set of positive integers. One then places a distribution on $M$ (e.g., discrete uniform) that is sampled from when simulating data during the training phase. Note that the choice of distribution for $M$ is theoretically immaterial, provided it assigns positive mass on all sample sizes of interest (this follows from similar arguments given by [Richards et al., 2024, Theorem 1](https://www.jmlr.org/papers/v25/23-1134.html) and [Sainsbury-Dale et al., 2025, Theorem 1](https://doi.org/10.1080/10618600.2024.2433671)). 
 
@@ -260,7 +354,7 @@ scatter!(m_range, true_std;
     legend = :topright
 )
 ```
-![Neural](../assets/figures/variablem_posterior_std.png)
+![Neural](assets/figures//variablem_posterior_std.png)
 
 
 ## Missing data
@@ -274,6 +368,7 @@ using NeuralEstimators, Flux
 using Distributions: Uniform
 using Distances, LinearAlgebra
 using Statistics: mean
+using MLUtils: flatten
 
 # Prior and dimension of parameter vector
 Π = (τ = Uniform(0, 1.0), ρ = Uniform(0, 0.4))
@@ -369,7 +464,7 @@ Next, we construct and train a masked neural Bayes estimator using a CNN archite
 	Conv((10, 10), 2 => 16,  relu),
 	Conv((5, 5),  16 => 32,  relu),
 	Conv((3, 3),  32 => 64, relu),
-	Flux.flatten
+	flatten
 	)
 ϕ = Chain(Dense(64, 256, relu), Dense(256, d, exp))
 network = DeepSet(ψ, ϕ)
@@ -408,7 +503,7 @@ First, we construct a neural approximation of the MAP estimator. In this example
 	Conv((10, 10), 1 => 16,  relu),
 	Conv((5, 5),  16 => 32,  relu),
 	Conv((3, 3),  32 => 64, relu),
-	Flux.flatten
+	flatten
 	)
 ϕ = Chain(
 	Dense(64, 256, relu),
@@ -571,7 +666,7 @@ Inference with censored data can proceed in an analogous manner to the [The mask
 ```
 where $\boldsymbol{1}$ is a vector of ones of appropriate dimension, $\boldsymbol{v} \in \mathbb{R}^n$ is user-defined, and $\odot$ denotes elementwise multiplication. A neural estimator for censored data is then trained on realisations of the augmented data set, $\{\boldsymbol{U}, \boldsymbol{W}\}$. 
 
-The manner in which $\boldsymbol{U}$ and $\boldsymbol{W}$ are combined depends on the multivariate structure of the data and the chosen architecture. For example, when the data are gridded and the neural network is a CNN, then $\boldsymbol{U}$ and $\boldsymbol{W}$ can be concatenated along the channels dimension (i.e., the penultimate dimension of the array). In this example, we have replicated, unstructured bivariate data stored as matrices of dimension $2\times m$, where $m$ denotes the number of independent replicates, and so the neural network is based on dense multilayer perceptrons (MLPs). In these settings, a simple way to combine $\boldsymbol{U}$ and $\boldsymbol{W}$ so that they can be passed through the neural network is to concatenate $\boldsymbol{U}$ and $\boldsymbol{W}$ along their first dimension, so that the resulting input is a matrix of dimension $4 \times m$. 
+The manner in which $\boldsymbol{U}$ and $\boldsymbol{W}$ are combined depends on the multivariate structure of the data and the chosen architecture. For example, when the data are gridded and the neural network is a CNN, then $\boldsymbol{U}$ and $\boldsymbol{W}$ can be concatenated along the channels dimension (i.e., the penultimate dimension of the array). In this example, we have replicated, unstructured bivariate data stored as matrices of dimension $2\times m$, where $m$ denotes the number of replicates, and so the neural network is based on dense multilayer perceptrons (MLPs). In these settings, a simple way to combine $\boldsymbol{U}$ and $\boldsymbol{W}$ so that they can be passed through the neural network is to concatenate $\boldsymbol{U}$ and $\boldsymbol{W}$ along their first dimension, so that the resulting input is a matrix of dimension $4 \times m$. 
 
 The following helper function implements a simple version of the general censoring framework described above, based on a vector of censoring levels $\boldsymbol{c}$ and with $\boldsymbol{v}$ fixed to a constant such that the censoring mechanism and augmentation values do not vary with the model parameter values or with the replicate index.
 
@@ -650,7 +745,7 @@ plot(assessment)
 | Mild censoring | ρ       | 0.394838 |
 | Mild censoring | δ         | 0.135169 |
 
-![General censoring](../assets/figures/generalcensoring.png)
+![General censoring](assets/figures//generalcensoring.png)
 
 Here we have trained two separate neural estimators to handle two different censoring threshold vectors. However, one could train a single neural estimator that caters for a range of censoring thresholds, `c`, by allowing it to vary with the data samples and using it as an input to the neural network. In the next section, we illustrate this in the context of peaks-over-threshold modelling, whereby a single censoring threshold is defined to be the marginal $\tau$-quantile of the data, and we amortise the estimator with respect to the probability level $\tau$. In a peaks-over-threshold setting, variation in the censoring thresholds can be created by placing a prior on $\tau$, which induces a prior on `c`.
 
@@ -682,7 +777,7 @@ end
 
 # Generate the data used for training and validation
 K = 50000  # number of training samples
-m = 500    # number of independent replicates in each data set
+m = 500    # number of replicates in each data set
 θ_train  = sample(K)
 θ_val    = sample(K ÷ 5)
 τ_train  = sampleτ(K)
@@ -737,4 +832,4 @@ plot(assessment)
 | τ = 0.80   | ρ         | 0.476348 |
 | τ = 0.80   | δ         | 0.124913 |
 
-![Peaks-over-threshold censoring](../assets/figures/potcensoring.png)
+![Peaks-over-threshold censoring](assets/figures//potcensoring.png)

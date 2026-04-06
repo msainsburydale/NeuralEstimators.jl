@@ -1,6 +1,6 @@
 # Contributing to NeuralEstimators
 
-Thank you for your interest in contributing to **NeuralEstimators**! We welcome contributions of all sizes, from fixing typos to implementing new estimator types. This document describes the code structure, development workflow, and conventions for submitting contributions.
+Thank you for your interest in contributing to **NeuralEstimators**! We welcome contributions of all sizes, from fixing typos to implementing new estimator types. This document describes the code structure, development workflow, and conventions for submitting contributions. Note that a list of planned improvements is available in [TODO.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/TODO.md).
 
 ---
 
@@ -71,7 +71,7 @@ NeuralEstimator
 ├── Ensemble
 ```
 
-Every concrete estimator wraps one or more Flux neural networks and must be callable on data `Z` (and possibly parameters `θ`).
+Every concrete estimator wraps one or more Flux/Lux models and must be callable on data `Z` (and possibly model parameters `θ`).
 
 ### `ApproximateDistribution`
 
@@ -146,7 +146,6 @@ After running `import NeuralEstimators: <function name>`:
 
    - `_inputoutput(estimator, Z, θ)`: by default, returns `(Z, θ)` as the `(input, output)` pair, where `Z` is the simulated data and `θ` is the true parameters, so that training minimises `loss(estimator(Z), θ)`. Override if the estimator requires a different input/output structure.
 
-   - `_risk(estimator, loss, dataset, device, optimiser)`: by default, iterates over `(input, output)` batches in `dataset` and computes `loss(estimator(input), output)`. Override only if the required computation cannot be expressed through `_loss` or `_inputoutput` alone.
 - Inference: extend existing functions (e.g., `sampleposterior`) or define new ones as needed. 
 - Assessment: if your estimator returns point estimates via `estimate` or posterior
   samples via `sampleposterior`, it will work with `assess` automatically (just
@@ -158,28 +157,28 @@ After running `import NeuralEstimators: <function name>`:
 ## Adding a New Approximate Distribution
 
 **Interactive prototyping:**
-1. Define a custom struct subtyping `ApproximateDistribution`, for example, `struct MyDist <: ApproximateDistribution`. The fields of this struct should store anything needed to parameterise the distribution, including any neural network(s) used to condition the distribution on the learned summary statistics (e.g., an MLP mapping summary statistics to distributional parameters, or coupling blocks that accept summary statistics as a conditioning input as in a normalising flow).
-1. Define a convenience constructor with the signature: `MyDist(num_parameters::Integer, num_summaries::Integer; kwargs...)`. This ensures compatibility with `PosteriorEstimator`'s convenience constructor, which calls `q(num_parameters, num_summaries; kwargs...)` internally.
-1. Import the following functions: `import NeuralEstimators: logdensity, sampleposterior, numdistributionalparams`.
-1. Define methods:
-- `logdensity(q::MyDist, θ::AbstractMatrix, t::AbstractMatrix)`: log-density of `q` evaluated at parameters `θ`, given summary statistics `t`. Required for training.
-- `sampleposterior(q::MyDist, t::AbstractMatrix, N::Integer)`: draws `N` posterior samples from `q` given summary statistics `t`, where each column of `t` corresponds to an independent data set. Required for inference.
-- `numdistributionalparams(q::MyDist)`: number of distributional parameters. Optional.
-1. Test the distribution by plugging it into a `PosteriorEstimator`, then training and assessing the estimator to verify correctness.
+1. Define a custom struct subtyping `ApproximateDistribution`, for example, `struct MyDist <: ApproximateDistribution`. The fields of this struct should store anything needed to parameterise the distribution, including any neural network(s) used to condition the distribution on the learned summary statistics (e.g., an MLP mapping summary statistics directly to distributional parameters, or coupling blocks that accept summary statistics as a conditioning input as in a normalising flow).
+1. Define a convenience constructor with the signature: `MyDist(num_parameters::Integer, num_summaries::Integer; kwargs...)`. This ensures compatibility with `PosteriorEstimator`'s convenience constructor.
+1. `import NeuralEstimators: _logdensity, sampleposterior` and define methods:
+   - `_logdensity(q::MyDist, θ::AbstractMatrix, t::AbstractMatrix)`: log-density of `q` evaluated at parameters `θ`, given summary statistics `t`.
+   - `sampleposterior(q::MyDist, t::AbstractMatrix, N::Integer; device)`: draws `N` posterior samples from `q` given summary statistics `t`, where each column of `t` corresponds to an independent data set.
+1. Test the distribution by plugging it into a `PosteriorEstimator`, then train and assess the estimator to verify correctness.
 1. Write a docstring with a self-contained example that can be copy-pasted and run.
 
-**Consolidating into the package:**
-1. Create `src/ApproximateDistributions/MyDist.jl` and move all of the above definitions into it.
-1. Export `MyDist` in `NeuralEstimators.jl`.
 
+Note that when defining an `ApproximateDistribution` for use with [Lux](https://lux.csail.mit.edu/stable/), the distribution does _not_ subtype `AbstractLuxLayer`, but its fields should be `AbstractLuxLayer`s. 
+
+**Consolidating into the package:**
+1. Create `src/ApproximateDistributions/MyDist.jl` and move the above definitions into it.
+1. Export `MyDist` in `NeuralEstimators.jl`.
 
 ---
 
 ## Adding a New Architecture
 
-In general, we leave the construction of neural network architectures to the user: the package is intentionally agnostic to the specific architecture used, and most standard Flux layers and containers work out of the box. 
+In general, we leave the construction of neural network architectures to the user: the package is intentionally agnostic to the specific architecture used, and most standard Flux/Lux layers and containers work out of the box. 
 
-That said, reusable building blocks that are broadly applicable and not already available in Flux (e.g., `DeepSet`, `MLP`) can be added to `Architectures.jl`. Follow the Flux layer pattern (a struct with fields for parameters, and a callable method), and export the type and any associated constructor helpers from `NeuralEstimators.jl`.
+That said, reusable building blocks that are broadly applicable and not readily available elsewhere (e.g., `DeepSet`) can be added to `Architectures.jl`. Export the type from `NeuralEstimators.jl`.
 
 ---
 
@@ -189,17 +188,6 @@ Documentation examples live in `docs/src/examples/`. Each example is a self-cont
 
 **To add a new example:**
 
-1. Create a new file `docs/src/examples/data_<name>.md` and write the example following the general workflow:
-   - Introductory paragraph describing the statistical model and parameters.
-   - `## Package dependencies` — list all required packages, including the GPU code-group block.
-   - `## Sampling parameters` — define a `sampler` function.
-   - `## Simulating data` — define a `simulator` function.
-   - `## Constructing the neural network` — construct the summary network.
-   - `## Constructing the neural estimator` — use the code-group block for `PointEstimator`, `PosteriorEstimator`, and `RatioEstimator`.
-   - `## Training the estimator` — call `train`.
-   - `## Assessing the estimator` — call `assess` and show diagnostics.
-   - `## Applying the estimator to observed data` — use the code-group block for the three estimator types.
-   
-   See `docs/src/examples/data_replicated.md` for a worked example to follow as a template.
+1. Create a new file `docs/src/examples/data_<name>.md` and write the example following the general workflow. See [`docs/src/examples/`](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main/docs/src/examples) for worked examples to follow as a template.
 2. Register the new file in `makedocs` in `docs/make.jl` by adding it to the `"Examples"` section of the `pages` argument.
-3. Build and preview the documentation locally (see [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/README.md)).
+3. (Optional) Build and preview the documentation locally (see [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/README.md)).

@@ -9,6 +9,16 @@ Pkg.add(["Makie"])
 Pkg.instantiate()
 using Makie
 
+@info pwd()
+
+# Copy assets into subdirectories that reference them
+for subdir in ["examples"]
+    dest = joinpath(@__DIR__, "src", subdir, "assets")
+    isdir(dest) || mkpath(dest)
+    cp(joinpath(@__DIR__, "src", "assets", "figures"),
+       joinpath(dest, "figures"); force = true)
+end
+
 makedocs(
     sitename = "NeuralEstimators.jl",
     pages = [
@@ -21,7 +31,7 @@ makedocs(
             "examples/data_spatiotemporal.md",
             "examples/data_irregularspatial.md"
         ],
-        "Advanced usage" => "examples/advancedusage.md",
+        "Advanced usage" => "advancedusage.md",
         "API" => [
             "Parameters and data" => "API/parametersdata.md",
             "API/estimators.md",

@@ -117,23 +117,23 @@ The return value is of type [`Assessment`](@ref).
 - `probs = nothing` (applicable only to [`PointEstimator`](@ref)): probability levels taking values between 0 and 1. By default, no bootstrap uncertainty quantification is done; if `probs` is provided, it must be a two-element vector specifying the lower and upper probability levels for non-parametric bootstrap intervals (note that parametric bootstrap is not currently supported with `assess()`).
 - `B::Integer = 400` (applicable only to [`PointEstimator`](@ref)): number of bootstrap samples.
 - `pointsummary::Function = mean` (applicable only to estimators that yield posterior samples): a function that summarises a vector of posterior samples into a single point estimate for each marginal; any function mapping a vector to a scalar is valid (e.g., `median` for the posterior median).
-- `N::Integer = 1000` (applicable only to estimators that yield posterior samples): number of posterior samples drawn for each data set.
 - `kwargs...` (applicable only to estimators that yield posterior samples): additional keyword arguments passed to [`sampleposterior`](@ref).
 """
 function assess end
 
 # Point estimates
 function assess(
-    estimator, θ::P, Z;
+    estimator, θ, Z, args...;
     parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
     estimator_name::Union{Nothing, String} = nothing,
     estimator_names::Union{Nothing, String} = nothing,
     use_gpu::Bool = true,
     probs = nothing,
     B::Integer = 400,
-    loss = Flux.Losses.mae,   # TODO this will be simplified if we add loss to the estimator object
-    ξ = nothing, xi = nothing # deprecated since it isn't typically needed when assessing NeuralEstimators (a collection of objects passed to estimator)
-) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+    loss = nothing,
+    ξ = nothing, xi = nothing, # deprecated since it isn't typically needed when assessing NeuralEstimators (a collection of objects passed to estimator)
+    kwargs...
+)
 
     # Check duplicated arguments that are needed so that the R interface uses ASCII characters only
     @assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
@@ -144,18 +144,18 @@ function assess(
     # Set up
     θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
 
-    # Obtain point estimates
+    # Obtain estimates
     if !isnothing(ξ)
-        runtime = @elapsed estimates = estimator(Z, ξ) # note that the gpu is never used in this case
+        runtime = @elapsed estimates = estimator(Z, ξ) # note that the GPU is never used in this case #TODO delete this?
     else
-        runtime = @elapsed estimates = estimate(estimator, Z, use_gpu = use_gpu)
+        runtime = @elapsed estimates = estimate(estimator, Z, args...; use_gpu = use_gpu, kwargs...)
     end
     estimates = convert(Matrix, estimates) # convert to Matrix in case estimator returns a different format (e.g., adjoint vector)
     runtime = DataFrame(runtime = runtime)
 
     # Compute the empirical risk
     loss = _loss(estimator, loss)
-    empirical_risk = loss(estimates, θ)
+    empirical_risk = !isnothing(loss) ? loss(estimates, θ) : nothing
 
     # Convert true and estimated parameter to DataFrame, then merge
     estimates = _estimates_to_df(estimates, parameter_names, K, J, m)
@@ -189,24 +189,24 @@ end
 
 # Posterior sampling 
 function assess(
-    estimator::Union{PosteriorEstimator, RatioEstimator}, θ::P, Z;
+    estimator::Union{PosteriorEstimator, RatioEstimator}, θ, Z, args...;
     parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
     estimator_name::Union{Nothing, String} = nothing,
     estimator_names::Union{Nothing, String} = nothing,
-    N::Integer = 1000,
     pointsummary::Function = mean,
     kwargs... #Document these kwargs...
-) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+)
 
     # Set up
     θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
 
     # Posterior samples 
-    runtime = @elapsed samples = sampleposterior(estimator, Z, N; kwargs...)
+    runtime = @elapsed samples = sampleposterior(estimator, Z, args...; kwargs...)
     runtime = DataFrame(runtime = runtime)
 
     # Empirical risk
-    empirical_risk = _computerisk(estimator, θ, Z)
+    # NB not including this for now; see the comments in assess.jl
+    empirical_risk = nothing # _computerisk(estimator, θ, Z)
 
     # Obtain point estimates 
     estimates = reduce(hcat, map.(pointsummary, eachrow.(samples)))
@@ -292,13 +292,16 @@ end
 
 _resolve_estimator_name(name, names) = isnothing(names) ? name : names
 
-function _computerisk(estimator, θ, Z; use_gpu = true, batchsize = 32)
-    loss = _loss(estimator)
-    device = _checkgpu(use_gpu, verbose = false)
-    estimator = device(estimator)
-    dataset = _dataloader(estimator, Z, θ, batchsize)
-    _risk(estimator, loss, dataset, device)
-end
+#TODO Just removing risk computation for now, because:
+# - we now define _risk(::TrainState) rather than _risk(::NeuralEstimator), so the final line doesn't work
+# - we need to move estimator to device carefully when using a LuxEstimator; should be: estimator = LuxEstimator(estimator.estimator, estimator.ps |> device, estimator.st |> device)
+# function _computerisk(estimator, θ, Z; batchsize::Integer = 32, kwargs...)
+#     loss = _loss(estimator)
+#     device = _resolvedevice(verbose = false, kwargs...)
+#     estimator = device(estimator) 
+#     dataset = _dataloader(estimator, Z, θ, batchsize)
+#     _risk(estimator, loss, dataset, device)
+# end
 
 function _estimates_to_df(estimates, estimate_names, K, J, m)
     df = DataFrame(estimates', estimate_names)
@@ -357,14 +360,14 @@ end
 
 # Wrapper for assessing multiple estimators at once
 function assess(
-    estimators::Union{AbstractVector, Tuple}, θ::P, Z;
+    estimators::Union{AbstractVector, Tuple}, θ, Z;
     estimator_names::Union{Nothing, Vector{String}} = nothing,
     use_gpu = true,
     verbose::Bool = true,
     ξ = nothing, xi = nothing,     # Deprecated
     use_xi = false, use_ξ = false, # Deprecated: a `Bool` or a collection of `Bool` objects with length equal to the number of estimators, specifying whether or not the estimator uses `ξ`
     kwargs...
-) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+)
     num_estimators = length(estimators)
     if isnothing(estimator_names)
         estimator_names = ["estimator$i" for i ∈ eachindex(estimators)]

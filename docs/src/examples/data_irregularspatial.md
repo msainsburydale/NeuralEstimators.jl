@@ -21,7 +21,7 @@ To improve computational efficiency, various GPU backends are supported. Once th
 ::: code-group
 
 ```julia [NVIDIA GPUs]
-using CUDA
+using CUDA, cuDNN
 ```
 
 ```julia [AMD ROCm GPUs]
@@ -169,7 +169,7 @@ estimator = train(estimator, θ_train, θ_val, simulator, epochs = 10)
 
 The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref).
 
-One may wish to save a trained estimator and load it in a later session: see [Saving and loading neural estimators](@ref) for details on how this can be done.
+One may wish to save a trained estimator and load it in a later session: see [Saving and loading estimators](@ref) for details on how this can be done.
 
 ## Assessing the estimator
 
@@ -190,7 +190,7 @@ risk(assessment)
 plot(assessment)
 ```
 
-![Estimates from a graph neural network (GNN) based neural Bayes estimator](../assets/figures/spatial.png)
+![Estimates from a graph neural network (GNN) based neural Bayes estimator](assets/figures//spatial.png)
 
 ## Applying the estimator to observed data
 

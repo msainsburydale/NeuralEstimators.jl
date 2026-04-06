@@ -1,6 +1,6 @@
 """
 	samplesize(Z)
-Computes the number of independent replicates in the data set `Z`. 
+Computes the number of replicates in the data set `Z`. 
 
 Note that this function is a wrapper around [`numberreplicates`](@ref) with return type equal to the eltype of `Z`.
 """
@@ -8,13 +8,13 @@ samplesize(Z) = eltype(Z)(numberreplicates(Z))
 
 """
 	logsamplesize(Z)
-Computes the log of the number of independent replicates in the data set `Z`. 
+Computes the log of the number of replicates in the data set `Z`. 
 """
 logsamplesize(Z) = log.(samplesize(Z))
 
 """
 	invsqrtsamplesize(Z)
-Computes the inverse of the square root of the number of independent replicates in the data set `Z`. 
+Computes the inverse of the square root of the number of replicates in the data set `Z`. 
 """
 invsqrtsamplesize(Z) = 1 ./ (sqrt.(samplesize(Z)))
 
@@ -33,7 +33,7 @@ samplecovariance(z)
 """
 function samplecovariance(z::A) where {A <: AbstractArray{T, N}} where {T, N}
     @assert size(z, N) > 1 "The number of replicates, which are stored in the final dimension of the input array, should be greater than 1"
-    z = Flux.flatten(z) # convert to matrix (allows for arbitrary sized data inputs)
+    z = flatten(z) # convert to matrix (allows for arbitrary sized data inputs)
     d = size(z, 1)
     Σ̂ = cov(z, dims = 2, corrected = false)
     tril_idx = tril(trues(d, d))
@@ -56,60 +56,10 @@ samplecorrelation(z)
 """
 function samplecorrelation(z::A) where {A <: AbstractArray{T, N}} where {T, N}
     @assert size(z, N) > 1 "The number of replicates, which are stored in the final dimension of the input array, should be greater than 1"
-    z = Flux.flatten(z) # convert to matrix (allows for arbitrary sized data inputs)
+    z = flatten(z) # convert to matrix (allows for arbitrary sized data inputs)
     d = size(z, 1)
     Σ̂ = cor(z, dims = 2)
     tril_idx = tril(trues(d, d), -1)
     return Σ̂[tril_idx]
 end
 samplecorrelation(z::AbstractVector) = samplecorrelation(reshape(z, :, 1))
-
-# NB I thought the following functions might be better on the GPU, but after
-# some benchmarking it turns out the base implementation is better (at least
-# when considering only a single data set at a time). Still, I will leave these
-# functions here in case I want to implement something similar later.
-
-# function samplecov(z::A) where {A <: AbstractArray{T, N}} where {T, N}
-# 	@assert size(z, N) > 1 "The number of replicates, which are stored in the final dimension of the input array, should be greater than 1"
-# 	z = Flux.flatten(z) # convert to matrix (allows for arbitrary sized data inputs)
-# 	d, n = size(z)
-# 	z̄ = mean(z, dims = 2)
-# 	e = z .- z̄
-# 	e = reshape(e, (size(e, 1), 1, n)) # 3D array for batched mul and transpose
-# 	Σ̂ = sum(e ⊠ batched_transpose(e), dims = 3) / T(n)
-# 	Σ̂ = reshape(Σ̂, d, d) # convert matrix (drop final singelton)
-# 	tril_idx = tril(trues(d, d))
-# 	return Σ̂[tril_idx]
-# end
-#
-# function samplecor(z::A) where {A <: AbstractArray{T, N}} where {T, N}
-# 	@assert size(z, N) > 1 "The number of replicates, which are stored in the final dimension of the input array, should be greater than 1"
-# 	z = Flux.flatten(z) # convert to matrix (allows for arbitrary sized data inputs)
-# 	d, n = size(z)
-# 	z̄ = mean(z, dims = 2)
-# 	e = z .- z̄
-# 	e = reshape(e, (size(e, 1), 1, n)) # 3D array for batched mul and transpose
-# 	Σ̂ = sum(e ⊠ batched_transpose(e), dims = 3) / T(n)
-# 	Σ̂ = reshape(Σ̂, d, d) # convert matrix (drop final singelton)
-# 	σ̂ = Σ̂[diagind(Σ̂)]
-# 	D = Diagonal(1 ./ sqrt.(σ̂))
-# 	Σ̂ = D * Σ̂ * D
-# 	tril_idx = tril(trues(d, d), -1)
-# 	return Σ̂[tril_idx]
-# end
-#
-# using NeuralEstimators
-# using Flux
-# using BenchmarkTools
-# using Statistics
-# using LinearAlgebra
-# z = rand(3, 4000) |> gpu
-# @time samplecovariance(z)
-# @time samplecov(z)
-# @time samplecorrelation(z)
-# @time samplecor(z)
-#
-# @btime samplecovariance(z);
-# @btime samplecov(z);
-# @btime samplecorrelation(z);
-# @btime samplecor(z);

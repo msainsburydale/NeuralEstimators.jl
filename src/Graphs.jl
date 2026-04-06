@@ -110,7 +110,7 @@ using NeuralEstimators, Flux, GraphNeuralNetworks
 
 # Toy spatial data
 n = 250                # number of spatial locations
-m = 5                  # number of independent replicates
+m = 5                  # number of replicates
 S = rand(n, 2)         # spatial locations
 Z = rand(n, m)         # data
 g = spatialgraph(S, Z) # construct the graph
@@ -142,9 +142,12 @@ hidden-feature graphs. The `readout` module aggregates these feature graphs into
 a single hidden feature vector of fixed length. The network `ψ` is then defined as the composition of the
 propagation and readout modules.
 
-The data should be stored as a `GNNGraph` or `Vector{GNNGraph}`, where
-each graph is associated with a single parameter vector. The graphs may contain
-subgraphs corresponding to independent replicates.
+The data should be stored as a `Vector{A}` where each element is associated with
+one parameter vector. For spatial data collected over irregular locations, `A` is
+typically a [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.GNNGraph),
+where independent replicates (possibly with differing spatial locations) are
+stored as subgraphs. See [`spatialgraph`](@ref) for constructing these graphs
+from matrices of spatial locations and data.
 
 # Examples
 ```julia
@@ -153,7 +156,7 @@ using Statistics: mean
 
 # Spatial data
 n = 100                # number of spatial locations
-m = 50                 # number of independent replicates
+m = 50                 # number of replicates
 S = rand(n, 2)         # spatial locations
 Z = rand(n, m)         # observed data
 g = spatialgraph(S, Z) # construct the graph
@@ -187,6 +190,7 @@ struct GNNSummary{F, G}
 end
 Base.show(io::IO, D::GNNSummary) = print(io, "\nThe propagation and readout modules of a graph neural network (GNN), with a total of $(nparams(D)) trainable parameters:\n\nPropagation module ($(nparams(D.propagation)) parameters):  $(D.propagation)\n\nReadout module ($(nparams(D.readout)) parameters):  $(D.readout)")
 GNNSummary(args...; kwargs...) = error("GNNSummary requires GraphNeuralNetworks.jl to be loaded, i.e., `using GraphNeuralNetworks`")
+nparams(model) = length(Optimisers.trainables(model)) > 0 ? sum(length, Optimisers.trainables(model)) : 0
 
 #TODO clean up this documentation (e.g., don't bother with the bin notation)
 #TODO there is a more general structure that we could define, that has message(xi, xj, e) as a slot
@@ -220,7 +224,7 @@ S = rand(n, 2)                          # spatial locations
 D = pairwise(Euclidean(), S, dims = 1)  # distance matrix 
 Σ = exp.(-D ./ θ)                       # covariance matrix 
 L = cholesky(Symmetric(Σ)).L            # Cholesky factor 
-m = 5                                   # number of independent replicates 
+m = 5                                   # number of replicates 
 Z = L * randn(n, m)                     # simulated data 
 
 # Construct the spatial graph 
@@ -239,92 +243,6 @@ struct NeighbourhoodVariogram{T} # <: GNNLayer
     # TODO inner constructor, add 0 into h_cutoffs if it is not already in there 
 end
 NeighbourhoodVariogram(args...; kwargs...) = error("NeighbourhoodVariogram requires GraphNeuralNetworks.jl to be loaded, i.e., `using GraphNeuralNetworks`")
-
-@doc raw"""
-	IndicatorWeights(h_max, n_bins::Integer)
-	(w::IndicatorWeights)(h::Matrix) 
-For spatial locations $\boldsymbol{s}$ and  $\boldsymbol{u}$, creates a spatial weight function defined as
-
-```math 
-\boldsymbol{w}(\boldsymbol{s}, \boldsymbol{u}) \equiv (\mathbb{I}(h \in B_k) : k = 1, \dots, K)',
-```
-
-where $\mathbb{I}(\cdot)$ denotes the indicator function, 
-$h \equiv \|\boldsymbol{s} - \boldsymbol{u} \|$ is the spatial distance between $\boldsymbol{s}$ and 
-$\boldsymbol{u}$, and $\{B_k : k = 1, \dots, K\}$ is a set of $K =$`n_bins` equally-sized distance bins covering the spatial distances between 0 and `h_max`. 
-
-# Examples 
-```julia
-using NeuralEstimators, GraphNeuralNetworks
-
-h_max = 1
-n_bins = 10
-w = IndicatorWeights(h_max, n_bins)
-h = rand(1, 30) # distances between 30 pairs of spatial locations 
-w(h)
-```
-"""
-struct IndicatorWeights{T}
-    h_cutoffs::T
-end
-function IndicatorWeights(h_max, n_bins::Integer)
-    h_cutoffs = range(0, stop = h_max, length = n_bins+1)
-    h_cutoffs = collect(h_cutoffs)
-    IndicatorWeights(h_cutoffs)
-end
-function (l::IndicatorWeights)(h::M) where {M <: AbstractMatrix{T}} where {T}
-    h_cutoffs = l.h_cutoffs
-    bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
-    bins_lower = h_cutoffs[1:(end - 1)] # lower bounds of the distance bins 
-    N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
-    N = reduce(vcat, N)
-    f32(N)
-end
-Flux.trainable(l::IndicatorWeights) = NamedTuple()
-
-@doc raw"""
-	KernelWeights(h_max, n_bins::Integer)
-	(w::KernelWeights)(h::Matrix) 
-For spatial locations $\boldsymbol{s}$ and  $\boldsymbol{u}$, creates a spatial weight function defined as
-
-```math 
-\boldsymbol{w}(\boldsymbol{s}, \boldsymbol{u}) \equiv (\exp(-(h - \mu_k)^2 / (2\sigma_k^2)) : k = 1, \dots, K)',
-```
-
-where $h \equiv \|\boldsymbol{s} - \boldsymbol{u}\|$ is the spatial distance between $\boldsymbol{s}$ and $\boldsymbol{u}$, and ${\mu_k : k = 1, \dots, K}$ and ${\sigma_k : k = 1, \dots, K}$ are the means and standard deviations of the Gaussian kernels for each bin, covering the spatial distances between 0 and h_max.
-
-# Examples 
-```julia
-using NeuralEstimators, GraphNeuralNetworks
-
-h_max = 1
-n_bins = 10
-w = KernelWeights(h_max, n_bins)
-h = rand(1, 30) # distances between 30 pairs of spatial locations 
-w(h)
-```
-"""
-struct KernelWeights{T1, T2}
-    mu::T1
-    sigma::T2
-end
-function KernelWeights(h_max, n_bins::Integer)
-    h_cutoffs = range(0, stop = h_max, length = n_bins+1)
-    h_cutoffs = collect(h_cutoffs)
-    mu = [(h_cutoffs[i] + h_cutoffs[i + 1]) / 2 for i = 1:n_bins] # midpoints of the intervals 
-    sigma = [(h_cutoffs[i + 1] - h_cutoffs[i]) / 4 for i = 1:n_bins] # std dev so that 95% of mass is within the bin 
-    mu = f32(mu)
-    sigma = f32(sigma)
-    KernelWeights(mu, sigma)
-end
-function (l::KernelWeights)(h::M) where {M <: AbstractMatrix{T}} where {T}
-    mu = l.mu
-    sigma = l.sigma
-    N = [exp.(-(h .- mu[i:i]) .^ 2 ./ (2 * sigma[i:i] .^ 2)) for i in eachindex(mu)] # Gaussian kernel for each bin (NB avoid scalar indexing by i:i)
-    N = reduce(vcat, N)
-    f32(N)
-end
-Flux.trainable(l::KernelWeights) = NamedTuple()
 
 # ---- Adjacency matrices ----
 

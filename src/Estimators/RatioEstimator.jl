@@ -55,31 +55,24 @@ plotrisk()
 # Assess the estimator
 θ_test = sampler(250)
 Z_test = simulator(θ_test);
-θ_grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
-assessment = assess(estimator, θ_test, Z_test; θ_grid = θ_grid)
+grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
+assessment = assess(estimator, θ_test, Z_test; grid = grid)
 plot(assessment)
 
 # Generate "observed" data 
 θ = sampler(1)
 z = simulator(θ)
 
-# Grid-based optimization and sampling
-logratio(estimator, z, θ_grid = θ_grid)                # log of likelihood-to-evidence ratios
-posteriormode(estimator, z; θ_grid = θ_grid)           # posterior mode 
-sampleposterior(estimator, z; θ_grid = θ_grid)         # posterior sample
+# Grid-based evaluation and sampling
+logratio(estimator, z; grid = grid)                # log of likelihood-to-evidence ratios
+sampleposterior(estimator, z; grid = grid)         # posterior sample
 ```
 """
-struct RatioEstimator{M1, M2, N} <: NeuralEstimator
-    summary_network::M1   # summary network for data Z (called summary_network for consistency with other estimators)
-    summary_network_θ::M2 # summary network for θ 
-    inference_network::N
+@concrete struct RatioEstimator <: NeuralEstimator
+    summary_network   # summary network for data Z (called summary_network for consistency with other estimators)
+    summary_network_θ # summary network for θ 
+    inference_network
 end
-
-# NB: not currently supporting this; see NeuralEstimatorsOptimExt if we want to reintroduce it
-# Gradient-based optimization 
-# using Optim
-# θ₀ = [0.5, 0.5]                                        # initial estimate
-# posteriormode(estimator, z; θ₀ = θ₀)                   # posterior mode 
 
 # Constructor: summary network, number of parameters, number of summaries => MLP inference network
 function RatioEstimator(
@@ -88,25 +81,15 @@ function RatioEstimator(
     summary_network_θ_kwargs::NamedTuple = (;),
     kwargs...
 )
-    # NB enforce output_activation = identity for both internally constructed MLPs
-    summary_network_θ = MLP(num_parameters, num_summaries_θ; output_activation = identity, summary_network_θ_kwargs...)
-    inference_network = MLP(num_summaries + num_summaries_θ, 1; output_activation = identity, kwargs...)
+    backend = _backendof(summary_network)
+    summary_network_θ = MLP(num_parameters, num_summaries_θ; backend = backend, output_activation = identity, summary_network_θ_kwargs...)
+    inference_network = MLP(num_summaries + num_summaries_θ, 1; backend = backend, output_activation = identity, kwargs...)
     @info "RatioEstimator: num_summaries = $num_summaries."
     RatioEstimator(summary_network, summary_network_θ, inference_network)
 end
 
 # Constructor: keyword num_summaries
 RatioEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, kwargs...) = RatioEstimator(summary_network, num_parameters, num_summaries; kwargs...)
-
-# Forward pass: log ratio
-function (estimator::RatioEstimator)(Z, θ)
-    logr = estimator.inference_network(_summarystatistics(estimator, Z), estimator.summary_network_θ(θ))
-    if typeof(logr) <: AbstractVector
-        logr = reduce(vcat, logr)
-    end
-    return logr
-end
-(estimator::RatioEstimator)(Zθ::Tuple) = estimator(Zθ[1], Zθ[2]) # Tuple method used internally during training
 
 function _inputoutput(estimator::RatioEstimator, Z, θ)
 
@@ -119,140 +102,140 @@ function _inputoutput(estimator::RatioEstimator, Z, θ)
     θ = hcat(θ, θ̃)
     if Z isa AbstractVector
         Z = vcat(Z, Z̃)
-    elseif Z isa AbstractMatrix
+    elseif Z isa AbstractMatrix || Z isa Summaries
         Z = hcat(Z, Z̃)
     else
         Z = getobs(joinobs(Z, Z̃), 1:2K)
     end
 
-    # Create class labels for output
-    labels = [:dependent, :independent]
-    output = onehotbatch(repeat(labels, inner = K), labels)[1:1, :]
+    # Binary class labels: 1 for dependent pairs (Z, θ), 0 for independent pairs (Z̃, θ̃)
+    output = [ones(Float32, 1, K) zeros(Float32, 1, K)]
 
-    # Shuffle everything in case batching isn't shuffled properly downstream
+    # Shuffle everything just in case batching isn't shuffled properly downstream
     idx = shuffle(1:2K)
     Z = getobs(Z, idx)
     θ = getobs(θ, idx)
-    output = output[1:1, idx]
+    output = output[:, idx]
 
     input = (Z, θ)
     return input, output
 end
 
-_loss(estimator::RatioEstimator, loss = nothing) = Flux.logitbinarycrossentropy
+_loss(estimator::RatioEstimator, loss = nothing) = logitbinarycrossentropy
+
+# Forward pass: Stateful (Flux)
+function (estimator::RatioEstimator)(Z, θ)
+    tz = _summarystatistics(estimator, Z) |> copy # materialise to break Enzyme's trace: copy breaks Enzyme's provenance trace through Summaries.S
+    tθ = estimator.summary_network_θ(θ)
+    estimator.inference_network(vcat(tz, tθ))
+end
+
+# Forward pass: Stateless (Lux)
+function (e::RatioEstimator)(Z, θ, ps, st)
+    tz,   st_s  = _summarystatistics(e, Z, ps.summary_network, st.summary_network)
+    tz = tz |> copy # materialise to break Enzyme's trace: copy breaks Enzyme's provenance trace through Summaries.S
+    tθ,   st_sθ = e.summary_network_θ(θ, ps.summary_network_θ, st.summary_network_θ)
+    logr, st_i  = e.inference_network(vcat(tz, tθ), ps.inference_network, st.inference_network)
+    return logr, (summary_network=st_s, summary_network_θ=st_sθ, inference_network=st_i)
+end
+
+# Tuple methods used internally during training
+(estimator::RatioEstimator)(Zθ::Tuple) = estimator(Zθ[1], Zθ[2]) 
+(estimator::RatioEstimator)(Zθ::Tuple, ps, st) = estimator(Zθ[1], Zθ[2], ps, st)
+
+
+
+# ---- Inference: Stateful (Flux) ----
 
 """
-    logratio(estimator::RatioEstimator, Z, θ_grid)
-    logratio(estimator::RatioEstimator, Z; θ_grid)
-
-Compute the log likelihood-to-evidence ratios over a grid of parameter values `θ_grid` 
-for the data `Z`.
+    logratio(estimator::RatioEstimator, Z; grid)
+Compute the log likelihood-to-evidence ratio for each parameter configuration in `grid`.
 
 # Arguments
 - `estimator`: a `RatioEstimator`
 - `Z`: observed data
-- `θ_grid`: matrix of parameter values, where each column is a parameter configuration
+- `grid`: matrix of parameter values, where each column is a parameter configuration
 
 # Returns
-A vector of log ratios, one for each column of `θ_grid`.
+A matrix of log ratios with one row per data set and one column per grid point.
 """
-function logratio(estimator::RatioEstimator, Z, θ_grid_posarg = nothing; θ_grid = nothing)
-    @assert !(!isnothing(θ_grid_posarg) && !isnothing(θ_grid)) "θ_grid must be provided exactly once, either as a positional or keyword argument, but not both"
-    @assert !(isnothing(θ_grid_posarg) && isnothing(θ_grid)) "θ_grid must be provided either as a positional or keyword argument"
-    θ_grid = isnothing(θ_grid_posarg) ? θ_grid : θ_grid_posarg
-    θ_grid = f32(θ_grid)
-
-    summary_stats = summarystatistics(estimator, Z)
-    summary_stats_θ = estimator.summary_network_θ(θ_grid)
-    _gridlogratio(estimator, summary_stats, summary_stats_θ)
+function logratio(estimator::RatioEstimator, Z; grid, kwargs...) 
+    grid = f32(grid)
+    summary_stats_Z = summarystatistics(estimator, Z; kwargs...)
+    summary_stats_θ = estimator.summary_network_θ(grid)
+    _gridlogratio(estimator, summary_stats_Z, summary_stats_θ)
 end
 
-function _gridlogratio(estimator::RatioEstimator, summary_stats, summary_stats_θ::AbstractMatrix)
-    @assert size(summary_stats, 2) == 1 "gridlogratio currently only supports a single data set"
-    summary_stats_rep = repeat(summary_stats, 1, size(summary_stats_θ, 2))
-    log_ratios = estimator.inference_network(vcat(summary_stats_rep, summary_stats_θ))
-    return log_ratios
+
+function _gridlogratio(estimator::RatioEstimator, summary_stats_Z, summary_stats_θ::AbstractMatrix)
+    K = size(summary_stats_Z, 2)    # number of data sets
+    G = size(summary_stats_θ, 2)    # number of grid points
+    # Repeat so that both sets of summary stats have GxK columns
+    summary_stats_Z_rep = repeat(summary_stats_Z, inner = (1, G)) 
+    summary_stats_θ_rep = repeat(summary_stats_θ, outer = (1, K))
+    log_ratios = estimator.inference_network(vcat(summary_stats_Z_rep, summary_stats_θ_rep))
+    return permutedims(reshape(log_ratios, G, K))  # K × G matrix
 end
 
 function sampleposterior(
-    estimator::RatioEstimator, Z, N::Integer = 1000;
+    estimator::RatioEstimator, Z;
+    grid,
+    N::Integer = 1000,
     logprior::Function = θ -> 0.0f0,
-    θ_grid = nothing, theta_grid = nothing,
     kwargs...
 )
-    @assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
-    if !isnothing(theta_grid)
-        θ_grid = theta_grid
-    end
-    @assert !isnothing(θ_grid) "θ_grid must be provided for RatioEstimator"
-    θ_grid = f32(θ_grid)
+    grid = f32(grid)
 
-    # Log prior over the grid
-    logpθ = logprior.(eachcol(θ_grid))
-
-    # θ embeddings over the grid
-    summary_stats_θ = estimator.summary_network_θ(θ_grid)
-
-    # Summary statistics for each data set 
     summary_stats = summarystatistics(estimator, Z; kwargs...)
+    logpθ = logprior.(eachcol(grid))
+    summary_stats_θ = estimator.summary_network_θ(grid)
 
-    # For each data set, pass summary stats and θ embeddings through the inference net, then sample
-    samples = map(eachcol(summary_stats)) do s
-        logrZθ = vec(_gridlogratio(estimator, s, summary_stats_θ))
-        weights = exp.(logpθ .+ logrZθ)
-        samples = StatsBase.wsample(eachcol(θ_grid), weights, N; replace = true)
-        reduce(hcat, samples)
+    log_ratios = _gridlogratio(estimator, summary_stats, summary_stats_θ) 
+
+    samples = map(1:size(log_ratios, 1)) do k
+        weights = exp.(logpθ .+ log_ratios[k, :])
+        reduce(hcat, StatsBase.wsample(eachcol(grid), weights, N; replace = true))
     end
 
-    if length(samples) == 1
-        samples = samples[1]
-    end
-
-    return samples
+    return length(samples) == 1 ? samples[1] : samples
 end
 
-function posteriormode(
-    estimator::RatioEstimator, Z;
-    logprior::Function = θ -> 0.0f0, penalty::Union{Function, Nothing} = nothing,
-    θ_grid = nothing, theta_grid = nothing,
-    θ₀ = nothing, theta0 = nothing,
+# ---- Inference: Stateless (Lux) ----
+
+function logratio(estimator::RatioEstimator, Z, ps, st; grid, kwargs...)
+    grid = f32(grid)
+    summary_stats_Z = summarystatistics(estimator, Z, ps, st; kwargs...)
+    summary_stats_θ = first(estimator.summary_network_θ(grid, ps.summary_network_θ, st.summary_network_θ))
+    _gridlogratio(estimator, summary_stats_Z, summary_stats_θ, ps.inference_network, st.inference_network)
+end
+
+function _gridlogratio(estimator::RatioEstimator, summary_stats_Z, summary_stats_θ::AbstractMatrix, ps_inference, st_inference)
+    K = size(summary_stats_Z, 2)
+    G = size(summary_stats_θ, 2)
+    summary_stats_Z_rep = repeat(summary_stats_Z, inner = (1, G))
+    summary_stats_θ_rep = repeat(summary_stats_θ, outer = (1, K))
+    log_ratios = first(estimator.inference_network(vcat(summary_stats_Z_rep, summary_stats_θ_rep), ps_inference, st_inference))
+    return permutedims(reshape(log_ratios, G, K))  # K × G matrix
+end
+
+function sampleposterior(estimator::RatioEstimator, Z, ps, st;
+    grid,
+    N::Integer = 1000,
+    logprior::Function = θ -> 0.0f0,
     kwargs...
 )
+    grid = f32(grid)
 
-    # Check duplicated arguments that are needed so that the R interface uses ASCII characters only
-    @assert isnothing(θ_grid) || isnothing(theta_grid) "Only one of `θ_grid` or `theta_grid` should be given"
-    @assert isnothing(θ₀) || isnothing(theta0) "Only one of `θ₀` or `theta0` should be given"
-    if !isnothing(theta_grid)
-        θ_grid = theta_grid
-    end
-    if !isnothing(theta0)
-        θ₀ = theta0
-    end
+    summary_stats_Z = summarystatistics(estimator, Z, ps, st; kwargs...)
+    summary_stats_θ = first(estimator.summary_network_θ(grid, ps.summary_network_θ, st.summary_network_θ))
+    logpθ = logprior.(eachcol(grid))
 
-    # Change "penalty" to "prior"
-    if !isnothing(penalty)
-        logprior = penalty
+    log_ratios = _gridlogratio(estimator, summary_stats_Z, summary_stats_θ, ps.inference_network, st.inference_network)
+
+    samples = map(1:size(log_ratios, 1)) do k
+        weights = exp.(logpθ .+ log_ratios[k, :])
+        reduce(hcat, StatsBase.wsample(eachcol(grid), weights, N; replace = true))
     end
 
-    # Check that we have either a grid to search over or initial estimates
-    @assert !isnothing(θ_grid) || !isnothing(θ₀) "One of `θ_grid` or `θ₀` should be given"
-    @assert isnothing(θ_grid) || isnothing(θ₀) "Only one of `θ_grid` and `θ₀` should be given"
-
-    if !isnothing(θ_grid)
-        θ_grid = f32(θ_grid)
-        logpθ = logprior.(eachcol(θ_grid))
-        summary_stats = summarystatistics(estimator, Z)
-        summary_stats_θ = estimator.summary_network_θ(θ_grid)
-
-        modes = map(eachcol(summary_stats)) do s
-            logrZθ = vec(_gridlogratio(estimator, s, summary_stats_θ))
-            logdensity = logpθ .+ logrZθ
-            θ_grid[:, argmax(logdensity)]
-        end
-
-        return reduce(hcat, modes)
-
-    else
-        return _optimdensity(θ₀, logprior, estimator) #TODO doesn't work for multiple data sets; _optimdensity needs to take Z as input, I guess. Also, can be done more efficiently by computing the summary statistics. Try it out, could be interesting!
-    end
+    return length(samples) == 1 ? samples[1] : samples
 end

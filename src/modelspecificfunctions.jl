@@ -263,7 +263,7 @@ function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
     return L
 end
 
-function maternchols(D::V, ρ, ν, σ² = one(nested_eltype(D)); stack::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
+function maternchols(D::V, ρ, ν, σ² = one(T); stack::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
     if stack
         @assert length(unique(size.(D))) == 1 "Converting the Cholesky factors from a vector of matrices to a three-dimenisonal array is only possible if the Cholesky factors (i.e., all matrices `D`) are the same size."
     end

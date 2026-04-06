@@ -20,8 +20,6 @@ This allows different estimators to be applied to different ranges of sample siz
 ```
 where $\hat{\boldsymbol{\theta}}_1(\cdot)$ is a neural Bayes estimator trained to be near-optimal over the range of sample sizes in which it is applied. 
 
-Although this strategy requires training multiple neural networks, it is computationally efficient in practice when combined with pre-training (see [Sainsbury-Dale at al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522), Sec 2.3.3), which can be automated using [`trainmultiple()`](@ref). 
-
 # Examples
 ```julia
 using NeuralEstimators, Flux

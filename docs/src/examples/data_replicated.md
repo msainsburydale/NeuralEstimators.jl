@@ -16,7 +16,7 @@ To improve computational efficiency, various GPU backends are supported. Once th
 ::: code-group
 
 ```julia [NVIDIA GPUs]
-using CUDA
+using CUDA, cuDNN
 ```
 
 ```julia [AMD ROCm GPUs]
@@ -104,16 +104,17 @@ estimator = train(estimator, sampler, simulator)
 
 The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref). 
 
-One may wish to save a trained estimator and load it in a later session: see [Saving and loading neural estimators](@ref) for details on how this can be done.
+One may wish to save a trained estimator and load it in a later session: see [Saving and loading estimators](@ref) for details on how this can be done.
 
 
 ## Assessing the estimator
 
-The function [`assess`](@ref) can be used to assess the trained estimator:
+The function [`assess`](@ref) can then be used to assess the trained estimator based on unseen test data simulated from the statistical model:
 
 ```julia
 θ_test = sampler(1000)           # test parameters
-Z_test = simulator(θ_test, 50)   # test data, with 50 replicates in each data set
+Z_test = simulator(θ_test, 50)   # test data
+
 assessment = assess(estimator, θ_test, Z_test)
 ```
 
@@ -126,7 +127,7 @@ risk(assessment)      # 0.055
 plot(assessment)
 ```
 
-![Univariate Gaussian example: Estimates vs. truth](../assets/figures/univariate.png)
+![Univariate Gaussian example: Estimates vs. truth](assets/figures//univariate.png)
 
 ## Applying the estimator to observed data
 

@@ -1,111 +1,173 @@
-# ---- Internal helper: device placement, f32 conversion, and minibatching ----
+# ---- Flux helpers ----
+
+# Same as Flux but just defined here so that we can use it without loading the package
+
+#TODO just use cpu_device() where relevant (no need to define this helper function)
+cpu(x) = cpu_device()(x)
+
+struct FluxEltypeAdaptor{T} end
+
+Adapt.adapt_storage(::FluxEltypeAdaptor{T}, x::AbstractArray{<:AbstractFloat}) where {T<:AbstractFloat} = convert(AbstractArray{T}, x)
+Adapt.adapt_storage(::FluxEltypeAdaptor{T}, x::AbstractArray{<:Complex{<:AbstractFloat}}) where {T<:AbstractFloat} = convert(AbstractArray{Complex{T}}, x)
+
+_paramtype(::Type{T}, m) where T = fmap(adapt(FluxEltypeAdaptor{T}()), m)
+
+# fastpath for arrays
+_paramtype(::Type{T}, x::AbstractArray{<:AbstractFloat}) where {T<:AbstractFloat} = convert(AbstractArray{T}, x)
+_paramtype(::Type{T}, x::AbstractArray{<:Complex{<:AbstractFloat}}) where {T<:AbstractFloat} = convert(AbstractArray{Complex{T}}, x)
+
+f32(m) = _paramtype(Float32, m)
+
+# ---- Device and memory management ----
 
 """
-	_applywithdevice(network, z; batchsize, use_gpu, kwargs...)
-Internal helper that applies `network` to data `z`, handling GPU device placement,
-Float32 conversion, and minibatching.
+    _applywithdevice(network, z, ps = nothing, st = nothing; batchsize, kwargs...)
+
+Internal helper that applies a `network` to data `z`, handling device placement, 
+Float32 conversion, minibatching, and DeepSet input checking.
+
+Always runs in testmode: this function is never called during gradient computation (i.e. never
+inside `_risk`), so testmode is always appropriate. This includes the case of frozen summary
+networks during training.
+
+Keyword arguments are passed onto [`_resolvedevice`](@ref).
 """
-function _applywithdevice(network, z; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
-    z = f32(z)
-    batchsize = min(numobs(z), batchsize)
-    device = _checkgpu(use_gpu, verbose = false)
-    network = network |> device
-    Flux.testmode!(network)
-    data_loader = _DataLoader(z, batchsize, shuffle = false, partial = true)
-    try
-        y = map(data_loader) do zᵢ
-            cpu(network(zᵢ |> device))
-        end
-        return reduce(hcat, y)
-    finally
-        Flux.testmode!(network, :auto) # back to default
-    end
+function _applywithdevice end # methods defined in extensions
+
+"""
+    _resolvedevice(; device = nothing, use_gpu::Bool = true, verbose::Bool = true)
+
+Returns the device to use for moving data and parameters during training or inference.
+
+If `device` is explicitly provided, it is returned as-is. Accepted values are
+`cpu_device()`, `gpu_device()`, or (when using Lux) `reactant_device()`, all from
+[MLDataDevices.jl](https://github.com/LuxDL/MLDataDevices.jl).
+
+If `device = nothing` (the default), the device is inferred from `use_gpu`: a GPU
+is used if `use_gpu = true` and one is available, otherwise the CPU is used.
+
+The `device` argument takes priority over `use_gpu`.
+"""
+function _resolvedevice(; use_gpu::Bool = true, device = nothing, verbose::Bool = true)
+    isnothing(device) ? _getdevice(use_gpu; verbose = verbose) : device
 end
 
-# Wrapper around _applywithdevice for use at inference time. Handles the case where
-# a user passes a single dataset as a bare array to a DeepSet-based network — since
-# DeepSet expects a Vector of arrays (one per dataset), a bare array is automatically
-# wrapped in a single-element vector as a user convenience.
-# All inference functions (estimate, summarystatistics, sampleposterior, etc.) should
-# use this rather than calling _applywithdevice directly.
-function _applywithdevice_inference(network, z; kwargs...)
-    z = _check_deepset_input(network, z)
-    _applywithdevice(network, z; kwargs...)
+function _getdevice(use_gpu::Bool; verbose::Bool = true)
+    device = use_gpu ? gpu_device() : cpu_device()
+    verbose && @info "Running on $(nameof(typeof(device)))"
+    return device
+end
+
+# Here, we define _manualgc() for the case that CUDA has not been loaded (so, we will be using the CPU)
+# For the case that CUDA is loaded, the function is overloaded in ext/NeuralEstimatorsCUDAExt.jl
+# NB Julia complains if we overload functions in package extensions... to get around this, here we
+# use a slightly different function signature (omitting ::Bool)
+function _forcegc(verbose)
+    if verbose
+        @info "Forcing garbage collection..."
+    end
+    GC.gc(true)
+    return nothing
 end
 
 # Wraps a bare array in a single-element vector when using a DeepSet-based network,
-# allowing users to pass a single dataset without manually wrapping it in a vector.
-function _check_deepset_input(network, z)
-    if check_deepset(network)
-        bare_array = typeof(z) <: AbstractArray && !(typeof(z) <: AbstractVector)
-        bare_array_in_tuple = typeof(z) <: Tuple && !(typeof(z[1]) <: AbstractVector)
-        if bare_array
-            z = [z]
-        elseif bare_array_in_tuple
-            z = ([z[1]], z[2])
-        end
+# allowing users to pass a single dataset without manually wrapping it in a vector
+function _check_deepset_input(z)
+    bare_array = typeof(z) <: AbstractArray && !(typeof(z) <: AbstractVector)
+    bare_array_in_tuple = typeof(z) <: Tuple && !(typeof(z[1]) <: AbstractVector)
+    if bare_array
+        z = [z]
+    elseif bare_array_in_tuple
+        z = ([z[1]], z[2])
     end
     return z
 end
 
-@inline function check_deepset(T::DataType)
-    occursin("DeepSet", string(T.name)) || any(p -> check_deepset(p), T.parameters)
-end
-@inline function check_deepset(T::Type)
-    false
-end
-@inline check_deepset(x) = check_deepset(typeof(x))
+@inline _uses_deepset(T::DataType) = T <: DeepSet || any(p -> _uses_deepset(p), T.parameters)
+@inline _uses_deepset(T::Type) = false
+@inline _uses_deepset(x) = _uses_deepset(typeof(x))
 
-#TODO Not currently used: Would be great to have a way to automatically and reliably infer the number of summaries from an arbitrary summary_network, so that the user need not specify it when constructing an estimator.
-function _infer_num_summaries(model)
-    # Base case: Dense layer
-    if model isa Dense
-        return size(model.weight, 1)
-        @info "Inferred num_summaries = $inferred from summary_network. Set explicitly if incorrect."
+
+# ---- Backend helpers ----
+
+const _LUX_UUID  = Base.PkgId(Base.UUID("b2108857-7c20-44ae-9111-449ecde12c47"), "Lux")
+const _FLUX_UUID = Base.PkgId(Base.UUID("587475ba-b771-5e3f-ad9e-33799f191a9c"), "Flux")
+
+function _resolvebackend(B::Union{Nothing, Module})
+    lux_loaded  = haskey(Base.loaded_modules, _LUX_UUID)
+    flux_loaded = haskey(Base.loaded_modules, _FLUX_UUID)
+    if !isnothing(B)
+        lux  = get(Base.loaded_modules, _LUX_UUID, nothing)
+        flux = get(Base.loaded_modules, _FLUX_UUID, nothing)
+        B === lux || B === flux || error("Backend must be either Lux or Flux.")
+        return B
     end
 
-    # Recurse into Chain - last layer determines output
-    if model isa Chain
-        return _infer_num_summaries(model.layers[end])
+    if lux_loaded && flux_loaded
+        @warn "Both Lux and Flux are loaded; defaulting to Lux. Pass the backend explicitly to suppress this warning."
+        return Base.loaded_modules[_LUX_UUID]
+    elseif lux_loaded
+        return Base.loaded_modules[_LUX_UUID]
+    elseif flux_loaded
+        return Base.loaded_modules[_FLUX_UUID]
+    else
+        error("Neither Lux nor Flux is loaded. Please load one of them.")
     end
+end
 
-    # Recurse into any struct by searching its fields in reverse for the last Dense
-    for field in reverse(fieldnames(typeof(model)))
-        val = getfield(model, field)
-        try
-            return _infer_num_summaries(val)
-        catch
-            continue
+function _backendof(network)
+    lux  = get(Base.loaded_modules, _LUX_UUID, nothing)
+    flux = get(Base.loaded_modules, _FLUX_UUID, nothing)
+    if isnothing(lux) && isnothing(flux)
+        error("One of Flux or Lux must be loaded; run `using Flux` or `using Lux`")
+    elseif !isnothing(lux) && !isnothing(flux) # both loaded, so try to determine from the network
+        if _is_lux_network(network, lux)
+            return lux
+        elseif _is_flux_network(network, flux)
+            return flux
+        else 
+            error("Could not determine backend from network of type $(typeof(network)).")
         end
+    elseif !isnothing(lux)
+        return lux
+    else
+        return flux
     end
-
-    error("Could not infer output dimension from $(typeof(model)). Please specify `num_summaries` explicitly.")
 end
-# If we could implement this properly, the estimator constructors could be defined as follows:
-# function PointEstimator(summary_network, d::Integer, num_summaries = nothing; kwargs...)
-#     if isnothing(num_summaries)
-#         num_summaries = _infer_num_summaries(summary_network)
-#         @info "Inferred num_summaries = $num_summaries from summary_network. Set explicitly if incorrect."
+
+function _is_lux_network(network, lux, visited=Base.IdSet())
+    network in visited && return false
+    push!(visited, network)
+    network isa lux.AbstractLuxLayer && return true
+    for field in fieldnames(typeof(network))
+        val = getfield(network, field)
+        isstructtype(typeof(val)) && _is_lux_network(val, lux, visited) && return true
+    end
+    return false
+end
+
+function _is_flux_network(network, flux, visited=Base.IdSet())
+    network in visited && return false
+    push!(visited, network)
+    network isa flux.Chain && return true
+    for field in fieldnames(typeof(network))
+        val = getfield(network, field)
+        isstructtype(typeof(val)) && _is_flux_network(val, flux, visited) && return true
+    end
+    return false
+end
+
+
+# function _maybelux(estimator::NeuralEstimator, backend::Module)
+#     if backend === get(Base.loaded_modules, _LUX_UUID, nothing)
+#         @info "Wrapping estimator in a LuxEstimator to handle Lux parameters and states."
+#         LuxEstimator(estimator)
+#     else
+#         estimator
 #     end
-#     inference_network = MLP(num_summaries, d; kwargs...)
-#     PointEstimator(summary_network, inference_network)
 # end
-# PointEstimator(summary_network, d::Integer; num_summaries = nothing, kwargs...) = PointEstimator(summary_network, d, num_summaries; kwargs...)
 
-nparams(model) = length(Flux.trainables(model)) > 0 ? sum(length, Flux.trainables(model)) : 0
-
-# Drop fields from NamedTuple: https://discourse.julialang.org/t/filtering-keys-out-of-named-tuples/73564/8
-drop(nt::NamedTuple, key::Symbol) = Base.structdiff(nt, NamedTuple{(key,)})
-drop(nt::NamedTuple, keys::NTuple{N, Symbol}) where {N} = Base.structdiff(nt, NamedTuple{keys})
-
-# Check element type of arbitrarily nested array: https://stackoverflow.com/a/41847530
-nested_eltype(x) = nested_eltype(typeof(x))
-nested_eltype(::Type{T}) where {T <: AbstractArray} = nested_eltype(eltype(T))
-nested_eltype(::Type{T}) where {T} = T
-
-# Subsetting Assessment
-Base.getindex(A::Assessment, i::Integer) = getfield(A, i)
-Base.getindex(A::Assessment, s::Symbol) = getfield(A, s)
+# ---- Misc. ----
 
 """
 	rowwisenorm(A)
@@ -312,51 +374,6 @@ function subsetreplicates(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
     getobs(Z, i)
 end
 
-# ---- Test code for GNN and subsetreplicates ----
-
-# n = 250  # number of observations in each realisation
-# m = 100  # number of replicates in each data set
-# d = 1    # dimension of the response variable
-# K = 1000  # number of data sets
-#
-# # Array data
-# Z = [rand(n, d, m) for k ∈ 1:K]
-# @elapsed subsetreplicates(Z_array, 1:3) # ≈ 0.03 seconds
-#
-# # Graphical data
-# e = 100 # number of edges
-# Z = [batch([rand_graph(n, e, ndata = rand(d, n)) for _ ∈ 1:m]) for k ∈ 1:K]
-# @elapsed subsetreplicates(Z, 1:3) # ≈ 2.5 seconds
-#
-# # Graphical data: efficient storage
-# Z2 = [rand_graph(n, e, ndata = rand(d, m, n)) for k ∈ 1:K]
-# @elapsed subsetreplicates(Z2, 1:3) # ≈ 0.13 seconds
-
-# ---- End test code ----
-
-# Here, we define _checkgpu() for the case that CUDA has not been loaded (so, we will be using the CPU)
-# For the case that CUDA is loaded, _checkgpu() is overloaded in ext/NeuralEstimatorsCUDAExt.jl
-# NB Julia complains if we overload functions in package extensions... to get around this, here we
-# use a slightly different function signature (omitting ::Bool)
-function _checkgpu(use_gpu; verbose::Bool = true)
-    if verbose
-        @info "Running on CPU"
-    end
-    device = cpu
-    return (device)
-end
-
-# Here, we define _manualgc() for the case that CUDA has not been loaded (so, we will be using the CPU)
-# For the case that CUDA is loaded, the function is overloaded in ext/NeuralEstimatorsCUDAExt.jl
-# NB Julia complains if we overload functions in package extensions... to get around this, here we
-# use a slightly different function signature (omitting ::Bool)
-function _forcegc(verbose)
-    if verbose
-        @info "Forcing garbage collection..."
-    end
-    GC.gc(true)
-    return nothing
-end
 
 """
     expandgrid(xs, ys)

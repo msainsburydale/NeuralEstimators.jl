@@ -15,7 +15,7 @@ using NeuralEstimators: Permutation
 #                                                   setup
 ##############################################################################################################
 n = 2        # dimension of each data replicate 
-m = 5        # number of independent replicates 
+m = 5        # number of replicates 
 d = 2        # dimension of the parameter vector θ
 w = 128      # width of each hidden layer 
 
@@ -90,43 +90,27 @@ SUITE[:RatioEstimator][:sampleposterior] = @benchmarkable(
     setup = (data = simulate([5, 0.3f0], $m))
 )
 
-SUITE[:RatioEstimator][:mlestimate] = @benchmarkable(
-    mlestimate($estimator, data; θ_grid),
-    setup = (
-        data = simulate([5, 0.3f0], $m);
-        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
-    )
-)
-
 SUITE[:RatioEstimator][:posteriormean] = @benchmarkable(
-    posteriormean($estimator, data; θ_grid),
+    posteriormean($estimator, data; grid),
     setup = (
         data = simulate([5, 0.3f0], $m);
-        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
-    )
-)
-
-SUITE[:RatioEstimator][:posteriormode] = @benchmarkable(
-    posteriormode($estimator, data; θ_grid),
-    setup = (
-        data = simulate([5, 0.3f0], $m);
-        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
+        grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
     )
 )
 
 SUITE[:RatioEstimator][:posteriormedian] = @benchmarkable(
-    posteriormedian($estimator, data; θ_grid),
+    posteriormedian($estimator, data; grid),
     setup = (
         data = simulate([5, 0.3f0], $m);
-        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
+        grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
     )
 )
 
 SUITE[:RatioEstimator][:sampleposterior] = @benchmarkable(
-    sampleposterior($estimator, data; θ_grid),
+    sampleposterior($estimator, data; grid),
     setup = (
         data = simulate([5, 0.3f0], $m);
-        θ_grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
+        grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
     )
 )
 ##############################################################################################################
@@ -314,19 +298,6 @@ for K ∈ [5, 10]
             TZ = rand32(dstar, $K);
             layer = NormalisingFlow(d, dstar);
             U = forward(layer, θ, TZ);
-        )
-    )
-end
-
-for K ∈ [5, 10]
-    SUITE[:layers][:NormalisingFlow][:logdensity, K] = @benchmarkable(
-        logdensity(layer, θ, TZ),
-        setup = (
-            d = 100;
-            dstar = 50;
-            θ = rand32(d, $K);
-            TZ = rand32(dstar, $K);
-            layer = NormalisingFlow(d, dstar);
         )
     )
 end

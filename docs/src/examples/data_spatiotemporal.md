@@ -184,7 +184,7 @@ estimator = train(estimator, θ_train, θ_val, Z_train, Z_val)
 
 The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref).
 
-One may wish to save a trained estimator and load it in a later session: see [Saving and loading neural estimators](@ref) for details on how this can be done.
+One may wish to save a trained estimator and load it in a later session: see [Saving and loading estimators](@ref) for details on how this can be done.
 
 
 ## Assessing the estimator

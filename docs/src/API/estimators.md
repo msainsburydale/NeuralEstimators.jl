@@ -58,6 +58,14 @@ summarynetwork
 setsummarynetwork
 
 summarystatistics
+```
 
-logdensity
+## Lux.jl convenience wrapper
+
+Both [Flux.jl](https://fluxml.ai/Flux.jl/stable/) and [Lux.jl](https://lux.csail.mit.edu/stable/) are supported. These frameworks differ in a key way: Flux networks store their trainable parameters and states inside the network object, while Lux networks store them externally as explicit, separate objects. 
+
+For convenience, [`LuxEstimator`](@ref) bundles a Lux-based estimator together with its parameters and states for a unified, backend-agnostic API.
+
+```@docs
+LuxEstimator
 ```

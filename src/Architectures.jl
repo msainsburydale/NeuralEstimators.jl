@@ -1,3 +1,13 @@
+# ---- DeepSet ----
+
+#TODO delete some of the methods (redundant now that we've changed the fields of RatioEstimator)
+#TODO Remove ElementwiseAggregator?
+
+@concrete struct ElementwiseAggregator
+    a
+end
+(e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
+
 """
 	(S::AbstractVector)(z)
 	(S::Tuple)(z)
@@ -13,32 +23,9 @@ S = [f, g]
 S(1)
 ```
 """
-function (S::AbstractVector)(z)
-    reduce(vcat, [s(z) for s in S])
-end
-function (S::Tuple)(z)
-    reduce(vcat, [s(z) for s in S])
-end
+(S::AbstractVector)(z) = reduce(vcat, [s(z) for s in S])
+(S::Tuple)(z) = reduce(vcat, [s(z) for s in S])
 
-struct ElementwiseAggregator{F}
-    a::F
-end
-(e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
-
-# The data are stored as a `Vector{A}`, where each element of the vector is associated with one parameter vector, and the subtype `A` depends on the multivariate structure of the data. Common formats include:
-
-# * **Unstructured data**: `A` is typically an $n \times m$ matrix, where:
-#     * ``n`` is the dimension of each replicate (e.g., $n=1$ for univariate data, $n=2$ for bivariate data).  
-#     * ``m`` is the number of independent replicates in each data set ($m$ is allowed to vary between data sets). 
-# * __Data collected over a regular grid__: `A` is typically an ($N + 2$)-dimensional array, where: 
-#     * The first $N$ dimensions correspond to the dimensions of the grid (e.g., $N = 1$ for time series, $N = 2$ for two-dimensional spatial grids). 
-#     * The penultimate dimension stores the so-called "channels" (e.g., singleton for univariate processes, two for bivariate processes). 
-#     * The final dimension stores the $m$ independent replicates. 
-# * **Spatial data collected over irregular locations**: `A` is typically a [`GNNGraph`](https://carlolucibello.github.io/GraphNeuralNetworks.jl/dev/api/gnngraph/#GraphNeuralNetworks.GNNGraphs.GNNGraph), where independent replicates (possibly with differing spatial locations) are stored as subgraphs. See the helper function [`spatialgraph()`](@ref) for constructing these graphs from matrices of spatial locations and data. 
-
-# While the formats above cover many applications, the package is flexible: the data structure simply needs to align with the chosen neural-network architecture. 
-
-#TODO Allow for a learned embedding of the sample size $m$ 
 @doc raw"""
     DeepSet(ψ, ϕ, a = mean; S = nothing)
 	(ds::DeepSet)(Z::Vector{A}) where A <: Any
@@ -48,7 +35,7 @@ The DeepSets representation ([Zaheer et al., 2017](https://arxiv.org/abs/1703.06
 \hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}(\mathbf{T}(\mathbf{Z})), \quad
 \mathbf{T}(\mathbf{Z}) = \mathbf{a}(\{\boldsymbol{\psi}(\mathbf{Z}_i) : i = 1, \dots, m\}),
 ```
-where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates of data, 
+where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are exchangeable replicates of data, 
 `ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant aggregation
 function. 
 
@@ -56,10 +43,8 @@ The function `a` must operate on arrays and have a keyword argument `dims` for
 specifying the dimension of aggregation (e.g., `mean`, `sum`, `maximum`, `minimum`, `logsumexp`).
 
 `DeepSet` objects act on data of type `Vector{A}`, where each
-element of the vector is associated with one data set (i.e., one set of
-independent replicates), and where `A` depends on the chosen architecture for `ψ`. 
-Independent replicates within each data set are stored in the batch dimension. 
-For example, data collected over a two-dimensional grid and `ψ` a CNN, `A` should be a 4-dimensional array, 
+element of the vector is associated with one data set (i.e., one set of exchangeable replicates), and where `A` depends on the chosen architecture for `ψ`. 
+Exchangeable replicates within each data set are stored in the batch dimension. For example, with data collected over a two-dimensional grid and with `ψ` chosen to be a CNN, `A` should be a 4-dimensional array, 
 with replicates stored in the 4ᵗʰ dimension. 
 
 For computational efficiency, 
@@ -86,6 +71,9 @@ This is done by calling the `DeepSet` object on a
 `Tuple{Vector{A}, Vector{Vector}}`, where the first element of the tuple
 contains a vector of data sets and the second element contains a vector of
 set-level inputs (i.e., one vector for each data set).
+
+!!! note
+    `DeepSet` is currently only implemented for the `Flux` backend.
 
 # Examples
 ```julia
@@ -120,11 +108,11 @@ X  = [rand32(dₓ) for _ ∈ eachindex(Z)]
 ds((Z, X))
 ```
 """
-struct DeepSet{T, G, K, A}
-    ψ::T
-    ϕ::G
-    a::A
-    S::K
+@concrete struct DeepSet
+    ψ
+    ϕ
+    a
+    S
 end
 function DeepSet(ψ, ϕ, a::Function = mean; S = nothing)
     @assert !isnothing(ψ) | !isnothing(S) "At least one of `ψ` or `S` must be given"
@@ -146,8 +134,7 @@ end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractMatrix{T}} where {T}
     Z, x = tup
     if size(x, 2) == 1
-        # Catches the simple case that the user accidentally passed an Nx1 matrix
-        # rather than an N-dimensional vector. Also used by RatioEstimator.
+        # Catches the simple case that the user accidentally passed an Nx1 matrix rather than an N-dimensional vector. 
         d((Z, vec(x)))
     else
         # Designed for situations where we have a fixed data set and want to
@@ -172,24 +159,13 @@ end
 function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V, M}} where {V <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
     Z, x = tup
     if size(x, 2) == length(Z)
-        # Catches the simple case that the user accidentally passed an NxM matrix
-        # rather than an M-dimensional vector of N-vector.
-        # Also used by RatioEstimator.
+        # Catches the simple case that the user accidentally passed an NxM matrix rather than an M-dimensional vector of N-vector.
         d((Z, eachcol(x)))
     else
         # Designed for situations where we have a several data sets and we want
         # to evaluate the object for many different set-level covariates
         [d((z, x)) for z in Z]
     end
-end
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{M}} where {M <: AbstractMatrix{T}} where {A, T}
-    # Multiple data sets Z, each applied over multiple set-level covariates
-    # (NB similar to above method, but the set-level covariates are allowed to be different for each data set)
-    # (This is used during training by QuantileEstimatorContinuous, where each data set is allowed multiple and different probability levels)
-    Z, X = tup
-    @assert length(Z) == length(X)
-    result = [d((Z[k], X[k])) for k ∈ eachindex(Z)]
-    reduce(hcat, vec.(permutedims.(result)))
 end
 
 # Single data set
@@ -260,7 +236,8 @@ function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})
     return true  # All arrays have the same first N-1 dimensions
 end
 
-# ---- Activation functions -----
+
+# ---- Output layers ----
 
 @doc raw"""
     Compress(a, b, k = 1)
@@ -304,45 +281,23 @@ struct Compress{T}
     a::T
     b::T
     k::T
-    # TODO should check that b > a
+    function Compress(a::T, b::T, k::T) where T
+        @assert all(b .> a) "All upper bounds b must be strictly greater than lower bounds a"
+        new{T}(a, b, k)
+    end
 end
 Compress(a, b) = Compress(float.(a), float.(b), ones(eltype(float.(a)), length(a)))
 Compress(a::Number, b::Number) = Compress([float(a)], [float(b)])
 (l::Compress)(θ) = l.a .+ (l.b - l.a) ./ (one(eltype(θ)) .+ exp.(-l.k .* θ))
-Flux.trainable(l::Compress) = NamedTuple()
+Optimisers.trainable(l::Compress) = NamedTuple()
 
-#TODO documentation and unit testing
-export TruncateSupport
-struct TruncateSupport{A, B, P}
-    a::A
-    b::B
-    p::P
-end
-function (l::TruncateSupport)(θ::AbstractMatrix)
-    p = l.p
-    m = size(θ, 1)
-    @assert m ÷ p == m/p "Number of rows in the input must be a multiple of the number of parameters in the statistical model"
-    r = m ÷ p
-    idx = repeat(1:p, inner = r)
-    y = [tuncatesupport.(θ[i:i, :], Ref(l.a[idx[i]]), Ref(l.b[idx[i]])) for i in eachindex(idx)]
-    reduce(vcat, y)
-end
-TruncateSupport(a, b) = TruncateSupport(float.(a), float.(b), length(a))
-TruncateSupport(a::Number, b::Number) = TruncateSupport([float(a)], [float(b)], 1)
-Flux.trainable(l::TruncateSupport) = NamedTuple()
-tuncatesupport(θ, a, b) = min(max(θ, a), b)
-
-# ---- Layers to construct Covariance and Correlation matrices ----
-
-#TODO update notation: d -> n, p -> d
 triangularnumber(d) = d*(d+1)÷2
 
 @doc raw"""
     CovarianceMatrix(d)
 	(object::CovarianceMatrix)(x::Matrix, cholesky::Bool = false)
-Transforms a vector 𝐯 ∈ ℝᵈ to the parameters of an unconstrained `d`×`d`
-covariance matrix or, if `cholesky = true`, the lower Cholesky factor of an
-unconstrained `d`×`d` covariance matrix.
+Transforms unconstrained input into the parameters of a `d`×`d`
+covariance matrix or, if `cholesky = true`, the lower Cholesky factor of a `d`×`d` covariance matrix.
 
 The expected input is a `Matrix` with T(`d`) = `d`(`d`+1)÷2 rows, where T(`d`)
 is the `d`th triangular number (the number of free parameters in an
@@ -383,20 +338,20 @@ See also [`CorrelationMatrix`](@ref).
 
 # Examples
 ```julia
-using NeuralEstimators, Flux, LinearAlgebra
+using NeuralEstimators, LinearAlgebra
 
 d = 4
 l = CovarianceMatrix(d)
 p = d*(d+1)÷2
-θ = randn(p, 50)
+x = randn(p, 50)
 
 # Returns a matrix of parameters, which can be converted to covariance matrices
-Σ = l(θ)
-Σ = [Symmetric(cpu(vectotril(x)), :L) for x ∈ eachcol(Σ)]
+Σ = l(x)
+Σ = [Symmetric(vectotril(x), :L) for x ∈ eachcol(Σ)]
 
 # Obtain the Cholesky factor directly
-L = l(θ, true)
-L = [LowerTriangular(cpu(vectotril(x))) for x ∈ eachcol(L)]
+L = l(x, true)
+L = [LowerTriangular(vectotril(x)) for x ∈ eachcol(L)]
 L[1] * L[1]'
 ```
 """
@@ -449,9 +404,9 @@ end
 @doc raw"""
     CorrelationMatrix(d)
 	(object::CorrelationMatrix)(x::Matrix, cholesky::Bool = false)
-Transforms a vector 𝐯 ∈ ℝᵈ to the parameters of an unconstrained `d`×`d`
-correlation matrix or, if `cholesky = true`, the lower Cholesky factor of an
-unconstrained `d`×`d` correlation matrix.
+Transforms unconstrained input into the parameters of a `d`×`d`
+correlation matrix or, if `cholesky = true`, the lower Cholesky factor of a 
+`d`×`d` correlation matrix.
 
 The expected input is a `Matrix` with T(`d`-1) = (`d`-1)`d`÷2 rows, where T(`d`-1)
 is the (`d`-1)th triangular number (the number of free parameters in an
@@ -489,26 +444,26 @@ See also [`CovarianceMatrix`](@ref).
 
 # Examples
 ```julia
-using NeuralEstimators, LinearAlgebra, Flux
+using NeuralEstimators, LinearAlgebra
 
 d  = 4
 l  = CorrelationMatrix(d)
 p  = (d-1)*d÷2
-θ  = randn(p, 100)
+x  = randn(p, 100)
 
 # Returns a matrix of parameters, which can be converted to correlation matrices
-R = l(θ)
+R = l(x)
 R = map(eachcol(R)) do r
-	R = Symmetric(cpu(vectotril(r, strict = true)), :L)
+	R = Symmetric(vectotril(r, strict = true), :L)
 	R[diagind(R)] .= 1
 	R
 end
 
 # Obtain the Cholesky factor directly
-L = l(θ, true)
+L = l(x, true)
 L = map(eachcol(L)) do x
 	# Only the strict lower diagonal elements are returned
-	L = LowerTriangular(cpu(vectotril(x, strict = true)))
+	L = LowerTriangular(vectotril(x, strict = true))
 
 	# Diagonal elements are determined under the constraint diag(L*L') = 𝟏
 	L[diagind(L)] .= sqrt.(1 .- rowwisenorm(L).^2)
@@ -561,140 +516,37 @@ function (l::CorrelationMatrix)(v, cholesky_only::Bool = false)
 end
 (l::CorrelationMatrix)(v::AbstractVector) = l(reshape(v, :, 1))
 
-# # Example input data helpful for prototyping:
-# d = 4
-# K = 100
-# triangularnumber(d) = d*(d+1)÷2
-#
-# p = triangularnumber(d-1)
-# v = collect(range(1, p*K))
-# v = reshape(v, p, K)
-# l = CorrelationMatrix(d)
-# l(v) - l(v, true) # note that the first columns of a correlation matrix and its Cholesky factor will always be identical
-#
-# using LinearAlgebra
-# R = rand(d, d); R = R * R'
-# D = Diagonal(1 ./ sqrt.(R[diagind(R)]))
-# R = Symmetric(D * R *D)
-# L = cholesky(R).L
-# LowerTriangular(R) - L
-#
-# p = triangularnumber(d)
-# v = collect(range(1, p*K))
-# v = reshape(v, p, K)
-# l = CovarianceMatrix(d)
-# l(v) - l(v, true)
-
 # ---- Layers ----
 
-#NB this is from Flux, but I copied it here because I got an error that it wasn't defined when submitting to CRAN (think it's a recent addition to Flux)
-function _size_check(layer, x::AbstractArray, (d, n)::Pair)
-    0 < d <= ndims(x) || throw(DimensionMismatch(string("layer ", layer,
-        " expects ndims(input) >= ", d, ", but got ", summary(x))))
-    size(x, d) == n || throw(DimensionMismatch(string("layer ", layer,
-        lazy" expects size(input, $d) == $n, but got ", summary(x))))
-end
-@non_differentiable _size_check(::Any...)
-
-#TODO document last_only 
-#TODO g should be a positional argument in line with standard flux layers 
 """
-	DensePositive(layer::Dense; g::Function = relu, last_only::Bool = false)
-Wrapper around the standard
-[Dense](https://fluxml.ai/Flux.jl/stable/models/layers/#Flux.Dense) layer that
-ensures positive weights (biases are left unconstrained).
+    MLP(in::Integer, out::Integer; kwargs...)
 
-This layer can be useful for constucting (partially) monotonic neural networks. 
+A traditional fully-connected multilayer perceptron (MLP) with input dimension `in` and output dimension `out`.
 
-# Examples
-```julia
-using NeuralEstimators, Flux
-
-l = DensePositive(Dense(5 => 2))
-x = rand32(5, 64)
-l(x)
-```
+# Keyword arguments
+- `depth::Integer = 2`: the number of hidden layers. Use `depth = 0` for a single linear layer with no hidden layers.
+- `width::Integer = 128`: the width of each hidden layer.
+- `activation = relu`: the activation function used in each hidden layer.
+- `output_activation = identity`: the activation function used in the output layer.
+- `backend::Union{Nothing, Module} = nothing`: the backend to use for constructing the network (e.g., `Lux` or `Flux`). If `nothing`, the backend is resolved automatically.
 """
-struct DensePositive{L, G}
-    layer::L
-    g::G
-    last_only::Bool
-end
-DensePositive(layer::Dense; g::Function = Flux.relu, last_only::Bool = false) = DensePositive(layer, g, last_only)
-# Simple version of forward pass:
-# (d::DensePositive)(x) = d.layer.σ.(Flux.softplus(d.layer.weight) * x .+ d.layer.bias)
-# Complex version of forward pass based on Flux's Dense code:
-function (d::DensePositive)(x::AbstractVecOrMat)
-    a = d.layer # extract the underlying fully-connected layer
-    _size_check(a, x, 1 => size(a.weight, 2))
-    σ = NNlib.fast_act(a.σ, x) # replaces tanh => tanh_fast
-    xT = _match_eltype(a, x)   # fixes Float64 input
-    if d.last_only
-        weight = hcat(a.weight[:, 1:(end - 1)], d.g.(a.weight[:, end:end]))
-    else
-        weight = d.g.(a.weight)
+function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128, activation = relu, output_activation = identity, backend::Union{Nothing, Module} = nothing)
+    @assert depth >= 0
+    B = _resolvebackend(backend)
+    if depth == 0
+        layers = Any[B.Dense(in => out, output_activation)]
+    else 
+        layers = []
+        push!(layers, B.Dense(in => width, activation))
+        append!(layers, [B.Dense(width => width, activation) for _ ∈ 2:depth])
+        push!(layers, B.Dense(width => out, output_activation))
     end
-    σ.(weight * xT .+ a.bias)
-end
-function (a::DensePositive)(x::AbstractArray)
-    a = d.layer # extract the underlying fully-connected layer
-    _size_check(a, x, 1 => size(a.weight, 2))
-    reshape(a(reshape(x, size(x, 1), :)), :, size(x)[2:end]...)
+
+    return B.Chain(layers...)
 end
 
-#TODO constrain a ∈ [0, 1] and b > 0
 """
-	PowerDifference(a, b)
-Function ``f(x, y) = |ax - (1-a)y|^b`` for trainable parameters a ∈ [0, 1] and b > 0.
-
-# Examples
-```julia
-using NeuralEstimators, Flux
-
-# Generate some data
-d = 5
-K = 10000
-X = randn32(d, K)
-Y = randn32(d, K)
-XY = (X, Y)
-a = 0.2f0
-b = 1.3f0
-Z = (abs.(a .* X - (1 .- a) .* Y)).^b
-
-# Initialise layer
-f = PowerDifference([0.5f0], [2.0f0])
-
-# Optimise the layer
-loader = Flux.DataLoader((XY, Z), batchsize=32, shuffle=false)
-optim = Flux.setup(Flux.Adam(0.01), f)
-for epoch in 1:100
-    for (xy, z) in loader
-        loss, grads = Flux.withgradient(f) do m
-            Flux.mae(m(xy), z)
-        end
-        Flux.update!(optim, f, grads[1])
-    end
-end
-
-# Estimates of a and b
-f.a
-f.b
-```
-"""
-struct PowerDifference{A, B}
-    a::A
-    b::B
-end
-PowerDifference() = PowerDifference([0.5f0], [2.0f0])
-PowerDifference(a::Number, b::AbstractArray) = PowerDifference([a], b)
-PowerDifference(a::AbstractArray, b::Number) = PowerDifference(a, [b])
-(f::PowerDifference)(x, y) = (abs.(f.a .* x - (1 .- f.a) .* y)) .^ f.b
-(f::PowerDifference)(tup::Tuple) = f(tup[1], tup[2])
-
-#TODO add further details
-#TODO Groups in ResidualBlock (i.e., allow additional arguments to Conv).
-"""
-	ResidualBlock(filter, in => out; stride = 1)
+    ResidualBlock(filter, in => out; stride = 1, backend = nothing)
 
 Basic residual block (see [here](https://en.wikipedia.org/wiki/Residual_neural_network#Basic_block)),
 consisting of two sequential convolutional layers and a skip (shortcut) connection
@@ -703,79 +555,151 @@ facilitating the training of deep networks.
 
 # Examples
 ```julia
-using NeuralEstimators
+using NeuralEstimators, Flux
 z = rand(16, 16, 1, 1)
 b = ResidualBlock((3, 3), 1 => 32)
 b(z)
 ```
 """
-struct ResidualBlock{B}
-    block::B
-end
-(b::ResidualBlock)(x) = relu.(b.block(x))
-function ResidualBlock(filter, channels; stride = 1)
-    layer = Chain(
-        Conv(filter, channels; stride = stride, pad = 1, bias = false),
-        BatchNorm(channels[2], relu),
-        Conv(filter, channels[2]=>channels[2]; pad = 1, bias = false),
-        BatchNorm(channels[2])
+function ResidualBlock(filter, channels; stride = 1, backend::Union{Nothing, Module} = nothing)
+    B = _resolvebackend(backend)
+    lux = get(Base.loaded_modules, _LUX_UUID, nothing)
+    is_lux = !isnothing(lux) && B === lux
+
+    bias_kwarg = is_lux ? :use_bias : :bias
+    id = is_lux ? lux.WrappedFunction(identity) : identity
+
+    layer = B.Chain(
+        B.Conv(filter, channels; stride = stride, pad = 1, bias_kwarg => false),
+        B.BatchNorm(channels[2], relu),
+        B.Conv(filter, channels[2] => channels[2]; pad = 1, bias_kwarg => false),
+        B.BatchNorm(channels[2])
     )
 
-    if stride == 1 && channels[1] == channels[2]
-        # dimensions match, can add input directly to output
-        connection = +
+    connection = if stride == 1 && channels[1] == channels[2]
+        +
     else
-        #TODO options for different dimension matching (padding vs. projection)
-        # Projection connection using 1x1 convolution
-        connection = Shortcut(
-            Chain(
-            Conv((1, 1), channels; stride = stride, bias = false),
-            BatchNorm(channels[2])
+        projection = B.Chain(
+            B.Conv((1, 1), channels; stride = stride, bias_kwarg => false),
+            B.BatchNorm(channels[2])
         )
-        )
+        B.Parallel(+, id, projection)
     end
 
-    ResidualBlock(SkipConnection(layer, connection))
+    return B.Chain(B.SkipConnection(layer, connection), B.relu)
 end
-struct Shortcut{S}
-    s::S
-end
-(s::Shortcut)(mx, x) = mx + s.s(x)
+
+# ---- Structs for GNNs: Only compatible with Flux ----
 
 """
-    MLP(in::Integer, out::Integer; kwargs...)
-	(mlp::MLP)(x)
-	(mlp::MLP)(x, y)
-A traditional fully-connected multilayer perceptron (MLP) with input dimension `in` and output dimension `out`.
+	PowerDifference(a, b)
+Function ``f(x, y) = |\\tilde{a}x - (1-\\tilde{a})y|^{\\tilde{b}}``, where
+``\\tilde{a} = \\text{sigmoid}(a) \\in (0, 1)`` and ``\\tilde{b} = \\text{softplus}(b) > 0``
+are constrained transformations of the trainable parameters `a` and `b`.
 
-The method `(mlp::MLP)(x, y)` concatenates `x` and `y` along their first dimension before passing the result through the neural network. This functionality is used in constructs such as [`AffineCouplingBlock`](@ref). 
+# Examples
+```julia
+using NeuralEstimators
 
-# Keyword arguments
-- `depth::Integer = 2`: the number of hidden layers.
-- `width::Integer = 128`: the width of each hidden layer.
-- `activation::Function = relu`: the (non-linear) activation function used in each hidden layer.
-- `output_activation = identity`: the activation function used in the output layer.
-- `final_layer = nothing`: an optional final layer to append to the network. If provided, it must accept `width` inputs. When set, `output_activation` is ignored and replaced with identity. The effective depth of the network becomes `depth + 1`.
+X = rand(5, 100)
+Y = rand(5, 100)
+f = PowerDifference(0, 1.55)
+f(X, Y)   # two arg method
+f((X, Y)) # tuple method
+```
 """
-struct MLP{T <: Chain} # type parameter to avoid type instability
-    network::T
+struct PowerDifference{A, B}
+    a::A
+    b::B
 end
-function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128, activation::Function = Flux.relu, output_activation = identity, final_layer = nothing)
-    @assert depth > 0
-    @assert width > 0
+PowerDifference() = PowerDifference([0.0f0], [1.55f0]) # default initial values chosen such that ã = 0.5 and b̃ ≈ 2
+PowerDifference(a::Number, b::AbstractArray) = PowerDifference([a], b)
+PowerDifference(a::AbstractArray, b::Number) = PowerDifference(a, [b])
+(f::PowerDifference)(x, y) = (abs.(sigmoid.(f.a) .* x - (1 .- sigmoid.(f.a)) .* y)) .^ softplus.(f.b)
+(f::PowerDifference)(tup::Tuple) = f(tup[1], tup[2])
 
-    layers = []
-    push!(layers, Dense(in => width, activation))
-    if depth > 1
-        push!(layers, [Dense(width => width, activation) for _ ∈ 2:depth]...)
-    end
-    push!(layers, Dense(width => out, output_activation))
-    if !isnothing(final_layer)
-        push!(layers, final_layer)
-    end
+@doc raw"""
+	IndicatorWeights(h_max, n_bins::Integer)
+	(w::IndicatorWeights)(h::Matrix) 
+For spatial locations $\boldsymbol{s}$ and  $\boldsymbol{u}$, creates a spatial weight function defined as
 
-    return MLP(Chain(layers...))
+```math 
+\boldsymbol{w}(\boldsymbol{s}, \boldsymbol{u}) \equiv (\mathbb{I}(h \in B_k) : k = 1, \dots, K)',
+```
+
+where $\mathbb{I}(\cdot)$ denotes the indicator function, 
+$h \equiv \|\boldsymbol{s} - \boldsymbol{u} \|$ is the spatial distance between $\boldsymbol{s}$ and 
+$\boldsymbol{u}$, and $\{B_k : k = 1, \dots, K\}$ is a set of $K =$`n_bins` equally-sized distance bins covering the spatial distances between 0 and `h_max`. 
+
+# Examples 
+```julia
+using NeuralEstimators, GraphNeuralNetworks
+
+h_max = 1
+n_bins = 10
+w = IndicatorWeights(h_max, n_bins)
+h = rand(1, 30) # distances between 30 pairs of spatial locations 
+w(h)
+```
+"""
+struct IndicatorWeights{T}
+    h_cutoffs::T
 end
-(mlp::MLP)(x) = mlp.network(x)
-(mlp::MLP)(x, y) = mlp.network(cat(x, y; dims = 1))
-(mlp::MLP)(xy::Tuple) = mlp(xy[1], xy[2])
+function IndicatorWeights(h_max, n_bins::Integer)
+    h_cutoffs = range(0, stop = h_max, length = n_bins+1)
+    h_cutoffs = collect(h_cutoffs)
+    IndicatorWeights(h_cutoffs)
+end
+function (l::IndicatorWeights)(h::M) where {M <: AbstractMatrix{T}} where {T}
+    h_cutoffs = l.h_cutoffs
+    bins_upper = h_cutoffs[2:end]   # upper bounds of the distance bins
+    bins_lower = h_cutoffs[1:(end - 1)] # lower bounds of the distance bins 
+    N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
+    N = reduce(vcat, N)
+    f32(N)
+end
+Optimisers.trainable(l::IndicatorWeights) = NamedTuple()
+
+@doc raw"""
+	KernelWeights(h_max, n_bins::Integer)
+	(w::KernelWeights)(h::Matrix) 
+For spatial locations $\boldsymbol{s}$ and  $\boldsymbol{u}$, creates a spatial weight function defined as
+
+```math 
+\boldsymbol{w}(\boldsymbol{s}, \boldsymbol{u}) \equiv (\exp(-(h - \mu_k)^2 / (2\sigma_k^2)) : k = 1, \dots, K)',
+```
+
+where $h \equiv \|\boldsymbol{s} - \boldsymbol{u}\|$ is the spatial distance between $\boldsymbol{s}$ and $\boldsymbol{u}$, and ${\mu_k : k = 1, \dots, K}$ and ${\sigma_k : k = 1, \dots, K}$ are the means and standard deviations of the Gaussian kernels for each bin, covering the spatial distances between 0 and h_max.
+
+# Examples 
+```julia
+using NeuralEstimators, GraphNeuralNetworks
+
+h_max = 1
+n_bins = 10
+w = KernelWeights(h_max, n_bins)
+h = rand(1, 30) # distances between 30 pairs of spatial locations 
+w(h)
+```
+"""
+struct KernelWeights{T1, T2}
+    mu::T1
+    sigma::T2
+end
+function KernelWeights(h_max, n_bins::Integer)
+    h_cutoffs = range(0, stop = h_max, length = n_bins+1)
+    h_cutoffs = collect(h_cutoffs)
+    mu = [(h_cutoffs[i] + h_cutoffs[i + 1]) / 2 for i = 1:n_bins] # midpoints of the intervals 
+    sigma = [(h_cutoffs[i + 1] - h_cutoffs[i]) / 4 for i = 1:n_bins] # std dev so that 95% of mass is within the bin 
+    mu = f32(mu)
+    sigma = f32(sigma)
+    KernelWeights(mu, sigma)
+end
+function (l::KernelWeights)(h::M) where {M <: AbstractMatrix{T}} where {T}
+    mu = l.mu
+    sigma = l.sigma
+    N = [exp.(-(h .- mu[i:i]) .^ 2 ./ (2 * sigma[i:i] .^ 2)) for i in eachindex(mu)] # Gaussian kernel for each bin (NB avoid scalar indexing by i:i)
+    N = reduce(vcat, N)
+    f32(N)
+end
+Optimisers.trainable(l::KernelWeights) = NamedTuple()
