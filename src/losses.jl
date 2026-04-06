@@ -15,15 +15,14 @@ _check_sizes(ŷ, y) = nothing  # pass-through, for constant label e.g. y = 1
 # defined here to reduce dependency on Flux
 
 function logitbinarycrossentropy(ŷ, y; agg = mean)
-  _check_sizes(ŷ, y)
-  agg(@.((1 - y) * ŷ - logσ(ŷ)))
+    _check_sizes(ŷ, y)
+    agg(@.((1 - y) * ŷ - logσ(ŷ)))
 end
 
 function mae(ŷ, y; agg = mean)
-  _check_sizes(ŷ, y)
-  agg(abs.(ŷ .- y))
+    _check_sizes(ŷ, y)
+    agg(abs.(ŷ .- y))
 end
-
 
 # ---- surrogates for 0-1 loss ----
 

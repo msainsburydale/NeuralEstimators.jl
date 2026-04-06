@@ -95,7 +95,7 @@ function train end
 
 function getestimator end
 function _construct_train_state end
-function _risk end 
+function _risk end
 function _train_step end
 
 function train(estimator::NeuralEstimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...) where {P, T}
@@ -104,7 +104,7 @@ function train(estimator::NeuralEstimator, θ_train::P, θ_val::P, Z_train::T, Z
     getestimator(trainstate)
 end
 
-function train(estimator::NeuralEstimator, θ_train::P, θ_val::P, simulator; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...) where P
+function train(estimator::NeuralEstimator, θ_train::P, θ_val::P, simulator; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...) where {P}
     trainstate = _construct_train_state(estimator, optimiser)
     trainstate = train(trainstate, θ_train, θ_val, simulator; kwargs...)
     getestimator(trainstate)
@@ -244,7 +244,7 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
         # For each batch update trainstate and compute the training loss
         epoch_time = @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype)
-        epoch_time += @elapsed val_risk, _  = _risk(trainstate, loss, val_set, device, adtype)
+        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device, adtype)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
         verbose && println("Epoch: $(lpad(epoch, ndigits(epochs)))  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(trainstate))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
 
@@ -296,8 +296,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false,
     adtype::Union{AbstractADType, Nothing} = nothing
-) where P
-
+) where {P}
     if !isnothing(m)
         @warn "`m` is deprecated, use `simulator_args` instead"
         simulator_args = (m,)
@@ -398,7 +397,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
                 t += @elapsed Z = simulator(θ, simulator_args...; simulator_kwargs...)
                 set = _dataloader(estimator, Z, θ, batchsize)
                 epoch_time += @elapsed rsk, trainstate = _train_step(trainstate, loss, set, device, adtype)
-                            
+
                 push!(train_risk, rsk)
             end
             verbose && println("Total simulation time: $(round(t, digits = 3)) seconds")
@@ -407,7 +406,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
         end
 
         # Compute and report the validation risk
-        epoch_time += @elapsed val_risk, _  = _risk(trainstate, loss, val_set, device, adtype)
+        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device, adtype)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
         verbose && println("Epoch: $(lpad(epoch, ndigits(epochs)))  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(trainstate))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
 
@@ -465,7 +464,6 @@ function train(trainstate, sampler, simulator;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 )
-
     @assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
     if !isnothing(xi)
         ξ = xi
@@ -494,7 +492,6 @@ function train(trainstate, sampler, simulator;
     # Number of batches of θ in each epoch
     num_batches = ceil(Int, K / batchsize)
 
-
     # Determine device
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
 
@@ -514,7 +511,7 @@ function train(trainstate, sampler, simulator;
     verbose && println(" Finished in $(round(t, digits = 3)) seconds")
     train_time += t
 
-    if freeze_summary_network 
+    if freeze_summary_network
         if !_has_summary_network(estimator)
             @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
             freeze_summary_network = false
@@ -611,7 +608,7 @@ function train(trainstate, sampler, simulator;
             train_risk = mean(train_risk) #TODO mean of means ≠ grand mean
         end
 
-        epoch_time += @elapsed val_risk, _  = _risk(trainstate, loss, val_set, device, adtype)
+        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device, adtype)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
         verbose && println("Epoch: $(lpad(epoch, ndigits(epochs)))  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(trainstate))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
 
@@ -652,7 +649,6 @@ end
 Saves the training state to disk. The model parameters, states, optimizer, and optimiser state are saved separately as a BSON file. 
 """
 function _save_trainstate end
-
 
 # For generic estimators, use the user-specified loss function
 _loss(estimator, loss) = loss

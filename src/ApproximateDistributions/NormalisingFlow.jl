@@ -21,8 +21,8 @@ where ``d^*`` is an appropriate number of summary statistics for the given param
 - `kwargs`: additional keyword arguments passed to [`CouplingLayer`](@ref) and [`AffineCouplingBlock`](@ref).
 """
 @concrete struct NormalisingFlow <: ApproximateDistribution
-    d
-    layers
+    d::Any
+    layers::Any
 end
 
 function NormalisingFlow(d::Integer, dstar::Integer; num_coupling_layers::Integer = 6, use_act_norm::Bool = true, backend::Union{Nothing, Module} = nothing, kwargs...)
@@ -62,7 +62,7 @@ function _logdensity(flow::NormalisingFlow, θ::AbstractMatrix, tz::AbstractMatr
     # Log density using change-of-variables formula under a standard Gaussian base distribution: 
     # log(q) = log pᵤ(U) + log|J(U)| = -0.5*d*log(2π) -0.5||U||^2 + log|J(U)|
     log_densities = -0.5f0 * d * Float32(log(2π)) .- 0.5f0 * sum(U .* U; dims = 1) .+ log_det_J
-    
+
     return log_densities # 1xK matrix 
 end
 
@@ -89,7 +89,6 @@ function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer; 
     return [θ[:, ((i - 1) * N + 1):(i * N)] for i = 1:K]
 end
 
-
 # -------------------------------- CouplingLayer --------------------------------
 
 """
@@ -106,13 +105,13 @@ The argument `dstar` is the dimension of the conditioning summary statistics
 (see [`PosteriorEstimator`](@ref)), and `kwargs` are passed to [`AffineCouplingBlock`](@ref).
 """
 @concrete struct CouplingLayer
-    d
-    d₁
-    d₂
-    block1
-    block2
-    actnorm
-    permutation
+    d::Any
+    d₁::Any
+    d₂::Any
+    block1::Any
+    block2::Any
+    actnorm::Any
+    permutation::Any
 end
 
 function CouplingLayer(d::Integer, dstar::Integer; use_act_norm::Bool = true, use_permutation::Bool = true, kwargs...)
@@ -179,7 +178,6 @@ function inverse(layer::CouplingLayer, U::AbstractMatrix, tz::AbstractMatrix)
     return θ
 end
 
-
 # -------------------------------- AffineCouplingBlock --------------------------------
 
 @doc raw"""
@@ -239,7 +237,6 @@ function inverse(net::AffineCouplingBlock, U, V, tz)
     return θ
 end
 
-
 # -------------------------------- ActNorm ----------------------------
 
 #TODO functionality to initialise scale/bias based on a first batch of data (just introduce another field `initialised` that get set to `true` when we've run through data; something similar is done in Lux.TrainState, so see their source code)
@@ -249,9 +246,9 @@ end
     ActNorm(d::Integer)
 Activation normalisation layer [Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685) for an input of dimension `d`. 
 """
-@concrete struct ActNorm 
-    scale
-    bias
+@concrete struct ActNorm
+    scale::Any
+    bias::Any
 end
 
 function ActNorm(d::Integer)
@@ -267,7 +264,6 @@ function forward(actnorm::ActNorm, θ::AbstractMatrix)
 end
 inverse(actnorm::ActNorm, U::AbstractMatrix) = (U .- actnorm.bias) ./ actnorm.scale
 
-
 # -------------------------------- Permutation ----------------------------
 
 """
@@ -278,8 +274,8 @@ Variables need to be permuted between coupling blocks in order for all input com
     Note also that permutations are always invertible with absolute Jacobian determinant equal to 1. 
 """
 @concrete struct Permutation
-    permutation
-    inv_permutation
+    permutation::Any
+    inv_permutation::Any
 end
 function Permutation(d::Integer)
     permutation = randperm(d)                # random permutation of integers 1, …, d

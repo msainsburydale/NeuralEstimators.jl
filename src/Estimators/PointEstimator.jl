@@ -46,8 +46,8 @@ estimate(estimator, Z)   # point estimate
 ```
 """
 @concrete struct PointEstimator <: BayesEstimator
-    summary_network
-    inference_network
+    summary_network::Any
+    inference_network::Any
 end
 
 # Constructor: summary network, number of parameters, number of summaries => MLP inference network
@@ -81,4 +81,3 @@ function (e::PointEstimator)(Z, ps, st)
     y, st_i = e.inference_network(t, ps.inference_network, st.inference_network)
     return y, (summary_network = st_s, inference_network = st_i)
 end
-

@@ -45,7 +45,7 @@ getestimator(trainstate::FluxTrainState) = trainstate.model
 function _save_trainstate(trainstate::FluxTrainState, savepath; best::Bool = true)
     isnothing(savepath) && return
     prefix = best ? "best" : "final"
-    optimizer       = cpu_device()(trainstate.optimizer)
+    optimizer = cpu_device()(trainstate.optimizer)
     optimizer_state = cpu_device()(trainstate.optimizer_state)
     # Always save optimiser and optimiser state to both savepath and tempdir
     for path in unique([savepath, tempdir()])

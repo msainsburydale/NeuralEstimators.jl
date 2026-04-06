@@ -7,14 +7,14 @@ cpu(x) = cpu_device()(x)
 
 struct FluxEltypeAdaptor{T} end
 
-Adapt.adapt_storage(::FluxEltypeAdaptor{T}, x::AbstractArray{<:AbstractFloat}) where {T<:AbstractFloat} = convert(AbstractArray{T}, x)
-Adapt.adapt_storage(::FluxEltypeAdaptor{T}, x::AbstractArray{<:Complex{<:AbstractFloat}}) where {T<:AbstractFloat} = convert(AbstractArray{Complex{T}}, x)
+Adapt.adapt_storage(::FluxEltypeAdaptor{T}, x::AbstractArray{<:AbstractFloat}) where {T <: AbstractFloat} = convert(AbstractArray{T}, x)
+Adapt.adapt_storage(::FluxEltypeAdaptor{T}, x::AbstractArray{<:Complex{<:AbstractFloat}}) where {T <: AbstractFloat} = convert(AbstractArray{Complex{T}}, x)
 
-_paramtype(::Type{T}, m) where T = fmap(adapt(FluxEltypeAdaptor{T}()), m)
+_paramtype(::Type{T}, m) where {T} = fmap(adapt(FluxEltypeAdaptor{T}()), m)
 
 # fastpath for arrays
-_paramtype(::Type{T}, x::AbstractArray{<:AbstractFloat}) where {T<:AbstractFloat} = convert(AbstractArray{T}, x)
-_paramtype(::Type{T}, x::AbstractArray{<:Complex{<:AbstractFloat}}) where {T<:AbstractFloat} = convert(AbstractArray{Complex{T}}, x)
+_paramtype(::Type{T}, x::AbstractArray{<:AbstractFloat}) where {T <: AbstractFloat} = convert(AbstractArray{T}, x)
+_paramtype(::Type{T}, x::AbstractArray{<:Complex{<:AbstractFloat}}) where {T <: AbstractFloat} = convert(AbstractArray{Complex{T}}, x)
 
 f32(m) = _paramtype(Float32, m)
 
@@ -87,17 +87,16 @@ end
 @inline _uses_deepset(T::Type) = false
 @inline _uses_deepset(x) = _uses_deepset(typeof(x))
 
-
 # ---- Backend helpers ----
 
-const _LUX_UUID  = Base.PkgId(Base.UUID("b2108857-7c20-44ae-9111-449ecde12c47"), "Lux")
+const _LUX_UUID = Base.PkgId(Base.UUID("b2108857-7c20-44ae-9111-449ecde12c47"), "Lux")
 const _FLUX_UUID = Base.PkgId(Base.UUID("587475ba-b771-5e3f-ad9e-33799f191a9c"), "Flux")
 
 function _resolvebackend(B::Union{Nothing, Module})
-    lux_loaded  = haskey(Base.loaded_modules, _LUX_UUID)
+    lux_loaded = haskey(Base.loaded_modules, _LUX_UUID)
     flux_loaded = haskey(Base.loaded_modules, _FLUX_UUID)
     if !isnothing(B)
-        lux  = get(Base.loaded_modules, _LUX_UUID, nothing)
+        lux = get(Base.loaded_modules, _LUX_UUID, nothing)
         flux = get(Base.loaded_modules, _FLUX_UUID, nothing)
         B === lux || B === flux || error("Backend must be either Lux or Flux.")
         return B
@@ -116,7 +115,7 @@ function _resolvebackend(B::Union{Nothing, Module})
 end
 
 function _backendof(network)
-    lux  = get(Base.loaded_modules, _LUX_UUID, nothing)
+    lux = get(Base.loaded_modules, _LUX_UUID, nothing)
     flux = get(Base.loaded_modules, _FLUX_UUID, nothing)
     if isnothing(lux) && isnothing(flux)
         error("One of Flux or Lux must be loaded; run `using Flux` or `using Lux`")
@@ -125,7 +124,7 @@ function _backendof(network)
             return lux
         elseif _is_flux_network(network, flux)
             return flux
-        else 
+        else
             error("Could not determine backend from network of type $(typeof(network)).")
         end
     elseif !isnothing(lux)
@@ -135,7 +134,7 @@ function _backendof(network)
     end
 end
 
-function _is_lux_network(network, lux, visited=Base.IdSet())
+function _is_lux_network(network, lux, visited = Base.IdSet())
     network in visited && return false
     push!(visited, network)
     network isa lux.AbstractLuxLayer && return true
@@ -146,7 +145,7 @@ function _is_lux_network(network, lux, visited=Base.IdSet())
     return false
 end
 
-function _is_flux_network(network, flux, visited=Base.IdSet())
+function _is_flux_network(network, flux, visited = Base.IdSet())
     network in visited && return false
     push!(visited, network)
     network isa flux.Chain && return true
@@ -156,7 +155,6 @@ function _is_flux_network(network, flux, visited=Base.IdSet())
     end
     return false
 end
-
 
 # function _maybelux(estimator::NeuralEstimator, backend::Module)
 #     if backend === get(Base.loaded_modules, _LUX_UUID, nothing)
@@ -373,7 +371,6 @@ end
 function subsetreplicates(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
     getobs(Z, i)
 end
-
 
 """
     expandgrid(xs, ys)

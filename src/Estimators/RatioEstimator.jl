@@ -69,9 +69,9 @@ sampleposterior(estimator, z; grid = grid)         # posterior sample
 ```
 """
 @concrete struct RatioEstimator <: NeuralEstimator
-    summary_network   # summary network for data Z (called summary_network for consistency with other estimators)
-    summary_network_θ # summary network for θ 
-    inference_network
+    summary_network::Any   # summary network for data Z (called summary_network for consistency with other estimators)
+    summary_network_θ::Any # summary network for θ 
+    inference_network::Any
 end
 
 # Constructor: summary network, number of parameters, number of summaries => MLP inference network
@@ -132,18 +132,16 @@ end
 
 # Forward pass: Stateless (Lux)
 function (e::RatioEstimator)(Z, θ, ps, st)
-    tz,   st_s  = _summarystatistics(e, Z, ps.summary_network, st.summary_network)
+    tz, st_s = _summarystatistics(e, Z, ps.summary_network, st.summary_network)
     tz = tz |> copy # materialise to break Enzyme's trace: copy breaks Enzyme's provenance trace through Summaries.S
-    tθ,   st_sθ = e.summary_network_θ(θ, ps.summary_network_θ, st.summary_network_θ)
-    logr, st_i  = e.inference_network(vcat(tz, tθ), ps.inference_network, st.inference_network)
-    return logr, (summary_network=st_s, summary_network_θ=st_sθ, inference_network=st_i)
+    tθ, st_sθ = e.summary_network_θ(θ, ps.summary_network_θ, st.summary_network_θ)
+    logr, st_i = e.inference_network(vcat(tz, tθ), ps.inference_network, st.inference_network)
+    return logr, (summary_network = st_s, summary_network_θ = st_sθ, inference_network = st_i)
 end
 
 # Tuple methods used internally during training
-(estimator::RatioEstimator)(Zθ::Tuple) = estimator(Zθ[1], Zθ[2]) 
+(estimator::RatioEstimator)(Zθ::Tuple) = estimator(Zθ[1], Zθ[2])
 (estimator::RatioEstimator)(Zθ::Tuple, ps, st) = estimator(Zθ[1], Zθ[2], ps, st)
-
-
 
 # ---- Inference: Stateful (Flux) ----
 
@@ -159,19 +157,18 @@ Compute the log likelihood-to-evidence ratio for each parameter configuration in
 # Returns
 A matrix of log ratios with one row per data set and one column per grid point.
 """
-function logratio(estimator::RatioEstimator, Z; grid, kwargs...) 
+function logratio(estimator::RatioEstimator, Z; grid, kwargs...)
     grid = f32(grid)
     summary_stats_Z = summarystatistics(estimator, Z; kwargs...)
     summary_stats_θ = estimator.summary_network_θ(grid)
     _gridlogratio(estimator, summary_stats_Z, summary_stats_θ)
 end
 
-
 function _gridlogratio(estimator::RatioEstimator, summary_stats_Z, summary_stats_θ::AbstractMatrix)
     K = size(summary_stats_Z, 2)    # number of data sets
     G = size(summary_stats_θ, 2)    # number of grid points
     # Repeat so that both sets of summary stats have GxK columns
-    summary_stats_Z_rep = repeat(summary_stats_Z, inner = (1, G)) 
+    summary_stats_Z_rep = repeat(summary_stats_Z, inner = (1, G))
     summary_stats_θ_rep = repeat(summary_stats_θ, outer = (1, K))
     log_ratios = estimator.inference_network(vcat(summary_stats_Z_rep, summary_stats_θ_rep))
     return permutedims(reshape(log_ratios, G, K))  # K × G matrix
@@ -190,7 +187,7 @@ function sampleposterior(
     logpθ = logprior.(eachcol(grid))
     summary_stats_θ = estimator.summary_network_θ(grid)
 
-    log_ratios = _gridlogratio(estimator, summary_stats, summary_stats_θ) 
+    log_ratios = _gridlogratio(estimator, summary_stats, summary_stats_θ)
 
     samples = map(1:size(log_ratios, 1)) do k
         weights = exp.(logpθ .+ log_ratios[k, :])

@@ -38,7 +38,6 @@ function GaussianMixture(d::Integer, dstar::Integer; num_components::Integer = 1
     GaussianMixture(d, dstar, num_components, inference_network)
 end
 
-
 numdistributionalparams(q::GaussianMixture) = (2 * q.d + 1) * q.num_components
 
 function distributionparameters(q::GaussianMixture, κ::AbstractMatrix)
@@ -162,8 +161,8 @@ function sampleposterior(q::GaussianMixture, tz::AbstractMatrix, N::Integer, ps_
 
     # Always use CPU (bottleneck is wsample, which isn't vectorised)
     device = cpu_device()
-    ps_q  = ps_q  |> device
-    st_q  = st_q  |> device
+    ps_q = ps_q |> device
+    st_q = st_q |> device
     tz = tz |> device
 
     κ_all, _ = q.inference_network(tz, ps_q.inference_network, st_q.inference_network)

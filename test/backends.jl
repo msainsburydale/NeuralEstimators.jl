@@ -14,11 +14,11 @@ simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
 K = 1000
 θ_train = sampler(K)
-θ_val   = sampler(K)
+θ_val = sampler(K)
 Z_train = simulator(θ_train);
-Z_val   = simulator(θ_val);
-θ_test  = sampler(500)
-Z_test  = simulator(θ_test);
+Z_val = simulator(θ_val);
+θ_test = sampler(500)
+Z_test = simulator(θ_test);
 θ_single = sampler(1)
 Z_single = simulator(θ_single);
 
@@ -33,7 +33,7 @@ function backend_config(backend)
     devices = Any[cpu_device()]
     adtypes = Any[AutoZygote()]
     if backend === Lux
-        adtypes =  push!(adtypes, AutoEnzyme())
+        adtypes = push!(adtypes, AutoEnzyme())
         if CUDA.functional()
             push!(devices, gpu_device())
             # Reactant GPU only when available
@@ -47,7 +47,7 @@ function backend_config(backend)
         end
         return devices, adtypes
     elseif backend === Flux
-        adtypes =  push!(adtypes, AutoEnzyme())
+        adtypes = push!(adtypes, AutoEnzyme())
         CUDA.functional() && push!(devices, gpu_device())
         return devices, adtypes
     elseif backend === SimpleChains
@@ -84,9 +84,9 @@ end
 # ──────────────────────────────────────────────────────────────────────────────
 
 TRAINING_SCENARIOS = [
-    # (args = (θ_train, θ_val, simulator),            label = "on-the-fly simulator"),
-    (args = (θ_train, θ_val, Z_train, Z_val),       label = "fixed parameters and data"),
-    # (args = (sampler, simulator),                   label = "on-the-fly sampler+simulator"),
+# (args = (θ_train, θ_val, simulator),            label = "on-the-fly simulator"),
+    (args = (θ_train, θ_val, Z_train, Z_val), label = "fixed parameters and data"),
+# (args = (sampler, simulator),                   label = "on-the-fly sampler+simulator"),
 ]
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ TRAINING_SCENARIOS = [
                                                     freeze_summary_network = freeze,
                                                     savepath = mktempdir(),
                                                     epochs = 1,
-                                                    verbose = false,
+                                                    verbose = false
                                                 )
                                                 true   # reached without exception
                                             end broken=false
@@ -152,10 +152,10 @@ TRAINING_SCENARIOS = [
                         est = make_estimator(backend, estimator_type)
                         # Train for one epoch so weights are initialised properly
                         train(est, θ_train, θ_val, Z_train, Z_val;
-                              adtype = first(adtypes),
-                              device = first(devices),
-                              epochs = 1,
-                              verbose = false)
+                            adtype = first(adtypes),
+                            device = first(devices),
+                            epochs = 1,
+                            verbose = false)
 
                         if estimator_type === :point
                             @testset "estimate" begin
@@ -211,11 +211,8 @@ TRAINING_SCENARIOS = [
                             end
                         end
                     end  # Inference
-
                 end  # estimator type
             end  # estimator_type loop
-
         end  # backend
     end  # backend loop
-
 end  # NeuralEstimators
