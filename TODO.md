@@ -18,7 +18,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Model selection/comparison: see [here](https://bayesflow.org/main/api/bayesflow.approximators.ModelComparisonApproximator.html#bayesflow.approximators.ModelComparisonApproximator), [this paper](https://arxiv.org/abs/2004.10629), and [this paper](https://arxiv.org/pdf/2503.23156).
 - Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
 - Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference.
-- Explicit learning of summary statistics (see [Zammit-Mangion et al., 2025, Sec. 4](https://arxiv.org/pdf/2404.12484)).
 - Ensemble methods with general estimator types (e.g., PosteriorEstimator, RatioEstimator).
 
 **Inference & diagnostics**
