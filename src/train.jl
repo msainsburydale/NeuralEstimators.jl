@@ -1,13 +1,16 @@
+#TODO Remove adtype argument from _risk once we've sorted out Reactant compilation
+#TODO clean up saving/loading... think we want to save the best parameters and optimisers separately:
+# optimizer.bson: optimizer rule + optimizer state (continued training)
+# parameters.bson: neural-network parameters (and states) (continued training + loading in different session)
 """
     train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...) where {P, T}
-    train(estimator, θ_train::P, θ_val::P, simulator::Function; ...) where {P, T}
-    train(estimator, sampler::Function, simulator::Function; ...)
+    train(estimator, θ_train::P, θ_val::P, simulator; ...) where P
+    train(estimator, sampler, simulator; ...)
 Trains a neural `estimator`.
 
 The methods cater for different variants of "on-the-fly" simulation.
-Specifically, a `sampler` can be provided to continuously sample new parameter
-vectors from the prior, and a `simulator` can be provided to continuously
-simulate new data conditional on the parameters. If
+Specifically, a callable `sampler` can be provided to continuously sample new parameters, 
+and a callable `simulator` can be provided to continuously simulate new data conditional on the parameters. If
 provided with specific sets of parameters (`θ_train` and `θ_val`) and/or data
 (`Z_train` and `Z_val`), they will be held fixed during training.
 
@@ -20,19 +23,20 @@ The trained estimator is always returned on the CPU.
 - `epochs = 100`: number of epochs to train the neural network. An epoch is one complete pass through the entire training data set when doing stochastic gradient descent.
 - `stopping_epochs = 5`: cease training if the risk does not improve in this number of epochs.
 - `batchsize = 32`: the batchsize to use when performing stochastic gradient descent, that is, the number of training samples processed between each update of the neural-network parameters.
-- `optimiser = Optimisers.setup(Adam(5e-4), estimator)`: any [Optimisers.jl](https://fluxml.ai/Optimisers.jl/stable/) optimisation rule for updating the neural-network parameters. When the training data and/or parameters are held fixed, one may wish to employ regularisation to prevent overfitting; for example, `optimiser = Optimisers.setup(OptimiserChain(WeightDecay(1e-4), Adam()), estimator)`, which corresponds to L₂ regularisation with penalty coefficient λ=10⁻⁴. 
+- `optimiser::Optimisers.AbstractRule = Adam(5e-4)`: any [Optimisers.jl](https://fluxml.ai/Optimisers.jl/stable/) optimisation rule for updating the neural-network parameters. When the training data or parameters are fixed, one may wish to use regularisation to help prevent overfitting; see [Regularisation](@ref).
 - `lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule}`: defines the learning-rate schedule for adaptively changing the learning rate during training. Accepts either a [ParameterSchedulers.jl](https://fluxml.ai/ParameterSchedulers.jl/dev/) object or `nothing` for a fixed learning rate. By default, it uses [`CosAnneal`](https://fluxml.ai/ParameterSchedulers.jl/dev/api/cyclic/#ParameterSchedulers.CosAnneal) with a maximum set to the initial learning rate from `optimiser`, a minimum of zero, and a period equal to the number of epochs. The learning rate is updated at the end of each epoch. 
 - `freeze_summary_network = false`: if `true` and the estimator has a `summary_network` field, freezes the summary network parameters during training (i.e., only the inference network is updated). In this case, the summary statistics for a given instance of simulated data are computed only once, giving a significant speedup. This is useful for transfer learning, where a pretrained summary network is held fixed while a new inference network is trained for a different model or estimator type.
-- `use_gpu = true`: flag indicating whether to use a GPU if one is available.
+- `device = nothing`: the device used for computation, e.g., `cpu_device()`, `gpu_device()`, or `reactant_device()` (the latter requires Lux.jl). If `nothing`, the device is inferred from `use_gpu`. Takes priority over `use_gpu`.
+- `use_gpu::Bool = true`: flag indicating whether to use a GPU if one is available. Ignored if `device` is provided.
 - `adtype::AbstractADType = AutoZygote()`: the automatic differentiation backend used to compute gradients during training. The default uses [Zygote.jl](https://fluxml.ai/Zygote.jl/dev/). Alternatively, `AutoEnzyme()` can be used to enable [Enzyme.jl](https://enzymead.github.io/Enzyme.jl/stable/), which can be faster and more memory efficient, and supports mutation and scalar indexing (requires `using Enzyme`).
-- `savepath::Union{Nothing, String} = tempdir()`: path to save information generated during training. If `nothing`, nothing is saved. Otherwise, the following files are always saved to both `savepath` and `tempdir()` (the latter for convenient within-session access via [`loadrisk`](@ref), [`plotrisk`](@ref), and [`loadoptimiser`](@ref)):
+- `savepath::Union{Nothing, String} = tempdir()`: path to save information generated during training. Saving is disabled if `savepath = nothing`. Otherwise, the following files are always saved to both `savepath` and `tempdir()`:
   - `loss_per_epoch.csv`: training and validation risk at each epoch, in the first and second columns respectively.
-  - `best_optimiser.bson`: optimiser state corresponding to the best validation risk.
-  - `final_optimiser.bson`: optimiser state at the final epoch.
+  - `best_optimizer.bson`: optimiser and optimiser state corresponding to the best validation risk.
+  - `final_optimizer.bson`: optimiser and optimiser state at the final epoch.
 
   If additionally `savepath != tempdir()`, the following files are also saved to `savepath`:
-  - `best_network.bson`: neural-network parameters corresponding to the best validation risk.
-  - `final_network.bson`: neural-network parameters at the final epoch.
+  - `best_trainstate.bson`: neural-network parameters, optimiser, and optimiser state corresponding to the best validation risk.
+  - `final_trainstate.bson`: neural-network parameters, optimiser, and optimiser state at the final epoch.
   - `train_time.csv`: total training time in seconds.
 - `risk_history::Union{Nothing, Matrix} = nothing`: a matrix with two columns containing the training and validation risk from a previous call to `train()`, used to initialise the risk history when continuing training. Can be loaded from a previous call to `train` using [`loadrisk`](@ref).
 - `verbose = true`: flag indicating whether information, including empirical risk values and timings, should be printed to the console during training.
@@ -89,58 +93,566 @@ estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, optimiser = loado
 """
 function train end
 
-# TODO with summary statistics only, might be faster to always use the CPU?
+function getestimator end
+function _construct_train_state end
+function _risk end 
+function _train_step end
 
-# Computes the risk for a general loss function in a memory-safe manner, updating the
-# neural-network parameters using stochastic gradient descent if optimiser is specified
-# function _risk(estimator, loss, data_loader, device, optimiser = nothing, adtype = AutoZygote())
-#     sum_loss = 0.0f0
-#     K = 0
-#     for (input, output) in data_loader
-#         input, output = input |> device, output |> device
-#         if !isnothing(optimiser)
-#             # NB computing and storing the loss in this way is computationally efficient, but it means that
-#             # the final training risk that we report for each epoch is slightly inaccurate
-#             # (since the neural-network parameters are updated after each batch)
-#             ls, ∇ = Flux.withgradient(estimator -> loss(estimator(input), output), adtype, estimator)
-#             Optimisers.update!(optimiser, estimator, ∇[1])
-#         else
-#             ls = loss(estimator(input), output)
-#         end
-#         # Convert average loss to a sum and add to total
-#         num_obs = numobs(input)
-#         sum_loss += ls * num_obs
-#         K += num_obs
-#     end
-
-#     return cpu(sum_loss/K)
-# end
-
-function _risk(estimator, loss, data_loader, device, optimiser = nothing, adtype = AutoZygote())
-    sum_loss = 0.0f0
-    K = 0
-    for (input, output) in data_loader
-        input, output = input |> device, output |> device
-        if !isnothing(optimiser)
-            # NB computing and storing the loss in this way is computationally efficient, but it means that
-            # the final training risk that we report for each epoch is slightly inaccurate
-            # (since the neural-network parameters are updated after each batch)
-            ls, ∇ = _riskvalue_and_gradient(estimator, loss, input, output, adtype)
-            Optimisers.update!(optimiser, estimator, ∇)
-        else
-            ls = _riskvalue(estimator, loss, input, output)
-        end
-        # Convert average loss to a sum and add to total
-        num_obs = numobs(input)
-        sum_loss += ls * num_obs
-        K += num_obs
-    end
-
-    return cpu(sum_loss/K)
+function train(estimator::NeuralEstimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...) where {P, T}
+    trainstate = _construct_train_state(estimator, optimiser)
+    trainstate = train(trainstate, θ_train, θ_val, Z_train, Z_val; kwargs...)
+    getestimator(trainstate)
 end
 
-function _riskvalue_and_gradient end
-_riskvalue(estimator, loss, input, output) = loss(estimator(input), output)
+function train(estimator::NeuralEstimator, θ_train::P, θ_val::P, simulator; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...) where P
+    trainstate = _construct_train_state(estimator, optimiser)
+    trainstate = train(trainstate, θ_train, θ_val, simulator; kwargs...)
+    getestimator(trainstate)
+end
+
+function train(estimator::NeuralEstimator, sampler, simulator; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...)
+    trainstate = _construct_train_state(estimator, optimiser)
+    trainstate = train(trainstate, sampler, simulator; kwargs...)
+    getestimator(trainstate)
+end
+
+#TODO with frozen summary networks, might be faster to always use the CPU once the summary statistics have been computed
+_freeze_summary_network!(trainstate) = Optimisers.freeze!(trainstate.optimizer_state.summary_network)
+_thaw!(trainstate) = Optimisers.thaw!(trainstate.optimizer_state)
+
+_trainstate_to_device(trainstate, device) = device(trainstate)
+
+function _resolve_adtype(trainstate, device, adtype)
+
+    # Hard errors
+    if trainstate isa FluxTrainState && device isa ReactantDevice
+        error("reactant_device() is not supported with Flux; switch to Lux to use Reactant/XLA.")
+    end
+
+    # Set default adtype if not provided
+    if isnothing(adtype)
+        adtype = if device isa ReactantDevice
+            AutoReactant()
+        elseif trainstate isa FluxTrainState || device isa CUDADevice
+            AutoZygote()
+        else
+            AutoEnzyme()  # Lux + CPU
+        end
+        return adtype
+    end
+
+    # Soft adjustments
+    if device isa ReactantDevice && !(adtype isa AutoReactant)
+        @info "Setting adtype = AutoReactant() since device is a ReactantDevice."
+        adtype = AutoReactant()
+    elseif adtype isa AutoReactant && !(device isa ReactantDevice)
+        adtype = trainstate isa FluxTrainState || device isa CUDADevice ? AutoZygote() : AutoEnzyme()
+        @info "Setting adtype = $(nameof(typeof(adtype)))() since AutoReactant requires reactant_device(), but device = $(nameof(typeof(device)))() was provided."
+    elseif device isa CUDADevice && adtype isa AutoEnzyme
+        @info "Setting adtype = AutoZygote() since AutoEnzyme is not yet fully supported with gpu_device()."
+        if trainstate isa FluxTrainState
+            @info "For improved performance, consider using Lux.jl + Reactant.jl."
+        else
+            @info "For improved performance, consider using Reactant.jl: run Reactant.set_default_backend(\"gpu\"), then set device = reactant_device() and adtype = AutoReactant()."
+        end
+        adtype = AutoZygote()
+    end
+
+    return adtype
+end
+
+function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
+    batchsize::Integer = 32,
+    epochs::Integer = 100,
+    loss = mae,
+    savepath::Union{Nothing, String} = tempdir(),
+    stopping_epochs::Integer = 5,
+    device = nothing,
+    use_gpu::Bool = true,
+    adtype::Union{AbstractADType, Nothing} = nothing,
+    verbose::Bool = true,
+    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = ParameterSchedulers.CosAnneal(_findlr(trainstate), zero(_findlr(trainstate)), epochs, false),
+    risk_history::Union{Nothing, Matrix} = nothing,
+    freeze_summary_network::Bool = false
+) where {P, T}
+
+    # Determine device
+    device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
+
+    # Determine adtype and check deep-learning backend + adtype + device are compatible
+    adtype = _resolve_adtype(trainstate, device, adtype)
+
+    # Move trainstate to device and extract the current estimator
+    trainstate = _trainstate_to_device(trainstate, device)
+    estimator = getestimator(trainstate)
+
+    train_time = 0.0
+
+    # Precompute summary statistics when the summary network is frozen
+    if freeze_summary_network
+        if !_has_summary_network(estimator)
+            @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
+            freeze_summary_network = false
+        elseif estimator isa PointEstimator && _is_identity(estimator.inference_network)
+            @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function and will be ignored."
+            freeze_summary_network = false
+        elseif device isa ReactantDevice
+            @warn "`freeze_summary_network = true` is not supported with `reactant_device()` and will be ignored. If this affects your use case, please contact the package maintainer."
+            freeze_summary_network = false
+        else
+            _freeze_summary_network!(trainstate)
+            verbose && print("Computing summary statistics...")
+            t = @elapsed begin
+                #TODO device management here
+                Z_train = Summaries(summarystatistics(estimator, Z_train; device = device, batchsize = batchsize))
+                Z_val = Summaries(summarystatistics(estimator, Z_val; device = device, batchsize = batchsize))
+            end
+            verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+            train_time += t
+        end
+    end
+
+    verbose && println("Constructing the training set...")
+    train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
+
+    verbose && println("Constructing the validation set...")
+    val_set = _dataloader(estimator, Z_val, θ_val, batchsize)
+
+    # ---- Common setup ----
+
+    loss = _loss(estimator, loss)
+    _checkargs(batchsize, epochs, stopping_epochs, risk_history)
+
+    verbose && print("Computing the initial validation risk...")
+    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device, adtype)
+    verbose && println(" Initial validation risk = $min_val_risk")
+
+    loss_per_epoch = [min_val_risk min_val_risk;]
+    if !isnothing(risk_history)
+        loss_per_epoch = vcat(risk_history, loss_per_epoch)
+    end
+
+    !isnothing(lr_schedule) && (lr_schedule = ParameterSchedulers.Stateful(lr_schedule))
+
+    trainstate_best = deepcopy(trainstate)
+    early_stopping_counter = 0
+
+    # ---- End common setup ----
+
+    train_time += @elapsed for epoch = 1:epochs
+        GC.gc(false)
+
+        # For each batch update trainstate and compute the training loss
+        epoch_time = @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype)
+        epoch_time += @elapsed val_risk, _  = _risk(trainstate, loss, val_set, device, adtype)
+        loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
+        verbose && println("Epoch: $(lpad(epoch, ndigits(epochs)))  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(trainstate))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
+
+        # Update the learning rate
+        if !isnothing(lr_schedule)
+            next_lr = ParameterSchedulers.next!(lr_schedule)
+            trainstate = Optimisers.adjust!(trainstate, next_lr)
+        end
+
+        # Save info and check early stopping
+        _saveloss(loss_per_epoch, savepath)
+        if val_risk <= min_val_risk
+            _save_trainstate(trainstate, savepath; best = true)
+            min_val_risk = val_risk
+            early_stopping_counter = 0
+            trainstate_best = deepcopy(trainstate)
+        else
+            early_stopping_counter += 1
+            early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
+        end
+    end
+
+    _thaw!(trainstate)
+    _save_trainstate(trainstate, savepath; best = false)
+
+    _forcegc(verbose)
+    verbose && println("Finished training in $(train_time) seconds")
+    if !isnothing(savepath) && savepath != tempdir()
+        CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
+    end
+
+    return _trainstate_to_device(trainstate_best, cpu_device())
+end
+
+function train(trainstate, θ_train::P, θ_val::P, simulator;
+    simulator_args = (), m = nothing, # trailing deprecated argument
+    simulator_kwargs::NamedTuple = (;),
+    batchsize::Integer = 32,
+    epochs_per_Z_refresh::Integer = 1,
+    epochs::Integer = 100,
+    loss = mae,
+    savepath::Union{Nothing, String} = tempdir(),
+    simulate_just_in_time::Bool = false,
+    stopping_epochs::Integer = 5,
+    device = nothing,
+    use_gpu::Bool = true,
+    verbose::Bool = true,
+    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(_findlr(trainstate), zero(_findlr(trainstate)), epochs, false),
+    risk_history::Union{Nothing, Matrix} = nothing,
+    freeze_summary_network::Bool = false,
+    adtype::Union{AbstractADType, Nothing} = nothing
+) where P
+
+    if !isnothing(m)
+        @warn "`m` is deprecated, use `simulator_args` instead"
+        simulator_args = (m,)
+    end
+
+    @assert epochs_per_Z_refresh > 0
+    if simulate_just_in_time && epochs_per_Z_refresh != 1
+        @error "We cannot simulate the data just-in-time if we aren't refreshing the data every epoch; please either set `simulate_just_in_time = false` or `epochs_per_Z_refresh = 1`"
+    end
+
+    # Determine device
+    device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
+
+    # Determine adtype and check deep-learning backend + adtype + device are compatible
+    adtype = _resolve_adtype(trainstate, device, adtype)
+
+    # Move trainstate to device and extract the current estimator
+    trainstate = _trainstate_to_device(trainstate, device)
+    estimator = getestimator(trainstate)
+
+    verbose && print("Simulating validation data...")
+    train_time = @elapsed Z_val = simulator(θ_val, simulator_args...; simulator_kwargs...)
+    verbose && println(" Simulated in $(round(train_time, digits = 3)) seconds")
+
+    if freeze_summary_network
+        if !_has_summary_network(estimator)
+            @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
+            freeze_summary_network = false
+        elseif estimator isa PointEstimator && _is_identity(estimator.inference_network)
+            @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function and will be ignored."
+            freeze_summary_network = false
+        elseif device isa ReactantDevice
+            @warn "`freeze_summary_network = true` is not supported with `reactant_device()` and will be ignored. If this affects your use case, please contact the package maintainer."
+            freeze_summary_network = false
+        else
+            _freeze_summary_network!(trainstate)
+            verbose && print("Computing summary statistics...")
+            t = @elapsed Z_val = Summaries(summarystatistics(estimator, Z_val; device = device, batchsize = batchsize))
+            verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+            train_time += t
+        end
+    end
+
+    verbose && println("Constructing the validation set...")
+    val_set = _dataloader(estimator, Z_val, θ_val, batchsize)
+
+    # We may store Z_train in its entirety either to reduce simulation overhead or we are
+    # not refreshing Z_train every epoch so we need it for subsequent epochs
+    store_entire_train_set = !simulate_just_in_time || epochs_per_Z_refresh != 1
+
+    # ---- Common setup ----
+
+    loss = _loss(estimator, loss)
+    _checkargs(batchsize, epochs, stopping_epochs, risk_history)
+
+    verbose && print("Computing the initial validation risk...")
+    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device, adtype)
+    verbose && println(" Initial validation risk = $min_val_risk")
+
+    loss_per_epoch = [min_val_risk min_val_risk;]
+    if !isnothing(risk_history)
+        loss_per_epoch = vcat(risk_history, loss_per_epoch)
+    end
+
+    !isnothing(lr_schedule) && (lr_schedule = ParameterSchedulers.Stateful(lr_schedule))
+
+    trainstate_best = deepcopy(trainstate)
+    early_stopping_counter = 0
+
+    # ---- End common setup ----
+
+    local train_set
+    train_time += @elapsed for epoch = 1:epochs
+        GC.gc(false)
+        epoch_time = 0.0
+
+        if store_entire_train_set
+            # Simulate new training data if needed
+            if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
+                verbose && print("Simulating training data...")
+                train_set = nothing
+                GC.gc(false)
+                t = @elapsed Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
+                verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+                epoch_time += t
+                if freeze_summary_network
+                    epoch_time += @elapsed Z_train = Summaries(summarystatistics(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+                end
+                train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
+            end
+            # Update estimator and compute the training risk
+            epoch_time += @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype)
+        else
+            # Update estimator and compute the training risk
+            train_risk = []
+            t = 0.0
+            for θ ∈ _DataLoader(θ_train, batchsize)
+                t += @elapsed Z = simulator(θ, simulator_args...; simulator_kwargs...)
+                set = _dataloader(estimator, Z, θ, batchsize)
+                epoch_time += @elapsed rsk, trainstate = _train_step(trainstate, loss, set, device, adtype)
+                            
+                push!(train_risk, rsk)
+            end
+            verbose && println("Total simulation time: $(round(t, digits = 3)) seconds")
+            epoch_time += t
+            train_risk = mean(train_risk) #TODO mean of means ≠ grand mean
+        end
+
+        # Compute and report the validation risk
+        epoch_time += @elapsed val_risk, _  = _risk(trainstate, loss, val_set, device, adtype)
+        loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
+        verbose && println("Epoch: $(lpad(epoch, ndigits(epochs)))  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(trainstate))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
+
+        # Update the learning rate
+        if !isnothing(lr_schedule)
+            next_lr = ParameterSchedulers.next!(lr_schedule)
+            trainstate = Optimisers.adjust!(trainstate, next_lr)
+        end
+
+        # Save info and check early stopping
+        _saveloss(loss_per_epoch, savepath)
+        if val_risk <= min_val_risk
+            _save_trainstate(trainstate, savepath; best = true)
+            min_val_risk = val_risk
+            early_stopping_counter = 0
+            trainstate_best = deepcopy(trainstate)
+        else
+            early_stopping_counter += 1
+            early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
+        end
+    end
+
+    _thaw!(trainstate)
+    _save_trainstate(trainstate, savepath; best = false)
+
+    _forcegc(verbose)
+    verbose && println("Finished training in $(train_time) seconds")
+    if !isnothing(savepath) && savepath != tempdir()
+        CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
+    end
+
+    return _trainstate_to_device(trainstate_best, cpu_device())
+end
+
+function train(trainstate, sampler, simulator;
+    K::Integer = 10_000,
+    K_val::Integer = K ÷ 2 + 1,
+    sampler_args = (), ξ = nothing, xi = nothing, # trailing deprecated arguments
+    sampler_kwargs::NamedTuple = (;),
+    simulator_args = (), m = nothing, # trailing deprecated argument
+    simulator_kwargs::NamedTuple = (;),
+    epochs_per_θ_refresh::Integer = 1, epochs_per_theta_refresh::Integer = 1,
+    epochs_per_Z_refresh::Integer = 1,
+    simulate_just_in_time::Bool = false,
+    loss = mae,
+    batchsize::Integer = 32,
+    epochs::Integer = 100,
+    savepath::Union{Nothing, String} = tempdir(),
+    stopping_epochs::Integer = 5,
+    device = nothing,
+    use_gpu::Bool = true,
+    adtype::Union{AbstractADType, Nothing} = nothing,
+    verbose::Bool = true,
+    lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = CosAnneal(_findlr(trainstate), zero(_findlr(trainstate)), epochs, false),
+    risk_history::Union{Nothing, Matrix} = nothing,
+    freeze_summary_network::Bool = false
+)
+
+    @assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
+    if !isnothing(xi)
+        ξ = xi
+    end
+    if !isnothing(ξ)
+        @warn "`ξ` is deprecated, use `sampler_args` instead"
+        sampler_args = (ξ,)
+    end
+    if !isnothing(m)
+        @warn "`m` is deprecated, use `simulator_args` instead"
+        simulator_args = (m,)
+    end
+
+    @assert epochs_per_θ_refresh == 1 || epochs_per_theta_refresh == 1 "Only one of `epochs_per_θ_refresh` or `epochs_per_theta_refresh` should be provided"
+    if epochs_per_theta_refresh != 1
+        epochs_per_θ_refresh = epochs_per_theta_refresh
+    end
+
+    @assert K > 0
+    @assert epochs_per_Z_refresh > 0
+    @assert epochs_per_θ_refresh > 0
+    @assert epochs_per_θ_refresh % epochs_per_Z_refresh == 0 "`epochs_per_θ_refresh` must be a multiple of `epochs_per_Z_refresh`"
+
+    store_entire_train_set = epochs_per_Z_refresh > 1 || !simulate_just_in_time
+
+    # Number of batches of θ in each epoch
+    num_batches = ceil(Int, K / batchsize)
+
+
+    # Determine device
+    device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
+
+    # Determine adtype and check deep-learning backend + adtype + device are compatible
+    adtype = _resolve_adtype(trainstate, device, adtype)
+
+    # Move trainstate to device and extract the current estimator
+    trainstate = _trainstate_to_device(trainstate, device)
+    estimator = getestimator(trainstate)
+
+    verbose && print("Sampling validation parameters...")
+    train_time = @elapsed θ_val = sampler(K_val, sampler_args...; sampler_kwargs...)
+    verbose && println(" Finished in $(round(train_time, digits = 3)) seconds")
+
+    verbose && print("Simulating validation data...")
+    t = @elapsed Z_val = simulator(θ_val, simulator_args...; simulator_kwargs...)
+    verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+    train_time += t
+
+    if freeze_summary_network 
+        if !_has_summary_network(estimator)
+            @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
+            freeze_summary_network = false
+        elseif estimator isa PointEstimator && _is_identity(estimator.inference_network)
+            @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function and will be ignored."
+            freeze_summary_network = false
+        elseif device isa ReactantDevice
+            @warn "`freeze_summary_network = true` is not supported with `reactant_device()` and will be ignored. If this affects your use case, please contact the package maintainer."
+            freeze_summary_network = false
+        else
+            _freeze_summary_network!(trainstate)
+            verbose && print("Computing summary statistics...")
+            t = @elapsed Z_val = Summaries(summarystatistics(estimator, Z_val; device = device, batchsize = batchsize))
+            verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+            train_time += t
+        end
+    end
+
+    verbose && println("Constructing the validation set...")
+    val_set = _dataloader(estimator, Z_val, θ_val, batchsize)
+
+    # ---- Common setup ----
+
+    loss = _loss(estimator, loss)
+    _checkargs(batchsize, epochs, stopping_epochs, risk_history)
+
+    verbose && print("Computing the initial validation risk...")
+    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device, adtype)
+    verbose && println(" Initial validation risk = $min_val_risk")
+
+    loss_per_epoch = [min_val_risk min_val_risk;]
+    if !isnothing(risk_history)
+        loss_per_epoch = vcat(risk_history, loss_per_epoch)
+    end
+
+    !isnothing(lr_schedule) && (lr_schedule = ParameterSchedulers.Stateful(lr_schedule))
+
+    trainstate_best = deepcopy(trainstate)
+    early_stopping_counter = 0
+
+    # ---- End common setup ----
+
+    # For loops create a new scope for the variables that are not present in the
+    # enclosing scope, and such variables get a new binding in each iteration of
+    # the loop; circumvent this by declaring local variables
+    local θ_train
+    local train_set
+    train_time += @elapsed for epoch ∈ 1:epochs
+        GC.gc(false)
+
+        epoch_time = 0.0
+
+        if store_entire_train_set
+
+            # Simulate new training data if needed
+            if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
+
+                # Possibly also refresh the parameter set
+                if epoch == 1 || (epoch % epochs_per_θ_refresh) == 0
+                    verbose && print("Refreshing the training parameters...")
+                    θ_train = nothing
+                    GC.gc(false)
+                    t = @elapsed θ_train = sampler(K, sampler_args...; sampler_kwargs...)
+                    verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+                end
+
+                verbose && print("Refreshing the training data...")
+                train_set = nothing
+                GC.gc(false)
+                t = @elapsed Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
+                verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+                epoch_time += t
+                if freeze_summary_network
+                    epoch_time += @elapsed Z_train = Summaries(summarystatistics(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+                end
+                train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
+            end
+
+            # For each batch, update estimator and compute the training risk
+            epoch_time += @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype)
+
+        else
+            # Full simulation on the fly and just-in-time sampling
+            # Precomputation is incompatible with just-in-time simulation since
+            # each batch is simulated and immediately consumed.
+            train_risk = []
+            epoch_time += @elapsed for _ ∈ 1:num_batches
+                θ = sampler(batchsize, sampler_args...; sampler_kwargs...)
+                Z = simulator(θ, simulator_args...; simulator_kwargs...)
+                dat = _dataloader(estimator, Z, θ, batchsize)
+                rsk, trainstate = _train_step(trainstate, loss, dat, device, adtype)
+                push!(train_risk, rsk)
+            end
+            train_risk = mean(train_risk) #TODO mean of means ≠ grand mean
+        end
+
+        epoch_time += @elapsed val_risk, _  = _risk(trainstate, loss, val_set, device, adtype)
+        loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
+        verbose && println("Epoch: $(lpad(epoch, ndigits(epochs)))  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(trainstate))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
+
+        # Update the learning rate
+        if !isnothing(lr_schedule)
+            next_lr = ParameterSchedulers.next!(lr_schedule)
+            trainstate = Optimisers.adjust!(trainstate, next_lr)
+        end
+
+        # Save info and check early stopping
+        _saveloss(loss_per_epoch, savepath)
+        if val_risk <= min_val_risk
+            _save_trainstate(trainstate, savepath; best = true)
+            min_val_risk = val_risk
+            early_stopping_counter = 0
+            trainstate_best = deepcopy(trainstate)
+        else
+            early_stopping_counter += 1
+            early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
+        end
+    end
+
+    _thaw!(trainstate)
+    _save_trainstate(trainstate, savepath; best = false)
+
+    _forcegc(verbose)
+    verbose && println("Finished training in $(train_time) seconds")
+    if !isnothing(savepath) && savepath != tempdir()
+        CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
+    end
+
+    return _trainstate_to_device(trainstate_best, cpu_device())
+end
+
+"""
+    _save_trainstate(trainstate, savepath; best::Bool = true)
+
+Saves the training state to disk. The model parameters, states, optimizer, and optimiser state are saved separately as a BSON file. 
+"""
+function _save_trainstate end
+
 
 # For generic estimators, use the user-specified loss function
 _loss(estimator, loss) = loss
@@ -153,6 +665,8 @@ function _dataloader(estimator, Z, θ, batchsize)
     _DataLoader(data, batchsize)
 end
 
+_dataloader(estimator::LuxEstimator, Z, θ, batchsize) = _dataloader(estimator.estimator, Z, θ, batchsize)
+
 # Thin wrapper around DataLoader with sensible training defaults
 # NB: redirect_stderr suppresses batchsize warning from DataLoader
 function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
@@ -163,33 +677,20 @@ function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
     return data_loader
 end
 
-function _findlr(opt)
-    if opt isa Optimisers.Leaf
-        rule = opt.rule
-        if hasproperty(rule, :eta)
-            return rule.eta
-        elseif rule isa OptimiserChain
-            for subrule in rule.opts
-                if hasproperty(subrule, :eta)
-                    return subrule.eta
-                end
-            end
-        end
-    elseif opt isa AbstractArray || opt isa Tuple
-        for subopt in opt
-            eta = _findlr(subopt)
-            if !isnothing(eta)
-                return eta
-            end
-        end
-    elseif opt isa NamedTuple
-        for (_, subopt) in pairs(opt)
-            eta = _findlr(subopt)
-            if !isnothing(eta)
-                return eta
-            end
-        end
+# Learning rate from an optimiser rule
+_findlr(trainstate) = _findlr(trainstate.optimizer)
+function _findlr(rule::Optimisers.AbstractRule)
+    hasproperty(rule, :eta) && return Float64(rule.eta)
+    hasproperty(rule, :opt) && return _findlr(rule.opt)       # ReactantOptimiser
+    hasproperty(rule, :optimizer) && return _findlr(rule.optimizer)  # other wrappers
+    return nothing
+end
+function _findlr(rule::OptimiserChain)
+    for opt in rule.opts
+        lr = _findlr(opt)
+        isnothing(lr) || return lr
     end
+    @warn "Could not determine learning rate from OptimiserChain"
     return nothing
 end
 
@@ -198,29 +699,6 @@ function _saveloss(loss_per_epoch, savepath)
     for path in unique([savepath, tempdir()])
         !ispath(path) && mkpath(path)
         CSV.write(joinpath(path, "loss_per_epoch.csv"), Tables.table(loss_per_epoch), header = false)
-    end
-end
-
-function _saveoptimiser(optimiser, savepath; best::Bool = true)
-    isnothing(savepath) && return
-    file = best ? "best_optimiser.bson" : "final_optimiser.bson"
-    for path in unique([savepath, tempdir()])
-        !ispath(path) && mkpath(path)
-        optimiser = cpu(optimiser)
-        @save joinpath(path, file) optimiser
-    end
-end
-
-
-function _saveestimator end
-
-function _savefinal(estimator, optimiser, train_time, savepath, verbose)
-    _saveestimator(estimator, savepath; best = false)
-    _saveoptimiser(optimiser, savepath; best = false)
-    _forcegc(verbose)
-    verbose && println("Finished training in $(train_time) seconds")
-    if !isnothing(savepath) && savepath != tempdir()
-        CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
     end
 end
 
@@ -244,14 +722,14 @@ by validation loss). Set `best = false` to load the optimiser from the final
 epoch instead, which can be useful for resuming training from exactly where it
 left off.
 
-The returned optimizer can be passed directly to `train()` via the `optimiser` 
-keyword argument to resume training with the correct optimiser state.
+The returned optimizer can be passed directly to `train()` via the keyword argument `optimiser`.
 """
 function loadoptimiser(savepath::String = tempdir(); best::Bool = true)
-    file = best ? "best_optimiser.bson" : "final_optimiser.bson"
+    prefix = best ? "best" : "final"
+    file = "$(prefix)_optimizer.bson"
     path = joinpath(savepath, file)
-    @assert isfile(path) "No optimiser state found at $(path). Please ensure that `train()` has been called, or provide the correct `savepath`."
-    return load(path, @__MODULE__)[:optimiser]
+    @assert isfile(path) "No optimiser state found at $(path). Please ensure that `train()` has been called or check that the correct `savepath` has been provided."
+    return load(path, @__MODULE__)[:optimizer]
 end
 
 """

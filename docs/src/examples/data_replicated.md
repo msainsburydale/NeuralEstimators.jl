@@ -11,26 +11,12 @@ using Distributions: InverseGamma
 using CairoMakie
 ```
 
-Flux and Lux are both supported:
-
-::: code-group
-
-```julia [Flux]
-using Flux
-```
-
-```julia [Lux]
-using Lux
-```
-
-:::
-
 To improve computational efficiency, various GPU backends are supported. Once the relevant package is loaded and a compatible GPU is available, it will be used automatically:
 
 ::: code-group
 
 ```julia [NVIDIA GPUs]
-using CUDA
+using CUDA, cuDNN
 ```
 
 ```julia [AMD ROCm GPUs]
@@ -108,43 +94,17 @@ estimator = RatioEstimator(network, d; num_summaries = num_summaries)
 
 :::
 
-If using Lux.jl, we also wrap the estimator as a [`LuxEstimator`](@ref) to store the trainable parameters and states:
-
-::: code-group
-
-```julia [Lux]
-estimator = LuxEstimator(estimator)
-```
-
-```julia [Flux]
-# Nothing to do!
-```
-
-:::
-
 ## Training the estimator
 
 Next, we train the estimator using [`train`](@ref). Below, we pass our user-defined functions for sampling parameters and simulating data, but one may also pass fixed parameter and/or data instances:
 
-::: code-group
-
-```julia [Flux]
+```julia
 estimator = train(estimator, sampler, simulator)
 ```
 
-```julia [Lux]
-# Initialise the network parameters and states
-ps, st = Lux.setup(rng, estimator)
-
-# Training
-estimator, ps, st = train(estimator, sampler, simulator; ps=ps, st=st)
-```
-
-:::
-
 The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref). 
 
-One may wish to save a trained estimator and load it in a later session: see [Saving and loading neural estimators](@ref) for details on how this can be done.
+One may wish to save a trained estimator and load it in a later session: see [Saving and loading estimators](@ref) for details on how this can be done.
 
 
 ## Assessing the estimator
@@ -167,7 +127,7 @@ risk(assessment)      # 0.055
 plot(assessment)
 ```
 
-![Univariate Gaussian example: Estimates vs. truth](../assets/figures/univariate.png)
+![Univariate Gaussian example: Estimates vs. truth](assets/figures//univariate.png)
 
 ## Applying the estimator to observed data
 

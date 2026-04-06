@@ -1,7 +1,10 @@
 # ---- DeepSet ----
 
-struct ElementwiseAggregator{F}
-    a::F
+#TODO delete some of the methods (redundant now that we've changed the fields of RatioEstimator)
+#TODO Remove ElementwiseAggregator?
+
+@concrete struct ElementwiseAggregator
+    a
 end
 (e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
 
@@ -23,7 +26,6 @@ S(1)
 (S::AbstractVector)(z) = reduce(vcat, [s(z) for s in S])
 (S::Tuple)(z) = reduce(vcat, [s(z) for s in S])
 
-#TODO Flag for a learned embedding of the sample size $m$ (important to have this for variable sample sizes)
 @doc raw"""
     DeepSet(ψ, ϕ, a = mean; S = nothing)
 	(ds::DeepSet)(Z::Vector{A}) where A <: Any
@@ -33,7 +35,7 @@ The DeepSets representation ([Zaheer et al., 2017](https://arxiv.org/abs/1703.06
 \hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}(\mathbf{T}(\mathbf{Z})), \quad
 \mathbf{T}(\mathbf{Z}) = \mathbf{a}(\{\boldsymbol{\psi}(\mathbf{Z}_i) : i = 1, \dots, m\}),
 ```
-where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are independent replicates of data, 
+where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are exchangeable replicates of data, 
 `ψ` and `ϕ` are neural networks, and `a` is a permutation-invariant aggregation
 function. 
 
@@ -41,10 +43,8 @@ The function `a` must operate on arrays and have a keyword argument `dims` for
 specifying the dimension of aggregation (e.g., `mean`, `sum`, `maximum`, `minimum`, `logsumexp`).
 
 `DeepSet` objects act on data of type `Vector{A}`, where each
-element of the vector is associated with one data set (i.e., one set of
-independent replicates), and where `A` depends on the chosen architecture for `ψ`. 
-Independent replicates within each data set are stored in the batch dimension. 
-For example, with data collected over a two-dimensional grid and with `ψ` chosen to be a CNN, `A` should be a 4-dimensional array, 
+element of the vector is associated with one data set (i.e., one set of exchangeable replicates), and where `A` depends on the chosen architecture for `ψ`. 
+Exchangeable replicates within each data set are stored in the batch dimension. For example, with data collected over a two-dimensional grid and with `ψ` chosen to be a CNN, `A` should be a 4-dimensional array, 
 with replicates stored in the 4ᵗʰ dimension. 
 
 For computational efficiency, 
@@ -71,6 +71,9 @@ This is done by calling the `DeepSet` object on a
 `Tuple{Vector{A}, Vector{Vector}}`, where the first element of the tuple
 contains a vector of data sets and the second element contains a vector of
 set-level inputs (i.e., one vector for each data set).
+
+!!! note
+    `DeepSet` is currently only implemented for the `Flux` backend.
 
 # Examples
 ```julia
@@ -105,11 +108,11 @@ X  = [rand32(dₓ) for _ ∈ eachindex(Z)]
 ds((Z, X))
 ```
 """
-struct DeepSet{T, G, K, A}
-    ψ::T
-    ϕ::G
-    a::A
-    S::K
+@concrete struct DeepSet
+    ψ
+    ϕ
+    a
+    S
 end
 function DeepSet(ψ, ϕ, a::Function = mean; S = nothing)
     @assert !isnothing(ψ) | !isnothing(S) "At least one of `ψ` or `S` must be given"
@@ -517,29 +520,33 @@ end
 
 """
     MLP(in::Integer, out::Integer; kwargs...)
-	(mlp::MLP)(x)
-	(mlp::MLP)(x, y)
+
 A traditional fully-connected multilayer perceptron (MLP) with input dimension `in` and output dimension `out`.
 
-The method `(mlp::MLP)(x, y)` concatenates `x` and `y` along their first dimension before passing the result through the neural network. This functionality is used in constructs such as [`AffineCouplingBlock`](@ref). 
-
 # Keyword arguments
-- `depth::Integer = 2`: the number of hidden layers.
+- `depth::Integer = 2`: the number of hidden layers. Use `depth = 0` for a single linear layer with no hidden layers.
 - `width::Integer = 128`: the width of each hidden layer.
-- `activation::Function = relu`: the (non-linear) activation function used in each hidden layer.
+- `activation = relu`: the activation function used in each hidden layer.
 - `output_activation = identity`: the activation function used in the output layer.
-- `final_layer = nothing`: an optional final layer to append to the network. If provided, it must accept `width` inputs. When set, `output_activation` is ignored and replaced with identity. The effective depth of the network becomes `depth + 1`.
+- `backend::Union{Nothing, Module} = nothing`: the backend to use for constructing the network (e.g., `Lux` or `Flux`). If `nothing`, the backend is resolved automatically.
 """
-struct MLP{T}
-    network::T
+function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128, activation = relu, output_activation = identity, backend::Union{Nothing, Module} = nothing)
+    @assert depth >= 0
+    B = _resolvebackend(backend)
+    if depth == 0
+        layers = Any[B.Dense(in => out, output_activation)]
+    else 
+        layers = []
+        push!(layers, B.Dense(in => width, activation))
+        append!(layers, [B.Dense(width => width, activation) for _ ∈ 2:depth])
+        push!(layers, B.Dense(width => out, output_activation))
+    end
+
+    return B.Chain(layers...)
 end
-MLP(args...; kwargs...) = error("No backend loaded. Load either Flux (`using Flux`) or Lux (`using Lux`).")
-(mlp::MLP)(x) = mlp.network(x)
-(mlp::MLP)(x, y) = mlp.network(cat(x, y; dims = 1))
-(mlp::MLP)(xy::Tuple) = mlp(xy[1], xy[2])
 
 """
-	ResidualBlock(filter, in => out; stride = 1)
+    ResidualBlock(filter, in => out; stride = 1, backend = nothing)
 
 Basic residual block (see [here](https://en.wikipedia.org/wiki/Residual_neural_network#Basic_block)),
 consisting of two sequential convolutional layers and a skip (shortcut) connection
@@ -554,13 +561,35 @@ b = ResidualBlock((3, 3), 1 => 32)
 b(z)
 ```
 """
-struct ResidualBlock{B}
-    block::B
+function ResidualBlock(filter, channels; stride = 1, backend::Union{Nothing, Module} = nothing)
+    B = _resolvebackend(backend)
+    lux = get(Base.loaded_modules, _LUX_UUID, nothing)
+    is_lux = !isnothing(lux) && B === lux
+
+    bias_kwarg = is_lux ? :use_bias : :bias
+    id = is_lux ? lux.WrappedFunction(identity) : identity
+
+    layer = B.Chain(
+        B.Conv(filter, channels; stride = stride, pad = 1, bias_kwarg => false),
+        B.BatchNorm(channels[2], relu),
+        B.Conv(filter, channels[2] => channels[2]; pad = 1, bias_kwarg => false),
+        B.BatchNorm(channels[2])
+    )
+
+    connection = if stride == 1 && channels[1] == channels[2]
+        +
+    else
+        projection = B.Chain(
+            B.Conv((1, 1), channels; stride = stride, bias_kwarg => false),
+            B.BatchNorm(channels[2])
+        )
+        B.Parallel(+, id, projection)
+    end
+
+    return B.Chain(B.SkipConnection(layer, connection), B.relu)
 end
-struct Shortcut{S}
-    s::S
-end
-(s::Shortcut)(mx, x) = mx + s.s(x)
+
+# ---- Structs for GNNs: Only compatible with Flux ----
 
 """
 	PowerDifference(a, b)

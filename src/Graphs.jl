@@ -110,7 +110,7 @@ using NeuralEstimators, Flux, GraphNeuralNetworks
 
 # Toy spatial data
 n = 250                # number of spatial locations
-m = 5                  # number of independent replicates
+m = 5                  # number of replicates
 S = rand(n, 2)         # spatial locations
 Z = rand(n, m)         # data
 g = spatialgraph(S, Z) # construct the graph
@@ -156,7 +156,7 @@ using Statistics: mean
 
 # Spatial data
 n = 100                # number of spatial locations
-m = 50                 # number of independent replicates
+m = 50                 # number of replicates
 S = rand(n, 2)         # spatial locations
 Z = rand(n, m)         # observed data
 g = spatialgraph(S, Z) # construct the graph
@@ -224,7 +224,7 @@ S = rand(n, 2)                          # spatial locations
 D = pairwise(Euclidean(), S, dims = 1)  # distance matrix 
 Σ = exp.(-D ./ θ)                       # covariance matrix 
 L = cholesky(Symmetric(Σ)).L            # Cholesky factor 
-m = 5                                   # number of independent replicates 
+m = 5                                   # number of replicates 
 Z = L * randn(n, m)                     # simulated data 
 
 # Construct the spatial graph 

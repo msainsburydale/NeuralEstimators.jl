@@ -29,7 +29,7 @@ using Pkg; Pkg.add(url = "https://github.com/msainsburydale/NeuralEstimators.jl"
 
 ## Quick start 
 
-In the following minimal example, we develop a neural estimator for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $\boldsymbol{Z} \equiv (Z_1, \dots, Z_m)'$, where each $Z_i \overset{\mathrm{iid}}\sim N(\mu, \sigma^2)$ and we use the marginal priors $\mu \sim N(0, 1)$ and $\sigma \sim U(0, 1)$. 
+In the following minimal example, we develop a neural estimator for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $\boldsymbol{Z} \equiv (Z_1, \dots, Z_n)'$, where each $Z_i \overset{\mathrm{iid}}\sim N(\mu, \sigma^2)$ and we use the marginal priors $\mu \sim N(0, 1)$ and $\sigma \sim U(0, 1)$. 
 
 ::: code-group
 
@@ -37,16 +37,16 @@ In the following minimal example, we develop a neural estimator for $\boldsymbol
 using NeuralEstimators, Flux, CairoMakie
 
 # Functions to sample from the prior and simulate data
-d, m = 2, 100  # dimension of θ and number of replicates
+d, n = 2, 100  # dimension of θ and number of replicates
 sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
-simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(m))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(n))
 simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
-# Neural network, an MLP mapping m inputs into d outputs
-network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
+# Neural network, an MLP mapping n inputs into d outputs
+network = Chain(Dense(n, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
 
 # Initialise a neural estimator
-estimator = PointEstimator(network)
+estimator = PointEstimator(network, d; num_summaries = d)
 
 # Train the estimator
 estimator = train(estimator, sampler, simulator)
@@ -69,13 +69,13 @@ estimate(estimator, Z)           # point estimate
 using NeuralEstimators, Flux, CairoMakie
 
 # Functions to sample from the prior and simulate data
-d, m = 2, 100  # dimension of θ and number of replicates
+d, n = 2, 100  # dimension of θ and number of replicates
 sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
-simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(m))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(n))
 simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
-# Neural network, an MLP mapping m inputs into d outputs
-network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
+# Neural network, an MLP mapping n inputs into d outputs
+network = Chain(Dense(n, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
 
 # Initialise a neural estimator
 estimator = PosteriorEstimator(network, d; num_summaries = d)
@@ -101,13 +101,13 @@ sampleposterior(estimator, Z)    # approximate posterior sample
 using NeuralEstimators, Flux, CairoMakie
 
 # Functions to sample from the prior and simulate data
-d, m = 2, 100  # dimension of θ and number of replicates
+d, n = 2, 100  # dimension of θ and number of replicates
 sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
-simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(m))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(n))
 simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
-# Neural network, an MLP mapping m inputs into d outputs
-network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
+# Neural network, an MLP mapping n inputs into d outputs
+network = Chain(Dense(n, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
 
 # Initialise a neural estimator
 estimator = RatioEstimator(network, d; num_summaries = d)
@@ -133,7 +133,7 @@ sampleposterior(estimator, Z)    # approximate posterior sample
 
 ## Contributing
 
-To get started, see [CONTRIBUTING.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/CONTRIBUTING.md) for an overview of the code structure, development workflow, and how to submit contributions. A list of planned improvements is available in [TODO.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/TODO.md), and instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/README.md). 
+We welcome contributions of all sizes. To get started, see [CONTRIBUTING.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/CONTRIBUTING.md) for an overview of the code structure, development workflow, and how to submit contributions. A list of planned improvements is available in [TODO.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/TODO.md), and instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/README.md). 
 
 If you encounter a bug or have a suggestion, please feel free to [open an issue](https://github.com/msainsburydale/NeuralEstimators.jl/issues) or submit a pull request.
 
@@ -142,13 +142,23 @@ If you encounter a bug or have a suggestion, please feel free to [open an issue]
 This software was developed as part of academic research. If you would like to support it, please [star the repository](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main). If you use it in your research or other activities, please also use the following citation.
 
 ```
-@misc{NeuralEstimators.jl,
+@misc{,
   title = {{NeuralEstimators.jl}: A {J}ulia package for efficient simulation-based inference using neural networks},
   author = {Sainsbury-Dale, Matthew},
   year = {2026},
   note = {Version 0.2.0},
   howpublished = {\url{https://github.com/msainsburydale/NeuralEstimators.jl}}
 }
+
+@article{,
+    title = {Likelihood-Free Parameter Estimation with Neural {B}ayes Estimators},
+    author = {Matthew Sainsbury-Dale and Andrew Zammit-Mangion and Raphael Huser},
+    journal = {The American Statistician},
+    year = {2024},
+    volume = {78},
+    pages = {1--14},
+    doi = {10.1080/00031305.2023.2249522},
+  }
 ```
 
 ## Papers using NeuralEstimators

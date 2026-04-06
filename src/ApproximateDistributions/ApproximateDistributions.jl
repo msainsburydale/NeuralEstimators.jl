@@ -3,7 +3,7 @@
 An abstract supertype for approximate posterior distributions used in conjunction with a [`PosteriorEstimator`](@ref). 
 
 Subtypes `A <: ApproximateDistribution` must implement the following methods: 
- - `logdensity(q::A, θ::AbstractMatrix, t::AbstractMatrix)` 
+ - `_logdensity(q::A, θ::AbstractMatrix, t::AbstractMatrix)` 
     - Used during training and therefore must support automatic differentiation.
     - `θ` is a `d × K` matrix of parameter vectors.
     - `t` is a `dstar × K` matrix of learned summary statistics obtained by applying the neural network in the `PosteriorEstimator` to a collection of `K` data sets. 

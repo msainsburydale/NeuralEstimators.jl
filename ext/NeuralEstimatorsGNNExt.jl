@@ -27,7 +27,6 @@ function subsetreplicates(Z::G, i) where {G <: GNNGraph}
         #flag = Z.ndata[sym] isa CuArray
         Z = cpu(Z)
         Z = getgraph(Z, i)
-        #if flag Z = gpu(Z) end
         Z
     end
 end
@@ -50,9 +49,8 @@ function _deepsetsummaries(d::DeepSet, Z::V) where {V <: AbstractVector{G}} wher
 
             # For efficiency, convert Z from a vector of (super)graphs into a single
             # supergraph before applying the neural network. Since each element of Z
-            # may itself be a supergraph (where each subgraph corresponds to an
-            # independent replicate), record the grouping of independent replicates
-            # so that they can be combined again later in the function
+            # may itself be a supergraph (where each subgraph corresponds to a replicate), 
+            # record the grouping of replicates so that they can be recombined later
             m = numberreplicates.(Z)
 
             # Propagation and readout
@@ -286,7 +284,7 @@ function (l::SpatialGraphConv)(g::GNNGraph, x::A) where {A <: AbstractArray{T, 3
 
     w̃ = normalise_edge_neighbors(g, w) # Sanity check: aggregate_neighbors(g, +, w̃) # zeros and ones 
 
-    # Coerce to three-dimensional array, repeated to match the number of independent replicates
+    # Coerce to three-dimensional array, repeated to match the number of replicates
     w̃ = coerce3Darray(w̃, m)
 
     # Compute spatially-weighted sum of input features over each neighbourhood 
@@ -353,7 +351,7 @@ function (ψ::GNNSummary)(g::GNNGraph)
     # Readout module, computes a fixed-length vector (a summary statistic) for each replicate
     # R is a matrix with:
     # nrows = number of summary statistics
-    # ncols = number of independent replicates
+    # ncols = number of replicates
     R = ψ.readout(h, Z)
 
     # Reshape from three-dimensional array to matrix 

@@ -1,6 +1,6 @@
 """
 	samplesize(Z)
-Computes the number of independent replicates in the data set `Z`. 
+Computes the number of replicates in the data set `Z`. 
 
 Note that this function is a wrapper around [`numberreplicates`](@ref) with return type equal to the eltype of `Z`.
 """
@@ -8,13 +8,13 @@ samplesize(Z) = eltype(Z)(numberreplicates(Z))
 
 """
 	logsamplesize(Z)
-Computes the log of the number of independent replicates in the data set `Z`. 
+Computes the log of the number of replicates in the data set `Z`. 
 """
 logsamplesize(Z) = log.(samplesize(Z))
 
 """
 	invsqrtsamplesize(Z)
-Computes the inverse of the square root of the number of independent replicates in the data set `Z`. 
+Computes the inverse of the square root of the number of replicates in the data set `Z`. 
 """
 invsqrtsamplesize(Z) = 1 ./ (sqrt.(samplesize(Z)))
 

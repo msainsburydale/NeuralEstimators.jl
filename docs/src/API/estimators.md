@@ -58,15 +58,13 @@ summarynetwork
 setsummarynetwork
 
 summarystatistics
-
-logdensity
 ```
 
-## Deep learning backends: Flux and Lux
+## Lux.jl convenience wrapper
 
-Both [Flux.jl](https://fluxml.ai/Flux.jl/stable/) and [Lux.jl](https://lux.csail.mit.edu/stable/) are fully supported. These frameworks differ in a key way: Flux networks store their trainable parameters and states inside the network object, while Lux networks store them externally as explicit, separate objects. 
+Both [Flux.jl](https://fluxml.ai/Flux.jl/stable/) and [Lux.jl](https://lux.csail.mit.edu/stable/) are supported. These frameworks differ in a key way: Flux networks store their trainable parameters and states inside the network object, while Lux networks store them externally as explicit, separate objects. 
 
-The functions in this package require both the network and its parameters. Therefore, when using Lux networks, the estimators should be wrapped in a [`LuxEstimator`](@ref), which bundles the estimator together with its parameters and states for a unified, backend-agnostic API.
+For convenience, [`LuxEstimator`](@ref) bundles a Lux-based estimator together with its parameters and states for a unified, backend-agnostic API.
 
 ```@docs
 LuxEstimator

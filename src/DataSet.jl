@@ -69,3 +69,4 @@ end
 
 Base.length(s::Summaries) = size(s.S, 2)
 Base.getindex(s::Summaries, i) = Summaries(s.S[:, i])
+Base.hcat(a::Summaries, b::Summaries) = Summaries(hcat(a.S, b.S))

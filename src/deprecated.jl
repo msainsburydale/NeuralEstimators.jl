@@ -16,19 +16,6 @@ function loadweights(path::String)
     load(path, @__MODULE__)[:weights]
 end
 
-# aliases for backwards compatibility
-function mapestimate(args...; kwargs...)
-    @warn "`mapestimate` is deprecated, use `posteriormode` instead." maxlog=1
-    posteriormode(args...; kwargs...)
-end
-export mapestimate
-
-function mlestimate(args...; kwargs...)
-    @warn "`mlestimate` is deprecated, use `posteriormode` instead." maxlog=1
-    posteriormode(args...; kwargs...)
-end
-export mlestimate
-
 function simulategaussianprocess(args...; kwargs...)
     @warn "`simulategaussianprocess` is deprecated, use `simulategaussian` instead." maxlog=1
     simulategaussian(args...; kwargs...)

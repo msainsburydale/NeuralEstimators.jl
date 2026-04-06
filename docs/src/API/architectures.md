@@ -4,11 +4,11 @@ CollapsedDocStrings = true
 
 # Neural-network building blocks
 
-Any [Flux](https://fluxml.ai/Flux.jl/stable/) model can be used to construct a neural network when using the package. In addition to the standard Flux layers and architectures, the following components can be useful.
+Any [Flux.jl](https://fluxml.ai/Flux.jl/stable/) or [Lux.jl](https://lux.csail.mit.edu/stable/) model can be used to construct a neural network when using the package. In addition to the standard layers and architectures provided with these deep-learning packages ([Flux](https://fluxml.ai/Flux.jl/stable/reference/models/layers/)/[Lux](https://lux.csail.mit.edu/stable/api/Lux/layers)), the following components can be useful.
 
 ## Modules
 
-The structures listed below are often useful when constructing neural estimators. In particular, [`DeepSet`](@ref) provides a convenient wrapper for embedding standard neural networks (e.g., MLPs, CNNs, GNNs) into a framework suited to making inference with an arbitrary number of independent replicates. 
+The structures listed below are often useful when constructing neural estimators. In particular, [`DeepSet`](@ref) provides a convenient wrapper for embedding standard neural networks (e.g., MLPs, CNNs, GNNs) into a framework suited to making inference with an arbitrary number of replicates. 
 
 ```@docs
 DeepSet
@@ -44,7 +44,7 @@ NeighbourhoodVariogram
 
 ## Layers
 
-In addition to the [built-in layers](https://fluxml.ai/Flux.jl/stable/reference/models/layers/) provided by Flux, the following layers may be used when building a neural-network architecture.
+In addition to the built-in layers provided by [Flux](https://fluxml.ai/Flux.jl/stable/reference/models/layers/) and [Lux](https://lux.csail.mit.edu/stable/api/Lux/layers), the following layers may be used when building a neural-network architecture.
 
 ```@docs
 ResidualBlock
@@ -60,10 +60,10 @@ Order = [:type, :function]
 Pages   = ["activationfunctions.md"]
 ```
 
-In addition to the [standard activation functions](https://fluxml.ai/Flux.jl/stable/models/activation/) provided by Flux (e.g., `relu`, `softplus`), the following layers can be used at the end of an architecture to ensure valid estimates for certain models. Note that the Flux layer `Parallel` can be useful for applying several different parameter constraints.
+In addition to the standard activation functions provided by [NNlib.jl](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#man-activations) (e.g., `relu`, `gelu`, `softplus`), the following layers can be used at the end of an architecture to ensure valid point estimates for certain models. Note that `Parallel` ([Flux](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.Parallel)/[Lux](https://lux.csail.mit.edu/stable/api/Lux/layers)) can be useful for applying several parameter constraints.
 
 !!! note "Layers vs. activation functions"
-    Although we may conceptualise the following types as "output activation functions", they should be treated as separate layers included in the final stage of a `Chain()`. In particular, they cannot be used as the activation function of a `Dense` layer. 
+    Although we may conceptualise the following types as "output activation functions", they should be treated as separate layers included in the final stage of a `Chain`. In particular, they cannot be used as the activation function of a `Dense` layer. 
 
 ```@docs
 Compress

@@ -4,7 +4,7 @@ CollapsedDocStrings = true
 
 # Approximate distributions
 
-When constructing a [`PosteriorEstimator`](@ref), one must choose a family of distributions $q(\boldsymbol{\theta}; \boldsymbol{\kappa})$, parameterized by $\boldsymbol{\kappa} \in \mathcal{K}$, used to approximate the posterior distribution. These families of distributions are implemented as subtypes of the abstract supertype [ApproximateDistribution](@ref).
+When constructing a [`PosteriorEstimator`](@ref), one must specify a parametric family of probability distributions used to approximate the posterior distribution. These families of distributions are implemented as subtypes of the abstract type [ApproximateDistribution](@ref).
 
 ## Distributions 
 
@@ -25,5 +25,11 @@ numdistributionalparams
 ## Building blocks
 
 ```@docs
+CouplingLayer
+
 AffineCouplingBlock
+
+ActNorm
+
+Permutation
 ```

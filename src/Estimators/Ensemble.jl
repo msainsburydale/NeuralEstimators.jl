@@ -16,7 +16,10 @@ Note that `train()` currently acts sequentially on the component estimators, usi
 
 The ensemble components can be accessed by indexing the ensemble; the number of component estimators can be obtained using `length()`.
 
-See also [`Parallel`](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.Parallel), which can be used to mimic ensemble methods with an appropriately chosen `connection`. 
+See also `Parallel` ([Flux](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.Parallel)/[Lux](https://lux.csail.mit.edu/stable/api/Lux/layers))), which can be used to mimic ensemble methods with an appropriately chosen `connection`.
+
+!!! note
+    `Ensemble` is currently only implemented for the `Flux` backend.
 
 # Examples
 ```julia
@@ -24,8 +27,8 @@ using NeuralEstimators, Flux
 
 # Data Z|θ ~ N(θ, 1) with θ ~ N(0, 1)
 d = 1     # dimension of the parameter vector θ
-n = 1     # dimension of each independent replicate of Z
-m = 30    # number of independent replicates in each data set
+n = 1     # dimension of each replicate of Z
+m = 30    # number of replicates in each data set
 sampler(K) = randn32(d, K)
 simulator(θ, m) = [μ .+ randn32(n, m) for μ ∈ eachcol(θ)]
 
@@ -90,20 +93,10 @@ function train(ensemble::Ensemble, args...; kwargs...)
     kwargs = (; kwargs...)
     savepath = haskey(kwargs, :savepath) ? kwargs.savepath : nothing
     verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
-    optimiser = haskey(kwargs, :optimiser) ? kwargs.optimiser : nothing
     estimators = map(enumerate(ensemble.estimators)) do (i, estimator)
         verbose && @info "Training estimator $i of $(length(ensemble))"
         if !isnothing(savepath)
             kwargs = merge(kwargs, (savepath = joinpath(savepath, "estimator$i"),))
-        end
-        if !isnothing(optimiser) # catch errors caused by constructing the optimiser from the Ensemble object
-            lr = try
-                _findlr(optimiser)
-            catch
-                ;
-                5e-4
-            end
-            kwargs = merge(kwargs, (optimiser = Optimisers.setup(Adam(lr), estimator),))
         end
         train(estimator, args...; kwargs...)
     end
@@ -113,9 +106,11 @@ function train(ensemble::Ensemble, args...; kwargs...)
         if !ispath(savepath)
             mkpath(savepath)
         end
-        model_state = Flux.state(cpu(ensemble))
+        model_state = _state(ensemble)
         @save joinpath(savepath, "ensemble.bson") model_state
     end
 
     return ensemble
 end
+
+function _state end 

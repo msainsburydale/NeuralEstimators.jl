@@ -45,16 +45,18 @@ Z = simulator(θ)         # stand-in for real observations
 estimate(estimator, Z)   # point estimate
 ```
 """
-struct PointEstimator{M, N} <: BayesEstimator
-    summary_network::M
-    inference_network::N
+@concrete struct PointEstimator <: BayesEstimator
+    summary_network
+    inference_network
 end
 
 # Constructor: summary network, number of parameters, number of summaries => MLP inference network
 function PointEstimator(summary_network, num_parameters::Integer, num_summaries::Integer; kwargs...)
-    inference_network = MLP(num_summaries, num_parameters; kwargs...)
+    backend = _backendof(summary_network)
+    inference_network = MLP(num_summaries, num_parameters; backend = backend, kwargs...)
     @info "PointEstimator: num_summaries = $num_summaries."
-    PointEstimator(summary_network, inference_network)
+    estimator = PointEstimator(summary_network, inference_network)
+    estimator
 end
 
 # Constructor: num_summaries as keyword
@@ -62,9 +64,21 @@ PointEstimator(summary_network, num_parameters::Integer; num_summaries, kwargs..
 
 # Constructor: Old workflow, summary network represents the entire network
 function PointEstimator(network)
-    @info "Constructing PointEstimator with a single network. Consider separating the summary and inference networks as PointEstimator(summary_network, inference_network), which enables additional functionality such as transfer learning and model-misspecification detection."
-    PointEstimator(network, identity)
+    @info "Constructing PointEstimator with a single network. Consider separating the summary and inference networks as PointEstimator(summary_network, inference_network), which enables additional functionality." # such as transfer learning and model-misspecification detection."
+    backend = _backendof(network)
+    PointEstimator(network, _identity_layer(backend))
+end
+_identity_layer(backend::Module) = _identity_layer(Val(nameof(backend)))
+_identity_layer(::Val{:Flux}) = identity  # plain Julia function, valid as a Flux layer
+_is_identity(f) = f === identity || f isa typeof(identity) || f isa Identity
+
+# Forward pass: Stateful (Flux)
+(estimator::PointEstimator)(Z) = estimator.inference_network(_summarystatistics(estimator, Z))
+
+# Forward pass: Stateless (Lux)
+function (e::PointEstimator)(Z, ps, st)
+    t, st_s = _summarystatistics(e, Z, ps.summary_network, st.summary_network)
+    y, st_i = e.inference_network(t, ps.inference_network, st.inference_network)
+    return y, (summary_network = st_s, inference_network = st_i)
 end
 
-# Forward pass: point estimates
-(estimator::PointEstimator)(Z) = estimator.inference_network(_summarystatistics(estimator, Z))

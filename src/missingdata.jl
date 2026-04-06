@@ -68,7 +68,8 @@ with one column per dataset.
   criterion required to halt.
 - `tol = 0.01`: Convergence tolerance. Algorithm stops if the relative change in 
   post-burnin averaged parameters is less than `tol` for `nconsecutive` iterations.
-- `use_gpu::Bool = true`: Whether to use a GPU (if available) for MAP estimation.
+- `device = nothing`: the device used for MAP estimation, e.g., `cpu_device()`, `gpu_device()`, or `reactant_device()` (the latter requires Lux.jl). If `nothing` (the default), the device is inferred from `use_gpu`. Takes priority over `use_gpu`.
+- `use_gpu::Bool = true`: flag indicating whether to use a GPU if one is available. Ignored if `device` is provided.
 - `verbose::Bool = false`: Whether to print iteration details.
 - `kwargs...`: Additional arguments passed to `simulateconditional`.
 
@@ -134,6 +135,7 @@ function (em::EM)(
     burnin::Integer = 1,
     nconsecutive::Integer = 3,
     tol = 0.01,
+    device = nothing,
     use_gpu::Bool = true,
     verbose::Bool = false,
     kwargs...
@@ -161,7 +163,7 @@ function (em::EM)(
 
     θ₀ = cpu(θ₀)
 
-    device = _getdevice(use_gpu, verbose = verbose)
+    device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
     MAP = em.MAP |> device
 
     if !any(ismissing.(Z))

@@ -9,7 +9,7 @@ The [package documentation](https://msainsburydale.github.io/NeuralEstimators.jl
 git clone https://github.com/msainsburydale/NeuralEstimators.jl.git
 ```
 2.	**Edit the documentation**: Modify the relevant source files (in `docs/src`) or docstrings (in `src`).
-3.	**Build the documentation locally**: Preview your changes by building the documentation locally. This can be done by: 
+3.	**(Optional) Build the documentation locally**: Preview your changes by building the documentation locally. This can be done by: 
  - navigating to `docs/` (i.e., running `cd docs`)
  - Installing the relevant packages if not already on your system: 
  ```bash

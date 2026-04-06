@@ -84,11 +84,12 @@ function IntervalEstimator(
         probs = [probs]
     end
     @assert all(0 .< probs .< 1)
-    # NB enforce output_activation = identity for both inference MLPs
-    u = MLP(num_summaries, num_parameters; output_activation = identity, kwargs...)
-    v = MLP(num_summaries, num_parameters; output_activation = identity, kwargs...)
+    B = _backendof(summary_network)
+    u = MLP(num_summaries, num_parameters; backend = B, output_activation = identity, kwargs...)
+    v = MLP(num_summaries, num_parameters; backend = B, output_activation = identity, kwargs...)
     @info "IntervalEstimator: num_summaries = $num_summaries."
-    IntervalEstimator(summary_network, u, v, c, probs, g)
+    estimator = IntervalEstimator(summary_network, u, v, c, probs, g)
+    estimator
 end
 
 # Constructor: keyword num_summaries
@@ -204,8 +205,8 @@ q₂ = train(q₂, sampler, simulator)
 # Inference: Estimate quantiles of μ∣Z,σ with known σ
 σ₀ = θ["σ", 1]
 θ₋ᵢ = [σ₀;]
-estimate(q₁, Z, θ₋ᵢ)
-quantiles(q₁, Z, θ₋ᵢ)
+estimate(q₁, (Z, θ₋ᵢ))
+quantiles(q₁, (Z, θ₋ᵢ))
 ```
 """
 struct QuantileEstimator{M1, M2, V, P, G, I} <: BayesEstimator
@@ -240,24 +241,19 @@ function QuantileEstimator(
         @assert num_parameters >= i "i must be ≤ num_parameters"
     end
 
+    B = _backendof(summary_network)
     T = length(probs)
-
-    # Number of output parameters from inference networks: 1 for full conditional, d for marginals
     num_out = isnothing(i) ? num_parameters : 1
 
     if isnothing(i)
-        # Marginal posteriors: inference networks take only data summaries
         inference_input_dim = num_summaries
         summary_network_θ = nothing
     else
-        # Full conditional: concatenate data summaries with parameter summaries
-        # θ₋ᵢ has (num_parameters - 1) components
-        summary_network_θ = MLP(num_parameters - 1, num_summaries_θ; output_activation = identity, summary_network_θ_kwargs...)
+        summary_network_θ = MLP(num_parameters - 1, num_summaries_θ; backend = B, output_activation = identity, summary_network_θ_kwargs...)
         inference_input_dim = num_summaries + num_summaries_θ
     end
 
-    # NB enforce output_activation = identity for all inference MLPs
-    v = [MLP(inference_input_dim, num_out; output_activation = identity, kwargs...) for _ in 1:T]
+    v = [MLP(inference_input_dim, num_out; backend = B, output_activation = identity, kwargs...) for _ in 1:T]
 
     @info "QuantileEstimator: num_summaries = $num_summaries, T = $T quantile levels$(isnothing(i) ? "" : ", full conditional i = $i")."
     QuantileEstimator(summary_network, summary_network_θ, v, probs, g, i)
@@ -308,7 +304,7 @@ function (est::QuantileEstimator)(Z, θ₋ᵢ)
     _apply_quantile_networks(est, S)
 end
 
-# Tuple method used internally during training for full conditional case
+# Tuple method for full conditional case
 (est::QuantileEstimator)(Zθ::Tuple) = est(Zθ[1], Zθ[2])
 
 # Helper: coerce θ₋ᵢ to a matrix with columns matching the number of data sets
@@ -356,15 +352,14 @@ function _loss(estimator::Union{IntervalEstimator, QuantileEstimator}, loss = no
     (estimate, θ) -> quantileloss(estimate, θ, estimator.probs)
 end
 
-
 function assess(
     estimator::Union{IntervalEstimator, Ensemble{<:IntervalEstimator}},
-    θ::P, Z;
+    θ, Z;
     parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
     estimator_name::Union{Nothing, String} = nothing,
     estimator_names::Union{Nothing, String} = nothing,
     use_gpu::Bool = true
-) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+)
     θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
 
     # Apply the estimator to data 
@@ -372,7 +367,8 @@ function assess(
     runtime = DataFrame(runtime = runtime)
 
     # Empirical risk
-    empirical_risk = _computerisk(estimator, θ, Z)
+    # NB not including this for now; see the comments in assess.jl
+    empirical_risk = nothing # _computerisk(estimator, θ, Z)
 
     # Convert to DataFrame and add information
     estimate_names = repeat(parameter_names, outer = 2) .* repeat(["_lower", "_upper"], inner = d)
@@ -393,32 +389,36 @@ end
 
 function assess(
     estimator::Union{QuantileEstimator, Ensemble{<:QuantileEstimator}},
-    θ::P, Z;
+    θ, Z;
     parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
     estimator_name::Union{Nothing, String} = nothing,
     estimator_names::Union{Nothing, String} = nothing,
     use_gpu::Bool = true
-) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+)
     θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
 
     probs = estimator isa Ensemble{<:QuantileEstimator} ? estimator[1].probs : estimator.probs
     n_probs = length(probs)
 
+    # Empirical risk
+    # NB not including this for now; see the comments in assess.jl
     # NB: _computerisk not set up for Ensemble
-    empirical_risk = estimator isa QuantileEstimator ? _computerisk(estimator, θ, Z) : nothing
+    # empirical_risk = estimator isa QuantileEstimator ? _computerisk(estimator, θ, Z) : nothing
+    empirical_risk = nothing
 
     i = estimator.i
     if isnothing(i)
-        set_info = nothing
+        input = Z
+        
     else
         θ₋ᵢ = θ[Not(i), :]
-        set_info = eachcol(θ₋ᵢ)
+        input = (Z, eachcol(θ₋ᵢ))
         θ = θ[i:i, :]
         parameter_names = parameter_names[i:i]
         d = 1
     end
 
-    runtime = @elapsed estimates = estimate(estimator, Z, set_info, use_gpu = use_gpu)
+    runtime = @elapsed estimates = estimate(estimator, input, use_gpu = use_gpu)
     runtime = DataFrame(runtime = runtime)
 
     df = DataFrame(
