@@ -1,0 +1,28 @@
+\documentclass[crop,tikz, border={10bp 5bp 10bp 1bp}]{standalone} 
+% build using: 
+% latexmk logo.tex -pvc -pdf  
+% magick -density 900 -background none logo.pdf logo.png
+
+\usepackage{xcolor}
+
+\usetikzlibrary{positioning}
+\usetikzlibrary{calc}
+
+\definecolor{myred}{RGB}{199,44,38}
+\definecolor{mygreen}{RGB}{43,129,33}
+\definecolor{mypurple}{RGB}{126,78,160}
+\definecolor{myblue}{RGB}{20,92,205}
+
+\tikzset{
+  juliadot/.style args={#1,#2}{shape=circle,line width=0.03ex,minimum width=0.4ex,fill=#1,draw=#2}
+}
+
+\DeclareRobustCommand\logo{%
+\begin{tikzpicture}[baseline=0mm, every node/.style={inner sep=0mm, outer sep=0mm}]
+\node[anchor=base] (eqn) at (0,0) {$\color{mygreen}  \textcolor{mypurple}{\hat{\mathbf{\theta}}} : \textcolor{myred}{\mathcal{Z}} \to \textcolor{myblue}{\Theta}$};
+\end{tikzpicture}%
+}
+
+\begin{document}
+\Huge {\logo}
+\end{document}
