@@ -2,9 +2,9 @@
 
 ## Backends
 
-[Flux.jl](https://fluxml.ai/Flux.jl/stable/) and [Lux.jl](https://lux.csail.mit.edu/stable/) are the primarily supported backends. These frameworks differ in a key way: Flux stores trainable parameters and states inside the network object, while Lux represents them explicitly as separate objects. [SimpleChains.jl](https://github.com/PumasAI/SimpleChains.jl) is also supported via the Lux interface (see [here](https://lux.csail.mit.edu/stable/api/Lux/interop#Lux-Models-to-Simple-Chains)), and optimised for small, fast networks on the CPU.
+[Flux.jl](https://fluxml.ai/Flux.jl/stable/) and [Lux.jl](https://lux.csail.mit.edu/stable/) are the primarily supported backends. These frameworks differ in a key way: Flux stores trainable parameters and states inside the network object, while Lux represents them explicitly as separate objects. Flux's stateful, object-oriented style will feel familiar to PyTorch users, while Lux's explicit, functional style will feel familiar to JAX/Flax users.
 
-Flux's stateful, object-oriented style will feel familiar to PyTorch users, while Lux's explicit, functional style will feel familiar to JAX/Flax users.
+[SimpleChains.jl](https://github.com/PumasAI/SimpleChains.jl), which is optimised for small, fast networks on the CPU, is also supported via the [Lux interface](https://lux.csail.mit.edu/stable/api/Lux/interop#Lux-Models-to-Simple-Chains).
 
 Despite these differences, the high-level API of NeuralEstimators.jl is largely consistent across backends, particularly with the convenience wrapper [`LuxEstimator`](@ref). The typical workflows are as follows:
 
