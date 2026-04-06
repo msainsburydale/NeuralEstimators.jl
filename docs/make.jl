@@ -16,7 +16,7 @@ for subdir in ["examples"]
     dest = joinpath(@__DIR__, "src", subdir, "assets")
     isdir(dest) || mkpath(dest)
     cp(joinpath(@__DIR__, "src", "assets", "figures"),
-       joinpath(dest, "figures"); force = true)
+        joinpath(dest, "figures"); force = true)
 end
 
 makedocs(

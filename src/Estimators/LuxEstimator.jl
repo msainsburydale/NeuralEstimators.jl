@@ -26,9 +26,9 @@ estimator.st
 ```
 """
 @concrete struct LuxEstimator <: NeuralEstimator
-    estimator
-    ps
-    st
+    estimator::Any
+    ps::Any
+    st::Any
 end
 function LuxEstimator(estimator::LuxEstimator)
     @warn "estimator is already a LuxEstimator"

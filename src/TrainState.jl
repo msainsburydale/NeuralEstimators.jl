@@ -5,9 +5,9 @@ An abstract supertype for training states defined in NeuralEstimators.
 abstract type AbstractTrainState end
 
 @concrete struct FluxTrainState <: AbstractTrainState
-  model
-  optimizer
-  optimizer_state
+    model::Any
+    optimizer::Any
+    optimizer_state::Any
 end
 
 # Simple extension to the `adjust!` API

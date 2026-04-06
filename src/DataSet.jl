@@ -52,7 +52,6 @@ Base.getindex(d::DataSet, i) = DataSet(getobs(d.Z, i), d.S[:, i])
 numberreplicates(d::DataSet) = numberreplicates(d.Z)
 subsetreplicates(d::DataSet, idx) = DataSet(subsetreplicates(d.Z, idx), d.S)
 
-
 # ---- Summaries wrapper type ----
 
 """

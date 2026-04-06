@@ -4,7 +4,7 @@
 #TODO Remove ElementwiseAggregator?
 
 @concrete struct ElementwiseAggregator
-    a
+    a::Any
 end
 (e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
 
@@ -109,10 +109,10 @@ ds((Z, X))
 ```
 """
 @concrete struct DeepSet
-    ψ
-    ϕ
-    a
-    S
+    ψ::Any
+    ϕ::Any
+    a::Any
+    S::Any
 end
 function DeepSet(ψ, ϕ, a::Function = mean; S = nothing)
     @assert !isnothing(ψ) | !isnothing(S) "At least one of `ψ` or `S` must be given"
@@ -236,7 +236,6 @@ function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})
     return true  # All arrays have the same first N-1 dimensions
 end
 
-
 # ---- Output layers ----
 
 @doc raw"""
@@ -281,7 +280,7 @@ struct Compress{T}
     a::T
     b::T
     k::T
-    function Compress(a::T, b::T, k::T) where T
+    function Compress(a::T, b::T, k::T) where {T}
         @assert all(b .> a) "All upper bounds b must be strictly greater than lower bounds a"
         new{T}(a, b, k)
     end
@@ -535,7 +534,7 @@ function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128
     B = _resolvebackend(backend)
     if depth == 0
         layers = Any[B.Dense(in => out, output_activation)]
-    else 
+    else
         layers = []
         push!(layers, B.Dense(in => width, activation))
         append!(layers, [B.Dense(width => width, activation) for _ ∈ 2:depth])

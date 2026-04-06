@@ -35,9 +35,8 @@ end
 function LuxCore.statelength(estimator::NeuralEstimator)
     sum(f -> LuxCore.statelength(getfield(estimator, f)),
         filter(f -> getfield(estimator, f) isa LuxTraversable, fieldnames(typeof(estimator))),
-        init=0)  # init=0 handles the case where there are no matching fields
+        init = 0)  # init=0 handles the case where there are no matching fields
 end
-
 
 function LuxCore.initialparameters(rng::AbstractRNG, q::ApproximateDistribution)
     NamedTuple(f => LuxCore.initialparameters(rng, getfield(q, f))
@@ -93,13 +92,13 @@ import NeuralEstimators: getestimator
 import NeuralEstimators: _construct_train_state, _risk, _train_step, _save_trainstate
 import Lux.Training: TrainState
 
-using NeuralEstimators: @save 
+using NeuralEstimators: @save
 function _save_trainstate(trainstate::TrainState, savepath; best::Bool = true)
     isnothing(savepath) && return
     prefix = best ? "best" : "final"
-    parameters      = cpu_device()(trainstate.parameters)
-    states          = cpu_device()(trainstate.states)
-    optimizer       = cpu_device()(trainstate.optimizer)
+    parameters = cpu_device()(trainstate.parameters)
+    states = cpu_device()(trainstate.states)
+    optimizer = cpu_device()(trainstate.optimizer)
     optimizer_state = cpu_device()(trainstate.optimizer_state)
     # Always save optimiser and optimiser state to both savepath and tempdir
     for path in unique([savepath, tempdir()])
@@ -124,7 +123,7 @@ function _risk(trainstate::TrainState, loss, data, device, adtype = nothing) # T
     K = 0
     for (input, output) in data
         input, output = input |> device, output |> device
-        ŷ  = first(trainstate.model(input, ps, st))
+        ŷ = first(trainstate.model(input, ps, st))
         ls = loss(ŷ, output)
         sum_loss += ls * numobs(input)
         K += numobs(input)

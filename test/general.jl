@@ -157,7 +157,7 @@ end
             @test size(t, 2) == K
 
             # Without expert summaries: output size unchanged
-            ds_no_s = DataSet(Z) |> f32 
+            ds_no_s = DataSet(Z) |> f32
             t_no_s = estimator(ds_no_s)
             @test size(t_no_s, 1) == num_summaries
             @test size(t_no_s, 2) == K
@@ -706,9 +706,8 @@ Z = simulator(θ, m)
     show(devnull, estimator)
 
     @testset "$dvc" for dvc ∈ devices
-
         use_gpu = dvc == gpu
-        
+
         # Forward pass
         @test size(estimate(estimator, Z)) == (d, K)
 
@@ -760,10 +759,10 @@ Z = simulator(θ, m)
         @testset "bootstrap" begin
             # parametric bootstrap functions are designed for a single parameter configuration
             B = 40
-            parameters = sampler(1)            
-            Z_sims = reduce(hcat, [simulator(parameters, m) for _ in 1:B])
+            parameters = sampler(1)
+            Z_sims = reduce(hcat, [simulator(parameters, m) for _ = 1:B])
             @test size(bootstrap(estimator, parameters, Z_sims; use_gpu = use_gpu)) == (d, B)
-            @test size(bootstrap(estimator, parameters, simulator, m; B=B, use_gpu = use_gpu)) == (d, B)
+            @test size(bootstrap(estimator, parameters, simulator, m; B = B, use_gpu = use_gpu)) == (d, B)
         end
     end
 end
@@ -848,7 +847,6 @@ end
 end
 
 @testset "RatioEstimator" begin
-
     num_summaries = 3d
     summary_network = Chain(Dense(m, 16, gelu), Dense(16, num_summaries))
     estimator = RatioEstimator(summary_network, d; num_summaries = num_summaries)
@@ -917,7 +915,6 @@ end
 end
 
 @testset "PiecewiseEstimator" begin
-
     n = 2    # bivariate data
     d = 3    # dimension of parameter vector
     w = 128  # width of each hidden layer
@@ -940,7 +937,6 @@ end
     est2 = θ̂_piecewise(Z)
     @test est1 ≈ est2
 end
-
 
 @testset "EM" begin
     d = 2    # number of parameters in the statistical model
@@ -1067,9 +1063,9 @@ end
 
     # Construct neural MAP estimator
     ψ = Chain(
-        Conv((10, 10), 1 => 16,  relu),
-        Conv((5, 5),  16 => 32,  relu),
-        Conv((3, 3),  32 => 64, relu),
+        Conv((10, 10), 1 => 16, relu),
+        Conv((5, 5), 16 => 32, relu),
+        Conv((3, 3), 32 => 64, relu),
         Flux.flatten
     )
     ϕ = Chain(Dense(64, 256, relu), Dense(256, d, exp))
@@ -1100,7 +1096,6 @@ end
     Z₁ = removedata(Z₁, 1.0)
     @test_throws Exception neuralem(Z₁, θ₀, nsims = H, ξ = ξ)
 end
-
 
 # ---- Misc. ----
 

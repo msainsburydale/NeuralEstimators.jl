@@ -113,4 +113,4 @@ function train(ensemble::Ensemble, args...; kwargs...)
     return ensemble
 end
 
-function _state end 
+function _state end

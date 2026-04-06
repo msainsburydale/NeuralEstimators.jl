@@ -23,7 +23,7 @@ function _risk(trainstate::TrainState, loss, data, device::ReactantDevice, adtyp
 
     sum_loss = 0.0f0
     K = 0
-    for (input, output) in  device(data) #TODO Lux docs suggest device(data); check if memory is ok
+    for (input, output) in device(data) #TODO Lux docs suggest device(data); check if memory is ok
         # input, output = input |> device, output |> device
         ∇, ls, _, trainstate = compute_gradients(adtype, lux_loss, (input, output), trainstate)
         sum_loss += ls * numobs(input)

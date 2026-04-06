@@ -50,8 +50,8 @@ posteriormean(estimator, Z)   # point estimate
 ```
 """
 @concrete struct PosteriorEstimator <: NeuralEstimator
-    summary_network
-    q
+    summary_network::Any
+    q::Any
 end
 
 # Constructor: summary network, number of parameters, number of summaries => build approximate distribution automatically

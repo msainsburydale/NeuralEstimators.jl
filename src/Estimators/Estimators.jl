@@ -48,8 +48,8 @@ See also [`summarynetwork`](@ref).
 function summarystatistics end
 
 # Stateful (Flux)
-function summarystatistics(estimator::NeuralEstimator, Z; kwargs...) 
-	_applywithdevice(estimator.summary_network, Z; kwargs...)
+function summarystatistics(estimator::NeuralEstimator, Z; kwargs...)
+    _applywithdevice(estimator.summary_network, Z; kwargs...)
 end
 function summarystatistics(estimator::NeuralEstimator, d::DataSet; kwargs...)
     t = _applywithdevice(estimator.summary_network, d.Z; kwargs...)

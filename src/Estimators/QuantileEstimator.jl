@@ -99,7 +99,7 @@ IntervalEstimator(summary_network, num_parameters::Integer; num_summaries::Integ
 Optimisers.trainable(est::IntervalEstimator) = (summary_network = est.summary_network, u = est.u, v = est.v)
 
 function (est::IntervalEstimator)(Z)
-    S  = _summarystatistics(est, Z)  # shared summary statistics
+    S = _summarystatistics(est, Z)  # shared summary statistics
     bₗ = est.u(S)                    # lower bound
     bᵤ = bₗ .+ est.g.(est.v(S))     # upper bound (guaranteed > lower)
     vcat(est.c(bₗ), est.c(bᵤ))
@@ -253,7 +253,7 @@ function QuantileEstimator(
         inference_input_dim = num_summaries + num_summaries_θ
     end
 
-    v = [MLP(inference_input_dim, num_out; backend = B, output_activation = identity, kwargs...) for _ in 1:T]
+    v = [MLP(inference_input_dim, num_out; backend = B, output_activation = identity, kwargs...) for _ = 1:T]
 
     @info "QuantileEstimator: num_summaries = $num_summaries, T = $T quantile levels$(isnothing(i) ? "" : ", full conditional i = $i")."
     QuantileEstimator(summary_network, summary_network_θ, v, probs, g, i)
@@ -264,8 +264,8 @@ QuantileEstimator(summary_network, num_parameters::Integer; num_summaries::Integ
     QuantileEstimator(summary_network, num_parameters, num_summaries; kwargs...)
 
 Optimisers.trainable(est::QuantileEstimator) = isnothing(est.summary_network_θ) ?
-    (summary_network = est.summary_network, v = est.v) :
-    (summary_network = est.summary_network, summary_network_θ = est.summary_network_θ, v = est.v)
+                                               (summary_network = est.summary_network, v = est.v) :
+                                               (summary_network = est.summary_network, summary_network_θ = est.summary_network_θ, v = est.v)
 
 # Internal forward pass: accepts pre-computed summary statistics S (already concatenated with θ summaries if needed)
 function _apply_quantile_networks(est::QuantileEstimator, S)
@@ -300,7 +300,7 @@ function (est::QuantileEstimator)(Z, θ₋ᵢ)
     θ₋ᵢ = _prepare_θ₋ᵢ(θ₋ᵢ, S_Z)
 
     S_θ = est.summary_network_θ(θ₋ᵢ)
-    S   = vcat(S_Z, S_θ)
+    S = vcat(S_Z, S_θ)
     _apply_quantile_networks(est, S)
 end
 
@@ -335,13 +335,13 @@ end
 function _inputoutput(estimator::QuantileEstimator, Z, θ)
     i = estimator.i
     if isnothing(i)
-        input  = Z
+        input = Z
         output = θ
     else
         @assert size(θ, 1) >= i "The number of parameters in the model (size(θ, 1) = $(size(θ, 1))) must be at least as large as the value of i stored in the estimator (estimator.i = $(estimator.i))"
-        θᵢ  = θ[i:i, :]
+        θᵢ = θ[i:i, :]
         θ₋ᵢ = θ[Not(i), :]
-        input  = (Z, θ₋ᵢ)
+        input = (Z, θ₋ᵢ)
         output = θᵢ
     end
     return input, output
@@ -409,7 +409,7 @@ function assess(
     i = estimator.i
     if isnothing(i)
         input = Z
-        
+
     else
         θ₋ᵢ = θ[Not(i), :]
         input = (Z, eachcol(θ₋ᵢ))
@@ -423,10 +423,10 @@ function assess(
 
     df = DataFrame(
         parameter = repeat(repeat(parameter_names, outer = n_probs), K),
-        truth     = mapreduce(col -> repeat(col, n_probs), vcat, eachcol(θ)),
-        prob      = repeat(repeat(probs, inner = d), K),
-        estimate  = vec(estimates),
-        k         = repeat(1:K, inner = n_probs*d)
+        truth = mapreduce(col -> repeat(col, n_probs), vcat, eachcol(θ)),
+        prob = repeat(repeat(probs, inner = d), K),
+        estimate = vec(estimates),
+        k = repeat(1:K, inner = n_probs*d)
     )
 
     estimator_name = _resolve_estimator_name(estimator_name, estimator_names)
@@ -434,4 +434,3 @@ function assess(
 
     return Assessment(df, runtime, nothing, empirical_risk)
 end
-
