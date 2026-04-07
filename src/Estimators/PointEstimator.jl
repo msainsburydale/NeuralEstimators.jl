@@ -70,7 +70,7 @@ function PointEstimator(network)
 end
 _identity_layer(backend::Module) = _identity_layer(Val(nameof(backend)))
 _identity_layer(::Val{:Flux}) = identity  # plain Julia function, valid as a Flux layer
-_is_identity(f) = f === identity || f isa typeof(identity) || f isa Identity
+_is_identity(f) = f === identity || f isa typeof(identity) || (hasproperty(f, :func) && f.func === identity)
 
 # Forward pass: Stateful (Flux)
 (estimator::PointEstimator)(Z) = estimator.inference_network(_summarystatistics(estimator, Z))
