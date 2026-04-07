@@ -193,12 +193,12 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
         if !_has_summary_network(estimator)
             @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
             freeze_summary_network = false
-        elseif estimator isa PointEstimator && _is_identity(estimator.inference_network)
-            @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function and will be ignored."
-            freeze_summary_network = false
         elseif device isa ReactantDevice
             @warn "`freeze_summary_network = true` is not supported with `reactant_device()` and will be ignored. If this affects your use case, please contact the package maintainer."
             freeze_summary_network = false
+        elseif estimator isa PointEstimator && _is_identity(estimator.inference_network)
+            @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function; returning the estimator unchanged."
+            return trainstate
         else
             _freeze_summary_network!(trainstate)
             verbose && print("Computing summary statistics...")
@@ -325,12 +325,12 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
         if !_has_summary_network(estimator)
             @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
             freeze_summary_network = false
-        elseif estimator isa PointEstimator && _is_identity(estimator.inference_network)
-            @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function and will be ignored."
-            freeze_summary_network = false
         elseif device isa ReactantDevice
             @warn "`freeze_summary_network = true` is not supported with `reactant_device()` and will be ignored. If this affects your use case, please contact the package maintainer."
             freeze_summary_network = false
+        elseif estimator isa PointEstimator && _is_identity(estimator.inference_network)
+            @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function; returning the estimator unchanged."
+            return trainstate
         else
             _freeze_summary_network!(trainstate)
             verbose && print("Computing summary statistics...")
@@ -515,12 +515,12 @@ function train(trainstate, sampler, simulator;
         if !_has_summary_network(estimator)
             @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
             freeze_summary_network = false
-        elseif estimator isa PointEstimator && _is_identity(estimator.inference_network)
-            @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function and will be ignored."
-            freeze_summary_network = false
         elseif device isa ReactantDevice
             @warn "`freeze_summary_network = true` is not supported with `reactant_device()` and will be ignored. If this affects your use case, please contact the package maintainer."
             freeze_summary_network = false
+        elseif estimator isa PointEstimator && _is_identity(estimator.inference_network)
+            @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function; returning the estimator unchanged."
+            return trainstate
         else
             _freeze_summary_network!(trainstate)
             verbose && print("Computing summary statistics...")

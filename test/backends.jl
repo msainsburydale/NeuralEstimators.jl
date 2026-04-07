@@ -67,7 +67,7 @@ function make_estimator(backend, estimator_type::Symbol)
     end
 
     est = if estimator_type === :point
-        PointEstimator(network)
+        PointEstimator(network, d; num_summaries = d, depth = 1)
     elseif estimator_type === :ratio
         RatioEstimator(network, d; num_summaries = d, depth = 1)
     elseif estimator_type === :posterior
