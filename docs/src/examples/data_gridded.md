@@ -75,7 +75,7 @@ end
 
 ## Simulating data
 
-We store each simulated data set as a four-dimensional array of dimension $16 \times 16 \times 1 \times m$, where the third dimension is the number of channels (singleton for a univariate process) and the fourth stores independent replicates:
+We store the simulated data set as a four-dimensional array of dimension $16 \times 16 \times 1 \times K$, where the third dimension is the number of channels (singleton for a univariate process) and the fourth stores the independent data sets:
 
 ```julia
 function simulator(parameters::Parameters)

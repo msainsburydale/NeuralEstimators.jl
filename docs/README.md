@@ -15,7 +15,7 @@ git clone https://github.com/msainsburydale/NeuralEstimators.jl.git
  ```bash
 julia -e 'using Pkg; Pkg.add(["Documenter", "DocumenterVitepress", "LiveServer"])'
 ```
- - Then running the following command from the root folder:
+ - Then running the following command:
 ```bash
 julia --project=. make.jl && julia -e 'using LiveServer; serve(dir="build/1")'
 ```

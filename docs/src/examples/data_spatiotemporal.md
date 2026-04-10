@@ -8,8 +8,7 @@ both space and time.
 
 We assume that the data are observed at locations 
 $\{\boldsymbol{s}_1, \dots, \boldsymbol{s}_n\}$ on a regular spatial grid 
-over $T$ time steps. Let $\boldsymbol{Z}_t \equiv (Z(\boldsymbol{s}_1, t), \dots, Z(\boldsymbol{s}_n, t))'$ 
-denote the vector of observations at time $t = 1, \dots, T$. The data are modelled as correlated mean-zero Gaussian random variables with a separable spatio-temporal covariance function given by the product of a Matérn spatial covariance function and an AR(1) temporal covariance function:
+over $T$ time steps. Let $\boldsymbol{Z}_t \equiv (Z(\boldsymbol{s}_1, t), \dots, Z(\boldsymbol{s}_n, t))'$ denote the vector of observations at time $t = 1, \dots, T$. The data are modelled as correlated mean-zero Gaussian random variables with a separable spatio-temporal covariance function given by the product of a Matérn spatial covariance function and an AR(1) temporal covariance function:
 
 $$\text{Cov}(Z(\boldsymbol{s}, t),\, Z(\boldsymbol{s}', t')) = C(\|\boldsymbol{s} - \boldsymbol{s}'\|;\, \theta_1) \cdot \theta_2^{|t - t'|}, $$
 

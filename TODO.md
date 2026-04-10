@@ -28,10 +28,9 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ### Documentation
 - Update/improve the logo.
-- Improve the landing page (see, e.g., [here](https://beautiful.makie.org/dev/) and [here](https://lux.csail.mit.edu/stable/) for inspiration). For example, we could add some landing-page boxes (Box 1: NPEs, NREs, NBEs. Box 2: Multibackend: Flux.jl, Lux.jl, SimpleChains.jl)
+- Improve the landing page (see, e.g., [here](https://beautiful.makie.org/dev/), [here](https://lux.csail.mit.edu/stable/), and [here](https://timweiland.github.io/GaussianMarkovRandomFields.jl/stable/) for inspiration). For example, we could add some landing-page boxes (Box 1: NPEs, NREs, NBEs. Box 2: Multibackend: Flux.jl, Lux.jl, SimpleChains.jl)
 - Once [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) is supported with Lux, add code groups for Flux/Lux (containing `using Flux`/`using Lux`) in the examples.
 - Example: Sequence (e.g., time-series) data, either using recurrent neural networks (RNNs) or partially-exchangeable networks based on DeepSet.
-- Example: Nonstationary spatial data with image-to-image networks (see, e.g., [LatticeVision](https://arxiv.org/abs/2505.09803)).
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)).
 - Example: Lévy Processes using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
 - Add [`::: tabs`](https://luxdl.github.io/DocumenterVitepress.jl/dev/manual/markdown-examples#Tabs) in the assessment stage of the examples to show the various diagnostic plots (recovery plots for point estimates; SBC and posterior contraction for posterior samples).
