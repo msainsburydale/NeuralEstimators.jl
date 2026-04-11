@@ -47,7 +47,7 @@ function backend_config(backend)
         end
         return devices, adtypes
     elseif backend === Flux
-        adtypes = push!(adtypes, AutoEnzyme())
+        # adtypes = push!(adtypes, AutoEnzyme())
         CUDA.functional() && push!(devices, gpu_device())
         return devices, adtypes
     elseif backend === SimpleChains
