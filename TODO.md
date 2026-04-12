@@ -27,7 +27,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - By default, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) should condition on the (log) sample size (it's messy for the user to include manually and easy to forget). This can be done via a convenience constructor; given keyword argument `latent_dim`, calls `mlp` to construct the outer network, and we automatically condition on the sample size (and we can add a learned embedding of the sample size).
 
 ### Documentation
-- 🟡 Update/improve the logo.
 - 🟡 Diagram illustrating the general workflow.
 - Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/), [here](https://lux.csail.mit.edu/stable/), and [here](https://timweiland.github.io/GaussianMarkovRandomFields.jl/stable/) for inspiration). For example, we could add some landing-page boxes (Box 1: NPEs, NREs, NBEs. Box 2: Multibackend: Flux.jl, Lux.jl, SimpleChains.jl)
 - Once [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) is supported with Lux, add code groups for Flux/Lux (containing `using Flux`/`using Lux`) in the examples.

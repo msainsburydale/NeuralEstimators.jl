@@ -1,6 +1,6 @@
-<svg width="680" height="600" viewBox="0 0 680 600" xmlns="http://www.w3.org/2000/svg">
+<svg width="560" height="500" viewBox="60 20 560 500" xmlns="http://www.w3.org/2000/svg">
   <title>NeuralEstimators.jl logo</title>
-  <desc>Three separate Julia-coloured circles arranged in a triangle — red top-centre containing a neural network, green bottom-left containing a 2D spatial grid, purple bottom-right containing a univariate distribution — with the package name below.</desc>
+  <desc>Three separate Julia-coloured circles arranged in a triangle — red top-centre containing a neural network, green bottom-left containing a 2D spatial grid, purple bottom-right containing a univariate distribution.</desc>
 
   <defs>
     <clipPath id="cr"><circle cx="340" cy="148" r="128"/></clipPath>
@@ -11,33 +11,33 @@
   <!-- RED — top centre — neural network (MLP 4-3-3-2) -->
   <circle cx="340" cy="148" r="128" fill="#CB3C33"/>
   <g clip-path="url(#cr)">
-    <line x1="258" y1="100" x2="310" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="258" y1="100" x2="310" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="258" y1="100" x2="310" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="258" y1="133" x2="310" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="258" y1="133" x2="310" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="258" y1="133" x2="310" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="258" y1="163" x2="310" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="258" y1="163" x2="310" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="258" y1="163" x2="310" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="258" y1="196" x2="310" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="258" y1="196" x2="310" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="258" y1="196" x2="310" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="310" y1="118" x2="362" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="310" y1="118" x2="362" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="310" y1="118" x2="362" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="310" y1="148" x2="362" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="310" y1="148" x2="362" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="310" y1="148" x2="362" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="310" y1="178" x2="362" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="310" y1="178" x2="362" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="310" y1="178" x2="362" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="362" y1="118" x2="414" y2="133" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="362" y1="118" x2="414" y2="163" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="362" y1="148" x2="414" y2="133" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="362" y1="148" x2="414" y2="163" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="362" y1="178" x2="414" y2="133" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
-    <line x1="362" y1="178" x2="414" y2="163" stroke="rgba(255,255,255,0.50)" stroke-width="1.3" fill="none"/>
+    <line x1="258" y1="100" x2="310" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="258" y1="100" x2="310" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="258" y1="100" x2="310" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="258" y1="133" x2="310" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="258" y1="133" x2="310" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="258" y1="133" x2="310" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="258" y1="163" x2="310" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="258" y1="163" x2="310" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="258" y1="163" x2="310" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="258" y1="196" x2="310" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="258" y1="196" x2="310" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="258" y1="196" x2="310" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="310" y1="118" x2="362" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="310" y1="118" x2="362" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="310" y1="118" x2="362" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="310" y1="148" x2="362" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="310" y1="148" x2="362" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="310" y1="148" x2="362" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="310" y1="178" x2="362" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="310" y1="178" x2="362" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="310" y1="178" x2="362" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="362" y1="118" x2="414" y2="133" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="362" y1="118" x2="414" y2="163" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="362" y1="148" x2="414" y2="133" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="362" y1="148" x2="414" y2="163" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="362" y1="178" x2="414" y2="133" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="362" y1="178" x2="414" y2="163" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
     <circle cx="258" cy="100" r="8" fill="white"/>
     <circle cx="258" cy="133" r="8" fill="white"/>
     <circle cx="258" cy="163" r="8" fill="white"/>
@@ -82,34 +82,32 @@
       <rect x="44"  y="110" width="22" height="22" fill="rgba(255,255,255,0.32)"/>
       <rect x="66"  y="110" width="22" height="22" fill="rgba(255,255,255,0.32)"/>
       <rect x="88"  y="110" width="22" height="22" fill="rgba(255,255,255,0.14)"/>
-      <line x1="0" y1="0"   x2="132" y2="0"   stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="0" y1="22"  x2="132" y2="22"  stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="0" y1="44"  x2="132" y2="44"  stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="0" y1="66"  x2="132" y2="66"  stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="0" y1="88"  x2="132" y2="88"  stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="0" y1="110" x2="132" y2="110" stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="0" y1="132" x2="132" y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="0"   y1="0" x2="0"   y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="22"  y1="0" x2="22"  y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="44"  y1="0" x2="44"  y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="66"  y1="0" x2="66"  y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="88"  y1="0" x2="88"  y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="110" y1="0" x2="110" y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
-      <line x1="132" y1="0" x2="132" y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0" fill="none"/>
+      <line x1="0" y1="0"   x2="132" y2="0"   stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="0" y1="22"  x2="132" y2="22"  stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="0" y1="44"  x2="132" y2="44"  stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="0" y1="66"  x2="132" y2="66"  stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="0" y1="88"  x2="132" y2="88"  stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="0" y1="110" x2="132" y2="110" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="0" y1="132" x2="132" y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="0"   y1="0" x2="0"   y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="22"  y1="0" x2="22"  y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="44"  y1="0" x2="44"  y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="66"  y1="0" x2="66"  y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="88"  y1="0" x2="88"  y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="110" y1="0" x2="110" y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+      <line x1="132" y1="0" x2="132" y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
     </g>
   </g>
 
   <!-- PURPLE — bottom right — univariate distribution -->
   <circle cx="488" cy="378" r="128" fill="#9558B2"/>
   <g clip-path="url(#cp)">
-    <line x1="368" y1="428" x2="608" y2="428" stroke="rgba(255,255,255,0.55)" stroke-width="1.0" fill="none"/>
+    <line x1="368" y1="428" x2="608" y2="428" stroke="rgba(255,255,255,0.55)" stroke-width="1.0"/>
     <path d="M368,428 C383,428 398,424 410,414 C422,404 428,384 440,364 C450,347 462,328 488,324 C514,328 526,347 536,364 C548,384 554,404 566,414 C578,424 593,428 608,428 Z" fill="rgba(255,255,255,0.22)"/>
     <path d="M368,428 C383,428 398,424 410,414 C422,404 428,384 440,364 C450,347 462,328 488,324 C514,328 526,347 536,364 C548,384 554,404 566,414 C578,424 593,428 608,428" stroke="white" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <line x1="488" y1="428" x2="488" y2="437" stroke="rgba(255,255,255,0.55)" stroke-width="1.0" fill="none"/>
-    <line x1="440" y1="428" x2="440" y2="435" stroke="rgba(255,255,255,0.55)" stroke-width="1.0" fill="none"/>
-    <line x1="536" y1="428" x2="536" y2="435" stroke="rgba(255,255,255,0.55)" stroke-width="1.0" fill="none"/>
+    <line x1="488" y1="428" x2="488" y2="437" stroke="rgba(255,255,255,0.55)" stroke-width="1.0"/>
+    <line x1="440" y1="428" x2="440" y2="435" stroke="rgba(255,255,255,0.55)" stroke-width="1.0"/>
+    <line x1="536" y1="428" x2="536" y2="435" stroke="rgba(255,255,255,0.55)" stroke-width="1.0"/>
   </g>
 
-  <!-- wordmark -->
-  <text x="340" y="548" font-family="sans-serif" font-size="26" font-weight="500" fill="#1a1a1a" text-anchor="middle">NeuralEstimators.jl</text>
 </svg>
