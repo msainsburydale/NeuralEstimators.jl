@@ -27,8 +27,9 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - By default, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) should condition on the (log) sample size (it's messy for the user to include manually and easy to forget). This can be done via a convenience constructor; given keyword argument `latent_dim`, calls `mlp` to construct the outer network, and we automatically condition on the sample size (and we can add a learned embedding of the sample size).
 
 ### Documentation
-- Update/improve the logo.
-- Improve the landing page (see, e.g., [here](https://beautiful.makie.org/dev/), [here](https://lux.csail.mit.edu/stable/), and [here](https://timweiland.github.io/GaussianMarkovRandomFields.jl/stable/) for inspiration). For example, we could add some landing-page boxes (Box 1: NPEs, NREs, NBEs. Box 2: Multibackend: Flux.jl, Lux.jl, SimpleChains.jl)
+- 🟡 Update/improve the logo.
+- 🟡 Diagram illustrating the general workflow.
+- Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/), [here](https://lux.csail.mit.edu/stable/), and [here](https://timweiland.github.io/GaussianMarkovRandomFields.jl/stable/) for inspiration). For example, we could add some landing-page boxes (Box 1: NPEs, NREs, NBEs. Box 2: Multibackend: Flux.jl, Lux.jl, SimpleChains.jl)
 - Once [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) is supported with Lux, add code groups for Flux/Lux (containing `using Flux`/`using Lux`) in the examples.
 - Example: Sequence (e.g., time-series) data, either using recurrent neural networks (RNNs) or partially-exchangeable networks based on DeepSet.
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)).
@@ -36,13 +37,13 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Add [`::: tabs`](https://luxdl.github.io/DocumenterVitepress.jl/dev/manual/markdown-examples#Tabs) in the assessment stage of the examples to show the various diagnostic plots (recovery plots for point estimates; SBC and posterior contraction for posterior samples).
 - Clean Advanced usage; move "expert summary statistics", "censored data", and possibly "missing data" to the examples section (each with their own example page), and merge "Variable sample sizes" into the section on replicated data (possibly as a "Bonus" subsection at the end).
 - Citations: Use proper citation manager (see [here](https://luxdl.github.io/DocumenterVitepress.jl/dev/manual/citations)).
-- Document the internal functions and add them to `API/Internal`. This will help with maintenance/contributions, and allow us to reference the internals when documenting public functions (e.g., "`kwargs...` are passed onto `_internal_function`").
+- Document the internal functions and add them to `API/Internal` or `API/Developer docs`. This will help with maintenance/contributions, and allow us to reference the internals when documenting public functions (e.g., "`kwargs...` are passed onto `_internal_function`").
 - Add a gif to the README (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif)).
 
 ### Performance
 - 🟡 Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
 - 🟡 Lux + Reactant currently has extra overhead during training: see the TODO in the Reactant extension.
-- Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
+- 🟡 Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
 - For some operations involving only matrices and MLPs (e.g., inference-network transformations of summary statistics), it might be faster to always use the CPU (at least for certain batchsize ranges).
 - SimpleChains.jl: are the user-friendly constructors for each estimator type correctly converted to `SimpleChainsLayers`?
 
@@ -50,7 +51,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - 🟡 Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
    * This can be easily done for the common cases (Chain, DeepSet), with an `@info` given to tell the user what we inferred and to change it if it is wrong. For other cases, just error and tell the user to specify the number of summaries explicitly.
 - Clean and improve the plotting code/logic.
-- Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
+- 🟡 Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
 - Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl/Lux.jl.
 - Consider [StatefulLuxLayer](https://lux.csail.mit.edu/stable/manual/flux_lux_interop) as a replacement for `LuxEstimator`. (Currently, it has the same problem as `TrainState`, `model` needs to be an `AbstractLuxLayer`, but perhaps this can be relaxed.)
 

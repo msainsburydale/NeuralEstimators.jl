@@ -1,4 +1,4 @@
-# NeuralEstimators <img align="right" width="200" src="https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/src/assets/logo.png?raw=true">
+# NeuralEstimators <img align="right" width="200" src="https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/src/assets/logo.svg?raw=true">
 
 [![][docs-dev-img]][docs-dev-url]
 [![CI](https://github.com/msainsburydale/NeuralEstimators.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/msainsburydale/NeuralEstimators.jl/actions/workflows/CI.yml)
@@ -26,7 +26,7 @@ The package supports neural networks defined with either of the two leading deep
 
 ### Installation 
 
-To install the package, please first install the current stable release of [Julia](https://julialang.org/downloads/). Then, install the current stable version of the package using the following command inside Julia:
+Please first install the current stable release of [Julia](https://julialang.org/downloads/). Then, install the current stable version of the package using the following command inside Julia:
 
 ```julia
 using Pkg; Pkg.add("NeuralEstimators")
