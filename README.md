@@ -10,29 +10,59 @@
 [R-repo-img]: https://img.shields.io/badge/R-interface-blue.svg
 [R-repo-url]: https://github.com/msainsburydale/NeuralEstimators
 
-`NeuralEstimators` facilitates neural methods for simulation-based parameter inference. These methods are **likelihood-free** and **amortised**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches. 
+`NeuralEstimators` is a Julia package for **fast**, **simulation-based** inference using neural networks. It is designed for settings where likelihoods are intractable or classical methods such as MCMC are computationally expensive. The package supports: 
 
-The package supports: 
+- Neural posterior estimation (NPE): directly learn the posterior distribution
+- Neural ratio estimation (NRE): approximate likelihood ratios for flexible frequentist or Bayesian inference
+- Neural Bayes estimation (NBE): efficiently estimate functionals (point summaries) of the posterior distribution
 
- - Neural Bayes estimators (NBEs), which transform data into functionals of the posterior distribution;
- - Neural posterior estimators (NPEs), which perform approximate posterior inference via KL-divergence minimisation; and 
- - Neural ratio estimators (NREs), which approximate the likelihood-to-evidence ratio and thereby enable frequentist or Bayesian inference through various downstream algorithms.
+These methods are **likelihood-free** and **amortized**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches.
 
-See the [documentation](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) to get started, and the step-by-step introductory [notebook tutorial](http://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/src/tutorials/introduction.ipynb) (runnable in [Google Colab](https://colab.research.google.com/)) for a worked example.
+See the [documentation](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) to get started.
 
 
 ### Installation 
 
-To install the package, please first install the current stable release of [Julia](https://julialang.org/downloads/). Then, one may install the current stable version of the package using the following command inside Julia:
+To install the package, please first install the current stable release of [Julia](https://julialang.org/downloads/). Then, install the current stable version of the package using the following command inside Julia:
 
 ```julia
 using Pkg; Pkg.add("NeuralEstimators")
 ```
 
-Alternatively, one may install the current development version using the command:
+Or install the current development version using the command:
 
 ```julia
 using Pkg; Pkg.add(url = "https://github.com/msainsburydale/NeuralEstimators.jl")
+```
+
+### Quick start
+
+The following code constructs an NBE for parameters $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $\boldsymbol{Z} \equiv (Z_1, \dots, Z_n)'$, where each $Z_i \overset{\mathrm{iid}}\sim N(\mu, \sigma^2)$. 
+
+```julia
+using NeuralEstimators
+using Flux
+
+# Dimension of θ and number of replicates
+d, n = 2, 100  
+
+# Functions to sample from prior p(θ) and simulate data p(Z|θ)
+sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(n))
+simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
+
+# Neural network, an MLP mapping n inputs into d outputs
+network = Chain(Dense(n, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
+
+# Initialise an NBE
+estimator = PointEstimator(network)
+
+# Train the estimator
+estimator = train(estimator, sampler, simulator)
+
+# Apply to observed data
+Z = simulator(sampler(1))  # stand-in for real observations
+estimate(estimator, Z)     # point estimate
 ```
 
 
