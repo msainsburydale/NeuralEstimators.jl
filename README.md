@@ -16,7 +16,7 @@
 - Neural ratio estimation (NRE): approximate likelihood ratios for flexible frequentist or Bayesian inference
 - Neural Bayes estimation (NBE): efficiently estimate functionals (point summaries) of the posterior distribution
 
-These methods are **likelihood-free** and **amortized**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches.
+These methods are **likelihood-free** and **amortized**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets **orders of magnitude faster** than conventional approaches.
 
 See the [documentation](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) to get started.
 
