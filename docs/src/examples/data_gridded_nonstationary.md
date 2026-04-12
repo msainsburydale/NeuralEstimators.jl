@@ -78,7 +78,7 @@ function sampler(K::Integer; grid_dim = 32)
     θ = Folds.map(1:K) do k
         λ   = rand(Uniform(0.03, 0.75))
         cov = CovarianceFunction(2, Exponential(λ, σ = 0.25))
-        grf = GaussianRandomField(cov, CirculantEmbedding(), pts, pts)
+        grf = GaussianRandomField(cov, CirculantEmbedding(), pts, pts, minpadding = 100)
         sample(grf)
     end
     θ = stack(θ)

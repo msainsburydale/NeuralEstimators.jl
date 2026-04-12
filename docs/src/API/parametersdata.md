@@ -4,9 +4,11 @@ CollapsedDocStrings = true
 
 # Parameters
 
-Sampled parameters (e.g., from the prior distribution) are typically stored as a $d \times K$ matrix (possibly with named rows; see [`NamedMatrix`](@ref)), where $d$ is the dimension of the parameter vector of interest and $K$ is the number of sampled parameter vectors. However, any batchable object (compatible with [`numobs`](https://juliaml.github.io/MLUtils.jl/dev/api/#MLCore.numobs)/[`getobs`](https://juliaml.github.io/MLUtils.jl/dev/api/#MLCore.getobs)) is supported.
+Sampled parameters (e.g., from the prior distribution) are often stored as $d \times K$ matrices, where $d$ is the dimension of the parameter vector of interest and $K$ is the number of sampled parameter vectors. However, any batchable object (compatible with [`numobs`](https://juliaml.github.io/MLUtils.jl/dev/api/#MLCore.numobs)/[`getobs`](https://juliaml.github.io/MLUtils.jl/dev/api/#MLCore.getobs)) is supported.
 
 It can sometimes be helpful to wrap the parameters in a user-defined type that also stores expensive intermediate objects needed for simulating data (e.g., Cholesky factors). The user-defined type should be a subtype of [`AbstractParameterSet`](@ref), whose only requirement is a field `θ` that stores parameters.
+
+For convenience, parameters can be stored with named dimensions; see, for example, [`NamedMatrix`](@ref).
 
 ```@docs
 AbstractParameterSet

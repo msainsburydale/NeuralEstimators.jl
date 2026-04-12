@@ -63,7 +63,8 @@ export ParameterConfigurations
 """
     NamedMatrix(; kwargs...)
 
-Construct a named matrix where each keyword argument defines a named row.
+Returns a [`NamedArray`](https://github.com/davidavdav/NamedArrays.jl) with
+named rows (parameters) and indexed columns (samples).
 
 # Examples
 ```julia

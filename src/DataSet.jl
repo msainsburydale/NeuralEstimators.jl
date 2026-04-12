@@ -1,16 +1,11 @@
 """
 	DataSet(Z, S)
 	DataSet(Z)
-A container that couples raw data `Z` with precomputed expert summary statistics
-`S` (a matrix with one column per data set). Passing a `DataSet` to any neural
-estimator causes the summary network to be applied to `Z`, with the resulting
+A container that couples raw data `Z` with precomputed expert summary statistics `S` (a matrix with one column per data set). 
+
+Passing a `DataSet` to any neural estimator causes the summary network to be applied to `Z`, with the resulting
 learned summary statistics concatenated with `S` before being passed to the
-inference network:
-```math
-\\boldsymbol{T}(\\mathbf{Z}) \equiv (\\text{summary\\_network}(\\mathbf{Z})', \\mathbf{S}')',
-```
-Since `S` is precomputed and stored as a plain matrix, no special treatment is
-needed during training: gradients do not flow through `S`.
+inference network.
 
 If `S` is not provided, `DataSet(Z)` is equivalent to passing `Z` directly.
 
