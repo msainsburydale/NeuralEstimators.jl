@@ -13,6 +13,10 @@ The package supports neural Bayes estimators (NBEs), which transform data into p
 
 User-friendliness is a central focus of the package, which is designed to minimise "boilerplate" code while preserving complete flexibility in the neural-network architecture and other workflow components. The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. A convenient interface for R users is available on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
 
+## Backends
+
+The package supports neural networks defined with either of the two leading deep-learning packages in Julia, namely [Flux.jl](https://fluxml.ai) or [Lux.jl](https://lux.csail.mit.edu).
+
 ## Installation
 
 To install the package, please first install the current stable release of [Julia](https://julialang.org/downloads/). Then, one may install the current stable version of the package using the following command inside Julia:

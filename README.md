@@ -20,6 +20,9 @@ These methods are **likelihood-free** and **amortized**, in the sense that, once
 
 See the [documentation](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) to get started.
 
+### Backends
+
+The package supports neural networks defined with either of the two leading deep-learning packages in Julia, namely [Flux.jl](https://fluxml.ai) or [Lux.jl](https://lux.csail.mit.edu).
 
 ### Installation 
 
