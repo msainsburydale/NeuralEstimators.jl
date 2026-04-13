@@ -20,6 +20,39 @@ These methods are **likelihood-free** and **amortized**, in the sense that, once
 
 See the [documentation](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) to get started.
 
+### Overview
+
+```mermaid
+graph LR
+
+    %% --- Training phase ---
+    subgraph Training["Offline training (one-time cost)"]
+        A["Sample parameters 
+        θ ~ p(θ)"] --> B["Simulate data 
+        Z ~ p(Z | θ)"]
+        B --> C["Train neural network"]
+    end
+
+    C --> NN(["Trained neural network"])
+
+    %% --- Inference phase ---
+    subgraph Inference["Online inference (fast)"]
+        D["Observed data Zₒ"] --> NN
+        NN --> E["Approximate posterior 
+        p(θ | Zₒ)"]
+    end
+
+    %% --- Styling ---
+    classDef process fill:#2d2d2d,stroke:#999,color:#fff;
+    classDef data fill:#1f3b4d,stroke:#4aa3df,color:#fff;
+    classDef model fill:#3b2d4d,stroke:#b388ff,color:#fff;
+
+    class A,B,D data;
+    class C process;
+    class NN model;
+    class E process;
+```
+
 ### Backends
 
 The package supports neural networks defined with either of the two leading deep-learning packages in Julia, namely [Flux.jl](https://fluxml.ai) or [Lux.jl](https://lux.csail.mit.edu).
