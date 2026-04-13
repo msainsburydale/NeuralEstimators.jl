@@ -16,7 +16,7 @@
 - Neural ratio estimation (NRE): approximate likelihood ratios for flexible frequentist or Bayesian inference
 - Neural Bayes estimation (NBE): efficiently estimate functionals (point summaries) of the posterior distribution
 
-These methods are **likelihood-free** and **amortized**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets **orders of magnitude faster** than conventional approaches.
+These methods are **likelihood-free** and **amortized**: once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets **orders of magnitude faster** than conventional approaches.
 
 See the [documentation](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) to get started.
 
@@ -27,9 +27,7 @@ graph LR
 
     %% --- Training phase ---
     subgraph Training["Offline training (one-time cost)"]
-        A["Sample parameters 
-        θ ~ p(θ)"] --> B["Simulate data 
-        Z ~ p(Z | θ)"]
+        A["Sample parameters\nθ ~ p(θ)"] --> B["Simulate data\nZ ~ p(Z | θ)"]
         B --> C["Train neural network"]
     end
 
@@ -38,8 +36,7 @@ graph LR
     %% --- Inference phase ---
     subgraph Inference["Online inference (fast)"]
         D["Observed data Zₒ"] --> NN
-        NN --> E["Approximate posterior 
-        p(θ | Zₒ)"]
+        NN --> E["Approximate posterior\np(θ | Zₒ)"]
     end
 
     %% --- Styling ---
@@ -47,10 +44,9 @@ graph LR
     classDef data fill:#1f3b4d,stroke:#4aa3df,color:#fff;
     classDef model fill:#3b2d4d,stroke:#b388ff,color:#fff;
 
-    class A,B,D data;
+    class A,B,D,E data;
     class C process;
     class NN model;
-    class E process;
 ```
 
 ### Backends
