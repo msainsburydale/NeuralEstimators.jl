@@ -1,6 +1,6 @@
 <svg width="560" height="500" viewBox="60 20 560 500" xmlns="http://www.w3.org/2000/svg">
   <title>NeuralEstimators.jl logo</title>
-  <desc>Three separate Julia-coloured circles arranged in a triangle — red top-centre containing a neural network, green bottom-left containing a 2D spatial grid, purple bottom-right containing a univariate distribution.</desc>
+  <desc>Three separate Julia-coloured circles arranged in a triangle — red top-centre containing a neural network, green bottom-left containing a 2D spatial grid stack, purple bottom-right containing a skewed univariate distribution.</desc>
 
   <defs>
     <clipPath id="cr"><circle cx="340" cy="148" r="128"/></clipPath>
@@ -8,36 +8,38 @@
     <clipPath id="cp"><circle cx="488" cy="378" r="128"/></clipPath>
   </defs>
 
-  <!-- RED — top centre — neural network (MLP 4-3-3-2) -->
+  <!-- ═══════════════════════════════════════════════════
+       RED — top centre — neural network (MLP 4-3-3-2)
+       ═══════════════════════════════════════════════════ -->
   <circle cx="340" cy="148" r="128" fill="#CB3C33"/>
   <g clip-path="url(#cr)">
-    <line x1="258" y1="100" x2="310" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="258" y1="100" x2="310" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="258" y1="100" x2="310" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="258" y1="133" x2="310" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="258" y1="133" x2="310" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="258" y1="133" x2="310" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="258" y1="163" x2="310" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="258" y1="163" x2="310" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="258" y1="163" x2="310" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="258" y1="196" x2="310" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="258" y1="196" x2="310" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="258" y1="196" x2="310" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="310" y1="118" x2="362" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="310" y1="118" x2="362" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="310" y1="118" x2="362" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="310" y1="148" x2="362" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="310" y1="148" x2="362" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="310" y1="148" x2="362" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="310" y1="178" x2="362" y2="118" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="310" y1="178" x2="362" y2="148" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="310" y1="178" x2="362" y2="178" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="362" y1="118" x2="414" y2="133" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="362" y1="118" x2="414" y2="163" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="362" y1="148" x2="414" y2="133" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="362" y1="148" x2="414" y2="163" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="362" y1="178" x2="414" y2="133" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
-    <line x1="362" y1="178" x2="414" y2="163" stroke="rgba(255,255,255,0.50)" stroke-width="1.3"/>
+    <line x1="258" y1="100" x2="310" y2="118" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="258" y1="100" x2="310" y2="148" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="258" y1="100" x2="310" y2="178" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="258" y1="133" x2="310" y2="118" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="258" y1="133" x2="310" y2="148" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="258" y1="133" x2="310" y2="178" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="258" y1="163" x2="310" y2="118" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="258" y1="163" x2="310" y2="148" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="258" y1="163" x2="310" y2="178" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="258" y1="196" x2="310" y2="118" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="258" y1="196" x2="310" y2="148" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="258" y1="196" x2="310" y2="178" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="310" y1="118" x2="362" y2="118" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="310" y1="118" x2="362" y2="148" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="310" y1="118" x2="362" y2="178" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="310" y1="148" x2="362" y2="118" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="310" y1="148" x2="362" y2="148" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="310" y1="148" x2="362" y2="178" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="310" y1="178" x2="362" y2="118" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="310" y1="178" x2="362" y2="148" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="310" y1="178" x2="362" y2="178" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="362" y1="118" x2="414" y2="133" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="362" y1="118" x2="414" y2="163" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="362" y1="148" x2="414" y2="133" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="362" y1="148" x2="414" y2="163" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="362" y1="178" x2="414" y2="133" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
+    <line x1="362" y1="178" x2="414" y2="163" stroke="rgba(255,255,255,0.80)" stroke-width="1.3"/>
     <circle cx="258" cy="100" r="8" fill="white"/>
     <circle cx="258" cy="133" r="8" fill="white"/>
     <circle cx="258" cy="163" r="8" fill="white"/>
@@ -52,62 +54,217 @@
     <circle cx="414" cy="163" r="8" fill="white"/>
   </g>
 
-  <!-- GREEN — bottom left — 2D spatial grid -->
+  <!-- ═══════════════════════════════════════════════════
+       GREEN — bottom left — 3 stacked grids
+       Ball centre: (192, 378). Cell=26px, grid=130×130px.
+       Shifted +18px SE from previous positions:
+         Back   top-left: (103, 291)
+         Middle top-left: (129, 317)
+         Front  top-left: (155, 343)
+       NW offset between layers: (-26, -26)
+       Each grid: solid green bg for occlusion, then cells, lines, bold border.
+
+       Spatially correlated cell opacities — smooth "blob" pattern:
+       Treat each cell (col c, row r) 0..4.
+       A warm blob centred at (col=1.5, row=1.5) decays outward.
+       High opacity ≈ 0.70 at centre, low ≈ 0.18 at corners.
+       Neighbouring cells share similar values (spatial correlation).
+       ═══════════════════════════════════════════════════ -->
+
+  <!--
+    Spatially correlated opacity map (same pattern on all three grids,
+    rotated/shifted slightly per layer for visual interest):
+
+    Front grid field (col→, row↓):
+      (0,0)=0.62  (1,0)=0.70  (2,0)=0.55  (3,0)=0.30  (4,0)=0.20
+      (0,1)=0.68  (1,1)=0.72  (2,1)=0.60  (3,1)=0.38  (4,1)=0.22
+      (0,2)=0.58  (1,2)=0.65  (2,2)=0.50  (3,2)=0.32  (4,2)=0.20
+      (0,3)=0.38  (1,3)=0.45  (2,3)=0.35  (3,3)=0.25  (4,3)=0.18
+      (0,4)=0.22  (1,4)=0.28  (2,4)=0.22  (3,4)=0.18  (4,4)=0.15
+
+    Middle grid field (blob shifted slightly right/down):
+      (0,0)=0.30  (1,0)=0.45  (2,0)=0.58  (3,0)=0.55  (4,0)=0.35
+      (0,1)=0.38  (1,1)=0.55  (2,1)=0.68  (3,1)=0.65  (4,1)=0.42
+      (0,2)=0.30  (1,2)=0.48  (2,2)=0.62  (3,2)=0.58  (4,2)=0.38
+      (0,3)=0.20  (1,3)=0.32  (2,3)=0.45  (3,3)=0.40  (4,3)=0.28
+      (0,4)=0.15  (1,4)=0.20  (2,4)=0.28  (3,4)=0.25  (4,4)=0.18
+
+    Back grid field (blob top-right):
+      (0,0)=0.22  (1,0)=0.38  (2,0)=0.55  (3,0)=0.65  (4,0)=0.60
+      (0,1)=0.18  (1,1)=0.30  (2,1)=0.50  (3,1)=0.68  (4,1)=0.62
+      (0,2)=0.15  (1,2)=0.22  (2,2)=0.35  (3,2)=0.52  (4,2)=0.45
+      (0,3)=0.12  (1,3)=0.18  (2,3)=0.25  (3,3)=0.35  (4,3)=0.30
+      (0,4)=0.10  (1,4)=0.14  (2,4)=0.18  (3,4)=0.22  (4,4)=0.20
+  -->
+
   <circle cx="192" cy="378" r="128" fill="#389826"/>
   <g clip-path="url(#cg)">
-    <g transform="translate(126,312)">
-      <rect x="0"   y="0"   width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="22"  y="0"   width="22" height="22" fill="rgba(255,255,255,0.14)"/>
-      <rect x="44"  y="0"   width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="88"  y="0"   width="22" height="22" fill="rgba(255,255,255,0.14)"/>
-      <rect x="110" y="0"   width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="0"   y="22"  width="22" height="22" fill="rgba(255,255,255,0.14)"/>
-      <rect x="22"  y="22"  width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="66"  y="22"  width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="88"  y="22"  width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="110" y="22"  width="22" height="22" fill="rgba(255,255,255,0.14)"/>
-      <rect x="22"  y="44"  width="22" height="22" fill="rgba(255,255,255,0.14)"/>
-      <rect x="44"  y="44"  width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="66"  y="44"  width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="88"  y="44"  width="22" height="22" fill="rgba(255,255,255,0.14)"/>
-      <rect x="0"   y="66"  width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="44"  y="66"  width="22" height="22" fill="rgba(255,255,255,0.14)"/>
-      <rect x="88"  y="66"  width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="110" y="66"  width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="22"  y="88"  width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="44"  y="88"  width="22" height="22" fill="rgba(255,255,255,0.14)"/>
-      <rect x="66"  y="88"  width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="110" y="88"  width="22" height="22" fill="rgba(255,255,255,0.14)"/>
-      <rect x="0"   y="110" width="22" height="22" fill="rgba(255,255,255,0.14)"/>
-      <rect x="44"  y="110" width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="66"  y="110" width="22" height="22" fill="rgba(255,255,255,0.32)"/>
-      <rect x="88"  y="110" width="22" height="22" fill="rgba(255,255,255,0.14)"/>
-      <line x1="0" y1="0"   x2="132" y2="0"   stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="0" y1="22"  x2="132" y2="22"  stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="0" y1="44"  x2="132" y2="44"  stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="0" y1="66"  x2="132" y2="66"  stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="0" y1="88"  x2="132" y2="88"  stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="0" y1="110" x2="132" y2="110" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="0" y1="132" x2="132" y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="0"   y1="0" x2="0"   y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="22"  y1="0" x2="22"  y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="44"  y1="0" x2="44"  y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="66"  y1="0" x2="66"  y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="88"  y1="0" x2="88"  y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="110" y1="0" x2="110" y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
-      <line x1="132" y1="0" x2="132" y2="132" stroke="rgba(255,255,255,0.48)" stroke-width="1.0"/>
+
+    <!-- BACK grid → translate(100, 288) -->
+    <g transform="translate(100,288)">
+      <rect x="0" y="0" width="130" height="130" fill="#389826"/>
+      <!-- row 0 — noise added on top of spatial field -->
+      <rect x="0"   y="0"  width="26" height="26" fill="rgba(255,255,255,0.30)"/>
+      <rect x="26"  y="0"  width="26" height="26" fill="rgba(255,255,255,0.28)"/>
+      <rect x="52"  y="0"  width="26" height="26" fill="rgba(255,255,255,0.63)"/>
+      <rect x="78"  y="0"  width="26" height="26" fill="rgba(255,255,255,0.55)"/>
+      <rect x="104" y="0"  width="26" height="26" fill="rgba(255,255,255,0.70)"/>
+      <!-- row 1 -->
+      <rect x="0"   y="26" width="26" height="26" fill="rgba(255,255,255,0.10)"/>
+      <rect x="26"  y="26" width="26" height="26" fill="rgba(255,255,255,0.40)"/>
+      <rect x="52"  y="26" width="26" height="26" fill="rgba(255,255,255,0.42)"/>
+      <rect x="78"  y="26" width="26" height="26" fill="rgba(255,255,255,0.76)"/>
+      <rect x="104" y="26" width="26" height="26" fill="rgba(255,255,255,0.52)"/>
+      <!-- row 2 -->
+      <rect x="0"   y="52" width="26" height="26" fill="rgba(255,255,255,0.22)"/>
+      <rect x="26"  y="52" width="26" height="26" fill="rgba(255,255,255,0.12)"/>
+      <rect x="52"  y="52" width="26" height="26" fill="rgba(255,255,255,0.44)"/>
+      <rect x="78"  y="52" width="26" height="26" fill="rgba(255,255,255,0.60)"/>
+      <rect x="104" y="52" width="26" height="26" fill="rgba(255,255,255,0.36)"/>
+      <!-- row 3 -->
+      <rect x="0"   y="78" width="26" height="26" fill="rgba(255,255,255,0.20)"/>
+      <rect x="26"  y="78" width="26" height="26" fill="rgba(255,255,255,0.10)"/>
+      <rect x="52"  y="78" width="26" height="26" fill="rgba(255,255,255,0.32)"/>
+      <rect x="78"  y="78" width="26" height="26" fill="rgba(255,255,255,0.26)"/>
+      <rect x="104" y="78" width="26" height="26" fill="rgba(255,255,255,0.40)"/>
+      <!-- row 4 -->
+      <rect x="0"   y="104" width="26" height="26" fill="rgba(255,255,255,0.18)"/>
+      <rect x="26"  y="104" width="26" height="26" fill="rgba(255,255,255,0.08)"/>
+      <rect x="52"  y="104" width="26" height="26" fill="rgba(255,255,255,0.26)"/>
+      <rect x="78"  y="104" width="26" height="26" fill="rgba(255,255,255,0.14)"/>
+      <rect x="104" y="104" width="26" height="26" fill="rgba(255,255,255,0.30)"/>
+      <!-- grid lines -->
+      <line x1="0"   y1="0"   x2="130" y2="0"   stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="26"  x2="130" y2="26"  stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="52"  x2="130" y2="52"  stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="78"  x2="130" y2="78"  stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="104" x2="130" y2="104" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="130" x2="130" y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="0" x2="0"   y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="26"  y1="0" x2="26"  y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="52"  y1="0" x2="52"  y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="78"  y1="0" x2="78"  y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="104" y1="0" x2="104" y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="130" y1="0" x2="130" y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <!-- bold outer border -->
+      <rect x="0" y="0" width="130" height="130" fill="none" stroke="white" stroke-width="3.0"/>
     </g>
+
+    <!-- MIDDLE grid → translate(126, 314) -->
+    <g transform="translate(126,314)">
+      <rect x="0" y="0" width="130" height="130" fill="#389826"/>
+      <!-- row 0 — noise added on top of spatial field -->
+      <rect x="0"   y="0"  width="26" height="26" fill="rgba(255,255,255,0.22)"/>
+      <rect x="26"  y="0"  width="26" height="26" fill="rgba(255,255,255,0.54)"/>
+      <rect x="52"  y="0"  width="26" height="26" fill="rgba(255,255,255,0.48)"/>
+      <rect x="78"  y="0"  width="26" height="26" fill="rgba(255,255,255,0.65)"/>
+      <rect x="104" y="0"  width="26" height="26" fill="rgba(255,255,255,0.26)"/>
+      <!-- row 1 -->
+      <rect x="0"   y="26" width="26" height="26" fill="rgba(255,255,255,0.46)"/>
+      <rect x="26"  y="26" width="26" height="26" fill="rgba(255,255,255,0.44)"/>
+      <rect x="52"  y="26" width="26" height="26" fill="rgba(255,255,255,0.76)"/>
+      <rect x="78"  y="26" width="26" height="26" fill="rgba(255,255,255,0.56)"/>
+      <rect x="104" y="26" width="26" height="26" fill="rgba(255,255,255,0.52)"/>
+      <!-- row 2 -->
+      <rect x="0"   y="52" width="26" height="26" fill="rgba(255,255,255,0.20)"/>
+      <rect x="26"  y="52" width="26" height="26" fill="rgba(255,255,255,0.58)"/>
+      <rect x="52"  y="52" width="26" height="26" fill="rgba(255,255,255,0.52)"/>
+      <rect x="78"  y="52" width="26" height="26" fill="rgba(255,255,255,0.68)"/>
+      <rect x="104" y="52" width="26" height="26" fill="rgba(255,255,255,0.28)"/>
+      <!-- row 3 -->
+      <rect x="0"   y="78" width="26" height="26" fill="rgba(255,255,255,0.28)"/>
+      <rect x="26"  y="78" width="26" height="26" fill="rgba(255,255,255,0.22)"/>
+      <rect x="52"  y="78" width="26" height="26" fill="rgba(255,255,255,0.54)"/>
+      <rect x="78"  y="78" width="26" height="26" fill="rgba(255,255,255,0.30)"/>
+      <rect x="104" y="78" width="26" height="26" fill="rgba(255,255,255,0.38)"/>
+      <!-- row 4 -->
+      <rect x="0"   y="104" width="26" height="26" fill="rgba(255,255,255,0.08)"/>
+      <rect x="26"  y="104" width="26" height="26" fill="rgba(255,255,255,0.28)"/>
+      <rect x="52"  y="104" width="26" height="26" fill="rgba(255,255,255,0.18)"/>
+      <rect x="78"  y="104" width="26" height="26" fill="rgba(255,255,255,0.34)"/>
+      <rect x="104" y="104" width="26" height="26" fill="rgba(255,255,255,0.10)"/>
+      <!-- grid lines -->
+      <line x1="0"   y1="0"   x2="130" y2="0"   stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="26"  x2="130" y2="26"  stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="52"  x2="130" y2="52"  stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="78"  x2="130" y2="78"  stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="104" x2="130" y2="104" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="130" x2="130" y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="0" x2="0"   y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="26"  y1="0" x2="26"  y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="52"  y1="0" x2="52"  y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="78"  y1="0" x2="78"  y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="104" y1="0" x2="104" y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="130" y1="0" x2="130" y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <!-- bold outer border -->
+      <rect x="0" y="0" width="130" height="130" fill="none" stroke="white" stroke-width="3.0"/>
+    </g>
+
+    <!-- FRONT grid → translate(152, 340) -->
+    <g transform="translate(152,340)">
+      <rect x="0" y="0" width="130" height="130" fill="#389826"/>
+      <!-- row 0 — noise added on top of spatial field -->
+      <rect x="0"   y="0"  width="26" height="26" fill="rgba(255,255,255,0.70)"/>
+      <rect x="26"  y="0"  width="26" height="26" fill="rgba(255,255,255,0.58)"/>
+      <rect x="52"  y="0"  width="26" height="26" fill="rgba(255,255,255,0.66)"/>
+      <rect x="78"  y="0"  width="26" height="26" fill="rgba(255,255,255,0.20)"/>
+      <rect x="104" y="0"  width="26" height="26" fill="rgba(255,255,255,0.30)"/>
+      <!-- row 1 -->
+      <rect x="0"   y="26" width="26" height="26" fill="rgba(255,255,255,0.56)"/>
+      <rect x="26"  y="26" width="26" height="26" fill="rgba(255,255,255,0.80)"/>
+      <rect x="52"  y="26" width="26" height="26" fill="rgba(255,255,255,0.50)"/>
+      <rect x="78"  y="26" width="26" height="26" fill="rgba(255,255,255,0.46)"/>
+      <rect x="104" y="26" width="26" height="26" fill="rgba(255,255,255,0.14)"/>
+      <!-- row 2 -->
+      <rect x="0"   y="52" width="26" height="26" fill="rgba(255,255,255,0.66)"/>
+      <rect x="26"  y="52" width="26" height="26" fill="rgba(255,255,255,0.54)"/>
+      <rect x="52"  y="52" width="26" height="26" fill="rgba(255,255,255,0.60)"/>
+      <rect x="78"  y="52" width="26" height="26" fill="rgba(255,255,255,0.22)"/>
+      <rect x="104" y="52" width="26" height="26" fill="rgba(255,255,255,0.28)"/>
+      <!-- row 3 -->
+      <rect x="0"   y="78" width="26" height="26" fill="rgba(255,255,255,0.28)"/>
+      <rect x="26"  y="78" width="26" height="26" fill="rgba(255,255,255,0.54)"/>
+      <rect x="52"  y="78" width="26" height="26" fill="rgba(255,255,255,0.26)"/>
+      <rect x="78"  y="78" width="26" height="26" fill="rgba(255,255,255,0.34)"/>
+      <rect x="104" y="78" width="26" height="26" fill="rgba(255,255,255,0.10)"/>
+      <!-- row 4 -->
+      <rect x="0"   y="104" width="26" height="26" fill="rgba(255,255,255,0.30)"/>
+      <rect x="26"  y="104" width="26" height="26" fill="rgba(255,255,255,0.18)"/>
+      <rect x="52"  y="104" width="26" height="26" fill="rgba(255,255,255,0.30)"/>
+      <rect x="78"  y="104" width="26" height="26" fill="rgba(255,255,255,0.10)"/>
+      <rect x="104" y="104" width="26" height="26" fill="rgba(255,255,255,0.22)"/>
+      <!-- grid lines -->
+      <line x1="0"   y1="0"   x2="130" y2="0"   stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="26"  x2="130" y2="26"  stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="52"  x2="130" y2="52"  stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="78"  x2="130" y2="78"  stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="104" x2="130" y2="104" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="130" x2="130" y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="0"   y1="0" x2="0"   y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="26"  y1="0" x2="26"  y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="52"  y1="0" x2="52"  y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="78"  y1="0" x2="78"  y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="104" y1="0" x2="104" y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <line x1="130" y1="0" x2="130" y2="130" stroke="rgba(255,255,255,0.70)" stroke-width="1.0"/>
+      <!-- bold outer border -->
+      <rect x="0" y="0" width="130" height="130" fill="none" stroke="white" stroke-width="3.5"/>
+    </g>
+
   </g>
 
-  <!-- PURPLE — bottom right — univariate distribution -->
+  <!-- ═══════════════════════════════════════════════════
+       PURPLE — bottom right — strongly right-skewed distribution
+       ═══════════════════════════════════════════════════ -->
   <circle cx="488" cy="378" r="128" fill="#9558B2"/>
   <g clip-path="url(#cp)">
-    <line x1="368" y1="428" x2="608" y2="428" stroke="rgba(255,255,255,0.55)" stroke-width="1.0"/>
-    <path d="M368,428 C383,428 398,424 410,414 C422,404 428,384 440,364 C450,347 462,328 488,324 C514,328 526,347 536,364 C548,384 554,404 566,414 C578,424 593,428 608,428 Z" fill="rgba(255,255,255,0.22)"/>
-    <path d="M368,428 C383,428 398,424 410,414 C422,404 428,384 440,364 C450,347 462,328 488,324 C514,328 526,347 536,364 C548,384 554,404 566,414 C578,424 593,428 608,428" stroke="white" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <line x1="488" y1="428" x2="488" y2="437" stroke="rgba(255,255,255,0.55)" stroke-width="1.0"/>
-    <line x1="440" y1="428" x2="440" y2="435" stroke="rgba(255,255,255,0.55)" stroke-width="1.0"/>
-    <line x1="536" y1="428" x2="536" y2="435" stroke="rgba(255,255,255,0.55)" stroke-width="1.0"/>
+    <line x1="375" y1="408" x2="610" y2="408" stroke="rgba(255,255,255,0.80)" stroke-width="1.0"/>
+    <path d="M392,408 C396,408 406,405 415,398 C424,390 431,376 438,360 C443,347 448,332 453,321 C456,314 459,311 462,311 C465,311 468,315 472,323 C477,333 483,348 492,364 C502,382 514,396 530,404 C546,410 566,409 595,408 Z"
+          fill="rgba(255,255,255,0.38)"/>
+    <path d="M392,408 C396,408 406,405 415,398 C424,390 431,376 438,360 C443,347 448,332 453,321 C456,314 459,311 462,311 C465,311 468,315 472,323 C477,333 483,348 492,364 C502,382 514,396 530,404 C546,410 566,409 595,408"
+          stroke="white" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="462" y1="408" x2="462" y2="418" stroke="rgba(255,255,255,0.80)" stroke-width="1.0"/>
+    <line x1="432" y1="408" x2="432" y2="415" stroke="rgba(255,255,255,0.80)" stroke-width="1.0"/>
+    <line x1="530" y1="408" x2="530" y2="415" stroke="rgba(255,255,255,0.80)" stroke-width="1.0"/>
   </g>
 
 </svg>
