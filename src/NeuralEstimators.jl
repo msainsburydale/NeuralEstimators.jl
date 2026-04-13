@@ -106,8 +106,4 @@ export matern, maternchols, paciorek, scaledlogistic, scaledlogit
 export gaussiandensity, schlatherbivariatedensity
 include("modelspecificfunctions.jl")
 
-# Backwards compatability and deprecations
-export loadbestweights, loadweights, simulate, trainx, mapestimate
-include("deprecated.jl")
-
 end

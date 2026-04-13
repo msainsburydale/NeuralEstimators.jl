@@ -444,7 +444,7 @@ end
 function train(trainstate, sampler, simulator;
     K::Integer = 10_000,
     K_val::Integer = K ÷ 2 + 1,
-    sampler_args = (), ξ = nothing, xi = nothing, # trailing deprecated arguments
+    sampler_args = (),
     sampler_kwargs::NamedTuple = (;),
     simulator_args = (), m = nothing, # trailing deprecated argument
     simulator_kwargs::NamedTuple = (;),
@@ -464,14 +464,6 @@ function train(trainstate, sampler, simulator;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 )
-    @assert isnothing(ξ) || isnothing(xi) "Only one of `ξ` or `xi` should be provided"
-    if !isnothing(xi)
-        ξ = xi
-    end
-    if !isnothing(ξ)
-        @warn "`ξ` is deprecated, use `sampler_args` instead"
-        sampler_args = (ξ,)
-    end
     if !isnothing(m)
         @warn "`m` is deprecated, use `simulator_args` instead"
         simulator_args = (m,)

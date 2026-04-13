@@ -1,6 +1,7 @@
 using NeuralEstimators
-using NeuralEstimators: _runondevice, _check_sizes, _extractθ, rowwisenorm, triangularnumber, forward, inverse, _logdensity
+using NeuralEstimators: _check_sizes, _extractθ, rowwisenorm, triangularnumber, forward, inverse, _logdensity
 using NeuralEstimators: ActNorm, Permutation, AffineCouplingBlock, CouplingLayer
+using CairoMakie
 using CUDA
 using DataFrames
 using Distances
@@ -278,52 +279,52 @@ end
         g = spatialgraph(S, Z)
     end
 
-    # @testset "Missing data" begin
+    @testset "Missing data" begin
 
-    #     # removedata()
-    #     d = 5     # dimension of each replicate
-    #     n = 3     # number of observed elements of each replicate: must have n <= d
-    #     m = 2000  # number of replicates
-    #     p = rand(d)
+        # removedata()
+        d = 5     # dimension of each replicate
+        n = 3     # number of observed elements of each replicate: must have n <= d
+        m = 50    # number of replicates #NB removedata(Z, p) gives stack overflow when m is large... not fixing because this function is low priority, and may even be removed in the future
+        p = rand(d)
 
-    #     Z = rand(d)
-    #     removedata(Z, n)
-    #     removedata(Z, p[1])
-    #     removedata(Z, p)
+        Z = rand(d)
+        removedata(Z, n)
+        removedata(Z, p[1])
+        removedata(Z, p)
 
-    #     Z = rand(d, m)
-    #     removedata(Z, n)
-    #     removedata(Z, d)
-    #     removedata(Z, n; fixed_pattern = true)
-    #     removedata(Z, n; contiguous_pattern = true)
-    #     removedata(Z, n; contiguous_pattern = true, fixed_pattern = true)
-    #     # removedata(Z, p) #TODO errors
-    #     # removedata(Z, p; prevent_complete_missing = false) # TODO errors
-    #     # Check that the probability of missingness is roughly correct:
-    #     mapslices(x -> sum(ismissing.(x))/length(x), removedata(Z, p), dims = 2)
-    #     # Check that none of the replicates contain 100% missing:
-    #     @test !(d ∈ unique(mapslices(x -> sum(ismissing.(x)), removedata(Z, p), dims = 1)))
+        Z = rand(d, m)
+        removedata(Z, n)
+        removedata(Z, d)
+        removedata(Z, n; fixed_pattern = true)
+        removedata(Z, n; contiguous_pattern = true)
+        removedata(Z, n; contiguous_pattern = true, fixed_pattern = true)
+        removedata(Z, p)
+        removedata(Z, p; prevent_complete_missing = false)
+        # Check that the probability of missingness is roughly correct:
+        mapslices(x -> sum(ismissing.(x))/length(x), removedata(Z, p), dims = 2)
+        # Check that none of the replicates contain 100% missing:
+        @test !(d ∈ unique(mapslices(x -> sum(ismissing.(x)), removedata(Z, p), dims = 1)))
 
-    #     # encodedata()
-    #     n = 16
-    #     Z = rand(n)
-    #     Z = removedata(Z, 0.25)
-    #     UW = encodedata(Z)
-    #     @test ndims(UW) == 1
-    #     @test size(UW) == (2n,)
+        # encodedata()
+        n = 16
+        Z = rand(n)
+        Z = removedata(Z, 0.25)
+        UW = encodedata(Z)
+        @test ndims(UW) == 1
+        @test size(UW) == (2n,)
 
-    #     Z = rand(n, n)
-    #     Z = removedata(Z, 0.25)
-    #     UW = encodedata(Z)
-    #     @test ndims(UW) == 2
-    #     @test size(UW) == (2n, n)
+        Z = rand(n, n)
+        Z = removedata(Z, 0.25)
+        UW = encodedata(Z)
+        @test ndims(UW) == 2
+        @test size(UW) == (2n, n)
 
-    #     Z = rand(n, n, 3, 5)
-    #     Z = removedata(Z, 0.25)
-    #     UW = encodedata(Z)
-    #     @test ndims(UW) == 4
-    #     @test size(UW) == (n, n, 6, 5)
-    # end
+        Z = rand(n, n, 3, 5)
+        Z = removedata(Z, 0.25)
+        UW = encodedata(Z)
+        @test ndims(UW) == 4
+        @test size(UW) == (n, n, 6, 5)
+    end
 
     @testset "vectotri: $dvc" for dvc ∈ devices
         d = 4
@@ -727,6 +728,7 @@ Z = simulator(θ, m)
             train(estimator, θ, θ, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
             train(estimator, θ, θ, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose)
             train(estimator, θ, θ, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
+            p = plotrisk()
         end
 
         @testset "assess" begin
@@ -754,6 +756,8 @@ Z = simulator(θ, m)
             rmse(assessment; average_over_parameters = false)
             rmse(assessment; average_over_sample_sizes = false)
             rmse(assessment; average_over_parameters = false, average_over_sample_sizes = false)
+
+            p = plot(assessment)
         end
 
         @testset "bootstrap" begin
@@ -792,6 +796,7 @@ end
     coverage(assessment; average_over_parameters = true)
     coverage(assessment; average_over_sample_sizes = false)
     coverage(assessment; average_over_parameters = true, average_over_sample_sizes = false)
+    p = plot(assessment)
 
     intervalscore(assessment)
     intervalscore(assessment; average_over_parameters = true)
@@ -814,6 +819,7 @@ end
 
     # Assessment
     assessment = assess(estimator, θ, Z)
+    p = plot(assessment)
 
     # Inference
     z = simulator(sampler(1), m)
@@ -884,6 +890,7 @@ end
         posteriormedian(estimator, Z) # point estimate
         posteriorquantile(estimator, Z, [0.1, 0.5]) # quantiles
         assessment = assess(estimator, θ, Z)
+        p = plot(assessment)
     end
 end
 
@@ -1118,7 +1125,7 @@ end
 
         ## Potts model
         β = 0.7
-        complete_grid = simulatepotts(n, n, 2, 0.99)      # simulate marginally from the Ising model
+        complete_grid = simulatepotts(n, n, 2, 1.15)      # simulate marginally from the Ising model
         complete_grid = simulatepotts(n, n, 2, β)         # simulate marginally from the Ising model
         @test size(complete_grid) == (n, n)
         @test length(unique(complete_grid)) == 2

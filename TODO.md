@@ -27,7 +27,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - By default, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) should condition on the (log) sample size (it's messy for the user to include manually and easy to forget). This can be done via a convenience constructor; given keyword argument `latent_dim`, calls `mlp` to construct the outer network, and we automatically condition on the sample size (and we can add a learned embedding of the sample size).
 
 ### Documentation
-- 🟡 Diagram illustrating the general workflow.
 - Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/), [here](https://lux.csail.mit.edu/stable/), and [here](https://timweiland.github.io/GaussianMarkovRandomFields.jl/stable/) for inspiration). For example, we could add some landing-page boxes (Box 1: NPEs, NREs, NBEs. Box 2: Multibackend: Flux.jl, Lux.jl, SimpleChains.jl)
 - Once [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) is supported with Lux, add code groups for Flux/Lux (containing `using Flux`/`using Lux`) in the examples.
 - Example: Sequence (e.g., time-series) data, either using recurrent neural networks (RNNs) or partially-exchangeable networks based on DeepSet.
@@ -49,14 +48,13 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ### Refactoring/API improvements
 - 🟡 Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
    * This can be easily done for the common cases (Chain, DeepSet), with an `@info` given to tell the user what we inferred and to change it if it is wrong. For other cases, just error and tell the user to specify the number of summaries explicitly.
-- Clean and improve the plotting code/logic.
 - 🟡 Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
+- Clean and improve the plotting code/logic.
 - Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl/Lux.jl.
 - Consider [StatefulLuxLayer](https://lux.csail.mit.edu/stable/manual/flux_lux_interop) as a replacement for `LuxEstimator`. (Currently, it has the same problem as `TrainState`, `model` needs to be an `AbstractLuxLayer`, but perhaps this can be relaxed.)
 
 ### Testing
 - Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
-- Improve code coverage (including extensions).
 - Automatic type-stability testing using [JET.jl](https://github.com/aviatesk/JET.jl).
 - Automatic quality testing with [Aqua.jl](https://github.com/JuliaTesting/Aqua.jl).
 

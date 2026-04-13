@@ -142,63 +142,6 @@ function matern(h, ρ, ν, σ² = one(typeof(h)))
     return C
 end
 
-@doc raw"""
-    paciorek(s, r, ω₁, ω₂, ρ, β)
-Given spatial locations `s` and `r`, computes the nonstationary covariance function 
-```math
-C(\boldsymbol{s}, \boldsymbol{r}) = 
-|\boldsymbol{\Sigma}(\boldsymbol{s})|^{1/4}
-|\boldsymbol{\Sigma}(\boldsymbol{r})|^{1/4}
-\left|\frac{\boldsymbol{\Sigma}(\boldsymbol{s}) + \boldsymbol{\Sigma}(\boldsymbol{r})}{2}\right|^{-1/2}
-C^0\big(\sqrt{Q(\boldsymbol{s}, \boldsymbol{r})}\big), 
-```
-where $C^0(h) = \exp\{-(h/\rho)^{3/2}\}$ for range parameter $\rho > 0$, 
-the matrix $\boldsymbol{\Sigma}(\boldsymbol{s}) = \exp(\beta\|\boldsymbol{s} - \boldsymbol{\omega}\|)\boldsymbol{I}$ 
-is a kernel matrix ([Paciorek and Schervish, 2006](https://onlinelibrary.wiley.com/doi/abs/10.1002/env.785)) 
-with scale parameter $\beta > 0$ and reference point $\boldsymbol{\omega} \equiv (\omega_1, \omega_2)' \in \mathbb{R}^2$,
-and 
-```math
-Q(\boldsymbol{s}, \boldsymbol{r}) = 
-(\boldsymbol{s} - \boldsymbol{r})'
-\left(\frac{\boldsymbol{\Sigma}(\boldsymbol{s}) + \boldsymbol{\Sigma}(\boldsymbol{r})}{2}\right)^{-1}
-(\boldsymbol{s} - \boldsymbol{r})
-``` 
-is the squared Mahalanobis distance between $\boldsymbol{s}$ and $\boldsymbol{r}$. 
-
-Note that, in practical applications, the reference point $\boldsymbol{\omega}$ is often taken to be an estimable parameter rather than fixed and known. 
-"""
-function paciorek(s, r, ω₁, ω₂, ρ, β)
-
-    # Displacement vector
-    h = s - r
-
-    # Distance from each point to ω ≡ (ω₁, ω₂)'
-    dₛ = sqrt((s[1] - ω₁)^2 + (s[2] - ω₂)^2)
-    dᵣ = sqrt((r[1] - ω₁)^2 + (r[2] - ω₂)^2)
-
-    # Scaling factors of kernel matrices, such that Σ(s) = a(s)I
-    aₛ = exp(β * dₛ)
-    aᵣ = exp(β * dᵣ)
-
-    # Several computational efficiencies afforded by use of a diagonal kernel matrix:
-    # - the inverse of a diagonal matrix is given by replacing the diagonal elements with their reciprocals
-    # - the determinant of a diagonal matrix is equal to the product of its diagonal elements
-
-    # Mahalanobis distance
-    Q = 2 * h'h / (aₛ + aᵣ)
-
-    # Explicit version of code 
-    # Σₛ_det = aₛ^2   
-    # Σᵣ_det = aᵣ^2   
-    # C⁰ = exp(-sqrt(Q/ρ)^1.5)
-    # logC = 1/4*log(Σₛ_det) + 1/4*log(Σᵣ_det) - log((aₛ + aᵣ)/2) + log(C⁰)
-
-    # Numerically stable version of code
-    logC = β*dₛ/2 + β*dᵣ/2 - log((aₛ + aᵣ)/2) - (sqrt(Q)/ρ)^1.5
-
-    exp(logC)
-end
-
 """
     maternchols(D, ρ, ν, σ² = 1; stack = true)
 Given a matrix `D` of distances, constructs the Cholesky factor of the covariance matrix
