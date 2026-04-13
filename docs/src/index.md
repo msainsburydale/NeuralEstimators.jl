@@ -7,25 +7,33 @@ next: false
 
 # NeuralEstimators
 
-`NeuralEstimators` facilitates a suite of neural methods for parameter inference in scenarios where simulation from the model is feasible. These methods are **likelihood-free** and **amortised**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches. 
+`NeuralEstimators` is a Julia package for **fast**, **simulation-based** inference using neural networks. It is designed for settings where likelihoods are intractable or classical methods such as MCMC are computationally expensive. The package supports: 
 
-The package supports neural Bayes estimators (NBEs), which transform data into point summaries of the posterior distribution; neural posterior estimators (NPEs), which perform approximate posterior inference via KL-divergence minimisation; and neural ratio estimators (NREs), which approximate the likelihood-to-evidence ratio and thereby enable frequentist or Bayesian inference through various downstream algorithms.
+- Neural posterior estimation (NPE): directly learn the posterior distribution
+- Neural ratio estimation (NRE): approximate likelihood ratios for flexible frequentist or Bayesian inference
+- Neural Bayes estimation (NBE): efficiently estimate functionals (point summaries) of the posterior distribution
 
-User-friendliness is a central focus of the package, which is designed to minimise "boilerplate" code while preserving complete flexibility in the neural-network architecture and other workflow components. The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. A convenient interface for R users is available on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
+These methods are **likelihood-free** and **amortized**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets **orders of magnitude faster** than conventional approaches. 
+
+The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. User-friendliness is a central focus of the package, which is designed to minimise "boilerplate" code while preserving complete flexibility in the neural-network architecture and other workflow components.
 
 ## Backends
 
 The package supports neural networks defined with either of the two leading deep-learning packages in Julia, namely [Flux.jl](https://fluxml.ai) or [Lux.jl](https://lux.csail.mit.edu).
 
+## R interface 
+
+A convenient interface for R users is available on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
+
 ## Installation
 
-To install the package, please first install the current stable release of [Julia](https://julialang.org/downloads/). Then, one may install the current stable version of the package using the following command inside Julia:
+To install the package, please first install the current stable release of [Julia](https://julialang.org/downloads/). Then, install the current stable version of the package using the following command inside Julia:
 
 ```julia
 using Pkg; Pkg.add("NeuralEstimators")
 ```
 
-Alternatively, one may install the current development version using the command:
+Or install the current development version using the command:
 
 ```julia
 using Pkg; Pkg.add(url = "https://github.com/msainsburydale/NeuralEstimators.jl")
@@ -33,7 +41,7 @@ using Pkg; Pkg.add(url = "https://github.com/msainsburydale/NeuralEstimators.jl"
 
 ## Quick start 
 
-In the following minimal example, we develop a neural estimator for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $\boldsymbol{Z} \equiv (Z_1, \dots, Z_n)'$, where each $Z_i \overset{\mathrm{iid}}\sim N(\mu, \sigma^2)$ and we use the marginal priors $\mu \sim N(0, 1)$ and $\sigma \sim U(0, 1)$. 
+In the following minimal example, we develop a neural estimator for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $\boldsymbol{Z} \equiv (Z_1, \dots, Z_n)'$, where $Z_i \overset{\mathrm{iid}}\sim N(\mu, \sigma^2)$ and we use the marginal priors $\mu \sim N(0, 1)$ and $\sigma \sim U(0, 1)$. 
 
 ::: code-group
 
