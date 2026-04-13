@@ -42,7 +42,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ### Performance
 - 🟡 Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
 - 🟡 Lux + Reactant currently has extra overhead during training: see the TODO in the Reactant extension.
-- 🟡 Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
+- Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
 - For some operations involving only matrices and MLPs (e.g., inference-network transformations of summary statistics), it might be faster to always use the CPU (at least for certain batchsize ranges).
 - SimpleChains.jl: are the user-friendly constructors for each estimator type correctly converted to `SimpleChainsLayers`?
 

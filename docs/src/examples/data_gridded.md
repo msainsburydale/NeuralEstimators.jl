@@ -1,4 +1,4 @@
-# Gridded data
+# Gridded data: isotropic spatial fields
 
 Here, we develop a neural estimator for a spatial Gaussian process model with exponential covariance function and unknown range parameter $\theta > 0$. The spatial domain is the unit square, data are simulated on a regular $16 \times 16$ grid ($n = 256$ locations), and we adopt the prior $\theta \sim U(0, 0.5)$.
 
