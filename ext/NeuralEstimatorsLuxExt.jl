@@ -76,6 +76,9 @@ end
 import NeuralEstimators: _identity_layer
 _identity_layer(::Val{:Lux}) = Lux.WrappedFunction(identity)
 
+import NeuralEstimators: LowerCholeskyFactor
+LowerCholeskyFactor(d::Integer, ::Val{:Lux}) = Lux.WrappedFunction(LowerCholeskyFactor(d))
+
 # ---- LuxEstimator ----
 
 import NeuralEstimators: LuxEstimator

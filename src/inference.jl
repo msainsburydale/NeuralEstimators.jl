@@ -45,10 +45,10 @@ posteriorquantile(θ::AbstractMatrix, probs) = mapslices(row -> quantile(row, pr
 posteriorquantile(θ::AbstractVector{<:AbstractMatrix}, probs) = posteriorquantile.(θ, Ref(probs))
 posteriorquantile(estimator, Z, probs, args...; kwargs...) = posteriorquantile(sampleposterior(estimator, Z, args...; kwargs...), probs)
 
-# For gradient and optimisation based point estimates, _optimdensity() is overloaded in ext/NeuralEstimatorsOptimExt.jl
+# For gradient and optimisation based point estimates, _optimdensity() is overloaded in ext/NeuralEstimatorsOptimExt.jl (currently deleted but can find it in the GitHub commit history)
 # NB Can also use density evaluation with PosteriorEstimator for and gradient-based methods for computing the posterior mode
 # NB Julia complains if we overload functions in package extensions... to get around this, here we use a slightly different function signature (omitting ::Function)
-_optimdensity(θ₀, logprior, est) = error("A vector of initial parameter estimates has been provided, indicating that the approximate likelihood or posterior density will be maximised by numerical optimisation; please load the Julia package `Optim` to facilitate this")
+# _optimdensity(θ₀, logprior, estimator) = error("A vector of initial parameter estimates has been provided, indicating that the approximate likelihood or posterior density will be maximised by numerical optimisation; please load the Julia package `Optim` to facilitate this")
 
 # ---- Posterior sampling ----
 

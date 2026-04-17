@@ -11,6 +11,8 @@ When constructing a [`PosteriorEstimator`](@ref), one must specify a parametric 
 ```@docs
 ApproximateDistribution
 
+Gaussian
+
 GaussianMixture
 
 NormalisingFlow

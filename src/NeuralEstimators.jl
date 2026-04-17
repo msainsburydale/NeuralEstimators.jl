@@ -51,7 +51,7 @@ export IndicatorWeights, KernelWeights
 export vectotril, vectotriu
 include("Architectures.jl")
 
-export ApproximateDistribution, GaussianMixture, NormalisingFlow, numdistributionalparams
+export ApproximateDistribution, Gaussian, GaussianMixture, NormalisingFlow, numdistributionalparams
 export CouplingLayer, AffineCouplingBlock, ActNorm, Permutation
 include(joinpath("ApproximateDistributions", "ApproximateDistributions.jl"))
 for file in sort(readdir(joinpath(@__DIR__, "ApproximateDistributions")))

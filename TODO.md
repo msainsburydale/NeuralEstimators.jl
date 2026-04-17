@@ -7,8 +7,9 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ### Features
 
 **Backend**
-- 🟡 Support for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) with Lux.
-- 🟡 Support for [NormalisingFlow](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) with Lux.
+- 🟡 Lux support for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules).
+- 🟡 Lux support for [NormalisingFlow](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions).
+- Lux support for [CovarianceMatrix/CorrelationMatrix](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Output-layers).
 - SimpleChains.jl: for user-friendliness, enforce `CPUDevice`/`AutoZygote` during training and `CPUDevice` during inference (dispatching on `SimpleChainsLayer` within `_resolvedevice` and `_resolve_adtype`). NB: `SimpleChainsLayer` is not in LuxCore, so this dispatch may need to live in the extension.
 
 **Training**
@@ -44,6 +45,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
 - For some operations involving only matrices and MLPs (e.g., inference-network transformations of summary statistics), it might be faster to always use the CPU (at least for certain batchsize ranges).
 - SimpleChains.jl: are the user-friendly constructors for each estimator type correctly converted to `SimpleChainsLayers`?
+- Lux.jl: Initial risks are much larger than Flux.jl when training NPEs.
 
 ### Refactoring/API improvements
 - 🟡 Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.

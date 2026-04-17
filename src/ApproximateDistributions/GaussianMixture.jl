@@ -1,6 +1,6 @@
 @doc raw"""
     GaussianMixture <: ApproximateDistribution
-    GaussianMixture(d::Integer, dstar::Integer; num_components::Integer = 10, kwargs...)
+    GaussianMixture(d::Integer, num_summaries::Integer; num_components::Integer = 10, kwargs...)
 A mixture of Gaussian distributions for amortised posterior inference, where `d` is the dimension of the parameter vector. 
 
 The density of the distribution is: 
@@ -19,23 +19,23 @@ where ``d^*`` is an appropriate number of summary statistics for the parameter v
 """
 struct GaussianMixture{D, M} <: ApproximateDistribution
     d::D
-    dstar::D
+    num_summaries::D
     num_components::D
     inference_network::M
 end
-function GaussianMixture(d::Integer, dstar::Integer; num_components::Integer = 10, backend::Union{Nothing, Module} = nothing, kwargs...)
+function GaussianMixture(d::Integer, num_summaries::Integer; num_components::Integer = 10, backend::Union{Nothing, Module} = nothing, kwargs...)
     B = _resolvebackend(backend)
     out = (2d + 1) * num_components
 
     inference_network = B.Chain(
-        MLP(dstar, out; backend = B, kwargs...).layers...,
+        MLP(num_summaries, out; backend = B, kwargs...).layers...,
         B.Parallel(vcat,
             B.Chain(B.Dense(out, num_components), softmax),   # ∑wⱼ = 1
             B.Dense(out, d * num_components, identity),       # μ ∈ ℝ
             B.Dense(out, d * num_components, softplus)        # σ > 0
         )
     )
-    GaussianMixture(d, dstar, num_components, inference_network)
+    GaussianMixture(d, num_summaries, num_components, inference_network)
 end
 
 numdistributionalparams(q::GaussianMixture) = (2 * q.d + 1) * q.num_components

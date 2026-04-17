@@ -876,7 +876,7 @@ end
 end
 
 @testset "PosteriorEstimator" begin
-    for approxdist in [NormalisingFlow, GaussianMixture]
+    for approxdist in [NormalisingFlow, GaussianMixture, Gaussian]
         num_summaries = 3d
         summary_network = Chain(Dense(m, 16, gelu), Dense(16, num_summaries))
         q = approxdist(d, num_summaries)
@@ -961,8 +961,8 @@ end
     )
 
     struct GPParameters <: AbstractParameterSet
-        θ::Any
-        cholesky_factors::Any
+        θ
+        cholesky_factors
     end
 
     function GPParameters(K::Integer, ξ)

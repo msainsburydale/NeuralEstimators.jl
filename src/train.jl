@@ -42,17 +42,17 @@ The trained estimator is always returned on the CPU.
 - `verbose = true`: flag indicating whether information, including empirical risk values and timings, should be printed to the console during training.
 
 # Keyword arguments common to `train(estimator, sampler, simulator)` and `train(estimator, θ_train, θ_val, simulator)`:
-- `simulator_args = ()`: positional arguments passed to the simulator as `simulator(θ, simulator_args...)`.
-- `simulator_kwargs::NamedTuple = (;)`: keyword arguments passed to the simulator as `simulator(...; simulator_kwargs...)`.
+- `simulator_args = ()`: positional arguments passed to `simulator`.
+- `simulator_kwargs::NamedTuple = (;)`: keyword arguments passed to `simulator`.
 - `epochs_per_Z_refresh = 1`: the number of passes to make through the training set before the training data are refreshed.
 - `simulate_just_in_time = false`: flag indicating whether we should simulate just-in-time, in the sense that only a `batchsize` number of parameter vectors and corresponding data are in memory at a given time.
 
 # Keyword arguments unique to `train(estimator, sampler, simulator)`:
-- `sampler_args = ()`: positional arguments passed to the parameter sampler as `sampler(K, sampler_args...)`.
-- `sampler_kwargs::NamedTuple = (;)`: keyword arguments passed to the parameter sampler as `sampler(...; sampler_kwargs...)`.
+- `sampler_args = ()`: positional arguments passed to `sampler`.
+- `sampler_kwargs::NamedTuple = (;)`: keyword arguments passed to `sampler`.
 - `K = 10000`: number of parameter vectors in the training set.
 - `K_val = K ÷ 2` number of parameter vectors in the validation set.
-- `epochs_per_θ_refresh = 1`: the number of passes to make through the training set before the training parameters are refreshed. Must be a multiple of `epochs_per_Z_refresh`. Can also be provided as `epochs_per_theta_refresh`.
+- `epochs_per_θ_refresh = 1`: the number of passes to make through the training set before the training parameters are refreshed. Must be a multiple of `epochs_per_Z_refresh`.
 
 # Examples
 ```julia
@@ -122,7 +122,7 @@ _thaw!(trainstate) = Optimisers.thaw!(trainstate.optimizer_state)
 
 _trainstate_to_device(trainstate, device) = device(trainstate)
 
-function _resolve_adtype(trainstate, device, adtype)
+function _resolve_adtype(trainstate, device, adtype, verbose = true)
 
     # Hard errors
     if trainstate isa FluxTrainState && device isa ReactantDevice
@@ -158,6 +158,8 @@ function _resolve_adtype(trainstate, device, adtype)
         adtype = AutoZygote()
     end
 
+    verbose && @info "Automatic differentiation: $(nameof(typeof(adtype)))"
+
     return adtype
 end
 
@@ -180,7 +182,7 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
 
     # Determine adtype and check deep-learning backend + adtype + device are compatible
-    adtype = _resolve_adtype(trainstate, device, adtype)
+    adtype = _resolve_adtype(trainstate, device, adtype, verbose)
 
     # Move trainstate to device and extract the current estimator
     trainstate = _trainstate_to_device(trainstate, device)
@@ -311,7 +313,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
 
     # Determine adtype and check deep-learning backend + adtype + device are compatible
-    adtype = _resolve_adtype(trainstate, device, adtype)
+    adtype = _resolve_adtype(trainstate, device, adtype, verbose)
 
     # Move trainstate to device and extract the current estimator
     trainstate = _trainstate_to_device(trainstate, device)
@@ -488,7 +490,7 @@ function train(trainstate, sampler, simulator;
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
 
     # Determine adtype and check deep-learning backend + adtype + device are compatible
-    adtype = _resolve_adtype(trainstate, device, adtype)
+    adtype = _resolve_adtype(trainstate, device, adtype, verbose)
 
     # Move trainstate to device and extract the current estimator
     trainstate = _trainstate_to_device(trainstate, device)

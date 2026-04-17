@@ -1,10 +1,12 @@
+
+
 # ---- DeepSet ----
 
 #TODO delete some of the methods (redundant now that we've changed the fields of RatioEstimator)
 #TODO Remove ElementwiseAggregator?
 
 @concrete struct ElementwiseAggregator
-    a::Any
+    a
 end
 (e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
 
@@ -109,10 +111,10 @@ ds((Z, X))
 ```
 """
 @concrete struct DeepSet
-    ψ::Any
-    ϕ::Any
-    a::Any
-    S::Any
+    ψ
+    ϕ
+    a
+    S
 end
 function DeepSet(ψ, ϕ, a::Function = mean; S = nothing)
     @assert !isnothing(ψ) | !isnothing(S) "At least one of `ψ` or `S` must be given"

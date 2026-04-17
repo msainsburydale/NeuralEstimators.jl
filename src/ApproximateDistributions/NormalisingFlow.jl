@@ -1,8 +1,8 @@
 @doc raw"""
     NormalisingFlow <: ApproximateDistribution
-    NormalisingFlow(d::Integer, dstar::Integer; num_coupling_layer = 6, backend = nothing, kwargs...)
+    NormalisingFlow(d::Integer, num_summaries::Integer; num_coupling_layer = 6, backend = nothing, kwargs...)
 A normalising flow for amortised posterior inference (e.g., [Ardizzone et al., 2019](https://openreview.net/forum?id=rJed6j0cKX); [Radev et al., 2022](https://ieeexplore.ieee.org/document/9298920)), where `d` is the dimension of
-the parameter vector and `dstar` is the dimension of the summary statistics for the data.
+the parameter vector and `num_summaries` is the dimension of the summary statistics for the data.
 
 Normalising flows are diffeomorphisms (i.e., invertible, differentiable transformations with differentiable inverses) that map a simple base distribution (e.g., standard Gaussian) to a more complex target distribution (e.g., the posterior). They achieve this by applying a sequence of learned transformations, the forms of which are chosen to be invertible and allow for tractable density computation via the change of variables formula. This allows for efficient density evaluation during the training stage, and efficient sampling during the inference stage. For further details, see the reviews by [Kobyzev et al. (2020)](https://ieeexplore.ieee.org/document/9089305) and [Papamakarios (2021)](https://dl.acm.org/doi/abs/10.5555/3546258.3546315).
 
@@ -21,13 +21,13 @@ where ``d^*`` is an appropriate number of summary statistics for the given param
 - `kwargs`: additional keyword arguments passed to [`CouplingLayer`](@ref) and [`AffineCouplingBlock`](@ref).
 """
 @concrete struct NormalisingFlow <: ApproximateDistribution
-    d::Any
-    layers::Any
+    d
+    layers
 end
 
-function NormalisingFlow(d::Integer, dstar::Integer; num_coupling_layers::Integer = 6, use_act_norm::Bool = true, backend::Union{Nothing, Module} = nothing, kwargs...)
+function NormalisingFlow(d::Integer, num_summaries::Integer; num_coupling_layers::Integer = 6, use_act_norm::Bool = true, backend::Union{Nothing, Module} = nothing, kwargs...)
     backend = _resolvebackend(backend)
-    layers = ntuple(_ -> CouplingLayer(d, dstar; backend = backend, use_act_norm = use_act_norm, kwargs...), num_coupling_layers)
+    layers = ntuple(_ -> CouplingLayer(d, num_summaries; backend = backend, use_act_norm = use_act_norm, kwargs...), num_coupling_layers)
     NormalisingFlow(d, layers)
 end
 
@@ -92,7 +92,7 @@ end
 # -------------------------------- CouplingLayer --------------------------------
 
 """
-    CouplingLayer(d, dstar; use_act_norm = true, use_permutation = true, kwargs...)
+    CouplingLayer(d, num_summaries; use_act_norm = true, use_permutation = true, kwargs...)
 A single coupling layer used in a [`NormalisingFlow`](@ref), combining two [`AffineCouplingBlock`](@ref)s
 with optional activation normalisation and permutation.
 
@@ -101,26 +101,26 @@ The layer splits its `d`-dimensional input into two halves of dimensions `d₁ =
 are transformed in a single forward pass), and optionally applies activation normalisation
 ([`ActNorm`](@ref)) and a random [`Permutation`](@ref) to decorrelate the inputs across layers.
 
-The argument `dstar` is the dimension of the conditioning summary statistics
+The argument `num_summaries` is the dimension of the conditioning summary statistics
 (see [`PosteriorEstimator`](@ref)), and `kwargs` are passed to [`AffineCouplingBlock`](@ref).
 """
 @concrete struct CouplingLayer
-    d::Any
-    d₁::Any
-    d₂::Any
-    block1::Any
-    block2::Any
-    actnorm::Any
-    permutation::Any
+    d
+    d₁
+    d₂
+    block1
+    block2
+    actnorm
+    permutation
 end
 
-function CouplingLayer(d::Integer, dstar::Integer; use_act_norm::Bool = true, use_permutation::Bool = true, kwargs...)
+function CouplingLayer(d::Integer, num_summaries::Integer; use_act_norm::Bool = true, use_permutation::Bool = true, kwargs...)
     d₁ = div(d, 2)
     d₂ = div(d, 2) + (d % 2 != 0 ? 1 : 0)
 
     # Two-in-one coupling block (i.e., no inactive part after a forward pass)
-    block1 = AffineCouplingBlock(d₂, dstar, d₁; kwargs...)
-    block2 = AffineCouplingBlock(d₁, dstar, d₂; kwargs...)
+    block1 = AffineCouplingBlock(d₂, num_summaries, d₁; kwargs...)
+    block2 = AffineCouplingBlock(d₁, num_summaries, d₂; kwargs...)
 
     actnorm = use_act_norm ? ActNorm(d) : nothing
     permutation = use_permutation ? Permutation(d) : nothing
@@ -182,7 +182,7 @@ end
 
 @doc raw"""
     AffineCouplingBlock(κ₁::MLP, κ₂::MLP)
-    AffineCouplingBlock(d₁::Integer, dstar::Integer, d₂; kwargs...)
+    AffineCouplingBlock(d₁::Integer, num_summaries::Integer, d₂; kwargs...)
 An affine coupling block used in a [`NormalisingFlow`](@ref). 
 
 An affine coupling block splits its input $\boldsymbol{\theta}$ into two disjoint components, $\boldsymbol{\theta}_1$ and $\boldsymbol{\theta}_2$, with dimensions $d_1$ and $d_2$, respectively. The block then applies the following transformation: 
@@ -209,10 +209,10 @@ struct AffineCouplingBlock{M, D}
     d₂::D
 end
 
-function AffineCouplingBlock(d₁::Integer, dstar::Integer, d₂::Integer; backend::Union{Nothing, Module} = nothing, kwargs...)
+function AffineCouplingBlock(d₁::Integer, num_summaries::Integer, d₂::Integer; backend::Union{Nothing, Module} = nothing, kwargs...)
     backend = _resolvebackend(backend)
-    scale = MLP(d₁ + dstar, d₂; backend = backend, kwargs...)
-    translate = MLP(d₁ + dstar, d₂; backend = backend, kwargs...)
+    scale = MLP(d₁ + num_summaries, d₂; backend = backend, kwargs...)
+    translate = MLP(d₁ + num_summaries, d₂; backend = backend, kwargs...)
     AffineCouplingBlock(scale, translate, d₁, d₂)
 end
 
@@ -247,8 +247,8 @@ end
 Activation normalisation layer [Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685) for an input of dimension `d`. 
 """
 @concrete struct ActNorm
-    scale::Any
-    bias::Any
+    scale
+    bias
 end
 
 function ActNorm(d::Integer)
@@ -274,8 +274,8 @@ Variables need to be permuted between coupling blocks in order for all input com
     Note also that permutations are always invertible with absolute Jacobian determinant equal to 1. 
 """
 @concrete struct Permutation
-    permutation::Any
-    inv_permutation::Any
+    permutation
+    inv_permutation
 end
 function Permutation(d::Integer)
     permutation = randperm(d)                # random permutation of integers 1, …, d
