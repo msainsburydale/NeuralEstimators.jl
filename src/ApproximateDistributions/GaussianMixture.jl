@@ -1,7 +1,7 @@
 @doc raw"""
     GaussianMixture <: ApproximateDistribution
     GaussianMixture(d::Integer, num_summaries::Integer; num_components::Integer = 10, kwargs...)
-A mixture of Gaussian distributions for amortised posterior inference, where `d` is the dimension of the parameter vector. 
+A mixture of Gaussian distributions foramortised inference with a [`PosteriorEstimator`](@ref), where `d` is the dimension of the parameter vector. 
 
 The density of the distribution is: 
 ```math 
@@ -9,9 +9,7 @@ q(\boldsymbol{\theta}; \boldsymbol{\kappa}) = \sum_{j=1}^{J} \pi_j \cdot \mathca
 ```
 where the parameters $\boldsymbol{\kappa}$ comprise the mixture weights $\pi_j \in [0, 1]$ subject to $\sum_{j=1}^{J} \pi_j = 1$, the mean vector $\boldsymbol{\mu}_j$ of each component, and the variance parameters of the diagonal covariance matrix $\boldsymbol{\Sigma}_j$.
 
-When using a `GaussianMixture` as the approximate distribution of a [`PosteriorEstimator`](@ref), 
-the neural network should be a mapping from the sample space to ``\mathbb{R}^{d^*}``, 
-where ``d^*`` is an appropriate number of summary statistics for the parameter vector $\boldsymbol{\theta}$. The summary statistics are then mapped to the mixture parameters using a conventional multilayer perceptron ([MLP](@ref "MLP")) with approporiately chosen output activation functions (e.g., [softmax](https://fluxml.ai/Flux.jl/stable/reference/models/nnlib/#NNlib.softmax) for the mixture weights, [softplus](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#NNlib.softplus) for the variance parameters).
+When using a `GaussianMixture` as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) summary statistics are mapped to the mixture parameters using a multilayer perceptron ([MLP](@ref "MLP")) with approporiately chosen output activation functions (e.g., [softmax](https://fluxml.ai/Flux.jl/stable/reference/models/nnlib/#NNlib.softmax) for the mixture weights, [softplus](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#NNlib.softplus) for the variance parameters).
 
 # Keyword arguments
 - `num_components::Integer = 10`: number of components in the mixture. 

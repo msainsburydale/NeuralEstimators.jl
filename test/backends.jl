@@ -70,8 +70,10 @@ function make_estimator(backend, estimator_type::Symbol)
         PointEstimator(network, d; num_summaries = d, depth = 1)
     elseif estimator_type === :ratio
         RatioEstimator(network, d; num_summaries = d, depth = 1)
-    elseif estimator_type === :posterior
+    elseif estimator_type === :posterior_mixture
         PosteriorEstimator(network, d; num_summaries = d, depth = 1, q = GaussianMixture)
+    elseif estimator_type === :posterior_gaussian
+        PosteriorEstimator(network, d; num_summaries = d, depth = 1, q = Gaussian)
     else
         error("Unknown estimator type: $estimator_type")
     end
@@ -103,7 +105,7 @@ TRAINING_SCENARIOS = [
         @testset "$backend_name backend" begin
 
             # ── Estimator types ───────────────────────────────────────────────
-            for estimator_type in (:point, :ratio, :posterior)
+            for estimator_type in (:point, :ratio, :posterior_mixture, :posterior_gaussian)
                 est_label = string(estimator_type)
 
                 @testset "$est_label estimator" begin
@@ -169,7 +171,7 @@ TRAINING_SCENARIOS = [
                                 @test result !== nothing
                             end
 
-                        elseif estimator_type === :posterior
+                        elseif estimator_type === :posterior_gaussian || estimator_type === :posterior_mixture
                             @testset "sampleposterior" begin
                                 samples = sampleposterior(est, Z_single; device = first(devices))
                                 @test samples isa AbstractArray

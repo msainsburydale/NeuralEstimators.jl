@@ -4,7 +4,7 @@
 	PosteriorEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, q = nothing, kwargs...)
 A neural estimator that approximates the posterior distribution $p(\boldsymbol{\theta} \mid \boldsymbol{Z})$, based on a neural `summary_network` and an approximate distribution `q` (see the available in-built [Approximate distributions](@ref)).
 
-The `summary_network` maps data $\boldsymbol{Z}$ to a vector of learned summary statistics $\boldsymbol{t} \in \mathbb{R}^{d^*}$, which are then used to condition the approximate distribution `q`. The precise way in which the summary statistics condition `q` depends on the choice of approximate distribution: for example, [`GaussianMixture`](@ref) uses an MLP to map $\boldsymbol{t}$ directly to distributional parameters, while [`NormalisingFlow`](@ref) uses $\boldsymbol{t}$ as a conditioning input at each coupling layer.
+The `summary_network` maps data $\boldsymbol{Z}$ to a vector of learned summary statistics $\boldsymbol{t} \in \mathbb{R}^{d^*}$, which are then used to condition the approximate distribution `q`. The precise way in which the summary statistics condition `q` depends on the choice of approximate distribution: for example, [`Gaussian`](@ref) and [`GaussianMixture`](@ref) use an MLP to map $\boldsymbol{t}$ directly to distributional parameters, while [`NormalisingFlow`](@ref) uses $\boldsymbol{t}$ as a conditioning input at each coupling layer.
 
 The convenience constructor builds `q` internally given `num_parameters` and `num_summaries`, with any additional keyword arguments passed to the constructor of `q`.
 

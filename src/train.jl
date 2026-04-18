@@ -129,8 +129,7 @@ function _resolve_adtype(trainstate, device, adtype, verbose = true)
         error("reactant_device() is not supported with Flux; switch to Lux to use Reactant/XLA.")
     end
 
-    # Set default adtype if not provided
-    if isnothing(adtype)
+    if isnothing(adtype) # Set default adtype if not provided
         adtype = if device isa ReactantDevice
             AutoReactant()
         elseif trainstate isa FluxTrainState || device isa CUDADevice
@@ -138,24 +137,22 @@ function _resolve_adtype(trainstate, device, adtype, verbose = true)
         else
             AutoEnzyme()  # Lux + CPU
         end
-        return adtype
-    end
-
-    # Soft adjustments
-    if device isa ReactantDevice && !(adtype isa AutoReactant)
-        @info "Setting adtype = AutoReactant() since device is a ReactantDevice."
-        adtype = AutoReactant()
-    elseif adtype isa AutoReactant && !(device isa ReactantDevice)
-        adtype = trainstate isa FluxTrainState || device isa CUDADevice ? AutoZygote() : AutoEnzyme()
-        @info "Setting adtype = $(nameof(typeof(adtype)))() since AutoReactant requires reactant_device(), but device = $(nameof(typeof(device)))() was provided."
-    elseif device isa CUDADevice && adtype isa AutoEnzyme
-        @info "Setting adtype = AutoZygote() since AutoEnzyme is not yet fully supported with gpu_device()."
-        if trainstate isa FluxTrainState
-            @info "For improved performance, consider using Lux.jl + Reactant.jl."
-        else
-            @info "For improved performance, consider using Reactant.jl: run Reactant.set_default_backend(\"gpu\"), then set device = reactant_device() and adtype = AutoReactant()."
+    else # Soft adjustments
+        if device isa ReactantDevice && !(adtype isa AutoReactant)
+            @info "Setting adtype = AutoReactant() since device is a ReactantDevice."
+            adtype = AutoReactant()
+        elseif adtype isa AutoReactant && !(device isa ReactantDevice)
+            adtype = trainstate isa FluxTrainState || device isa CUDADevice ? AutoZygote() : AutoEnzyme()
+            @info "Setting adtype = $(nameof(typeof(adtype)))() since AutoReactant requires reactant_device(), but device = $(nameof(typeof(device)))() was provided."
+        elseif device isa CUDADevice && adtype isa AutoEnzyme
+            @info "Setting adtype = AutoZygote() since AutoEnzyme is not yet fully supported with gpu_device()."
+            if trainstate isa FluxTrainState
+                @info "For improved performance, consider using Lux.jl + Reactant.jl."
+            else
+                @info "For improved performance, consider using Reactant.jl: run Reactant.set_default_backend(\"gpu\"), then set device = reactant_device() and adtype = AutoReactant()."
+            end
+            adtype = AutoZygote()
         end
-        adtype = AutoZygote()
     end
 
     verbose && @info "Automatic differentiation: $(nameof(typeof(adtype)))"

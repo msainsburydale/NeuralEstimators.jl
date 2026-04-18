@@ -8,9 +8,7 @@ Normalising flows are diffeomorphisms (i.e., invertible, differentiable transfor
 
 `NormalisingFlow` uses affine coupling blocks (see [`AffineCouplingBlock`](@ref)), with optional activation normalisation ([`ActNorm`](@ref); [Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685)) and permutations applied between each block via [`CouplingLayer`](@ref). The base distribution is taken to be a standard multivariate Gaussian distribution.
 
-When using a `NormalisingFlow` as the approximate distribution of a [`PosteriorEstimator`](@ref),
-the neural network should be a mapping from the sample space to ``\mathbb{R}^{d^*}``,
-where ``d^*`` is an appropriate number of summary statistics for the given parameter vector (e.g., ``d^* = d``). The summary statistics are then used to condition the affine coupling blocks at each layer.
+When using a `NormalisingFlow` as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) summary statistics are used to condition the affine coupling blocks at each layer.
 
 !!! note
     `NormalisingFlow` is currently only implemented for the `Flux` backend.

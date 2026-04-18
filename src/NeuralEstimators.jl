@@ -18,7 +18,7 @@ using Functors
 using InvertedIndices
 using LinearAlgebra
 using MLDataDevices: cpu_device, gpu_device, reactant_device, CPUDevice, CUDADevice, ReactantDevice, AbstractDevice
-using MLUtils: getobs, joinobs, DataLoader, flatten, zeros_like
+using MLUtils: getobs, joinobs, DataLoader, flatten, zeros_like, unsqueeze
 import MLUtils: numobs
 using NamedArrays
 import NamedArrays: NamedMatrix
