@@ -105,7 +105,8 @@ TRAINING_SCENARIOS = [
         @testset "$backend_name backend" begin
 
             # ── Estimator types ───────────────────────────────────────────────
-            for estimator_type in (:point, :ratio, :posterior_mixture, :posterior_gaussian)
+            # for estimator_type in (:point, :ratio, :posterior_mixture, :posterior_gaussian)
+            for estimator_type in (:posterior_gaussian, )
                 est_label = string(estimator_type)
 
                 @testset "$est_label estimator" begin

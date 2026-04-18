@@ -65,9 +65,9 @@ function distributionparameters(q::Gaussian, κ::AbstractMatrix)
     μ = κ[1:d, :]
     L = κ[(d+1):end, :]
 
-    # q.chol_bases is d²×p, Lvec is p×K → L is d×d×K
-    # bases = @ignore_derivatives q.chol_bases
-    L̃ = q.chol_bases * L
+    # q.chol_bases is d²×p, L is p×K → L̃ is d²×K
+    bases = adapt(typeof(L), q.chol_bases) # call adapt() since chol_bases doesn't get moved to the device() when using Lux.jl
+    L̃ = bases * L
 
     return μ, reshape(L̃, d, d, K)
 end
