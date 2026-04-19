@@ -6,7 +6,7 @@ using CUDA
 using DataFrames
 using Distances
 using Flux
-using Flux: batch, DataLoader, mae, mse, numobs, getobs
+using Flux: batch, DataLoader, mae, mse, numobs, getobs, f32
 using GraphNeuralNetworks
 using LinearAlgebra
 using MLUtils
