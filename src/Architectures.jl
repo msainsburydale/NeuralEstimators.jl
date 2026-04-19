@@ -1,5 +1,4 @@
 
-
 # ---- DeepSet ----
 
 #TODO delete some of the methods (redundant now that we've changed the fields of RatioEstimator)

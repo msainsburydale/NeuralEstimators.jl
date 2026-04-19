@@ -25,8 +25,8 @@ function mae(ŷ, y; agg = mean)
 end
 
 function mse(ŷ, y; agg = mean)
-  _check_sizes(ŷ, y)
-  agg(abs2.(ŷ .- y))
+    _check_sizes(ŷ, y)
+    agg(abs2.(ŷ .- y))
 end
 
 # ---- surrogates for 0-1 loss ----
