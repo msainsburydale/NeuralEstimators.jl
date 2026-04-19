@@ -23,9 +23,11 @@ diagonal entries of $\boldsymbol{L}$).
     d
     num_summaries
     inference_network
+    # chol_k
+    # chol_j
     chol_bases
 end
-Optimisers.trainable(dist::Gaussian) = (inference_network = dist.inference_network, ) # chol_bases are not trainable
+Optimisers.trainable(dist::Gaussian) = (inference_network = dist.inference_network, )
 
 function Gaussian(d::Integer, num_summaries::Integer; backend::Union{Nothing, Module} = nothing, kwargs...)
     B = _resolvebackend(backend)
@@ -44,12 +46,17 @@ function Gaussian(d::Integer, num_summaries::Integer; backend::Union{Nothing, Mo
         )
     )
 
+    # x = d:-1:1
+    # j = cumsum(x)
+    # k = j .- x .+ 1
+    # return Gaussian(d, num_summaries, inference_network, Tuple(k), Tuple(j)) # Tuple to prevent GPU movement when using Flux
+
     chol_idx = [(i, j) for j in 1:d for i in j:d]
     chol_bases = [((1:d) .== i) * ((1:d) .== j)' for (i, j) in chol_idx]
     chol_bases = stack(chol_bases, dims = 3)
     chol_bases = reshape(chol_bases, d*d, :)
-
-    Gaussian(d, num_summaries, inference_network, chol_bases)
+    chol_bases = Matrix{Bool}(chol_bases)
+    return Gaussian(d, num_summaries, inference_network, chol_bases)
 end
 
 """
@@ -59,74 +66,34 @@ Splits the raw network output `κ` into the mean vector `μ` (a `d×K` matrix)
 and the lower Cholesky factors `L` (a `d×d×K` array) such that `Σ = LL'`.
 """
 function distributionparameters(q::Gaussian, κ::AbstractMatrix)
+    # Non-mutating version that works with both Zygote and Enzyme.jl
     d = q.d
     K = size(κ, 2)
 
     μ = κ[1:d, :]
     L = κ[(d+1):end, :]
 
-    # q.chol_bases is d²×p, L is p×K → L̃ is d²×K
-    bases = adapt(typeof(L), q.chol_bases) # call adapt() since chol_bases doesn't get moved to the device() when using Lux.jl
+    # Non-mutating version with vcat
+    # zero_mat = zero(L[1:d, :])
+    # k, j = q.chol_k, q.chol_j
+    # L̃ = vcat(L[k[1]:j[1], :], reduce(vcat, [vcat(zero_mat[1:(i-1), :], L[k[i]:j[i], :]) for i in 2:d]))
+
+    # Non-mutating version with matrix multiplies + reshapes only
+    # bases = @ignore_derivatives adapt(typeof(L), q.chol_bases) # adapt() since chol_bases doesn't get moved to the device() when using Lux.jl
+    bases = @ignore_derivatives convert(typeof(L), q.chol_bases) # convert() since chol_bases doesn't get moved to the device() when using Lux.jl
     L̃ = bases * L
 
     return μ, reshape(L̃, d, d, K)
 end
 
-
-# Non-mutating version that works with Zygote.jl (but annoyingly causes problems with Enzyme.jl)
-# function distributionparameters(q::Gaussian, κ::AbstractMatrix)
-#     d = q.d
-#     K = size(κ, 2)
-
-#     μ = κ[1:d, :]
-#     L = κ[(d+1):end, :]
-
-#     # Build dense three-dimensional array of lower Cholesky factors
-#     zero_mat = zero(L[1:d, :]) # NB Zygote does not like repeat()
-#     # zero_mat = L[1:d, :] .* 0
-#     x = d:-1:1      # number of rows to extract from v
-#     j = cumsum(x)   # end points of the row-groups of v
-#     k = j .- x .+ 1 # start point of the row-groups of v
-#     L̃ = vcat(L[k[1]:j[1], :], [vcat(zero_mat[1:(i .- 1), :], L[k[i]:j[i], :]) for i ∈ 2:d]...)
-
-#     return μ, reshape(L̃, d, d, K)
-# end
-
-# Mutating version that works with Enzyme.jl (but not Zygote.jl)
-# function distributionparameters(q::Gaussian, κ::AbstractMatrix)
-#     d = q.d
-#     K = size(κ, 2)
-
-#     μ = κ[1:d, :]
-#     Lvec = κ[(d+1):end, :]   # (p, K)
-
-#     L = similar(κ, d, d, K)
-
-#     idx = 1
-#     @inbounds for j in 1:d
-#         for i in j:d
-#             L[i, j, :] = Lvec[idx, :]
-#             idx += 1
-#         end
-#     end
-
-#     # zero upper triangle
-#     @inbounds for j in 1:d
-#         for i in 1:j-1
-#             L[i, j, :] .= 0
-#         end
-#     end
-
-#     return μ, L
-# end
-
 # Total number of distributional parameters: d (mean) + d(d+1)/2 (lower triangle of Σ)
 numdistributionalparams(q::Gaussian) = q.d + q.d*(q.d+1)÷2
 
 # Struct for constructing lower Cholesky factors
-@concrete struct LowerCholeskyFactor <: Function
+@concrete struct LowerCholeskyFactor <: Function # function so that we can use Lux.WrappedFunction
     d
     p
+    # diag_idx
     diag_mask
 end
 function LowerCholeskyFactor(d::Integer)
@@ -137,16 +104,24 @@ function LowerCholeskyFactor(d::Integer)
         push!(diag_idx, diag_idx[i - 1] + d - (i - 1) + 1)
     end
 
+    # return LowerCholeskyFactor(d, p, Tuple(diag_idx)) # Tuple to prevent GPU movement when using Flux
+
     mask = falses(p)
     mask[diag_idx] .= true
-    mask = reshape(mask, :, 1) # reshape to px1 for broadcasting
-
+    mask = reshape(mask, :, 1) 
+    mask = Matrix{Bool}(mask)
     return LowerCholeskyFactor(d, p, mask)
 end
 LowerCholeskyFactor(d::Integer, backend::Module) = LowerCholeskyFactor(d, Val(nameof(backend)))
 LowerCholeskyFactor(d::Integer, ::Val{:Flux}) = LowerCholeskyFactor(d)
 
-(l::LowerCholeskyFactor)(v) = ifelse.(l.diag_mask, softplus.(v), v) # NB could be made more efficient, currently applys softplus over all of v
+function (l::LowerCholeskyFactor)(v)
+    # reduce(vcat, [i ∈ l.diag_idx ? softplus.(v[i:i, :]) : v[i:i, :] for i in 1:l.p])
+
+    # mask = @ignore_derivatives adapt(typeof(v), l.diag_mask)
+    mask = @ignore_derivatives convert(typeof(v), l.diag_mask)
+    v .+ (softplus.(v) .- v) .* mask
+end
 
 
 # ── Stateful (Flux) ────────────────────────────────────────────────────────────
@@ -161,7 +136,7 @@ function _logdensity(q::Gaussian, θ::AbstractMatrix, tz::AbstractMatrix)
 
     x = LowerTriangular.(eachslice(L, dims=3)) .\ eachcol(Δ) |> stack
 
-    # Enzyme with Lux didn't like CartesianIndex...
+    # Enzyme doesn't like CartesianIndex...
     # diag_entries = L[CartesianIndex.(1:d, 1:d), :]
     diag_entries = reshape(L, d*d, K)[1:d+1:d*d, :] 
     log_det = sum(log, diag_entries, dims=1) 
@@ -203,7 +178,7 @@ function _logdensity(q::Gaussian, θ::AbstractMatrix, tz::AbstractMatrix, ps_q, 
 
     x = LowerTriangular.(eachslice(L, dims=3)) .\ eachcol(Δ) |> stack
 
-    # Enzyme with Lux didn't like CartesianIndex...
+    # Enzyme doesn't like CartesianIndex...
     # diag_entries = L[CartesianIndex.(1:d, 1:d), :]
     diag_entries = reshape(L, d*d, K)[1:d+1:d*d, :] 
     log_det = sum(log, diag_entries, dims=1) 

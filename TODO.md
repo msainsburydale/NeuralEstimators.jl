@@ -10,6 +10,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - 🟡 Lux support for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules).
 - 🟡 Lux support for [NormalisingFlow](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions).
 - Lux support for [CovarianceMatrix/CorrelationMatrix](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Output-layers).
+- Reactant support for [Gaussian](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) (issue is likely the triangular solve when computing the density).
 - SimpleChains.jl: for user-friendliness, enforce `CPUDevice`/`AutoZygote` during training and `CPUDevice` during inference (dispatching on `SimpleChainsLayer` within `_resolvedevice` and `_resolve_adtype`). NB: `SimpleChainsLayer` is not in LuxCore, so this dispatch may need to live in the extension.
 
 **Training**
