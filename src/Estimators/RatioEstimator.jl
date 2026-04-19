@@ -69,9 +69,9 @@ sampleposterior(estimator, z; grid = grid)         # posterior sample
 ```
 """
 @concrete struct RatioEstimator <: NeuralEstimator
-    summary_network   # summary network for data Z (called summary_network for consistency with other estimators)
-    summary_network_θ # summary network for θ 
-    inference_network
+    summary_network::Any   # summary network for data Z (called summary_network for consistency with other estimators)
+    summary_network_θ::Any # summary network for θ 
+    inference_network::Any
 end
 
 # Constructor: summary network, number of parameters, number of summaries => MLP inference network

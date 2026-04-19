@@ -19,8 +19,8 @@ When using a `NormalisingFlow` as the approximate distribution of a [`PosteriorE
 - `kwargs`: additional keyword arguments passed to [`CouplingLayer`](@ref) and [`AffineCouplingBlock`](@ref).
 """
 @concrete struct NormalisingFlow <: ApproximateDistribution
-    d
-    layers
+    d::Any
+    layers::Any
 end
 
 function NormalisingFlow(d::Integer, num_summaries::Integer; num_coupling_layers::Integer = 6, use_act_norm::Bool = true, backend::Union{Nothing, Module} = nothing, kwargs...)
@@ -103,13 +103,13 @@ The argument `num_summaries` is the dimension of the conditioning summary statis
 (see [`PosteriorEstimator`](@ref)), and `kwargs` are passed to [`AffineCouplingBlock`](@ref).
 """
 @concrete struct CouplingLayer
-    d
-    d₁
-    d₂
-    block1
-    block2
-    actnorm
-    permutation
+    d::Any
+    d₁::Any
+    d₂::Any
+    block1::Any
+    block2::Any
+    actnorm::Any
+    permutation::Any
 end
 
 function CouplingLayer(d::Integer, num_summaries::Integer; use_act_norm::Bool = true, use_permutation::Bool = true, kwargs...)
@@ -245,8 +245,8 @@ end
 Activation normalisation layer [Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685) for an input of dimension `d`. 
 """
 @concrete struct ActNorm
-    scale
-    bias
+    scale::Any
+    bias::Any
 end
 
 function ActNorm(d::Integer)
@@ -272,8 +272,8 @@ Variables need to be permuted between coupling blocks in order for all input com
     Note also that permutations are always invertible with absolute Jacobian determinant equal to 1. 
 """
 @concrete struct Permutation
-    permutation
-    inv_permutation
+    permutation::Any
+    inv_permutation::Any
 end
 function Permutation(d::Integer)
     permutation = randperm(d)                # random permutation of integers 1, …, d

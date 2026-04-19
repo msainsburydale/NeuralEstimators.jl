@@ -96,7 +96,6 @@ TRAINING_SCENARIOS = [
 # ──────────────────────────────────────────────────────────────────────────────
 
 @testset "Backends, devices, and AD types" begin
-
     for backend in (Flux, Lux, SimpleChains)
         backend_name = string(backend)
         devices, adtypes = backend_config(backend)
@@ -106,7 +105,6 @@ TRAINING_SCENARIOS = [
                 est_label = string(estimator_type)
 
                 @testset "$est_label estimator" begin
-
                     @testset "Forward pass (summarystatistics)" begin
                         est = make_estimator(backend, estimator_type)
                         @test begin

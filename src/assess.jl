@@ -24,7 +24,7 @@ struct Assessment
     estimates::DataFrame
     runtime::DataFrame
     samples::Union{DataFrame, Nothing}
-    risk
+    risk::Any
 end
 Assessment(estimates, runtime) = Assessment(estimates, runtime, nothing, nothing)
 

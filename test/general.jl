@@ -961,8 +961,8 @@ end
     )
 
     struct GPParameters <: AbstractParameterSet
-        θ
-        cholesky_factors
+        θ::Any
+        cholesky_factors::Any
     end
 
     function GPParameters(K::Integer, ξ)

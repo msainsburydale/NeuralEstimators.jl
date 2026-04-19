@@ -20,14 +20,14 @@ diagonal entries of $\boldsymbol{L}$).
 - `kwargs`: additional keyword arguments passed to [`MLP`](@ref).
 """
 @concrete struct Gaussian <: ApproximateDistribution
-    d
-    num_summaries
-    inference_network
+    d::Any
+    num_summaries::Any
+    inference_network::Any
     # chol_k
     # chol_j
-    chol_bases
+    chol_bases::Any
 end
-Optimisers.trainable(dist::Gaussian) = (inference_network = dist.inference_network, )
+Optimisers.trainable(dist::Gaussian) = (inference_network = dist.inference_network,)
 
 function Gaussian(d::Integer, num_summaries::Integer; backend::Union{Nothing, Module} = nothing, kwargs...)
     B = _resolvebackend(backend)
@@ -35,14 +35,12 @@ function Gaussian(d::Integer, num_summaries::Integer; backend::Union{Nothing, Mo
     latent_dim = 3*(d + num_cov_matrix_params)
 
     inference_network = B.Chain(
-        MLP(num_summaries, latent_dim; backend = B, kwargs...).layers...,
-        
-        B.Parallel(vcat,
+        MLP(num_summaries, latent_dim; backend = B, kwargs...).layers..., B.Parallel(vcat,
             B.Dense(latent_dim, d, identity),    # μ ∈ ℝ     
             B.Chain(                             # L such that Σ = LL' is pos. def.
                 B.Dense(latent_dim, num_cov_matrix_params, identity),
                 LowerCholeskyFactor(d, B)
-            )    
+            )
         )
     )
 
@@ -51,7 +49,7 @@ function Gaussian(d::Integer, num_summaries::Integer; backend::Union{Nothing, Mo
     # k = j .- x .+ 1
     # return Gaussian(d, num_summaries, inference_network, Tuple(k), Tuple(j)) # Tuple to prevent GPU movement when using Flux
 
-    chol_idx = [(i, j) for j in 1:d for i in j:d]
+    chol_idx = [(i, j) for j = 1:d for i = j:d]
     chol_bases = [((1:d) .== i) * ((1:d) .== j)' for (i, j) in chol_idx]
     chol_bases = stack(chol_bases, dims = 3)
     chol_bases = reshape(chol_bases, d*d, :)
@@ -71,7 +69,7 @@ function distributionparameters(q::Gaussian, κ::AbstractMatrix)
     K = size(κ, 2)
 
     μ = κ[1:d, :]
-    L = κ[(d+1):end, :]
+    L = κ[(d + 1):end, :]
 
     # Non-mutating version with vcat
     # zero_mat = zero(L[1:d, :])
@@ -91,16 +89,16 @@ numdistributionalparams(q::Gaussian) = q.d + q.d*(q.d+1)÷2
 
 # Struct for constructing lower Cholesky factors
 @concrete struct LowerCholeskyFactor <: Function # function so that we can use Lux.WrappedFunction
-    d
-    p
+    d::Any
+    p::Any
     # diag_idx
-    diag_mask
+    diag_mask::Any
 end
 function LowerCholeskyFactor(d::Integer)
     p = triangularnumber(d)
 
     diag_idx = [1]
-    for i in 2:d
+    for i = 2:d
         push!(diag_idx, diag_idx[i - 1] + d - (i - 1) + 1)
     end
 
@@ -108,7 +106,7 @@ function LowerCholeskyFactor(d::Integer)
 
     mask = falses(p)
     mask[diag_idx] .= true
-    mask = reshape(mask, :, 1) 
+    mask = reshape(mask, :, 1)
     mask = Matrix{Bool}(mask)
     return LowerCholeskyFactor(d, p, mask)
 end
@@ -123,7 +121,6 @@ function (l::LowerCholeskyFactor)(v)
     v .+ (softplus.(v) .- v) .* mask
 end
 
-
 # ── Stateful (Flux) ────────────────────────────────────────────────────────────
 
 function _logdensity(q::Gaussian, θ::AbstractMatrix, tz::AbstractMatrix)
@@ -134,16 +131,16 @@ function _logdensity(q::Gaussian, θ::AbstractMatrix, tz::AbstractMatrix)
 
     Δ = θ .- μ
 
-    x = LowerTriangular.(eachslice(L, dims=3)) .\ eachcol(Δ) |> stack
+    x = LowerTriangular.(eachslice(L, dims = 3)) .\ eachcol(Δ) |> stack
 
     # Enzyme doesn't like CartesianIndex...
     # diag_entries = L[CartesianIndex.(1:d, 1:d), :]
-    diag_entries = reshape(L, d*d, K)[1:d+1:d*d, :] 
-    log_det = sum(log, diag_entries, dims=1) 
+    diag_entries = reshape(L, d*d, K)[1:(d + 1):(d * d), :]
+    log_det = sum(log, diag_entries, dims = 1)
 
-    quad = sum(x.^2, dims=1)
+    quad = sum(x .^ 2, dims = 1)
 
-    log_densities = -d/2f0 * log(2f0 * π) .- log_det .- 0.5f0 .* quad
+    log_densities = -d/2.0f0 * log(2.0f0 * π) .- log_det .- 0.5f0 .* quad
 
     return log_densities
 end
@@ -161,8 +158,8 @@ function sampleposterior(q::Gaussian, tz::AbstractMatrix, N::Integer; device = n
     θ = unsqueeze(μ, dims = 2) .+ L ⊠ x  # d × N × K # NB equivalent to:  θ = reshape(μ, d, 1, K) .+ L ⊠ x
 
     # Split into a vector for consistency with the output of other approximate distributions
-    θ = [θ[:, :, k] for k in 1:K]
-    
+    θ = [θ[:, :, k] for k = 1:K]
+
     return θ
 end
 
@@ -176,16 +173,16 @@ function _logdensity(q::Gaussian, θ::AbstractMatrix, tz::AbstractMatrix, ps_q, 
 
     Δ = θ .- μ
 
-    x = LowerTriangular.(eachslice(L, dims=3)) .\ eachcol(Δ) |> stack
+    x = LowerTriangular.(eachslice(L, dims = 3)) .\ eachcol(Δ) |> stack
 
     # Enzyme doesn't like CartesianIndex...
     # diag_entries = L[CartesianIndex.(1:d, 1:d), :]
-    diag_entries = reshape(L, d*d, K)[1:d+1:d*d, :] 
-    log_det = sum(log, diag_entries, dims=1) 
+    diag_entries = reshape(L, d*d, K)[1:(d + 1):(d * d), :]
+    log_det = sum(log, diag_entries, dims = 1)
 
-    quad = sum(x.^2, dims=1)
+    quad = sum(x .^ 2, dims = 1)
 
-    log_densities = -d/2f0 * log(2f0 * π) .- log_det .- 0.5f0 .* quad
+    log_densities = -d/2.0f0 * log(2.0f0 * π) .- log_det .- 0.5f0 .* quad
 
     st_q = merge(st_q, (inference_network = st_net,))
     return log_densities, st_q
@@ -205,7 +202,7 @@ function sampleposterior(q::Gaussian, tz::AbstractMatrix, N::Integer, ps_q, st_q
     θ = unsqueeze(μ, dims = 2) .+ L ⊠ x  # d × N × K # NB equivalent to:  θ = reshape(μ, d, 1, K) .+ L ⊠ x
 
     # Split into a vector for consistency with the output of other approximate distributions
-    θ = [θ[:, :, k] for k in 1:K]
-    
+    θ = [θ[:, :, k] for k = 1:K]
+
     return θ
 end
