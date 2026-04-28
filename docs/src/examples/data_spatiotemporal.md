@@ -166,6 +166,12 @@ estimator = RatioEstimator(network, d; num_summaries = num_summaries)
 
 :::
 
+## Visualizing temporal dependence
+
+The temporal range parameter $\theta_2$ controls the strength of temporal persistence through time. Smaller values produce weaker temporal memory, while larger values induce stronger persistence across successive fields.
+
+![Effect of temporal range](../assets/figures/temporal_range.png)
+
 ## Training the estimator
 
 Next, we train the estimator using [`train`](@ref). One may pass `sampler` and `simulator` directly to [`train`](@ref) for on-the-fly simulation, but here we pre-simulate fixed training sets, which can be faster when the simulator is expensive:
@@ -201,6 +207,10 @@ bias(assessment)    # θ₁ = ..., θ₂ = ...
 rmse(assessment)    # θ₁ = ..., θ₂ = ...
 plot(assessment)
 ```
+Example assessment diagnostics:
+
+![Assessment diagnostics](../assets/figures/spatiotemporal_assessment.png)
+
 
 ## Applying the estimator to observed data
 
