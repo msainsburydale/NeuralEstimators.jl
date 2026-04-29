@@ -170,6 +170,48 @@ estimator = RatioEstimator(network, d; num_summaries = num_summaries)
 
 The temporal range parameter $\theta_2$ controls the strength of temporal persistence through time. Smaller values produce weaker temporal memory, while larger values induce stronger persistence across successive fields.
 
+The following code reproduces the temporal-dependence visualisation shown below:
+
+```julia
+# Fix θ₁ and vary θ₂
+θ_viz = Float32[0.3  0.3;
+                0.1  0.8]
+
+# Simulate with fixed T = 7, giving 6 first-difference fields
+Z_viz = simulator(θ_viz, 7:7)
+
+labels = [
+    "Low temporal dependence (θ₂ = 0.1)",
+    "High temporal dependence (θ₂ = 0.8)"
+]
+
+fig = Figure(size = (1800, 600))
+
+for k in 1:2
+    Z_k = Z_viz[k]
+    ntime_viz = size(Z_k, 4)
+
+    for t in 1:ntime_viz
+        ax = Axis(
+            fig[k, t],
+            title = t == 1 ? labels[k] : "Δt = $t",
+            aspect = DataAspect()
+        )
+
+        hidedecorations!(ax)
+
+        heatmap!(
+            ax,
+            Z_k[:, :, 1, t],
+            colormap = :balance,
+            colorrange = (-2.5, 2.5)
+        )
+    end
+end
+
+display(fig)
+```
+
 ![Effect of temporal range](../assets/figures/temporal_range.png)
 
 ## Training the estimator
