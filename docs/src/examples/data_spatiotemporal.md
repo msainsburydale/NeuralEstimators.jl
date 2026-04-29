@@ -170,7 +170,7 @@ estimator = RatioEstimator(network, d; num_summaries = num_summaries)
 
 The temporal range parameter $\theta_2$ controls the strength of temporal persistence through time. Smaller values produce weaker temporal memory, while larger values induce stronger persistence across successive fields.
 
-The following code reproduces the temporal-dependence visualisation shown below:
+The following code reproduces the temporal-dependence visualisation shown below.
 
 ```julia
 # Fix θ₁ and vary θ₂
@@ -249,9 +249,17 @@ The resulting `Assessment` object contains ground-truth parameters, estimates, a
 ```julia
 bias(assessment)    # θ₁ = ..., θ₂ = ...
 rmse(assessment)    # θ₁ = ..., θ₂ = ...
-plot(assessment)
 ```
-Example assessment diagnostics:
+
+The following code reproduces the assessment diagnostics shown below.
+
+```julia
+# Generate the built-in assessment plot
+fig_assessment = plot(assessment)
+display(fig_assessment)
+```
+
+The diagnostics illustrate parameter recovery and calibration behaviour of the estimator.
 
 ![Assessment diagnostics](../assets/figures/spatiotemporal_assessment.png)
 
