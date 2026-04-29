@@ -177,7 +177,7 @@ The following code reproduces the temporal-dependence visualisation shown below:
 θ_viz = Float32[0.3  0.3;
                 0.1  0.8]
 
-# Simulate with fixed T = 7, giving 6 first-difference fields
+# Simulate 7 time steps, giving 6 first-difference fields
 Z_viz = simulator(θ_viz, 7:7)
 
 labels = [
@@ -211,6 +211,8 @@ end
 
 display(fig)
 ```
+
+The resulting plot illustrates the effect of varying temporal dependence while holding the spatial range parameter fixed.
 
 ![Effect of temporal range](../assets/figures/temporal_range.png)
 
