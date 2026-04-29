@@ -112,12 +112,17 @@ If you encounter a bug or have a suggestion, please feel free to [open an issue]
 
 This software was developed as part of academic research. If you would like to support it, please star the repository. If you use it in your research or other activities, please also use the following citation.
 
-```
+
+<details>
+
+<summary>Expand for BibTeX</summary>
+
+```bibtex
 @misc{,
   title = {{NeuralEstimators.jl}: A {J}ulia package for efficient simulation-based inference using neural networks},
   author = {Sainsbury-Dale, Matthew},
   year = {2026},
-  note = {Version 0.2.0},
+  note = {Version x.x.x},
   howpublished = {\url{https://github.com/msainsburydale/NeuralEstimators.jl}}
 }
 
@@ -131,6 +136,8 @@ This software was developed as part of academic research. If you would like to s
     doi = {10.1080/00031305.2023.2249522},
   }
 ```
+
+</details>
 
 ### Papers using NeuralEstimators
 
