@@ -170,6 +170,50 @@ estimator = RatioEstimator(network, d; num_summaries = num_summaries)
 
 The temporal range parameter $\theta_2$ controls the strength of temporal persistence through time. Smaller values produce weaker temporal memory, while larger values induce stronger persistence across successive fields.
 
+The following code reproduces the temporal-dependence visualisation shown below.
+
+```julia
+# Fix θ₁ and vary θ₂
+θ_viz = Float32[0.3  0.3;
+                0.1  0.8]
+
+# Simulate 7 time steps, giving 6 first-difference fields
+Z_viz = simulator(θ_viz, 7:7)
+
+labels = [
+    "Low temporal dependence (θ₂ = 0.1)",
+    "High temporal dependence (θ₂ = 0.8)"
+]
+
+fig = Figure(size = (1800, 600))
+
+for k in 1:2
+    Z_k = Z_viz[k]
+    ntime_viz = size(Z_k, 4)
+
+    for t in 1:ntime_viz
+        ax = Axis(
+            fig[k, t],
+            title = t == 1 ? labels[k] : "Δt = $t",
+            aspect = DataAspect()
+        )
+
+        hidedecorations!(ax)
+
+        heatmap!(
+            ax,
+            Z_k[:, :, 1, t],
+            colormap = :balance,
+            colorrange = (-2.5, 2.5)
+        )
+    end
+end
+
+display(fig)
+```
+
+The resulting plot illustrates the effect of varying temporal dependence while holding the spatial range parameter fixed.
+
 ![Effect of temporal range](../assets/figures/temporal_range.png)
 
 ## Training the estimator
@@ -205,9 +249,21 @@ The resulting `Assessment` object contains ground-truth parameters, estimates, a
 ```julia
 bias(assessment)    # θ₁ = ..., θ₂ = ...
 rmse(assessment)    # θ₁ = ..., θ₂ = ...
-plot(assessment)
 ```
 Example assessment diagnostics:
+
+![Assessment diagnostics](../assets/figures/spatiotemporal_assessment.png)
+
+
+The following code reproduces the assessment diagnostics shown below.
+
+```julia
+# Generate the built-in assessment plot
+fig_assessment = plot(assessment)
+display(fig_assessment)
+```
+
+The diagnostics illustrate parameter recovery and calibration behaviour of the estimator.
 
 ![Assessment diagnostics](../assets/figures/spatiotemporal_assessment.png)
 
