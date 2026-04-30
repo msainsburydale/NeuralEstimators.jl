@@ -367,8 +367,9 @@ As a running example, we consider a Gaussian process model where the data are co
 using NeuralEstimators, Flux
 using Distributions: Uniform
 using Distances, LinearAlgebra
-using Statistics: mean
 using MLUtils: flatten
+using SpecialFunctions: besselk, gamma
+using Statistics: mean
 
 # Prior and dimension of parameter vector
 Π = (τ = Uniform(0, 1.0), ρ = Uniform(0, 0.4))
@@ -388,6 +389,21 @@ struct Parameters <: AbstractParameterSet
 	L
 end
 
+# Matern covariance function
+function matern(h, ρ, ν, σ² = one(typeof(h)))
+
+    @assert h >= 0 "h should be non-negative"
+    @assert ρ > 0 "ρ should be positive"
+    @assert ν > 0 "ν should be positive"
+
+    if h == 0
+        σ²
+    else
+        d = h / ρ
+        σ² * ((2^(1 - ν)) / gamma(ν)) * d^ν * besselk(ν, d)
+    end
+end
+
 # Constructor for above struct
 function sample(K::Integer, ξ)
 
@@ -397,8 +413,13 @@ function sample(K::Integer, ξ)
 	ρ = rand(Π.ρ, K)
 	ν = 1 # fixed smoothness
 
-	# Compute Cholesky factors  
-	L = maternchols(ξ.D, ρ, ν)
+	# Compute Cholesky factors
+	L = map(1:K) do k
+		C = matern.(UpperTriangular(ξ.D), ρ[k], ν, 1)
+		L = cholesky(Symmetric(C)).L
+		convert(Array, L)
+	end
+	L = Base.stack(L)
 
 	# Concatenate into matrix
 	θ = permutedims(hcat(τ, ρ))

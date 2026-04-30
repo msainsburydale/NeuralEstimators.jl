@@ -954,7 +954,6 @@ end
 
     # Model information that is constant (and which will be passed into later functions)
     ξ = (
-        ν = 1.0, # fixed smoothness
         S = S,
         D = pairwise(Euclidean(), S, S, dims = 1),
         d = d
@@ -972,7 +971,12 @@ end
         ρ = 0.3 * rand(K)
 
         # Compute Cholesky factors
-        cholesky_factors = maternchols(ξ.D, ρ, ξ.ν)
+        cholesky_factors = map(1:K) do k
+            C = exp.(-ξ.D ./ ρ[k])
+            L = cholesky(Symmetric(C)).L
+            convert(Array, L)
+        end
+        cholesky_factors = Base.stack(cholesky_factors)
 
         # Concatenate into a matrix
         θ = permutedims(hcat(τ, ρ))
@@ -1016,7 +1020,7 @@ end
         Z₁ = [Z₁...]
 
         # Distance matrices needed for covariance matrices
-        D = ξ.D # distance matrix for all locations in the grid
+        D = ξ.D
         D₂₂ = D[I₂, I₂]
         D₁₁ = D[I₁, I₁]
         D₁₂ = D[I₁, I₂]
@@ -1026,22 +1030,21 @@ end
         ρ = θ[2]
 
         # Compute covariance matrices
-        ν = ξ.ν
-        Σ₂₂ = matern.(UpperTriangular(D₂₂), ρ, ν);
+        Σ₂₂ = exp.(-D₂₂ ./ ρ)
         Σ₂₂[diagind(Σ₂₂)] .+= τ^2
-        Σ₁₁ = matern.(UpperTriangular(D₁₁), ρ, ν);
+        Σ₁₁ = exp.(-D₁₁ ./ ρ)
         Σ₁₁[diagind(Σ₁₁)] .+= τ^2
-        Σ₁₂ = matern.(D₁₂, ρ, ν)
+        Σ₁₂ = exp.(-D₁₂ ./ ρ)
 
         # Compute the Cholesky factor of Σ₁₁ and solve the lower triangular system
         L₁₁ = cholesky(Symmetric(Σ₁₁)).L
         x = L₁₁ \ Σ₁₂
 
-        # Conditional covariance matrix, cov(Z₂ ∣ Z₁, θ),  and its Cholesky factor
+        # Conditional covariance matrix, cov(Z₂ ∣ Z₁, θ), and its Cholesky factor
         Σ = Σ₂₂ - x'x
         L = cholesky(Symmetric(Σ)).L
 
-        # Conditonal mean, E(Z₂ ∣ Z₁, θ)
+        # Conditional mean, E(Z₂ ∣ Z₁, θ)
         y = L₁₁ \ Z₁
         μ = x'y
 
@@ -1065,8 +1068,8 @@ end
     end
 
     θ = GPParameters(1, ξ)
-    Z = simulate(θ, 1)[1][:, :]# simulate a single gridded field
-    Z = removedata(Z, 0.25)# remove 25% of the data
+    Z = simulate(θ, 1)[1][:, :]
+    Z = removedata(Z, 0.25)
 
     # Construct neural MAP estimator
     ψ = Chain(
@@ -1075,13 +1078,13 @@ end
         Conv((3, 3), 32 => 64, relu),
         Flux.flatten
     )
-    ϕ = Chain(Dense(64, 256, relu), Dense(256, d, exp))
+    ϕ = Chain(Dense(64, 32, relu), Dense(32, d, exp))
     network = DeepSet(ψ, ϕ)
     neuralMAPestimator = PointEstimator(network)
 
     # EM object
     neuralem = EM(simulateconditional, neuralMAPestimator)
-    θ₀ = [0.15, 0.15]# initial estimate, the prior mean
+    θ₀ = [0.15, 0.15]
     H = 5
     θ̂ = neuralem(Z, θ₀, nsims = H, ξ = ξ).estimate
     θ̂2 = neuralem([Z, Z], θ₀, nsims = H, ξ = ξ)
@@ -1097,8 +1100,7 @@ end
     neuralem([Z, Z], nsims = H, ξ = ξ)
 
     ## Test edge cases (no missingness and complete missingness)
-    Z = simulate(θ, 1)[1]# simulate a single gridded field
-    # @test_logs (:warn,) neuralem(Z, θ₀, ξ = ξ, nsims = H)
+    Z = simulate(θ, 1)[1]
     @test_throws Exception neuralem(Z, θ₀, ξ = ξ, nsims = H)
     Z₁ = removedata(Z₁, 1.0)
     @test_throws Exception neuralem(Z₁, θ₀, nsims = H, ξ = ξ)
@@ -1111,17 +1113,13 @@ end
         n = 10
         S = array(n, 2, T = Float32)
         D = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ in eachrow(S)]
-        ρ = Float32.([0.6, 0.8])
-        ν = Float32.([0.5, 0.7])
-        L = maternchols(D, ρ, ν)
-        σ² = 0.5f0
-        L = maternchols(D, ρ, ν, σ²)
-        @test maternchols(D, ρ, ν, σ²) == maternchols([D, D], ρ, ν, σ²)
-        L₁ = L[:, :, 1]
+        ρ = 0.6f0
+        Σ = Symmetric(exp.(-D / ρ))
+        L = cholesky(Σ).L
         m = 5
 
-        @test eltype(simulateschlather(L₁, m)) == Float32
-        @test eltype(simulategaussian(L₁, m)) == Float32
+        @test eltype(simulateschlather(L, m)) == Float32
+        @test eltype(simulategaussian(L, m)) == Float32
 
         ## Potts model
         β = 0.7

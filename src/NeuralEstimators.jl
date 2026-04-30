@@ -12,7 +12,7 @@ using ChainRulesCore: @non_differentiable, @ignore_derivatives
 using ConcreteStructs: @concrete
 using CSV
 using DataFrames
-using Distances
+using Distances #NB used for spatialgraph() and adjacencymatrix()
 using Folds
 using Functors
 using InvertedIndices
@@ -28,7 +28,6 @@ using ParameterSchedulers
 using Printf: @sprintf
 using Random: randexp, shuffle, randperm, AbstractRNG
 using SparseArrays
-using SpecialFunctions: besselk, gamma, loggamma
 using Statistics: mean, median, sum, quantile
 using StatsBase
 using StatsBase: wsample, sample
@@ -102,7 +101,7 @@ include("Graphs.jl")
 
 # Simulators and density functions that are useful to have but not needed in generic workflows
 export simulategaussian, simulatepotts, simulateschlather
-export matern, maternchols, paciorek, scaledlogistic, scaledlogit
+export scaledlogistic, scaledlogit
 export gaussiandensity, schlatherbivariatedensity
 include("modelspecificfunctions.jl")
 

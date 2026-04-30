@@ -95,8 +95,8 @@ function firstdifference(Z)
     getobs(Z, 2:numobs(Z)) - getobs(Z, 1:numobs(Z)-1)
 end
 
-# Simulate a single spatio-temporal field with T time steps
-function simulator(θ::AbstractVector, T::Integer; grid_size = 10)
+# Simulate a spatio-temporal field with T time steps
+function simulator(θ::AbstractVector, T::Integer; grid_size = 10, first_difference::Bool = true)
     ρ = θ["θ₁"]
     φ = θ["θ₂"]
 
@@ -117,10 +117,10 @@ function simulator(θ::AbstractVector, T::Integer; grid_size = 10)
 
     # Reshape into format required by our chosen architecture
     Z = reshape(Z, grid_size, grid_size, 1, T)
-    return firstdifference(Z)
+    return first_difference ? firstdifference(Z) : Z
 end
-simulator(θ::AbstractVector, T)         = simulator(θ, rand(T))
-simulator(θ::AbstractMatrix, T = 10:30) = Folds.map(ϑ -> simulator(ϑ, T), eachcol(θ))
+simulator(θ::AbstractVector, T; kwargs...) = simulator(θ, rand(T); kwargs...)
+simulator(θ::AbstractMatrix, T = 10:30; kwargs...) = Folds.map(ϑ -> simulator(ϑ, T; kwargs...), eachcol(θ))
 ```
 
 With this data format, the `DeepSet` inner network `ψ` processes each difference field $\boldsymbol{\Delta}_t$ independently, and the outer network `ϕ` maps the aggregated latent features to summary statistics:
@@ -145,9 +145,61 @@ num_summaries  = 3d  # number of summaries output by the network
     Dense(w, num_summaries),
 )
 network = DeepSet(ψ, ϕ)
-``` 
+```
 
+## Bonus: Visualizing spatio-temporal dependence
 
+Before initializing the neural estimator with our chosen neural-network architecture, let's simulate and visualize some realizations from the model. 
+
+We'll focus on the effect of the temporal range parameter, $\theta_2$, which controls the strength of temporal persistence through time. Smaller values produce weaker temporal memory, while larger values induce stronger persistence across successive fields.
+
+```julia
+# Fix θ₁, vary θ₂
+θ = NamedMatrix(
+    θ₁ = [0.3, 0.3],
+    θ₂ = [0.1, 0.8]
+) 
+
+# Simulate several time steps
+Z = simulator(θ, 5; grid_size = 32, first_difference = false)
+
+labels = [
+    "Low temporal dependence (θ₂ = 0.1)",
+    "High temporal dependence (θ₂ = 0.8)"
+]
+
+fig = Figure(size = (1350, 600));
+
+for k in 1:2
+    Z_k = Z[k]
+    T = size(Z_k, 4)
+
+    for t in 1:T
+        ax = Axis(
+            fig[k, t],
+            title = t == 1 ? labels[k] : "t = $t",
+            aspect = DataAspect()
+        )
+
+        hidedecorations!(ax)
+
+        hm = heatmap!(
+            ax,
+            Z_k[:, :, 1, t],
+            colormap = :balance,
+            colorrange = (-2.5, 2.5)
+        )
+
+        if t == T
+            Colorbar(fig[k, T + 1], hm)
+        end
+    end
+end
+
+display(fig)
+```
+
+![Effect of temporal range](../assets/figures/spatiotemporal.png)
 
 ## Constructing the neural estimator
 
@@ -165,56 +217,6 @@ estimator = RatioEstimator(network, d; num_summaries = num_summaries)
 ```
 
 :::
-
-## Visualizing temporal dependence
-
-The temporal range parameter $\theta_2$ controls the strength of temporal persistence through time. Smaller values produce weaker temporal memory, while larger values induce stronger persistence across successive fields.
-
-The following code reproduces the temporal-dependence visualisation shown below.
-
-```julia
-# Fix θ₁ and vary θ₂
-θ_viz = Float32[0.3  0.3;
-                0.1  0.8]
-
-# Simulate 7 time steps, giving 6 first-difference fields
-Z_viz = simulator(θ_viz, 7:7)
-
-labels = [
-    "Low temporal dependence (θ₂ = 0.1)",
-    "High temporal dependence (θ₂ = 0.8)"
-]
-
-fig = Figure(size = (1800, 600))
-
-for k in 1:2
-    Z_k = Z_viz[k]
-    ntime_viz = size(Z_k, 4)
-
-    for t in 1:ntime_viz
-        ax = Axis(
-            fig[k, t],
-            title = t == 1 ? labels[k] : "Δt = $t",
-            aspect = DataAspect()
-        )
-
-        hidedecorations!(ax)
-
-        heatmap!(
-            ax,
-            Z_k[:, :, 1, t],
-            colormap = :balance,
-            colorrange = (-2.5, 2.5)
-        )
-    end
-end
-
-display(fig)
-```
-
-The resulting plot illustrates the effect of varying temporal dependence while holding the spatial range parameter fixed.
-
-![Effect of temporal range](../assets/figures/temporal_range.png)
 
 ## Training the estimator
 
@@ -249,24 +251,10 @@ The resulting `Assessment` object contains ground-truth parameters, estimates, a
 ```julia
 bias(assessment)    # θ₁ = ..., θ₂ = ...
 rmse(assessment)    # θ₁ = ..., θ₂ = ...
-```
-Example assessment diagnostics:
-
-![Assessment diagnostics](../assets/figures/spatiotemporal_assessment.png)
-
-
-The following code reproduces the assessment diagnostics shown below.
-
-```julia
-# Generate the built-in assessment plot
-fig_assessment = plot(assessment)
-display(fig_assessment)
+plot(assessment)
 ```
 
-The diagnostics illustrate parameter recovery and calibration behaviour of the estimator.
-
-![Assessment diagnostics](../assets/figures/spatiotemporal_assessment.png)
-
+![Recovery plot](../assets/figures/spatiotemporal_assessment.png)
 
 ## Applying the estimator to observed data
 

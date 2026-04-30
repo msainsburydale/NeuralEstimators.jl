@@ -13,11 +13,10 @@ returned as an ``n``x`m` matrix.
 using NeuralEstimators, Distances, LinearAlgebra
 
 n = 500
-ρ = 0.6
-ν = 1.0
 S = rand(n, 2)
 D = pairwise(Euclidean(), S, dims = 1)
-Σ = Symmetric(matern.(D, ρ, ν))
+ρ = 0.6
+Σ = Symmetric(exp.(-D / ρ))
 L = cholesky(Σ).L
 simulategaussian(L)
 ```
@@ -53,11 +52,10 @@ returned as an ``n``x`m` matrix.
 using NeuralEstimators, Distances, LinearAlgebra
 
 n = 500
-ρ = 0.6
-ν = 1.0
 S = rand(n, 2)
 D = pairwise(Euclidean(), S, dims = 1)
-Σ = Symmetric(matern.(D, ρ, ν))
+ρ = 0.6
+Σ = Symmetric(exp.(-D / ρ))
 L = cholesky(Σ).L
 simulateschlather(L)
 ```
@@ -106,144 +104,6 @@ function simulateschlather(obj::M; C = 3.5, Gumbel::Bool = false) where {M <: Ab
 end
 
 # ---- Miscellaneous functions ----
-
-#NB Currently, second order optimisation methods cannot be used
-# straightforwardly because besselk() is not differentiable. In the future, we
-# can add an argument to matern() and maternchols(), besselfn = besselk, which
-# allows the user to change the bessel function to use adbesselk(), which
-# allows automatic differentiation: see https://github.com/cgeoga/BesselK.jl.
-@doc raw"""
-    matern(h, ρ, ν, σ² = 1)
-Given distance ``\|\boldsymbol{h}\|`` (`h`), computes the Matérn covariance function
-
-```math
-C(\|\boldsymbol{h}\|) = \sigma^2 \frac{2^{1 - \nu}}{\Gamma(\nu)} \left(\frac{\|\boldsymbol{h}\|}{\rho}\right)^\nu K_\nu \left(\frac{\|\boldsymbol{h}\|}{\rho}\right),
-```
-
-where `ρ` is a range parameter, `ν` is a smoothness parameter, `σ²` is the marginal variance, 
-``\Gamma(\cdot)`` is the gamma function, and ``K_\nu(\cdot)`` is the modified Bessel
-function of the second kind of order ``\nu``.
-"""
-function matern(h, ρ, ν, σ² = one(typeof(h)))
-
-    # Note that the `Julia` functions for ``\Gamma(\cdot)`` and ``K_\nu(\cdot)``, respectively `gamma()` and
-    # `besselk()`, do not work on the GPU and, hence, nor does `matern()`.
-
-    @assert h >= 0 "h should be non-negative"
-    @assert ρ > 0 "ρ should be positive"
-    @assert ν > 0 "ν should be positive"
-
-    if h == 0
-        C = σ²
-    else
-        d = h / ρ
-        C = σ² * ((2^(1 - ν)) / gamma(ν)) * d^ν * besselk(ν, d)
-    end
-    return C
-end
-
-"""
-    maternchols(D, ρ, ν, σ² = 1; stack = true)
-Given a matrix `D` of distances, constructs the Cholesky factor of the covariance matrix
-under the Matérn covariance function with range parameter `ρ`, smoothness
-parameter `ν`, and marginal variance `σ²`.
-
-Providing vectors of parameters will yield a three-dimensional array of Cholesky factors (note
-that the vectors must of the same length, but a mix of vectors and scalars is
-allowed). A vector of distance matrices `D` may also be provided.
-
-If `stack = true`, the Cholesky factors will be "stacked" into a
-three-dimensional array (this is only possible if all distance matrices in `D`
-are the same size).
-
-# Examples
-```julia
-using NeuralEstimators
-using LinearAlgebra: norm
-n  = 10
-S  = rand(n, 2)
-D  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S), sⱼ ∈ eachrow(S)]
-ρ  = [0.6, 0.5]
-ν  = [0.7, 1.2]
-σ² = [0.2, 0.4]
-maternchols(D, ρ, ν)
-maternchols([D], ρ, ν)
-maternchols(D, ρ, ν, σ²; stack = false)
-
-S̃  = rand(n, 2)
-D̃  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S̃), sⱼ ∈ eachrow(S̃)]
-maternchols([D, D̃], ρ, ν, σ²)
-maternchols([D, D̃], ρ, ν, σ²; stack = false)
-
-S̃  = rand(2n, 2)
-D̃  = [norm(sᵢ - sⱼ) for sᵢ ∈ eachrow(S̃), sⱼ ∈ eachrow(S̃)]
-maternchols([D, D̃], ρ, ν, σ²; stack = false)
-```
-"""
-function maternchols(D, ρ, ν, σ² = one(eltype(D)); stack::Bool = true)
-    K = max(length(ρ), length(ν), length(σ²))
-    if K > 1
-        @assert all([length(θ) ∈ (1, K) for θ ∈ (ρ, ν, σ²)]) "`ρ`, `ν`, and `σ²` should be the same length"
-        ρ = _coercetoKvector(ρ, K)
-        ν = _coercetoKvector(ν, K)
-        σ² = _coercetoKvector(σ², K)
-    end
-
-    # compute Cholesky factorization (exploit symmetry of D to minimise computations)
-    # NB surprisingly, found that the parallel Folds.map() is slower than map(). Could try FLoops or other parallelisation packages.
-    L = map(1:K) do k
-        C = matern.(UpperTriangular(D), ρ[k], ν[k], σ²[k])
-        L = cholesky(Symmetric(C)).L
-        L = convert(Array, L) # convert from Triangular to Array so that stack() can be used below
-        L
-    end
-
-    # Optionally convert from Vector of Matrices to 3D Array
-    if stack
-        L = Base.stack(L)
-    end
-
-    return L
-end
-
-function maternchols(D::V, ρ, ν, σ² = one(T); stack::Bool = true) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-    if stack
-        @assert length(unique(size.(D))) == 1 "Converting the Cholesky factors from a vector of matrices to a three-dimenisonal array is only possible if the Cholesky factors (i.e., all matrices `D`) are the same size."
-    end
-
-    K = max(length(ρ), length(ν), length(σ²))
-    if K > 1
-        @assert all([length(θ) ∈ (1, K) for θ ∈ (ρ, ν, σ²)]) "`ρ`, `ν`, and `σ²` should be the same length"
-        ρ = _coercetoKvector(ρ, K)
-        ν = _coercetoKvector(ν, K)
-        σ² = _coercetoKvector(σ², K)
-    end
-    @assert length(D) ∈ (1, K)
-
-    # Compute the Cholesky factors
-    L = maternchols.(D, ρ, ν, σ², stack = false)
-
-    # L is currently a length-one Vector of Vectors: drop redundant outer vector
-    L = stackarrays(L, merge = true)
-
-    # Optionally convert from Vector of Matrices to 3D Array
-    if stack
-        L = Base.stack(L)
-    end
-    return L
-end
-
-# Coerces a single-number or length-one-vector x into a K vector
-function _coercetoKvector(x, K)
-    @assert length(x) ∈ (1, K)
-    if !isa(x, Vector)
-        x = [x]
-    end
-    if length(x) == 1
-        x = repeat(x, K)
-    end
-    return x
-end
 
 """
 	simulatepotts(grid::Matrix{Int}, β)
