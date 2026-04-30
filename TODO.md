@@ -47,6 +47,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - For some operations involving only matrices and MLPs (e.g., inference-network transformations of summary statistics), it might be faster to always use the CPU (at least for certain batchsize ranges).
 - SimpleChains.jl: are the user-friendly constructors for each estimator type correctly converted to `SimpleChainsLayers`?
 - Lux.jl: Initial risks are much larger than Flux.jl when training NPEs.
+- Add a check for NaNs in the inputs/outputs. Also, if the training risk or validation risk becomes NaN, immediately halt training.
 
 ### Refactoring/API improvements
 - 🟡 Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.

@@ -250,6 +250,10 @@ The resulting `Assessment` object contains ground-truth parameters, estimates, a
 bias(assessment)    # θ₁ = ..., θ₂ = ...
 rmse(assessment)    # θ₁ = ..., θ₂ = ...
 ```
+Example assessment diagnostics:
+
+![Assessment diagnostics](../assets/figures/spatiotemporal_assessment.png)
+
 
 The following code reproduces the assessment diagnostics shown below.
 
