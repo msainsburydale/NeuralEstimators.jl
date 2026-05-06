@@ -1,4 +1,4 @@
-# Replicated unstructured data
+# Exchangeable data
 
 Here, we develop a neural estimator to infer $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $\boldsymbol{Z} \equiv (Z_1, \dots, Z_m)'$, where $Z_i \overset{\mathrm{iid}}{\sim} N(\mu,\, \sigma^2)$. We adopt the marginal priors $\mu \sim N(0, 1)$ and $\sigma \sim \text{IG}(3, 1)$.
 

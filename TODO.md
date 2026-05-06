@@ -35,8 +35,8 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)).
 - Example: Lévy Processes using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
 - Add [`::: tabs`](https://luxdl.github.io/DocumenterVitepress.jl/dev/manual/markdown-examples#Tabs) in the assessment stage of the examples to show the various diagnostic plots (recovery plots for point estimates; SBC and posterior contraction for posterior samples).
-- Clean Advanced usage; move "expert summary statistics", "censored data", and possibly "missing data" to the examples section (each with their own example page), and merge "Variable sample sizes" into the section on replicated data (possibly as a "Bonus" subsection at the end).
-- Citations: Use proper citation manager (see [here](https://luxdl.github.io/DocumenterVitepress.jl/dev/manual/citations)).
+- [Expert summary statistics](https://msainsburydale.github.io/NeuralEstimators.jl/dev/advancedusage#Expert-summary-statistics): give example for a model fit only with expert summary statistics, and possibly present in a separate examples page.
+- Generalize the discussion in [Variable sample sizes](https://msainsburydale.github.io/NeuralEstimators.jl/dev/advancedusage#Variable-sample-sizes) (the considerations apply to all kinds of data, not just exchangeable data).
 - Document the internal functions and add them to `API/Internal` or `API/Developer docs`. This will help with maintenance/contributions, and allow us to reference the internals when documenting public functions (e.g., "`kwargs...` are passed onto `_internal_function`").
 - Add a gif to the README (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif)).
 
