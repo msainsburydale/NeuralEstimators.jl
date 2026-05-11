@@ -1,4 +1,4 @@
-# Gridded data: non-stationary spatial fields
+# Gridded data: spatially varying parameters
 
 Here, we develop a neural Bayes estimator for a **non-stationary** spatial Gaussian process. 
 
