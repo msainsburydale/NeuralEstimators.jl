@@ -34,11 +34,13 @@ _state(ensemble) = Flux.state(Flux.cpu(ensemble))
 
 # ---------------------- Training  ---------------------
 
-import NeuralEstimators: getestimator, _construct_train_state, _save_trainstate, _train_step, _risk
+# import NeuralEstimators: getestimator, _construct_train_state, _save_trainstate, _train_step, _risk
 
-function _construct_train_state(estimator::NeuralEstimator, optimiser::Optimisers.AbstractRule)
-    FluxTrainState(estimator, optimiser, Optimisers.setup(optimiser, estimator))
-end
+# function _construct_train_state(estimator::NeuralEstimator, optimiser::Optimisers.AbstractRule)
+#     FluxTrainState(estimator, optimiser, Optimisers.setup(optimiser, estimator))
+# end
+
+import NeuralEstimators: getestimator, _save_trainstate, _train_step, _risk
 
 getestimator(trainstate::FluxTrainState) = trainstate.model
 

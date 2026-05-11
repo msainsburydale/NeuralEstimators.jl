@@ -12,7 +12,7 @@ using ChainRulesCore: @non_differentiable, @ignore_derivatives
 using ConcreteStructs: @concrete
 using CSV
 using DataFrames
-using Distances #NB used for spatialgraph() and adjacencymatrix()
+using Distances # NB used for spatialgraph() and adjacencymatrix()
 using Folds
 using Functors
 using InvertedIndices

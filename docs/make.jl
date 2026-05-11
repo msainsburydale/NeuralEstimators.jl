@@ -27,10 +27,11 @@ makedocs(
         "Workflow overview" => "overview.md",
         "Examples" => [
             "examples/data_replicated.md",
+            "examples/data_temporal.md",
             "examples/data_gridded.md",
             "examples/data_gridded_nonstationary.md",
-            "examples/data_spatiotemporal.md",
             "examples/data_irregularspatial.md",
+            "examples/data_spatiotemporal.md",
             "examples/data_missing_censored.md"
         ],
         "Advanced usage" => "advancedusage.md",

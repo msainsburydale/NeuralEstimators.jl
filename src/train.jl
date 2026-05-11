@@ -6,7 +6,7 @@
     train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...) where {P, T}
     train(estimator, θ_train::P, θ_val::P, simulator; ...) where P
     train(estimator, sampler, simulator; ...)
-Trains a neural `estimator`.
+Train a neural `estimator`.
 
 The methods cater for different variants of "on-the-fly" simulation.
 Specifically, a callable `sampler` can be provided to continuously sample new parameters, 
@@ -97,6 +97,17 @@ function getestimator end
 function _construct_train_state end
 function _risk end
 function _train_step end
+
+# NB method for estimator::LuxEstimator is provided in the Lux extension
+function _construct_train_state(estimator::NeuralEstimator, optimiser::Optimisers.AbstractRule)
+    lux = get(Base.loaded_modules, _LUX_UUID, nothing)
+    if !isnothing(lux) && _is_lux_network(estimator, lux)
+        estimator = LuxEstimator(estimator)
+        _construct_train_state(estimator, optimiser)
+    else
+        FluxTrainState(estimator, optimiser, Optimisers.setup(optimiser, estimator))
+    end
+end
 
 function train(estimator::NeuralEstimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...) where {P, T}
     trainstate = _construct_train_state(estimator, optimiser)

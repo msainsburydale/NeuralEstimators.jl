@@ -32,11 +32,11 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ### Documentation
 - Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/), [here](https://lux.csail.mit.edu/stable/), and [here](https://timweiland.github.io/GaussianMarkovRandomFields.jl/stable/) for inspiration). For example, we could add some landing-page boxes (Box 1: NPEs, NREs, NBEs. Box 2: Multibackend: Flux.jl, Lux.jl, SimpleChains.jl)
 - Once [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) is supported with Lux, add code groups for Flux/Lux (containing `using Flux`/`using Lux`) in the examples.
-- Example: Sequence (e.g., time-series) data, either using recurrent neural networks (RNNs) or partially-exchangeable networks based on DeepSet.
+- Example: Time-series data, also illustrate partially-exchangeable networks using DeepSet.
+- Example: Illustrate Lévy Processes (a time-series model) using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)).
-- Example: Lévy Processes using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
 - Add [`::: tabs`](https://luxdl.github.io/DocumenterVitepress.jl/dev/manual/markdown-examples#Tabs) in the assessment stage of the examples to show the various diagnostic plots (recovery plots for point estimates; SBC and posterior contraction for posterior samples).
-- [Expert summary statistics](https://msainsburydale.github.io/NeuralEstimators.jl/dev/advancedusage#Expert-summary-statistics): give example for a model fit only with expert summary statistics, and possibly present in a separate examples page.
+- [Expert summary statistics](https://msainsburydale.github.io/NeuralEstimators.jl/dev/advancedusage#Expert-summary-statistics), give example for a model fit only with expert summary statistics, and possibly present in a separate examples page.
 - Generalize the discussion in [Variable sample sizes](https://msainsburydale.github.io/NeuralEstimators.jl/dev/advancedusage#Variable-sample-sizes) (the considerations apply to all kinds of data, not just exchangeable data).
 - Document the internal functions and add them to `API/Internal` or `API/Developer docs`. This will help with maintenance/contributions, and allow us to reference the internals when documenting public functions (e.g., "`kwargs...` are passed onto `_internal_function`").
 - Add a gif to the README (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif)).

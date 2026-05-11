@@ -65,15 +65,19 @@ network  = adaptor(network)
 
 :::
 
- **Notes for Lux.jl users** 
+**Notes for Lux.jl users** 
  
- See the [optional dependencies for improved performance](https://lux.csail.mit.edu/stable/manual/performance_pitfalls#Optional-Dependencies-for-Performance). If you plan to use the GPU both natively via CUDA and via [XLA](https://lux.csail.mit.edu/stable/manual/compiling_lux_models) in the same session, ensure that CUDA.jl/cuDNN.jl are loaded before Reactant.jl:
+Consider loading the [optional dependencies](https://lux.csail.mit.edu/stable/manual/performance_pitfalls#Optional-Dependencies-for-Performance) for improved performance on CPUs. 
+ 
+If you plan to use the GPU via both CUDA and [XLA/Reactant](https://lux.csail.mit.edu/stable/manual/compiling_lux_models) in the same session, ensure that CUDA.jl/cuDNN.jl are loaded before Reactant.jl:
 
 ```julia
 using CUDA, cuDNN
 using Reactant
 Reactant.set_default_backend("gpu")
 ```
+
+For the most computationally efficient setup, use XLA/Reactant.jl during training by passing `device = reactant_device()` to [`train`](@ref).
 
 ## Saving and loading estimators
 
