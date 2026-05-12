@@ -1,7 +1,7 @@
 @doc raw"""
 	PosteriorEstimator <: NeuralEstimator
 	PosteriorEstimator(summary_network, q::ApproximateDistribution)
-	PosteriorEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, q = nothing, kwargs...)
+	PosteriorEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, q::ApproximateDistribution = NormalisingFlow, kwargs...)
 A neural estimator that approximates the posterior distribution $p(\boldsymbol{\theta} \mid \boldsymbol{Z})$, based on a neural `summary_network` and an approximate distribution `q` (see the available in-built [Approximate distributions](@ref)).
 
 The `summary_network` maps data $\boldsymbol{Z}$ to a vector of learned summary statistics $\boldsymbol{t} \in \mathbb{R}^{d^*}$, which are then used to condition the approximate distribution `q`. The precise way in which the summary statistics condition `q` depends on the choice of approximate distribution: for example, [`Gaussian`](@ref) and [`GaussianMixture`](@ref) use an MLP to map $\boldsymbol{t}$ directly to distributional parameters, while [`NormalisingFlow`](@ref) uses $\boldsymbol{t}$ as a conditioning input at each coupling layer.
@@ -10,7 +10,7 @@ The convenience constructor builds `q` internally given `num_parameters` and `nu
 
 # Keyword arguments
 - `num_summaries::Integer`: the number of summary statistics output by `summary_network`. Must match the output dimension of `summary_network`.
-- `q::Type{<:ApproximateDistribution}`: the type of approximate distribution to use. Defaults to `NormalisingFlow` when using `Flux`, and `GaussianMixture` when using `Lux`.
+- `q::ApproximateDistribution`: the type of approximate distribution to use.
 - `kwargs...`: additional keyword arguments passed to the constructor of `q`.
 
 # Examples
@@ -55,21 +55,13 @@ posteriormean(estimator, Z)   # point estimate
 end
 
 # Constructor: summary network, number of parameters, number of summaries => build approximate distribution automatically
-function PosteriorEstimator(summary_network, num_parameters::Integer, num_summaries::Integer; q = nothing, kwargs...)
+function PosteriorEstimator(summary_network, num_parameters::Integer, num_summaries::Integer; q = NormalisingFlow, kwargs...)
     # Convert string to type if needed
-    q = if q isa String
-        getfield(@__MODULE__, Symbol(q))
-    else
-        q
+    if q isa String
+        q = getfield(@__MODULE__, Symbol(q))
     end
-    @info "PosteriorEstimator: num_summaries = $num_summaries."
+    @info "PosteriorEstimator: num_summaries = $num_summaries, q = $q."
     backend = _backendof(summary_network)
-    # Default approximate distribution depends on backend:
-    # GaussianMixture for Lux, NormalisingFlow for Flux
-    if isnothing(q)
-        lux = get(Base.loaded_modules, _LUX_UUID, nothing)
-        q = backend === lux ? GaussianMixture : NormalisingFlow
-    end
     PosteriorEstimator(summary_network, q(num_parameters, num_summaries; backend = backend, kwargs...))
 end
 

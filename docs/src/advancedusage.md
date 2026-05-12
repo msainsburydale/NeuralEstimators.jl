@@ -6,7 +6,7 @@
 
 [SimpleChains.jl](https://github.com/PumasAI/SimpleChains.jl), which is optimised for small networks on the CPU, is also supported via [Lux.jl](https://lux.csail.mit.edu/stable/api/Lux/interop#Lux-Models-to-Simple-Chains).
 
-Despite these differences, the high-level API of NeuralEstimators.jl is largely consistent across backends, particularly with the convenience wrapper [`LuxEstimator`](@ref). The typical workflows are as follows:
+Despite these differences, the high-level API of NeuralEstimators.jl is largely consistent across backends. The typical workflows are as follows:
 
 ::: code-group
 
@@ -20,19 +20,18 @@ assess(estimator, θ_test, Z_test)
 estimate(estimator, Z)
 ```
 
-```julia [Lux.jl (convenience wrapper)]
-using NeuralEstimators, Lux, Enzyme
+```julia [Lux.jl (implicit)]
+using NeuralEstimators, Lux
 
 network   = Lux.Chain(...)
-estimator = PointEstimator(network) 
-estimator = LuxEstimator(estimator)
+estimator = PointEstimator(network)
 estimator = train(estimator, sampler, simulator)          
 assess(estimator, θ_test, Z_test)
 estimate(estimator, Z)
 ```
 
 ```julia [Lux.jl (idiomatic)]
-using NeuralEstimators, Lux, Random, Enzyme, Optimisers
+using NeuralEstimators, Lux, Random, Optimisers
 
 network    = Lux.Chain(...)
 estimator  = PointEstimator(network)

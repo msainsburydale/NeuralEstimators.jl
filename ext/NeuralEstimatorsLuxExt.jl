@@ -55,6 +55,47 @@ function LuxCore.parameterlength(q::ApproximateDistribution)
         if getfield(q, f) isa LuxCore.AbstractLuxLayer)
 end
 
+function LuxCore.initialparameters(rng::AbstractRNG, flow::NormalisingFlow)
+    (layers = map(l -> Lux.initialparameters(rng, l), flow.layers),)
+end
+
+function LuxCore.initialstates(rng::AbstractRNG, flow::NormalisingFlow)
+    (layers = map(l -> Lux.initialstates(rng, l), flow.layers),)
+end
+
+function LuxCore.initialparameters(rng::AbstractRNG, layer::CouplingLayer)
+    (
+        block1      = isnothing(layer.block1)      ? NamedTuple() : Lux.initialparameters(rng, layer.block1),
+        block2      = Lux.initialparameters(rng, layer.block2),
+        actnorm     = isnothing(layer.actnorm)     ? NamedTuple() : Lux.initialparameters(rng, layer.actnorm),
+        permutation = isnothing(layer.permutation) ? NamedTuple() : Lux.initialparameters(rng, layer.permutation),
+    )
+end
+
+function LuxCore.initialstates(rng::AbstractRNG, layer::CouplingLayer)
+    (
+        block1      = isnothing(layer.block1)      ? NamedTuple() : Lux.initialstates(rng, layer.block1),
+        block2      = Lux.initialstates(rng, layer.block2),
+        actnorm     = isnothing(layer.actnorm)     ? NamedTuple() : Lux.initialstates(rng, layer.actnorm),
+        permutation = isnothing(layer.permutation) ? NamedTuple() : Lux.initialstates(rng, layer.permutation),
+    )
+end
+
+function LuxCore.initialparameters(rng::AbstractRNG, block::AffineCouplingBlock)
+    (scale = Lux.initialparameters(rng, block.scale), translate = Lux.initialparameters(rng, block.translate))
+end
+
+function LuxCore.initialstates(rng::AbstractRNG, block::AffineCouplingBlock)
+    (scale = Lux.initialstates(rng, block.scale), translate = Lux.initialstates(rng, block.translate))
+end
+
+# Seed from the struct's initial values
+LuxCore.initialparameters(::AbstractRNG, l::ActNorm) = (scale = copy(l.scale), bias = copy(l.bias))
+LuxCore.initialstates(::AbstractRNG, ::ActNorm) = NamedTuple()
+
+LuxCore.initialparameters(::AbstractRNG, ::Permutation) = NamedTuple()
+LuxCore.initialstates(::AbstractRNG, ::Permutation)     = NamedTuple()
+
 # ---- Utility functions ----
 
 using Lux: testmode

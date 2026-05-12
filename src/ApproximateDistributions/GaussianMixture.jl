@@ -1,7 +1,7 @@
 @doc raw"""
     GaussianMixture <: ApproximateDistribution
     GaussianMixture(d::Integer, num_summaries::Integer; num_components::Integer = 10, kwargs...)
-A mixture of Gaussian distributions foramortised inference with a [`PosteriorEstimator`](@ref), where `d` is the dimension of the parameter vector. 
+A mixture of Gaussian distributions for amortised inference with a [`PosteriorEstimator`](@ref), where `d` is the dimension of the parameter vector. 
 
 The density of the distribution is: 
 ```math 

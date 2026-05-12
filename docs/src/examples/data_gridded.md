@@ -91,14 +91,16 @@ end
 
 ## Constructing the neural network
 
-For data collected over a regular grid, the neural network is typically a convolutional neural network (CNN; see, e.g., [Dumoulin and Visin, 2016](https://arxiv.org/abs/1603.07285)). A simple CNN that could be used in the current example is:
+For data collected over a regular grid, the neural network is typically a convolutional neural network (CNN; see, e.g., [Dumoulin and Visin, 2016](https://arxiv.org/abs/1603.07285)). 
 
 ```julia
 d = 1                # dimension of the parameter vector θ
 num_summaries = 3d   # number of summary statistics for θ
 ```
 
-```julia
+::: code-group
+
+```julia [Shallow CNN]
 network = Chain(
 	Conv((3, 3), 1 => 32, gelu),    # 3×3 filter, 1 → 32 channels
 	MaxPool((2, 2)),                # 2×2 max pooling
@@ -111,11 +113,7 @@ network = Chain(
 )
 ```
 
-The inclusion of a global pooling layer (e.g., [`GlobalMeanPool`](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.GlobalMeanPool)) allows the network to accommodate grids of varying dimensions. However, standard CNNs require a fixed input size during training due to their rigid input structure. To handle varying grid sizes during training, use a [`DeepSet`](@ref) as described in [Bonus: Replicated data](@ref). 
-
-In practice, deeper architectures with residual connections (see [`ResidualBlock`](@ref)) often lead to improved performance. For example:
-
-```julia
+```julia [Deeper CNN]
 network = Chain(
 	Conv((3, 3), 1 => 16, pad=1, bias=false), 
 	BatchNorm(16, relu),   
@@ -128,8 +126,13 @@ network = Chain(
 	Dense(128, 64, gelu), 
 	Dense(64, 64, gelu), 
 	Dense(64, num_summaries)
-)    
+)
 ```
+:::
+
+The inclusion of a global pooling layer (e.g., [`GlobalMeanPool`](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.GlobalMeanPool)) allows the network to accommodate grids of varying dimensions. However, standard CNNs require a fixed input size during training due to their rigid input structure. In practice, deeper architectures with residual connections (see [`ResidualBlock`](@ref)) often lead to improved performance.
+
+To handle varying grid sizes during training, use a [`DeepSet`](@ref) as described in [Bonus: Replicated data](@ref). 
 
 ## Constructing the neural estimator
 
