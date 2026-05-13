@@ -139,10 +139,10 @@ function sampleposterior(
     st = device(st)
     U  = device(U)
     tz = device(tz)
-    θ, new_st = inverse(flow, U, tz, ps, st)
+    θ, _ = inverse(flow, U, tz, ps, st)
     θ = cpu_device()(θ)
     samples = [θ[:, ((i - 1) * N + 1):(i * N)] for i in 1:K]
-    return samples, new_st
+    return samples
 end
 
 # --------------------------------------------------------------------------
@@ -371,25 +371,17 @@ end
 
 #TODO data-dependent initialisation. That is, initialise scale/bias based on a first batch of data (could introduce another field `initialised` that get set to `true` when we've run through data; something similar is done in Lux.TrainState, see their source code)
 
-"""
-    
-    ActNorm(d::Integer)
-Activation normalisation layer [Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685) for an input of dimension `d`. 
-"""
-
 """ 
     ActNorm(d::Integer)
-    ActNorm(scale, bias)
 Activation normalisation layer [Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685) for an input of dimension `d`.
-
-`scale` and `bias` stored in the struct serve double duty:
-- Flux: they are the trainable parameters (collected by Flux.params).
-- Lux:  they seed `initialparameters`; the live values come from `ps` at runtime.
 """
 @concrete struct ActNorm
     scale
     bias
 end
+# NB `scale` and `bias` stored in the struct serve double duty:
+# - Flux: they are the trainable parameters (collected by Flux.params).
+# - Lux:  they seed `initialparameters`; the live values come from `ps` at runtime.
 
 ActNorm(d::Integer) = ActNorm(ones(Float32, d, 1), zeros(Float32, d, 1))
 
