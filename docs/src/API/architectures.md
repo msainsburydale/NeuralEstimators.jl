@@ -16,6 +16,8 @@ DeepSet
 GNNSummary
 
 MLP
+
+MultiHeadMLP
 ```
 
 ## User-defined summary statistics

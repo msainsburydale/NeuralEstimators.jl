@@ -12,7 +12,7 @@ using Lux.Training: TrainState, compute_gradients
 
 import NeuralEstimators: _risk, _trainstate_to_device
 
-#TODO Here we rely on compute_gradients for compiling and caching... this is wasteful since the gradient information is not used
+# #TODO Here we rely on compute_gradients for compiling and caching... this is wasteful since the gradient information is not used
 function _risk(trainstate::TrainState, loss, data, device::ReactantDevice, adtype)
 
     #TODO Can I remove this, or use Lux.GenericLoss?
@@ -23,14 +23,34 @@ function _risk(trainstate::TrainState, loss, data, device::ReactantDevice, adtyp
 
     sum_loss = 0.0f0
     K = 0
-    for (input, output) in device(data) #TODO Lux docs suggest device(data); check if memory is ok
-        # input, output = input |> device, output |> device
+    for (input, output) in device(data)
         ∇, ls, _, trainstate = compute_gradients(adtype, lux_loss, (input, output), trainstate)
         sum_loss += ls * numobs(input)
         K += numobs(input)
     end
     return cpu(sum_loss / K), trainstate
 end
+
+#TODO Here we rely on compute_gradients for compiling and caching... this is wasteful since the gradient information is not used
+# function _risk(trainstate::TrainState, loss, data, device::ReactantDevice, compiled_model)
+
+#     #TODO Can I remove this, or use Lux.GenericLoss?
+#     function lux_loss(model, ps, st, (input, output))
+#         ŷ, st_new = model(input, ps, st)
+#         return loss(ŷ, output), st_new, (;)
+#     end
+
+#     compiled_function = @compile Lux.apply(trainstate.model, input, ps, st) #TODO maybe cache this in a new object LuxTrainState?
+
+#     sum_loss = 0.0f0
+#     K = 0
+#     for (input, output) in device(data)
+#         ∇, ls, _, trainstate = compute_gradients(adtype, lux_loss, (input, output), trainstate)
+#         sum_loss += ls * numobs(input)
+#         K += numobs(input)
+#     end
+#     return cpu(sum_loss / K), trainstate
+# end
 
 function _trainstate_to_device(trainstate::TrainState, device::ReactantDevice)
     #TODO Have to reconstruct from scratch when using reactant... unfortunately this discards the optimiser state

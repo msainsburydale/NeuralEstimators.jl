@@ -546,6 +546,55 @@ function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128
 end
 
 """
+    MultiHeadMLP(in::Integer, out::Integer, num_heads::Integer; growing::Bool = false, kwargs...)
+
+A multi-head MLP consisting of `num_heads` independent MLP heads, each with input dimension
+`in` and output dimension `out`. The outputs of all heads are concatenated to give a final
+output of dimension `num_heads * out`.
+
+# Keyword arguments
+- `growing::Bool = false`: if `true`, the input dimension of the `i`-th head is `in + i`, allowing each head to receive an incrementally larger input.
+- `kwargs`: keyword arguments passed to [`MLP`](@ref).
+
+# Examples
+```julia
+using NeuralEstimators, Lux, Random
+rng = Random.default_rng()
+Random.seed!(rng, 0)
+
+# Dummy data
+batchsize = 16
+num_summaries = 5
+num_parameters = 3
+s = rand(Float32, num_summaries, batchsize)
+θ = rand(Float32, num_parameters, batchsize)
+
+m = MultiHeadMLP(num_summaries, 1, num_parameters)
+ps, st = Lux.setup(rng, m)
+m(s, ps, st)[1]
+
+m = MultiHeadMLP(num_summaries + num_parameters, 1, num_parameters)
+ps, st = Lux.setup(rng, m)
+m(vcat(s, θ), ps, st)[1]
+
+m = MultiHeadMLP(num_summaries, 1, num_parameters; growing = true)
+sθ_split = Tuple(vcat(s, θ[1:i, :]) for i in 1:num_parameters)
+ps, st = Lux.setup(rng, m)
+m(sθ_split, ps, st)[1]
+```
+"""
+function MultiHeadMLP(in::Integer, out::Integer, num_heads::Integer; growing::Bool = false, backend::Union{Nothing, Module} = nothing, kwargs...)
+    # NB: heads are executed sequentially by `Parallel`. A more efficient implementation could use
+    #     3D tensor weights with padded inputs stacked into a 3D tensor, using
+    #     `NNlib.batched_mul` for parallel execution. But for typical `num_heads` values the
+    #     sequential overhead is probably negligible.
+    @assert num_heads > 0
+    backend = _resolvebackend(backend)
+    mlps = Tuple(MLP(in + (growing ? i : 0), out; backend = backend, kwargs...) for i in 1:num_heads)
+    return backend.Parallel(vcat, mlps...)
+end
+
+"""
     ResidualBlock(filter, in => out; stride = 1, backend = nothing)
 
 Basic residual block (see [here](https://en.wikipedia.org/wiki/Residual_neural_network#Basic_block)),

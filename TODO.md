@@ -42,7 +42,8 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Add a gif to the README (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif)).
 
 ### Performance
-- 🟡 Lux.jl + Reactant.jl currently has extra overhead during training: see the TODO in the Reactant extension.
+- 🟡 Lux.jl + Reactant.jl currently has extra overhead during training: see the TODO in the Reactant extension and .
+- 🟡 Reactant.jl in the inference stage.
 - 🟡 Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
 - For some operations involving only matrices and MLPs (e.g., inference-network transformations of summary statistics), it might be faster to always use the CPU (at least for certain batchsize ranges).
@@ -51,9 +52,9 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Add a check for NaNs in the inputs/outputs. Also, if the training risk or validation risk becomes NaN, immediately halt training.
 
 ### Refactoring/API improvements
-- 🟡 Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
-   * This can be easily done for the common cases (Chain, DeepSet), with an `@info` given to tell the user what we inferred and to change it if it is wrong. For other cases, just error and tell the user to specify the number of summaries explicitly.
-- 🟡 Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
+- Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
+   * This can be easily done for the common cases (Chain, DeepSet), with an `@info` given to tell the user what we inferred. For other cases, just error and tell the user to specify the number of summaries explicitly.
+- Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
 - Clean and improve the plotting code/logic.
 - Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl/Lux.jl.
 - Consider [StatefulLuxLayer](https://lux.csail.mit.edu/stable/manual/flux_lux_interop) as a replacement for `LuxEstimator`. (Currently, it has the same problem as `TrainState`, `model` needs to be an `AbstractLuxLayer`, but perhaps this can be relaxed.)
@@ -72,13 +73,15 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 These changes would alter the fields of estimator objects, making it more difficult to load estimators saved in previous versions (although user-facing API would remain unchanged).
 
-- Add a `base_distribution` field in `NormalisingFlow` (default standard Normal).
+- 🟡 Abstract types should be consistently prefixed by `Abstract` (e.g., `NeuralEstimator` -> `AbstractNeuralEstimator`; `ApproximateDistribution` -> `AbstractApproximateDistribution`; `BayesEstimator` -> `AbstractBayesEstimator`).
+
+- 🟡 Add a `base_distribution` field in `NormalisingFlow` (default standard Normal).
 
 - Might be helpful to store the loss function in `PointEstimator` objects. 
    * Mainly useful for knowing post-training how the estimator was trained, and for computing the risk at the assessment stage (however, this is a minor convenience, we could also just add a `loss` argument to `assess`).
    * Otherwise, could just save the loss function as metadata during training (`assess` could then load it from `tmp` or `savepath`).
 
-- Might be helpful to store the number of parameters `num_parameters` in the estimator object. 
+- Might be helpful to store the number of parameters `num_parameters` in the estimator object.
    * This would be useful for basic checks which would lead to better/more intuitive error messages. This also makes sense with the new summary network decomposition, since these constructors already require `num_parameters`.
    * Main drawback is that it bloats the struct slightly; and estimators don't necessarily need to be initialised with `num_parameters` explicitly given, in which case this field would then be empty.
 

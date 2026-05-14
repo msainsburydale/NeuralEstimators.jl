@@ -45,7 +45,7 @@ include("Parameters.jl")
 export DataSet, Summaries
 include("DataSet.jl")
 
-export DeepSet, MLP, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference
+export DeepSet, MLP, MultiHeadMLP, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference
 export IndicatorWeights, KernelWeights
 export vectotril, vectotriu
 include("Architectures.jl")

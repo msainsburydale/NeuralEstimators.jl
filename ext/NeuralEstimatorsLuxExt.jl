@@ -165,8 +165,8 @@ function _risk(trainstate::TrainState, loss, data, device, adtype = nothing) # T
     ps = trainstate.parameters #|> device
     sum_loss = 0.0f0
     K = 0
-    for (input, output) in data
-        input, output = input |> device, output |> device
+    for (input, output) in device(data)
+        # input, output = input |> device, output |> device
         ŷ = first(trainstate.model(input, ps, st))
         ls = loss(ŷ, output)
         sum_loss += ls * numobs(input)
