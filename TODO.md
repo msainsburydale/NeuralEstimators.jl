@@ -39,7 +39,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Generalize the discussion in [Variable sample sizes](https://msainsburydale.github.io/NeuralEstimators.jl/dev/advancedusage#Variable-sample-sizes) (the considerations apply to all kinds of data, not just exchangeable data).
 - Document the internal functions and add them to `API/Internal` or `API/Developer docs`. This will help with maintenance/contributions, and allow us to reference the internals when documenting public functions (e.g., "`kwargs...` are passed onto `_internal_function`").
 - Add a gif to the README (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif)).
-- Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/), [here](https://lux.csail.mit.edu/stable/), and [here](https://timweiland.github.io/GaussianMarkovRandomFields.jl/stable/) for inspiration).
+- Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/) for inspiration).
 
 ### Performance
 - 🟡 Lux.jl + Reactant.jl currently has extra overhead during training: see the TODO in the Reactant extension and .
