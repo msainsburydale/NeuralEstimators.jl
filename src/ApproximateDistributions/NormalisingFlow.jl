@@ -24,7 +24,7 @@ function NormalisingFlow(
     num_coupling_layers::Integer = 6,
     use_act_norm::Bool = true,
     backend::Union{Nothing, Module} = nothing,
-    kwargs...,
+    kwargs...
 )
     @assert num_coupling_layers > 0
     backend = _resolvebackend(backend)
@@ -65,13 +65,13 @@ end
 
 function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer; device::AbstractDevice)
     K = size(tz, 2)
-    U    = randn(Float32, flow.d, N * K)
-    tz   = repeat(tz, inner = (1, N))
-    U    = device(U)
-    tz   = device(tz)
+    U = randn(Float32, flow.d, N * K)
+    tz = repeat(tz, inner = (1, N))
+    U = device(U)
+    tz = device(tz)
     flow = device(flow)
     θ = inverse(flow, U, tz) |> cpu_device()
-    return [θ[:, ((i - 1) * N + 1):(i * N)] for i in 1:K]
+    return [θ[:, ((i - 1) * N + 1):(i * N)] for i = 1:K]
 end
 
 # ---- Lux (stateless) -------------------------------------------------------
@@ -81,7 +81,7 @@ function forward(
     θ::AbstractMatrix,
     tz::AbstractMatrix,
     ps,
-    st::NamedTuple,
+    st::NamedTuple
 )
     U = θ
     log_det_J = zero(similar(θ, 1, size(θ, 2)))
@@ -99,7 +99,7 @@ function inverse(
     U::AbstractMatrix,
     tz::AbstractMatrix,
     ps,
-    st::NamedTuple,
+    st::NamedTuple
 )
     X = U
     new_st_layers = st.layers
@@ -115,7 +115,7 @@ function _logdensity(
     θ::AbstractMatrix,
     tz::AbstractMatrix,
     ps,
-    st::NamedTuple,
+    st::NamedTuple
 )
     d, K = size(θ)
     @assert d == flow.d
@@ -131,18 +131,18 @@ function sampleposterior(
     N::Integer,
     ps,
     st::NamedTuple;
-    device = cpu_device(),
+    device = cpu_device()
 )
-    K  = size(tz, 2)
-    U  = randn(Float32, flow.d, N * K)
+    K = size(tz, 2)
+    U = randn(Float32, flow.d, N * K)
     tz = repeat(tz, inner = (1, N))
     ps = device(ps)
     st = device(st)
-    U  = device(U)
+    U = device(U)
     tz = device(tz)
     θ, _ = inverse(flow, U, tz, ps, st)
     θ = cpu_device()(θ)
-    samples = [θ[:, ((i - 1) * N + 1):(i * N)] for i in 1:K]
+    samples = [θ[:, ((i - 1) * N + 1):(i * N)] for i = 1:K]
     return samples
 end
 
@@ -183,13 +183,13 @@ function CouplingLayer(
     num_summaries::Integer;
     use_act_norm::Bool = true,
     use_permutation::Bool = true,
-    kwargs...,
+    kwargs...
 )
-    d₁          = div(d, 2)
-    d₂          = d - d₁
-    block1      = d > 1 ? AffineCouplingBlock(d₂, num_summaries, d₁; kwargs...) : nothing
-    block2      = AffineCouplingBlock(d₁, num_summaries, d₂; kwargs...)
-    actnorm     = use_act_norm               ? ActNorm(d)     : nothing
+    d₁ = div(d, 2)
+    d₂ = d - d₁
+    block1 = d > 1 ? AffineCouplingBlock(d₂, num_summaries, d₁; kwargs...) : nothing
+    block2 = AffineCouplingBlock(d₁, num_summaries, d₂; kwargs...)
+    actnorm = use_act_norm ? ActNorm(d) : nothing
     permutation = (use_permutation && d > 1) ? Permutation(d) : nothing
     CouplingLayer(d, d₁, d₂, block1, block2, actnorm, permutation)
 end
@@ -222,9 +222,15 @@ function inverse(layer::CouplingLayer, U::AbstractMatrix, tz::AbstractMatrix)
     U2 = U[(layer.d₁ + 1):end, :]
     θ2 = inverse(layer.block2, U1, U2, tz)
     θ1 = inverse(layer.block1, θ2, U1, tz)
-    θ  = vcat(θ1, θ2)
-    if !isnothing(layer.permutation); θ = inverse(layer.permutation, θ); end
-    if !isnothing(layer.actnorm);     θ = inverse(layer.actnorm, θ);     end
+    θ = vcat(θ1, θ2)
+    if !isnothing(layer.permutation)
+        ;
+        θ = inverse(layer.permutation, θ);
+    end
+    if !isnothing(layer.actnorm)
+        ;
+        θ = inverse(layer.actnorm, θ);
+    end
     return θ
 end
 
@@ -237,7 +243,7 @@ function forward(
     θ::AbstractMatrix,
     tz::AbstractMatrix,
     ps,
-    st::NamedTuple,
+    st::NamedTuple
 )
     log_det_J = zero(similar(θ, 1, size(θ, 2)))
     if !isnothing(layer.actnorm)
@@ -264,7 +270,7 @@ function inverse(
     U::AbstractMatrix,
     tz::AbstractMatrix,
     ps,
-    st::NamedTuple,
+    st::NamedTuple
 )
     U1 = layer.d₁ > 0 ? U[1:layer.d₁, :] : similar(U, 0, size(U, 2))
     U2 = U[(layer.d₁ + 1):end, :]
@@ -322,17 +328,17 @@ function AffineCouplingBlock(
     num_summaries::Integer,
     d₂::Integer;
     backend::Union{Nothing, Module} = nothing,
-    kwargs...,
+    kwargs...
 )
-    backend   = _resolvebackend(backend)
-    scale     = MLP(d₁ + num_summaries, d₂; backend = backend, kwargs...)
+    backend = _resolvebackend(backend)
+    scale = MLP(d₁ + num_summaries, d₂; backend = backend, kwargs...)
     translate = MLP(d₁ + num_summaries, d₂; backend = backend, kwargs...)
     AffineCouplingBlock(scale, translate, d₁, d₂)
 end
 
 numdistributionalparams(block::AffineCouplingBlock) = 2 * block.d₂
 
-const clamp_value     = 1.9f0
+const clamp_value = 1.9f0
 const softclamp_scale = 2.0f0 * clamp_value / Float32(π)
 softclamp(s) = softclamp_scale .* atan.(s ./ clamp_value)
 
@@ -400,7 +406,6 @@ function forward(::ActNorm, θ::AbstractMatrix, ps, st::NamedTuple)
 end
 inverse(::ActNorm, U::AbstractMatrix, ps, st::NamedTuple) = ((U .- ps.bias) ./ ps.scale, st)
 
-
 # --------------------------------------------------------------------------
 # Permutation
 # --------------------------------------------------------------------------
@@ -417,7 +422,7 @@ Note that a permutation layer is invertible with Jacobian determinant |J| = 1.
 end
 
 function Permutation(d::Integer)
-    perm     = randperm(d)
+    perm = randperm(d)
     inv_perm = sortperm(perm)
     Permutation(perm, inv_perm)
 end
@@ -427,5 +432,5 @@ forward(l::Permutation, θ::AbstractMatrix) = θ[l.permutation, :]
 inverse(l::Permutation, U::AbstractMatrix) = U[l.inv_permutation, :]
 
 # Lux (stateless) — ps/st are empty; just thread them through
-forward(l::Permutation, θ::AbstractMatrix, ps, st::NamedTuple) = θ[l.permutation, :],     st
+forward(l::Permutation, θ::AbstractMatrix, ps, st::NamedTuple) = θ[l.permutation, :], st
 inverse(l::Permutation, U::AbstractMatrix, ps, st::NamedTuple) = U[l.inv_permutation, :], st

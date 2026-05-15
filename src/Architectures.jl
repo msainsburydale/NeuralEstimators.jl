@@ -590,7 +590,7 @@ function MultiHeadMLP(in::Integer, out::Integer, num_heads::Integer; growing::Bo
     #     sequential overhead is probably negligible.
     @assert num_heads > 0
     backend = _resolvebackend(backend)
-    mlps = Tuple(MLP(in + (growing ? i : 0), out; backend = backend, kwargs...) for i in 1:num_heads)
+    mlps = Tuple(MLP(in + (growing ? i : 0), out; backend = backend, kwargs...) for i = 1:num_heads)
     return backend.Parallel(vcat, mlps...)
 end
 
