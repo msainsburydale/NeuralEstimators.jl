@@ -26,12 +26,11 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Lux support for [CovarianceMatrix/CorrelationMatrix](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Output-layers).
 - Lux support for [SpatialGraphConv](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
 - Reactant support for [Gaussian](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) (issue is likely the triangular solve when computing the density).
-- AutoEnzyme + CPU support for [NormalisingFlow](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions). "ERROR: EnzymeRuntimeActivityError: Detected potential need for runtime activity."
+- 🟡 AutoEnzyme + CPU support for [NormalisingFlow](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions). "ERROR: EnzymeRuntimeActivityError: Detected potential need for runtime activity." Once this is done, change the ["Quick start"](https://msainsburydale.github.io/NeuralEstimators.jl/dev/#Quick-start) example to use Lux.
 - SimpleChains.jl: for user-friendliness, enforce `CPUDevice`/`AutoZygote` during training and `CPUDevice` during inference (dispatching on `SimpleChainsLayer` within `_resolvedevice` and `_resolve_adtype`). NB: `SimpleChainsLayer` is not in LuxCore, so this dispatch may need to live in the extension.
 
 ### Documentation
-- Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/), [here](https://lux.csail.mit.edu/stable/), and [here](https://timweiland.github.io/GaussianMarkovRandomFields.jl/stable/) for inspiration). For example, we could add some landing-page boxes (Box 1: NPEs, NREs, NBEs. Box 2: Multibackend: Flux.jl, Lux.jl, SimpleChains.jl)
-- Once [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) is supported with Lux, add code groups for Flux/Lux (containing `using Flux`/`using Lux`) in the examples.
+- Add code groups for Lux/Flux (containing `using Lux`/`using Flux`) in the examples.
 - Example: Time-series data, also illustrate partially-exchangeable networks using DeepSet.
 - Example: Illustrate Lévy Processes (a time-series model) using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)).
@@ -40,6 +39,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Generalize the discussion in [Variable sample sizes](https://msainsburydale.github.io/NeuralEstimators.jl/dev/advancedusage#Variable-sample-sizes) (the considerations apply to all kinds of data, not just exchangeable data).
 - Document the internal functions and add them to `API/Internal` or `API/Developer docs`. This will help with maintenance/contributions, and allow us to reference the internals when documenting public functions (e.g., "`kwargs...` are passed onto `_internal_function`").
 - Add a gif to the README (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif)).
+- Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/), [here](https://lux.csail.mit.edu/stable/), and [here](https://timweiland.github.io/GaussianMarkovRandomFields.jl/stable/) for inspiration).
 
 ### Performance
 - 🟡 Lux.jl + Reactant.jl currently has extra overhead during training: see the TODO in the Reactant extension and .

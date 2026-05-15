@@ -524,7 +524,7 @@ end
 A traditional fully-connected multilayer perceptron (MLP) with input dimension `in` and output dimension `out`.
 
 # Keyword arguments
-- `depth::Integer = 2`: the number of hidden layers. Use `depth = 0` for a single linear layer with no hidden layers.
+- `depth::Integer = 2`: the number of hidden layers.
 - `width::Integer = 128`: the width of each hidden layer.
 - `activation = relu`: the activation function used in each hidden layer.
 - `output_activation = identity`: the activation function used in the output layer.

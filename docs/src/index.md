@@ -1,25 +1,49 @@
 ```@raw html
 ---
-sidebar: false
-next: false
+# https://vitepress.dev/reference/default-theme-home-page
+layout: home
+
+hero:
+  name: NeuralEstimators.jl
+  text: Efficient simulation-based inference using neural networks
+  image:
+    src: /logo.svg
+    alt: NeuralEstimators.jl
+
+features:
+  - icon: 🧠
+    title: Neural Posterior, Ratio & Bayes Estimators
+    details: Build NPEs, NREs, and NBEs with a unified, user-friendly API.
+    link: /methodology
+
+  - icon: ⚡
+    title: High Performance
+    details: Supports XLA compilation via Reactant.jl for optimal performance on CPU, GPU, and TPU.
+    link: /advancedusage
+
+  - icon: 🔧
+    title: Multi-Backend Support
+    details: Works seamlessly with neural networks defined with Flux.jl, Lux.jl, and SimpleChains.jl.
+    link: /advancedusage
+
+  - icon: 🔗
+    title: R Interface via CRAN
+    details: An R interface is available on CRAN, giving R users full access to NeuralEstimators.jl.
+    link: https://cran.r-project.org/web/packages/NeuralEstimators/index.html
 ---
 ```
 
-# NeuralEstimators
+## Introduction
 
-`NeuralEstimators` facilitates a suite of neural methods for parameter inference in scenarios where simulation from the model is feasible. These methods are **likelihood-free** and **amortised**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches. 
+NeuralEstimators.jl facilitates neural methods for parameter inference in scenarios where simulation from the model is feasible. These methods are **likelihood-free** and **amortised**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches. 
 
 The package supports neural Bayes estimators (NBEs), which transform data into point summaries of the posterior distribution; neural posterior estimators (NPEs), which perform approximate posterior inference via KL-divergence minimisation; and neural ratio estimators (NREs), which approximate the likelihood-to-evidence ratio and thereby enable frequentist or Bayesian inference through various downstream algorithms.
 
-User-friendliness is a central focus of the package, which is designed to minimise "boilerplate" code while preserving complete flexibility in the neural-network architecture and other workflow components. The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data. A convenient interface for R users is available on [CRAN](https://cran.r-project.org/web/packages/NeuralEstimators/index.html).
-
-## Backends
-
-The package supports neural networks defined with either of the two leading deep-learning packages in Julia, namely [Flux.jl](https://fluxml.ai) or [Lux.jl](https://lux.csail.mit.edu).
+User-friendliness is a central focus of the package, which is designed to minimise "boilerplate" code while preserving complete flexibility in the neural-network architecture and other workflow components. The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data.
 
 ## Installation
 
-To install the package, please first install the current stable release of [Julia](https://julialang.org/downloads/). Then, install the current stable version of the package using the following command inside Julia:
+To install the package, first install the current stable release of [Julia](https://julialang.org/downloads/). Then, install the current stable version of the package using the following command inside Julia:
 
 ```julia
 using Pkg; Pkg.add("NeuralEstimators")
@@ -33,12 +57,12 @@ using Pkg; Pkg.add(url = "https://github.com/msainsburydale/NeuralEstimators.jl"
 
 ## Quick start 
 
-In the following minimal example, we develop a neural estimator for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $\boldsymbol{Z} \equiv (Z_1, \dots, Z_n)'$, where $Z_i \overset{\mathrm{iid}}\sim N(\mu, \sigma^2)$ and we use the marginal priors $\mu \sim N(0, 1)$ and $\sigma \sim U(0, 1)$. 
+In the following minimal example, we develop a neural estimator for $\boldsymbol{\theta} \equiv (\mu, \sigma)'$ from data $\boldsymbol{Z} \equiv (Z_1, \dots, Z_n)'$, where $Z_i \overset{\mathrm{iid}}\sim N(\mu, \sigma^2)$, and we use the priors $\mu \sim N(0, 1)$ and $\sigma \sim U(0, 1)$. 
 
 ::: code-group
 
 ```julia [Point estimation]
-using NeuralEstimators, Flux, CairoMakie
+using NeuralEstimators, Flux
 
 # Functions to sample from the prior and simulate data
 d, n = 2, 100  # dimension of θ and number of replicates
@@ -61,7 +85,6 @@ Z_test = simulator(θ_test)
 assessment = assess(estimator, θ_test, Z_test)
 bias(assessment)
 rmse(assessment)
-plot(assessment)
 
 # Apply to observed data (here, simulated as a stand-in)
 θ = sampler(1)                   # ground truth (not known in practice)
@@ -70,7 +93,7 @@ estimate(estimator, Z)           # point estimate
 ```
 
 ```julia [Posterior estimation]
-using NeuralEstimators, Flux, CairoMakie
+using NeuralEstimators, Flux
 
 # Functions to sample from the prior and simulate data
 d, n = 2, 100  # dimension of θ and number of replicates
@@ -93,7 +116,6 @@ Z_test = simulator(θ_test)
 assessment = assess(estimator, θ_test, Z_test)
 bias(assessment)
 rmse(assessment)
-plot(assessment)
 
 # Apply to observed data (here, simulated as a stand-in)
 θ = sampler(1)                   # ground truth (not known in practice)
@@ -102,7 +124,7 @@ sampleposterior(estimator, Z)    # approximate posterior sample
 ```
 
 ```julia [Ratio estimation]
-using NeuralEstimators, Flux, CairoMakie
+using NeuralEstimators, Flux
 
 # Functions to sample from the prior and simulate data
 d, n = 2, 100  # dimension of θ and number of replicates
@@ -125,7 +147,6 @@ Z_test = simulator(θ_test)
 assessment = assess(estimator, θ_test, Z_test)
 bias(assessment)
 rmse(assessment)
-plot(assessment)
 
 # Apply to observed data (here, simulated as a stand-in)
 θ = sampler(1)                   # ground truth (not known in practice)
@@ -137,33 +158,14 @@ sampleposterior(estimator, Z)    # approximate posterior sample
 
 ## Contributing
 
-We welcome contributions of all sizes. To get started, see [CONTRIBUTING.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/CONTRIBUTING.md) for an overview of the code structure, development workflow, and how to submit contributions. A list of planned improvements is available in [TODO.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/TODO.md), and instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/README.md). 
+We welcome contributions of all sizes. To get started, see [CONTRIBUTING.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/CONTRIBUTING.md) for an overview of the code structure, development workflow, and how to submit contributions. Specific instructions for contributing to the documentation can be found in [docs/README.md](https://github.com/msainsburydale/NeuralEstimators.jl/blob/main/docs/README.md). 
 
 If you encounter a bug or have a suggestion, please feel free to [open an issue](https://github.com/msainsburydale/NeuralEstimators.jl/issues) or submit a pull request.
 
 ## Supporting and citing
 
-This software was developed as part of academic research. If you would like to support it, please [star the repository](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main). If you use it in your research or other activities, please also use the following citation.
-
-```
-@misc{,
-  title = {{NeuralEstimators.jl}: A {J}ulia package for efficient simulation-based inference using neural networks},
-  author = {Sainsbury-Dale, Matthew},
-  year = {2026},
-  note = {Version 0.2.0},
-  howpublished = {\url{https://github.com/msainsburydale/NeuralEstimators.jl}}
-}
-
-@article{,
-    title = {Likelihood-Free Parameter Estimation with Neural {B}ayes Estimators},
-    author = {Matthew Sainsbury-Dale and Andrew Zammit-Mangion and Raphael Huser},
-    journal = {The American Statistician},
-    year = {2024},
-    volume = {78},
-    pages = {1--14},
-    doi = {10.1080/00031305.2023.2249522},
-  }
-```
+This software was developed as part of academic research. If you would like to support it, please [star the repository](https://github.com/msainsburydale/NeuralEstimators.jl/tree/main). If you use it in your research or other activities, please also use the 
+citation given [here](https://github.com/msainsburydale/NeuralEstimators.jl#supporting-and-citing).
 
 ## Papers using NeuralEstimators
 
@@ -180,3 +182,5 @@ This software was developed as part of academic research. If you would like to s
 - **Neural Bayes inference for complex bivariate extremal dependence models** [[paper]](https://arxiv.org/abs/2503.23156)[[code]](https://github.com/lidiamandre/NBE_classifier_depmodels)
 
 - **Fast likelihood-free parameter estimation for Lévy processes** [[paper]](https://www.arxiv.org/abs/2505.01639)
+
+- **Joint modeling of low and high extremes using a multivariate extended generalized Pareto distribution** [[paper]](https://arxiv.org/abs/2509.05982)

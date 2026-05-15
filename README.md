@@ -154,3 +154,5 @@ This software was developed as part of academic research. If you would like to s
 - **Neural Bayes inference for complex bivariate extremal dependence models** [[paper]](https://arxiv.org/abs/2503.23156)[[code]]( https://github.com/lidiamandre/NBE_classifier_depmodels)
 
 - **Fast likelihood-free parameter estimation for Lévy processes** [[paper]](https://www.arxiv.org/abs/2505.01639)
+
+- **Joint modeling of low and high extremes using a multivariate extended generalized Pareto distribution** [[paper]](https://arxiv.org/abs/2509.05982)

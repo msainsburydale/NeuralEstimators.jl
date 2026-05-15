@@ -26,6 +26,7 @@ function NormalisingFlow(
     backend::Union{Nothing, Module} = nothing,
     kwargs...,
 )
+    @assert num_coupling_layers > 0
     backend = _resolvebackend(backend)
     layers = ntuple(_ -> CouplingLayer(d, num_summaries; backend = backend, use_act_norm = use_act_norm, kwargs...), num_coupling_layers)
     NormalisingFlow(d, layers)
