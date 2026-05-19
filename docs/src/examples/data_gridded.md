@@ -136,7 +136,7 @@ To handle varying grid sizes during training, use a [`DeepSet`](@ref) as describ
 
 ## Constructing the neural estimator
 
-We now construct a [`NeuralEstimator`](@ref "Estimators") by wrapping the neural network in the subtype corresponding to the intended inferential method:
+We now construct a neural estimator by wrapping the neural network in the subtype corresponding to the intended inferential method:
 
 ::: code-group
 
@@ -156,7 +156,7 @@ estimator = RatioEstimator(network, d; num_summaries = num_summaries)
 
 ## Training the estimator
 
-We train the estimators using fixed parameter instances to avoid repeated Cholesky factorisations (see [Storing expensive intermediate objects for data simulation](@ref) and [On-the-fly and just-in-time simulation](@ref) for further discussion):
+We train the estimators using fixed parameter instances to avoid repeated Cholesky factorisations (see [On-the-fly and just-in-time simulation](@ref) for further discussion):
 
 ```julia
 K = 5000

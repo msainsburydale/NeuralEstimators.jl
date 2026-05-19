@@ -16,40 +16,40 @@ import LuxCore: initialparameters, initialstates, parameterlength, statelength
 
 # Tell Lux how to traverse estimator structs 
 # NB These reuels imply that all neural networks must be full Lux models (can't use DeepSet directly, would need a Lux version)
-const LuxTraversable = Union{LuxCore.AbstractLuxLayer, ApproximateDistribution}
+const LuxTraversable = Union{LuxCore.AbstractLuxLayer, AbstractApproximateDistribution}
 
-function LuxCore.initialparameters(rng::AbstractRNG, estimator::NeuralEstimator)
+function LuxCore.initialparameters(rng::AbstractRNG, estimator::AbstractNeuralEstimator)
     NamedTuple(f => LuxCore.initialparameters(rng, getfield(estimator, f))
                for f in fieldnames(typeof(estimator))
                if getfield(estimator, f) isa LuxTraversable)
 end
-function LuxCore.initialstates(rng::AbstractRNG, estimator::NeuralEstimator)
+function LuxCore.initialstates(rng::AbstractRNG, estimator::AbstractNeuralEstimator)
     NamedTuple(f => LuxCore.initialstates(rng, getfield(estimator, f))
                for f in fieldnames(typeof(estimator))
                if getfield(estimator, f) isa LuxTraversable)
 end
-function LuxCore.parameterlength(estimator::NeuralEstimator)
+function LuxCore.parameterlength(estimator::AbstractNeuralEstimator)
     sum(f -> LuxCore.parameterlength(getfield(estimator, f)),
         filter(f -> getfield(estimator, f) isa LuxTraversable, fieldnames(typeof(estimator))))
 end
-function LuxCore.statelength(estimator::NeuralEstimator)
+function LuxCore.statelength(estimator::AbstractNeuralEstimator)
     sum(f -> LuxCore.statelength(getfield(estimator, f)),
         filter(f -> getfield(estimator, f) isa LuxTraversable, fieldnames(typeof(estimator))),
         init = 0)  # init=0 handles the case where there are no matching fields
 end
 
-function LuxCore.initialparameters(rng::AbstractRNG, q::ApproximateDistribution)
+function LuxCore.initialparameters(rng::AbstractRNG, q::AbstractApproximateDistribution)
     NamedTuple(f => LuxCore.initialparameters(rng, getfield(q, f))
                for f in fieldnames(typeof(q))
                if getfield(q, f) isa LuxCore.AbstractLuxLayer)
 end
-function LuxCore.initialstates(rng::AbstractRNG, q::ApproximateDistribution)
+function LuxCore.initialstates(rng::AbstractRNG, q::AbstractApproximateDistribution)
     NamedTuple(f => LuxCore.initialstates(rng, getfield(q, f))
                for f in fieldnames(typeof(q))
                if getfield(q, f) isa LuxCore.AbstractLuxLayer)
 end
 
-function LuxCore.parameterlength(q::ApproximateDistribution)
+function LuxCore.parameterlength(q::AbstractApproximateDistribution)
     sum(LuxCore.parameterlength(getfield(q, f))
         for f in fieldnames(typeof(q))
         if getfield(q, f) isa LuxCore.AbstractLuxLayer)
@@ -125,7 +125,7 @@ LowerCholeskyFactor(d::Integer, ::Val{:Lux}) = Lux.WrappedFunction(LowerCholesky
 import NeuralEstimators: LuxEstimator
 
 # Convenience constructor so that users don't need to manually initialize the network parameters and states (ps and st)
-LuxEstimator(estimator::NeuralEstimator; rng::AbstractRNG = Random.default_rng()) = LuxEstimator(estimator, Lux.setup(rng, estimator)...)
+LuxEstimator(estimator::AbstractNeuralEstimator; rng::AbstractRNG = Random.default_rng()) = LuxEstimator(estimator, Lux.setup(rng, estimator)...)
 
 # Forward mode that can be used to directly apply a LuxEstimator to data
 (estimator::LuxEstimator)(args...) = first(estimator.estimator(args..., estimator.ps, Lux.testmode(estimator.st)))
@@ -214,6 +214,6 @@ function TrainState(model, ps, st, optimizer::Optimisers.AbstractRule) #TODO rem
 end
 
 import LuxCore: preserves_state_type
-preserves_state_type(l::NeuralEstimator) = true
+preserves_state_type(l::AbstractNeuralEstimator) = true
 
 end

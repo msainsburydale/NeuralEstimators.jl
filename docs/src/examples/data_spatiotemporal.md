@@ -203,7 +203,7 @@ display(fig)
 
 ## Constructing the neural estimator
 
-We now construct a `NeuralEstimator` by wrapping the neural network in the subtype corresponding to the intended inferential method:
+We now construct a neural estimator by wrapping the neural network in the subtype corresponding to the intended inferential method:
 
 ::: code-group
 ```julia [Point estimator]

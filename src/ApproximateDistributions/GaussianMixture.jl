@@ -1,5 +1,5 @@
 @doc raw"""
-    GaussianMixture <: ApproximateDistribution
+    GaussianMixture <: AbstractApproximateDistribution
     GaussianMixture(d::Integer, num_summaries::Integer; num_components::Integer = 10, kwargs...)
 A mixture of Gaussian distributions for amortised inference with a [`PosteriorEstimator`](@ref), where `d` is the dimension of the parameter vector. 
 
@@ -15,7 +15,7 @@ When using a `GaussianMixture` as the approximate distribution of a [`PosteriorE
 - `num_components::Integer = 10`: number of components in the mixture. 
 - `kwargs`: additional keyword arguments passed to [`MLP`](@ref). 
 """
-struct GaussianMixture{D, M} <: ApproximateDistribution
+struct GaussianMixture{D, M} <: AbstractApproximateDistribution
     d::D
     num_summaries::D
     num_components::D

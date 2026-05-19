@@ -1,5 +1,5 @@
 @doc raw"""
-    EM(simulateconditional::Function, MAP::Union{Function, NeuralEstimator}, θ₀ = nothing)
+    EM(simulateconditional::Function, MAP::Union{Function, AbstractNeuralEstimator}, θ₀ = nothing)
 
 Implements a (Bayesian) Monte Carlo expectation-maximization (EM) algorithm for 
 parameter estimation with missing data. The algorithm iteratively simulates missing 
@@ -40,7 +40,7 @@ declared when this quantity is less than `tol` for `nconsecutive` consecutive it
   ```
   Returns completed data in the format expected by `MAP` (e.g., 4D array for CNNs).
 
-- `MAP::NeuralEstimator`: MAP estimator applied to completed data. 
+- `MAP::AbstractNeuralEstimator`: MAP estimator applied to completed data. 
 
 - `θ₀`: Optional initial parameter values (vector). Can also be provided when calling 
   the `EM` object.

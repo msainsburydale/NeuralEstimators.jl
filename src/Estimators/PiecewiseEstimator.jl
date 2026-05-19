@@ -1,8 +1,8 @@
 #NB I think this should be deprecated, adds code complexity for something that is not often used. For now, I've just removed it from the main documentation. Previously, we wrote: "Several types serve as wrappers around the aforementioned estimators, enhancing their functionality. [`PiecewiseEstimator`](@ref) applies different estimators based on the sample size of the data (see the discussion on [Variable sample sizes](@ref)). Finally, [`Ensemble`](@ref) combines multiple estimators, aggregating their individual estimates to improve accuracy."
 
 @doc raw"""
-	PiecewiseEstimator <: NeuralEstimator
-	PiecewiseEstimator(estimators::Vector{BayesEstimator}, changepoints::Vector{Integer})
+	PiecewiseEstimator <: AbstractNeuralEstimator
+	PiecewiseEstimator(estimators::Vector{AbstractBayesEstimator}, changepoints::Vector{Integer})
 Creates a piecewise estimator
 ([Sainsbury-Dale et al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522), Sec. 2.2.2)
 from a collection of neural Bayes `estimators` and sample-size `changepoints`.
@@ -46,7 +46,7 @@ Z = [rand(n, m) for m ∈ (10, 50)]
 estimate(θ̂, Z)
 ```
 """
-struct PiecewiseEstimator{E, C} <: NeuralEstimator
+struct PiecewiseEstimator{E, C} <: AbstractNeuralEstimator
     estimators::E
     changepoints::C
     function PiecewiseEstimator(estimators, changepoints)

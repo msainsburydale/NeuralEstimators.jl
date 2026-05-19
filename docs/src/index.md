@@ -37,7 +37,7 @@ features:
 
 NeuralEstimators.jl facilitates neural methods for parameter inference in scenarios where simulation from the model is feasible. These methods are **likelihood-free** and **amortised**, in the sense that, once the neural networks are trained on simulated data, they enable rapid inference across arbitrarily many observed data sets in a fraction of the time required by conventional approaches. 
 
-The package supports neural Bayes estimators (NBEs), which transform data into point summaries of the posterior distribution; neural posterior estimators (NPEs), which perform approximate posterior inference via KL-divergence minimisation; and neural ratio estimators (NREs), which approximate the likelihood-to-evidence ratio and thereby enable frequentist or Bayesian inference through various downstream algorithms.
+The package supports neural posterior estimators (NPEs), which approximate the full posterior distribution using generative neural networks; neural Bayes estimators (NBEs), which transform data into functionals (e.g., point summaries) of the posterior distribution; and neural ratio estimators (NREs), which approximate the likelihood-to-evidence ratio and thereby enable flexible Bayesian or frequentist inference.
 
 User-friendliness is a central focus of the package, which is designed to minimise "boilerplate" code while preserving complete flexibility in the neural-network architecture and other workflow components. The package accommodates any model for which simulation is feasible by allowing users to define their model implicitly through simulated data.
 
@@ -62,7 +62,7 @@ In the following minimal example, we develop a neural estimator for $\boldsymbol
 ::: code-group
 
 ```julia [Point estimation]
-using NeuralEstimators, Flux
+using NeuralEstimators, Lux
 
 # Functions to sample from the prior and simulate data
 d, n = 2, 100  # dimension of θ and number of replicates
@@ -70,7 +70,7 @@ sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
 simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(n))
 simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
-# Neural network, an MLP mapping n inputs into d outputs
+# Neural network mapping n inputs into d outputs
 network = Chain(Dense(n, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
 
 # Initialise a neural estimator
@@ -93,7 +93,7 @@ estimate(estimator, Z)           # point estimate
 ```
 
 ```julia [Posterior estimation]
-using NeuralEstimators, Flux
+using NeuralEstimators, Lux
 
 # Functions to sample from the prior and simulate data
 d, n = 2, 100  # dimension of θ and number of replicates
@@ -101,11 +101,11 @@ sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
 simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(n))
 simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
-# Neural network, an MLP mapping n inputs into d outputs
+# Neural network mapping n inputs into d outputs
 network = Chain(Dense(n, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
 
 # Initialise a neural estimator
-estimator = PosteriorEstimator(network, d; num_summaries = d)
+estimator = PosteriorEstimator(network, d; num_summaries = d, q = GaussianMixture)
 
 # Train the estimator
 estimator = train(estimator, sampler, simulator)
@@ -124,7 +124,7 @@ sampleposterior(estimator, Z)    # approximate posterior sample
 ```
 
 ```julia [Ratio estimation]
-using NeuralEstimators, Flux
+using NeuralEstimators, Lux, Reactant
 
 # Functions to sample from the prior and simulate data
 d, n = 2, 100  # dimension of θ and number of replicates
@@ -132,14 +132,14 @@ sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
 simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(n))
 simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
-# Neural network, an MLP mapping n inputs into d outputs
+# Neural network mapping n inputs into d outputs
 network = Chain(Dense(n, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
 
 # Initialise a neural estimator
 estimator = RatioEstimator(network, d; num_summaries = d)
 
 # Train the estimator
-estimator = train(estimator, sampler, simulator)
+estimator = train(estimator, sampler, simulator, device = reactant_device())
 
 # Assess the estimator
 θ_test = sampler(250)

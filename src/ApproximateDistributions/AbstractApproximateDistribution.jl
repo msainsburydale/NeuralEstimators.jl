@@ -1,8 +1,8 @@
 @doc raw"""
-	ApproximateDistribution
-An abstract supertype for approximate posterior distributions used in conjunction with a [`PosteriorEstimator`](@ref). 
+	AbstractApproximateDistribution
+An abstract supertype for approximate distributions used in conjunction with a [`PosteriorEstimator`](@ref). 
 
-Subtypes `A <: ApproximateDistribution` must implement the following methods: 
+Subtypes `A <: AbstractApproximateDistribution` must implement the following methods: 
  - `_logdensity(q::A, θ::AbstractMatrix, t::AbstractMatrix)` 
     - Used during training and therefore must support automatic differentiation.
     - `θ` is a `d × K` matrix of parameter vectors.
@@ -12,19 +12,19 @@ Subtypes `A <: ApproximateDistribution` must implement the following methods:
     - Used during inference and therefore does not need to be differentiable.
     - Should return a `Vector` of length `K`, where each element is a `d × N` matrix containing `N` samples from the approximate posterior `q(θ | tₖ)` for the `k`-th data set.
 """
-abstract type ApproximateDistribution end
+abstract type AbstractApproximateDistribution end
 
 @doc raw"""
-    numdistributionalparams(q::ApproximateDistribution)
+    numdistributionalparams(q::AbstractApproximateDistribution)
     numdistributionalparams(estimator::PosteriorEstimator)
 The number of distributional parameters (i.e., the dimension of the space ``\mathcal{K}`` of approximate-distribution parameters ``\boldsymbol{\kappa}``). 
 """
 function numdistributionalparams end
 
 # Catch the case that t is a vector
-sampleposterior(q::ApproximateDistribution, t::AbstractVector, N::Integer; kwargs...) = sampleposterior(q, reshape(t, :, 1), N; kwargs...)
+sampleposterior(q::AbstractApproximateDistribution, t::AbstractVector, N::Integer; kwargs...) = sampleposterior(q, reshape(t, :, 1), N; kwargs...)
 
-# Generic keyword constructor for all ApproximateDistribution subtypes;
+# Generic keyword constructor for all AbstractApproximateDistribution subtypes;
 # allows num_summaries to be passed as either a positional or keyword argument
-(::Type{T})(num_parameters::Integer; num_summaries::Integer, kwargs...) where {T <: ApproximateDistribution} =
+(::Type{T})(num_parameters::Integer; num_summaries::Integer, kwargs...) where {T <: AbstractApproximateDistribution} =
     T(num_parameters, num_summaries; kwargs...)

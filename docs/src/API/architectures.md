@@ -62,10 +62,10 @@ Order = [:type, :function]
 Pages   = ["activationfunctions.md"]
 ```
 
-In addition to the standard activation functions provided by [NNlib.jl](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#man-activations) (e.g., `relu`, `gelu`, `softplus`), the following layers can be used at the end of an architecture to ensure valid point estimates for certain models. Note that `Parallel` ([Flux](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.Parallel)/[Lux](https://lux.csail.mit.edu/stable/api/Lux/layers)) can be useful for applying several parameter constraints.
+In addition to the standard activation functions provided by [NNlib.jl](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#man-activations) (e.g., `relu`, `gelu`, `softplus`), the following layers can be used at the end of a neural network to ensure the outputs satisfy certain constraints. Note that `Parallel` ([Flux](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.Parallel)/[Lux](https://lux.csail.mit.edu/stable/api/Lux/layers)) can be useful for applying several parameter constraints simultaneously.
 
 !!! note "Layers vs. activation functions"
-    Although we may conceptualise the following types as "output activation functions", they should be treated as separate layers included in the final stage of a `Chain`. In particular, they cannot be used as the activation function of a `Dense` layer. 
+    The following types should be incorporated as separate layers in the final stage of a `Chain`. In particular, they cannot be used as the activation function of a `Dense` layer. 
 
 ```@docs
 Compress

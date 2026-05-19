@@ -4,10 +4,10 @@ CollapsedDocStrings = true
 
 # Estimators
 
-The package provides several classes of neural estimator, organised within a type hierarchy rooted at the abstract supertype [`NeuralEstimator`](@ref).
+The package provides several classes of neural estimator, organised within a type hierarchy rooted at [`AbstractNeuralEstimator`](@ref).
 
 ```@docs
-NeuralEstimator
+AbstractNeuralEstimator
 ```
 
 ## Posterior estimators
@@ -28,10 +28,10 @@ RatioEstimator
 
 ## Bayes estimators
 
-Neural Bayes estimators are implemented as subtypes of [`BayesEstimator`](@ref). The general-purpose [`PointEstimator`](@ref) supports user-defined loss functions (see [Loss functions](@ref)). The types [`IntervalEstimator`](@ref) and its generalisation [`QuantileEstimator`](@ref) are designed for posterior quantile estimation based on user-specified probability levels, automatically configuring the quantile loss and enforcing non-crossing constraints.
+Neural Bayes estimators are implemented as subtypes of [`AbstractBayesEstimator`](@ref). The general-purpose [`PointEstimator`](@ref) supports user-defined loss functions (see [Loss functions](@ref)). The types [`IntervalEstimator`](@ref) and its generalisation [`QuantileEstimator`](@ref) are designed for posterior quantile estimation based on user-specified probability levels, automatically configuring the quantile loss and enforcing non-crossing constraints.
 
 ```@docs
-BayesEstimator
+AbstractBayesEstimator
 
 PointEstimator
 

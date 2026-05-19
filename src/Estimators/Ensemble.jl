@@ -1,5 +1,5 @@
 """
-	Ensemble <: NeuralEstimator
+	Ensemble <: AbstractNeuralEstimator
 	Ensemble(estimators)
 	Ensemble(architecture::Function, J::Integer)
 	(ensemble::Ensemble)(Z; aggr = mean)
@@ -59,7 +59,7 @@ rmse(assessment)
 ensemble(Z)
 ```
 """
-struct Ensemble{T <: NeuralEstimator} <: NeuralEstimator
+struct Ensemble{T <: AbstractNeuralEstimator} <: AbstractNeuralEstimator
     estimators::Vector{T}
 end
 Ensemble(architecture::Function, J::Integer) = Ensemble([architecture() for j = 1:J])

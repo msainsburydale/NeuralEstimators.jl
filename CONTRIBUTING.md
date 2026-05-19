@@ -25,7 +25,7 @@ src/
 ├── NeuralEstimators.jl          # Module entry point: imports, exports, includes
 │
 ├── Estimators/                  # Neural estimator types
-│   ├── Estimators.jl            # Abstract types (NeuralEstimator, BayesEstimator) and summary-network helpers
+│   ├── Estimators.jl            # Abstract types and summary-network helpers
 │   ├── PointEstimator.jl        # Point estimates 
 │   ├── QuantileEstimator.jl     # Posterior quantile estimation
 │   ├── PosteriorEstimator.jl    # Full posterior approximation
@@ -33,18 +33,17 @@ src/
 │   ├── Ensemble.jl              # Ensemble of estimators
 │
 ├── ApproximateDistributions/    # Approximate distributions used by PosteriorEstimator
-│   ├── ApproximateDistributions.jl  # Abstract type (ApproximateDistribution)
+│   ├── ApproximateDistributions.jl  # AbstractApproximateDistribution
 │   ├── GaussianMixture.jl       
 │   ├── NormalisingFlow.jl       
 │
 ├── train.jl                     # Training function (train)
 ├── assess.jl                    # Post-training assessment (assess, Assessment, etc.)
-├── Parameters.jl                # AbstractParameterSet and utilities
-├── DataSet.jl                   # DataSet struct and utilities
+├── DataParameters.jl            # DataAndSummaries container and AbstractParameterSet 
 ├── Architectures.jl             # Neural-network building blocks (DeepSet, MLP, etc.)
 ├── inference.jl                 # Post-training inference (estimate, sampleposterior, etc.)
 ├── summarystatistics.jl         # Expert summary statistics (samplesize, etc.)
-├── losses.jl                    # Non-standard loss functions (quantileloss, tanhloss, etc.)
+├── losses.jl                    # Non-standard loss functions
 ├── missingdata.jl               # Missing data support (EM algorithm, masking)
 ├── utility.jl                   # Utility functions
 ```
@@ -57,33 +56,28 @@ New `.jl` files in `src/` must be explicitly `include`d in `NeuralEstimators.jl`
 
 ## Key Abstractions
 
-### `NeuralEstimator` and `BayesEstimator`
+### `AbstractNeuralEstimator` and `AbstractBayesEstimator`
 
-Defined in `Estimators/Estimators.jl`, these are the root abstract types of the estimator hierarchy:
+The root abstract types of the estimator hierarchy:
 
 ```
-NeuralEstimator
-├── BayesEstimator
+AbstractNeuralEstimator
+├── AbstractBayesEstimator
 │   ├── PointEstimator
 │   └── QuantileEstimator (and variants)
 ├── PosteriorEstimator
 ├── RatioEstimator
-├── Ensemble
 ```
 
 Every concrete estimator wraps one or more Flux/Lux models and must be callable on data `Z` (and possibly model parameters `θ`).
 
-### `ApproximateDistribution`
+### `AbstractApproximateDistribution`
 
-An abstract type (defined in `ApproximateDistributions.jl`) for families of parametric distributions used to approximate the posterior distribution by objects of type `PosteriorEstimator`. 
+An abstract type for families of parametric distributions used to approximate the posterior distribution by objects of type `PosteriorEstimator`. 
 
 ### `AbstractParameterSet`
 
-An abstract type (defined in `Parameters.jl`) for user-defined structs that hold parameters and any precomputed intermediate quantities needed for simulation. 
-
-### `DataSet`
-
-A struct (defined in `DataSet.jl`) that couples raw data `Z` with a matrix `S` of precomputed expert summary statistics (`K` columns, one per data set). Passing a `DataSet` object to any estimator causes the learned summary statistics from the summary network to be concatenated with `S` before being passed to the inference network. If `S` is not provided, `DataSet(Z)` behaves identically to passing `Z` directly. The internal forward-pass helper `_summarystatistics` handles the concatenation.
+An abstract type for user-defined structs that hold parameters and any precomputed intermediate quantities needed for simulation. 
 
 ### `train` and `assess`
 
@@ -125,10 +119,10 @@ Please try to follow the [Julia style guide](https://docs.julialang.org/en/v1/ma
 The recommended workflow for developing a new estimator type is to first prototype interactively, which allows you to rapidly iterate and test changes on the fly without restarting the session, and then consolidate into the package once things are working.
 
 **Interactive prototyping:**
-1. Define a custom struct subtyping `NeuralEstimator`, for example, `struct MyEstimator <: NeuralEstimator`. This struct will have fields storing the neural networks and anything else needed for inference.
+1. Define a custom struct subtyping `AbstractNeuralEstimator`, for example, `struct MyEstimator <: AbstractNeuralEstimator`. This struct will have fields storing the neural networks and anything else needed for inference.
 1. Define convenience constructors. 
 1. Define the forward pass of the estimator: `(estimator::MyEstimator)(input) = ...`  
-   * When applying the summary network to data, use `_summarystatistics(estimator, Z)` rather than `estimator.summary_network(Z)` to automatically cater for `DataSet` objects.
+   * When applying the summary network to data, use `_summarystatistics(estimator, Z)` rather than `estimator.summary_network(Z)`.
 1. `import` and extend the relevant functions listed below.
 1. Train and assess the estimator to verify correctness.
 1. Write a docstring for the estimator with a self-contained example that can be copy-pasted and run.
@@ -157,16 +151,13 @@ After running `import NeuralEstimators: <function name>`:
 ## Adding a New Approximate Distribution
 
 **Interactive prototyping:**
-1. Define a custom struct subtyping `ApproximateDistribution`, for example, `struct MyDist <: ApproximateDistribution`. The fields of this struct should store anything needed to parameterise the distribution, including any neural network(s) used to condition the distribution on the learned summary statistics (e.g., an MLP mapping summary statistics directly to distributional parameters, or coupling blocks that accept summary statistics as a conditioning input as in a normalising flow).
+1. Define a custom `struct` subtyping `AbstractApproximateDistribution`, for example, `struct MyDist <: AbstractApproximateDistribution`. The fields of this struct should store anything needed to parameterise the distribution, including any neural network(s) used to condition the distribution on the learned summary statistics (e.g., an MLP mapping summary statistics directly to distributional parameters, or coupling blocks that accept summary statistics as a conditioning input as in a normalising flow).
 1. Define a convenience constructor with the signature: `MyDist(num_parameters::Integer, num_summaries::Integer; kwargs...)`. This ensures compatibility with `PosteriorEstimator`'s convenience constructor.
 1. `import NeuralEstimators: _logdensity, sampleposterior` and define methods:
    - `_logdensity(q::MyDist, θ::AbstractMatrix, t::AbstractMatrix)`: log-density of `q` evaluated at parameters `θ`, given summary statistics `t`.
    - `sampleposterior(q::MyDist, t::AbstractMatrix, N::Integer; device)`: draws `N` posterior samples from `q` given summary statistics `t`, where each column of `t` corresponds to an independent data set.
 1. Test the distribution by plugging it into a `PosteriorEstimator`, then train and assess the estimator to verify correctness.
 1. Write a docstring with a self-contained example that can be copy-pasted and run.
-
-
-Note that when defining an `ApproximateDistribution` for use with [Lux](https://lux.csail.mit.edu/stable/), the distribution does _not_ subtype `AbstractLuxLayer`, but its fields should be `AbstractLuxLayer`s. 
 
 **Consolidating into the package:**
 1. Create `src/ApproximateDistributions/MyDist.jl` and move the above definitions into it.

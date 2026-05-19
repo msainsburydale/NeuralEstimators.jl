@@ -99,7 +99,7 @@ function _risk end
 function _train_step end
 
 # NB method for estimator::LuxEstimator is provided in the Lux extension
-function _construct_train_state(estimator::NeuralEstimator, optimiser::Optimisers.AbstractRule)
+function _construct_train_state(estimator::AbstractNeuralEstimator, optimiser::Optimisers.AbstractRule)
     lux = get(Base.loaded_modules, _LUX_UUID, nothing)
     if !isnothing(lux) && _is_lux_network(estimator, lux)
         estimator = LuxEstimator(estimator)
@@ -109,19 +109,19 @@ function _construct_train_state(estimator::NeuralEstimator, optimiser::Optimiser
     end
 end
 
-function train(estimator::NeuralEstimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...) where {P, T}
+function train(estimator::AbstractNeuralEstimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...) where {P, T}
     trainstate = _construct_train_state(estimator, optimiser)
     trainstate = train(trainstate, θ_train, θ_val, Z_train, Z_val; kwargs...)
     getestimator(trainstate)
 end
 
-function train(estimator::NeuralEstimator, θ_train::P, θ_val::P, simulator; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...) where {P}
+function train(estimator::AbstractNeuralEstimator, θ_train::P, θ_val::P, simulator; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...) where {P}
     trainstate = _construct_train_state(estimator, optimiser)
     trainstate = train(trainstate, θ_train, θ_val, simulator; kwargs...)
     getestimator(trainstate)
 end
 
-function train(estimator::NeuralEstimator, sampler, simulator; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...)
+function train(estimator::AbstractNeuralEstimator, sampler, simulator; optimiser::Optimisers.AbstractRule = Adam(5e-4), kwargs...)
     trainstate = _construct_train_state(estimator, optimiser)
     trainstate = train(trainstate, sampler, simulator; kwargs...)
     getestimator(trainstate)

@@ -34,9 +34,9 @@ makedocs(
             ],
             "examples/data_irregularspatial.md",
             "examples/data_spatiotemporal.md",
+            "examples/data_expert_summaries.md",
             "examples/data_missing_censored.md"
         ],
-        "Advanced usage" => "advancedusage.md",
         "API" => [
             "Parameters and data" => "API/parametersdata.md",
             "API/estimators.md",
@@ -48,7 +48,8 @@ makedocs(
             "API/lossfunctions.md",
             "API/miscellaneous.md",
             "API/index.md"
-        ]
+        ],
+        "Advanced usage" => "advancedusage.md"
     ],
     format = DocumenterVitepress.MarkdownVitepress(
         repo = "github.com/msainsburydale/NeuralEstimators.jl",

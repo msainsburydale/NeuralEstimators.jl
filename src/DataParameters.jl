@@ -79,3 +79,69 @@ end
 
 _stripnames(x::NamedArray) = x.array
 _stripnames(x::AbstractArray) = x
+
+
+"""
+	DataAndSummaries(Z, S)
+A container that couples raw data `Z` (stored in a format amenable to the chosen neural-network architecture) 
+with precomputed expert summary statistics `S` (a matrix whose columns are the summary statistics for each corresponding element of `Z`).
+
+Passing a `DataAndSummaries` to any neural estimator causes the summary network to be applied to `Z`, with the resulting
+learned summary statistics concatenated with `S` before being passed to the inference network.
+
+See also [`summarystatistics`](@ref).
+
+# Examples
+```julia
+using NeuralEstimators
+using Statistics: mean, var
+
+# Simulate data: Z|μ,σ ~ N(μ, σ²)
+n, m, K = 1, 50, 500
+θ = rand(2, K)
+Z = [θ[1, k] .+ θ[2, k] .* randn(n, m) for k in 1:K]
+
+# Precompute expert summary statistics (e.g., sample mean and variance)
+S = hcat([vcat(mean(z), var(z)) for z in Z]...)
+
+# Package into a DataAndSummaries object
+DataAndSummaries(Z, S)
+```
+"""
+struct DataAndSummaries{A, B}
+    Z::A
+    S::B
+    function DataAndSummaries(Z, S)
+        @assert numobs(Z) == size(S, 2) "The number of data sets in Z ($(numobs(Z))) must match the number of columns in S ($(size(S, 2)))"
+        new{typeof(Z), typeof(S)}(Z, S)
+    end
+    DataAndSummaries(Z, ::Nothing) = new{typeof(Z), Nothing}(Z, nothing)
+    DataAndSummaries(Z) = new{typeof(Z), Nothing}(Z, nothing)
+end
+
+# Methods
+numobs(d::DataAndSummaries) = numobs(d.Z)
+Base.getindex(d::DataAndSummaries, i::Integer) = DataAndSummaries(getobs(d.Z, i:i), d.S[:, i:i])
+Base.getindex(d::DataAndSummaries, i) = DataAndSummaries(getobs(d.Z, i), d.S[:, i])
+joinobs(d1::DataAndSummaries, d2::DataAndSummaries) = DataAndSummaries(_mergedata(d1.Z, d2.Z), hcat(d1.S, d2.S))
+
+numberreplicates(d::DataAndSummaries) = numberreplicates(d.Z)
+subsetreplicates(d::DataAndSummaries, idx) = DataAndSummaries(subsetreplicates(d.Z, idx), d.S)
+
+# ---- Summaries wrapper type ----
+
+"""
+    Summaries(S::AbstractMatrix)
+
+A thin wrapper around a matrix of precomputed summary statistics. Used internally
+during training to signal that the summary network has already been applied to the
+data, so that `_summarystatistics` can short-circuit and return the matrix directly
+rather than re-running the (frozen) summary network on every forward pass.
+"""
+struct Summaries{T <: AbstractMatrix}
+    S::T
+end
+
+Base.length(s::Summaries) = size(s.S, 2)
+Base.getindex(s::Summaries, i) = Summaries(s.S[:, i])
+Base.hcat(a::Summaries, b::Summaries) = Summaries(hcat(a.S, b.S))

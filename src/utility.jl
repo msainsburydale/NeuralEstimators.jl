@@ -124,6 +124,9 @@ function _backendof(network)
             return lux
         elseif _is_flux_network(network, flux)
             return flux
+        elseif network === identity
+            @info "Assuming Flux backend since network === identity. If you intend to use Lux, use Lux.WrappedFunction(identity)"
+            return flux
         else
             error("Could not determine backend from network of type $(typeof(network)).")
         end
@@ -155,15 +158,6 @@ function _is_flux_network(network, flux, visited = Base.IdSet())
     end
     return false
 end
-
-# function _maybelux(estimator::NeuralEstimator, backend::Module)
-#     if backend === get(Base.loaded_modules, _LUX_UUID, nothing)
-#         @info "Wrapping estimator in a LuxEstimator to handle Lux parameters and states."
-#         LuxEstimator(estimator)
-#     else
-#         estimator
-#     end
-# end
 
 # ---- Misc. ----
 

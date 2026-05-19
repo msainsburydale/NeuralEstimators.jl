@@ -1,8 +1,8 @@
 """
-	estimate(estimator::BayesEstimator, Z; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
+	estimate(estimator::AbstractBayesEstimator, Z; batchsize::Integer = 32, use_gpu::Bool = true, kwargs...)
 Applies `estimator` to data `Z` and returns the resulting estimates.
 """
-estimate(estimator::NeuralEstimator, z, args...; kwargs...) = _applywithdevice(estimator, z, args...; kwargs...)
+estimate(estimator::AbstractNeuralEstimator, z, args...; kwargs...) = _applywithdevice(estimator, z, args...; kwargs...)
 
 # ---- Point summaries from non-PointEstimators ----
 

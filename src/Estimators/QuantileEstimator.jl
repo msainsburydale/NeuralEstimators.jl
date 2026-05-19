@@ -1,5 +1,5 @@
 @doc raw"""
-	IntervalEstimator <: BayesEstimator
+	IntervalEstimator <: AbstractBayesEstimator
 	IntervalEstimator(summary_network, num_parameters; num_summaries, kwargs...)
 	IntervalEstimator(summary_network, num_parameters, num_summaries; kwargs...)
 A neural estimator that jointly estimates marginal posterior credible intervals based on the probability levels `probs` (by default, 95% central credible intervals).
@@ -63,7 +63,7 @@ estimate(estimator, Z)
 interval(estimator, Z)
 ```
 """
-struct IntervalEstimator{M, N, H, C, G} <: BayesEstimator
+struct IntervalEstimator{M, N, H, C, G} <: AbstractBayesEstimator
     summary_network::M
     u::N  # inference network for lower bound
     v::N  # inference network for interval width
@@ -106,7 +106,7 @@ function (est::IntervalEstimator)(Z)
 end
 
 @doc raw"""
-	QuantileEstimator <: BayesEstimator
+	QuantileEstimator <: AbstractBayesEstimator
 	QuantileEstimator(summary_network, num_parameters; num_summaries, kwargs...)
 A neural estimator that jointly estimates a fixed set of marginal posterior
 quantiles, with probability levels $\{\tau_1, \dots, \tau_T\}$ controlled by the
@@ -209,7 +209,7 @@ estimate(q₁, (Z, θ₋ᵢ))
 quantiles(q₁, (Z, θ₋ᵢ))
 ```
 """
-struct QuantileEstimator{M1, M2, V, P, G, I} <: BayesEstimator
+struct QuantileEstimator{M1, M2, V, P, G, I} <: AbstractBayesEstimator
     summary_network::M1          # summary network for data Z
     summary_network_θ::M2        # summary network for θ₋ᵢ (nothing when i is nothing)
     v::V                         # vector of T MLP inference networks

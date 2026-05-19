@@ -293,7 +293,7 @@ end
 _resolve_estimator_name(name, names) = isnothing(names) ? name : names
 
 #TODO Just removing risk computation for now, because:
-# - we now define _risk(::TrainState) rather than _risk(::NeuralEstimator), so the final line doesn't work
+# - we now define _risk(::TrainState) rather than _risk(::AbstractNeuralEstimator), so the final line doesn't work
 # - we need to move estimator to device carefully when using a LuxEstimator; should be: estimator = LuxEstimator(estimator.estimator, estimator.ps |> device, estimator.st |> device)
 # function _computerisk(estimator, θ, Z; batchsize::Integer = 32, kwargs...)
 #     loss = _loss(estimator)
@@ -302,6 +302,7 @@ _resolve_estimator_name(name, names) = isnothing(names) ? name : names
 #     dataset = _dataloader(estimator, Z, θ, batchsize)
 #     _risk(estimator, loss, dataset, device)
 # end
+# - `PointEstimator`: For computing the risk at the assessment stage, save the loss function used during training as metadata (`assess` can then load it from `tmp`) and add a `loss` argument to `assess` (takes priority over the metadata loss).
 
 function _estimates_to_df(estimates, estimate_names, K, J, m)
     df = DataFrame(estimates', estimate_names)

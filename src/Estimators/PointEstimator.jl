@@ -1,5 +1,5 @@
 """
-	PointEstimator <: BayesEstimator
+	PointEstimator <: AbstractBayesEstimator
     PointEstimator(network)
     PointEstimator(summary_network, inference_network)
     PointEstimator(summary_network, num_parameters; num_summaries, kwargs...)
@@ -45,7 +45,7 @@ Z = simulator(θ)         # stand-in for real observations
 estimate(estimator, Z)   # point estimate
 ```
 """
-@concrete struct PointEstimator <: BayesEstimator
+@concrete struct PointEstimator <: AbstractBayesEstimator
     summary_network
     inference_network
 end

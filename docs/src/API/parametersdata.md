@@ -20,8 +20,8 @@ NamedMatrix
 
 Simulated data sets are stored as mini-batches in a format amenable to the chosen neural-network architecture; the only requirement is compatibility with [`numobs`](https://juliaml.github.io/MLUtils.jl/dev/api/#MLCore.numobs)/[`getobs`](https://juliaml.github.io/MLUtils.jl/dev/api/#MLCore.getobs). For example, when constructing an estimator from data collected over a two-dimensional grid, one may use a CNN, with each data set stored in the final dimension of a four-dimensional array.
 
-Precomputed (expert) summary statistics can be incorporated by wrapping the simulated data in a [`DataSet`](@ref) object, which couples the raw data with a matrix of summary statistics.
+Precomputed (expert) summary statistics can be incorporated by wrapping the simulated data and summary statistics in a [`DataAndSummaries`](@ref) object.
 
 ```@docs
-DataSet
+DataAndSummaries
 ```

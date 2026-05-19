@@ -1,5 +1,5 @@
 @doc raw"""
-    NormalisingFlow <: ApproximateDistribution
+    NormalisingFlow <: AbstractApproximateDistribution
     NormalisingFlow(d::Integer, num_summaries::Integer; num_coupling_layer = 6, kwargs...)
 A normalising flow for amortised inference with a [`PosteriorEstimator`](@ref), where `d` is the dimension of the parameter vector and `num_summaries` is the dimension of the summary statistics for the data.
 
@@ -9,13 +9,17 @@ Normalising flows are diffeomorphisms (i.e., invertible, differentiable transfor
 
 When using a `NormalisingFlow` as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) summary statistics are used to condition the affine coupling blocks at each layer.
 
+!!! note
+    To use `NormalisingFlow` with `Enzyme.jl`, set `adtype = AutoEnzyme(mode = set_runtime_activity(Enzyme.Reverse))` in [`train`](@ref).
+
 # Keyword arguments
 - `num_coupling_layers::Integer = 6`: number of coupling layers.
 - `kwargs`: additional keyword arguments passed to [`CouplingLayer`](@ref) and [`AffineCouplingBlock`](@ref).
 """
-@concrete struct NormalisingFlow <: ApproximateDistribution
+@concrete struct NormalisingFlow <: AbstractApproximateDistribution
     d
     layers
+    base_distribution # NB just a placeholder for now, options will be added in the future
 end
 
 function NormalisingFlow(
@@ -29,7 +33,7 @@ function NormalisingFlow(
     @assert num_coupling_layers > 0
     backend = _resolvebackend(backend)
     layers = ntuple(_ -> CouplingLayer(d, num_summaries; backend = backend, use_act_norm = use_act_norm, kwargs...), num_coupling_layers)
-    NormalisingFlow(d, layers)
+    NormalisingFlow(d, layers, nothing)
 end
 
 numdistributionalparams(q::NormalisingFlow) = sum(numdistributionalparams.(q.layers))

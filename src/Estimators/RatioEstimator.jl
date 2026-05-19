@@ -1,5 +1,5 @@
 @doc raw"""
-	RatioEstimator <: NeuralEstimator
+	RatioEstimator <: AbstractNeuralEstimator
 	RatioEstimator(summary_network, num_parameters; num_summaries, kwargs...)
 A neural estimator that estimates the likelihood-to-evidence ratio,
 ```math
@@ -68,7 +68,7 @@ logratio(estimator, z; grid = grid)                # log of likelihood-to-eviden
 sampleposterior(estimator, z; grid = grid)         # posterior sample
 ```
 """
-@concrete struct RatioEstimator <: NeuralEstimator
+@concrete struct RatioEstimator <: AbstractNeuralEstimator
     summary_network   # summary network for data Z (called summary_network for consistency with other estimators)
     summary_network_θ # summary network for θ 
     inference_network
@@ -91,6 +91,16 @@ end
 # Constructor: keyword num_summaries
 RatioEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, kwargs...) = RatioEstimator(summary_network, num_parameters, num_summaries; kwargs...)
 
+function _mergedata(Z, Z̃)
+    if Z isa AbstractVector
+        vcat(Z, Z̃)
+    elseif Z isa AbstractMatrix || Z isa Summaries
+        hcat(Z, Z̃)
+    else
+        getobs(joinobs(Z, Z̃), 1:2numobs(Z)) #TODO this doesn't work as intended... just want to combine along the batch dimension for an arbitrary data format
+    end
+end
+
 function _inputoutput(estimator::RatioEstimator, Z, θ)
 
     # Create independent pairs
@@ -100,13 +110,7 @@ function _inputoutput(estimator::RatioEstimator, Z, θ)
 
     # Combine dependent and independent pairs
     θ = hcat(θ, θ̃)
-    if Z isa AbstractVector
-        Z = vcat(Z, Z̃)
-    elseif Z isa AbstractMatrix || Z isa Summaries
-        Z = hcat(Z, Z̃)
-    else
-        Z = getobs(joinobs(Z, Z̃), 1:2K)
-    end
+    Z = _mergedata(Z, Z̃)
 
     # Binary class labels: 1 for dependent pairs (Z, θ), 0 for independent pairs (Z̃, θ̃)
     output = [ones(Float32, 1, K) zeros(Float32, 1, K)]
@@ -125,7 +129,7 @@ _loss(estimator::RatioEstimator, loss = nothing) = logitbinarycrossentropy
 
 # Forward pass: Stateful (Flux)
 function (estimator::RatioEstimator)(Z, θ)
-    tz = _summarystatistics(estimator, Z) |> copy # materialise to break Enzyme's trace: copy breaks Enzyme's provenance trace through Summaries.S
+    tz = _summarystatistics(estimator, Z)
     tθ = estimator.summary_network_θ(θ)
     estimator.inference_network(vcat(tz, tθ))
 end
@@ -133,7 +137,7 @@ end
 # Forward pass: Stateless (Lux)
 function (e::RatioEstimator)(Z, θ, ps, st)
     tz, st_s = _summarystatistics(e, Z, ps.summary_network, st.summary_network)
-    tz = tz |> copy # materialise to break Enzyme's trace: copy breaks Enzyme's provenance trace through Summaries.S
+    # tz = tz |> copy # NB: materialise to break Enzyme's trace
     tθ, st_sθ = e.summary_network_θ(θ, ps.summary_network_θ, st.summary_network_θ)
     logr, st_i = e.inference_network(vcat(tz, tθ), ps.inference_network, st.inference_network)
     return logr, (summary_network = st_s, summary_network_θ = st_sθ, inference_network = st_i)

@@ -1,7 +1,7 @@
 @doc raw"""
-	PosteriorEstimator <: NeuralEstimator
-	PosteriorEstimator(summary_network, q::ApproximateDistribution)
-	PosteriorEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, q::ApproximateDistribution = NormalisingFlow, kwargs...)
+	PosteriorEstimator <: AbstractNeuralEstimator
+	PosteriorEstimator(summary_network, q::AbstractApproximateDistribution)
+	PosteriorEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, q::AbstractApproximateDistribution = NormalisingFlow, kwargs...)
 A neural estimator that approximates the posterior distribution $p(\boldsymbol{\theta} \mid \boldsymbol{Z})$, based on a neural `summary_network` and an approximate distribution `q` (see the available in-built [Approximate distributions](@ref)).
 
 The `summary_network` maps data $\boldsymbol{Z}$ to a vector of learned summary statistics $\boldsymbol{t} \in \mathbb{R}^{d^*}$, which are then used to condition the approximate distribution `q`. The precise way in which the summary statistics condition `q` depends on the choice of approximate distribution: for example, [`Gaussian`](@ref) and [`GaussianMixture`](@ref) use an MLP to map $\boldsymbol{t}$ directly to distributional parameters, while [`NormalisingFlow`](@ref) uses $\boldsymbol{t}$ as a conditioning input at each coupling layer.
@@ -10,7 +10,7 @@ The convenience constructor builds `q` internally given `num_parameters` and `nu
 
 # Keyword arguments
 - `num_summaries::Integer`: the number of summary statistics output by `summary_network`. Must match the output dimension of `summary_network`.
-- `q::ApproximateDistribution`: the type of approximate distribution to use.
+- `q::AbstractApproximateDistribution`: the type of approximate distribution to use.
 - `kwargs...`: additional keyword arguments passed to the constructor of `q`.
 
 # Examples
@@ -49,7 +49,7 @@ sampleposterior(estimator, Z) # posterior draws
 posteriormean(estimator, Z)   # point estimate
 ```
 """
-@concrete struct PosteriorEstimator <: NeuralEstimator
+@concrete struct PosteriorEstimator <: AbstractNeuralEstimator
     summary_network
     q
 end
@@ -69,7 +69,7 @@ end
 PosteriorEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, kwargs...) = PosteriorEstimator(summary_network, num_parameters, num_summaries; kwargs...)
 
 # Constructor: consistent argument ordering 
-function PosteriorEstimator(q::A, summary_network) where {A <: ApproximateDistribution}
+function PosteriorEstimator(q::A, summary_network) where {A <: AbstractApproximateDistribution}
     return PosteriorEstimator(summary_network, q)
 end
 

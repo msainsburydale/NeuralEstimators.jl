@@ -4,7 +4,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ---
 
-### Features
+### Functionality
 
 **Estimator types & methods**
 - Model selection/comparison: see [here](https://bayesflow.org/main/api/bayesflow.approximators.ModelComparisonApproximator.html#bayesflow.approximators.ModelComparisonApproximator), [this paper](https://arxiv.org/abs/2004.10629), and [this paper](https://arxiv.org/pdf/2503.23156).
@@ -13,7 +13,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Ensemble methods with general estimator types (e.g., PosteriorEstimator, RatioEstimator).
 
 **Summary network architecture**
-- By default, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) should condition on the (log) sample size (it's messy for the user to include manually and easy to forget). This can be done via a convenience constructor; given keyword argument `latent_dim`, calls `mlp` to construct the outer network, and we automatically condition on the sample size (and we can add a learned embedding of the sample size).
+- 🟡 By default, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) should condition on the (log) sample size (it's easy to forget). This can be done via a convenience constructor; given keyword argument `latent_dim`, calls `MLP` to construct the outer network and automatically conditions on (a learned embedding of) the sample size.
 
 **Training**
 - Support for reading data from disk during training, to handle data sets that are too large to fit in memory.
@@ -21,28 +21,20 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 **Inference & diagnostics**
 - assess.jl/inference.jl for more general parameter shapes (currently assumes the parameters are stored as a matrix).
 
-**Backend**
-- 🟡 Lux support for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules).
-- Lux support for [CovarianceMatrix/CorrelationMatrix](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Output-layers).
-- Lux support for [SpatialGraphConv](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
-- Reactant support for [Gaussian](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) (issue is likely the triangular solve when computing the density).
-- 🟡 AutoEnzyme + CPU support for [NormalisingFlow](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions). "ERROR: EnzymeRuntimeActivityError: Detected potential need for runtime activity." Once this is done, change the ["Quick start"](https://msainsburydale.github.io/NeuralEstimators.jl/dev/#Quick-start) example to use Lux.
-- SimpleChains.jl: for user-friendliness, enforce `CPUDevice`/`AutoZygote` during training and `CPUDevice` during inference (dispatching on `SimpleChainsLayer` within `_resolvedevice` and `_resolve_adtype`). NB: `SimpleChainsLayer` is not in LuxCore, so this dispatch may need to live in the extension.
-
 ### Documentation
+- 🟡 Add illustrative data figures and diagnostic plots in all examples.
+- In the Examples tab, index "Global parameters" and "Spatially indexed parameters" so it is clear that these are subsections, and put a hyperlink on "Gridded spatial data" with the two subsections in it (or at least with links to them).
 - Add code groups for Lux/Flux (containing `using Lux`/`using Flux`) in the examples.
-- Example: Time-series data, also illustrate partially-exchangeable networks using DeepSet.
+- Example: In the time-series example, also illustrate partially-exchangeable networks using DeepSet.
 - Example: Illustrate Lévy Processes (a time-series model) using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)).
 - Add [`::: tabs`](https://luxdl.github.io/DocumenterVitepress.jl/dev/manual/markdown-examples#Tabs) in the assessment stage of the examples to show the various diagnostic plots (recovery plots for point estimates; SBC and posterior contraction for posterior samples).
-- [Expert summary statistics](https://msainsburydale.github.io/NeuralEstimators.jl/dev/advancedusage#Expert-summary-statistics), give example for a model fit only with expert summary statistics, and possibly present in a separate examples page.
-- Generalize the discussion in [Variable sample sizes](https://msainsburydale.github.io/NeuralEstimators.jl/dev/advancedusage#Variable-sample-sizes) (the considerations apply to all kinds of data, not just exchangeable data).
 - Document the internal functions and add them to `API/Internal` or `API/Developer docs`. This will help with maintenance/contributions, and allow us to reference the internals when documenting public functions (e.g., "`kwargs...` are passed onto `_internal_function`").
 - Add a gif to the README (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif)).
 - Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/) for inspiration).
 
 ### Performance
-- 🟡 Lux.jl + Reactant.jl currently has extra overhead during training: see the TODO in the Reactant extension and .
+- 🟡 Lux.jl + Reactant.jl currently has extra overhead during training: see the TODO in the Reactant extension.
 - 🟡 Reactant.jl in the inference stage.
 - 🟡 Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
@@ -51,38 +43,25 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Lux.jl: Initial risks are much larger than Flux.jl when training NPEs.
 - Add a check for NaNs in the inputs/outputs. Also, if the training risk or validation risk becomes NaN, immediately halt training.
 
+### Backend
+- 🟡 Lux support for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules).
+- 🟡 Lux support for [SpatialGraphConv](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
+- Lux support for [CovarianceMatrix/CorrelationMatrix](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Output-layers).
+- Reactant support for [Gaussian](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) (issue is likely the triangular solve when computing the density).
+- SimpleChains.jl: enforce `CPUDevice`/`AutoZygote` during training and `CPUDevice` during inference (dispatching on `SimpleChainsLayer` within `_resolvedevice` and `_resolve_adtype`).
+- EnzymeRuntimeActivityError when using [NormalisingFlow](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) with Lux + Enzyme + CPU.
+
 ### Refactoring/API improvements
-- Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
-   * This can be easily done for the common cases (Chain, DeepSet), with an `@info` given to tell the user what we inferred. For other cases, just error and tell the user to specify the number of summaries explicitly.
 - Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
 - Clean and improve the plotting code/logic.
 - Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl/Lux.jl.
-- Consider [StatefulLuxLayer](https://lux.csail.mit.edu/stable/manual/flux_lux_interop) as a replacement for `LuxEstimator`. (Currently, it has the same problem as `TrainState`, `model` needs to be an `AbstractLuxLayer`, but perhaps this can be relaxed.)
+- Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
+   * This can be easily done for the common cases (Chain, DeepSet), with an `@info` given to tell the user what we inferred. For other cases, just error and tell the user to specify the number of summaries explicitly. Can also make the function used to compute the number of summaries public (and overloadable for custom structs). 
 
 ### Testing
-- Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
 - Automatic type-stability testing using [JET.jl](https://github.com/aviatesk/JET.jl).
 - Automatic quality testing with [Aqua.jl](https://github.com/JuliaTesting/Aqua.jl).
+- Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
 
 ### General
-- The package would benefit by leveraging the SciML ecosystem (see, e.g., [here](https://docs.sciml.ai/DiffEqFlux/dev/)), for instance, using [Neural Ordinary Differential Equations](https://docs.sciml.ai/DiffEqFlux/dev/) for fast surrogate simulators; summary networks (i.e., data encoders); and approximate distributions for posterior estimation.
-
----
-
-### 🟡 Breaking changes to decide upon before version 1.0
-
-These changes would alter the fields of estimator objects, making it more difficult to load estimators saved in previous versions (although user-facing API would remain unchanged).
-
-- 🟡 Abstract types should be consistently prefixed by `Abstract` (e.g., `NeuralEstimator` -> `AbstractNeuralEstimator`; `ApproximateDistribution` -> `AbstractApproximateDistribution`; `BayesEstimator` -> `AbstractBayesEstimator`).
-
-- 🟡 Add a `base_distribution` field in `NormalisingFlow` (default standard Normal).
-
-- Might be helpful to store the loss function in `PointEstimator` objects. 
-   * Mainly useful for knowing post-training how the estimator was trained, and for computing the risk at the assessment stage (however, this is a minor convenience, we could also just add a `loss` argument to `assess`).
-   * Otherwise, could just save the loss function as metadata during training (`assess` could then load it from `tmp` or `savepath`).
-
-- Might be helpful to store the number of parameters `num_parameters` in the estimator object.
-   * This would be useful for basic checks which would lead to better/more intuitive error messages. This also makes sense with the new summary network decomposition, since these constructors already require `num_parameters`.
-   * Main drawback is that it bloats the struct slightly; and estimators don't necessarily need to be initialised with `num_parameters` explicitly given, in which case this field would then be empty.
-
-
+- The package would benefit by leveraging the SciML ecosystem, for instance, using [Neural Ordinary Differential Equations](https://docs.sciml.ai/DiffEqFlux/dev/) for fast surrogate simulators, summary networks, and approximate distributions for posterior estimation.

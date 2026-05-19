@@ -1,5 +1,5 @@
 @doc raw"""
-    Gaussian <: ApproximateDistribution
+    Gaussian <: AbstractApproximateDistribution
     Gaussian(d::Integer, num_summaries::Integer; kwargs...)
 A Gaussian distribution for amortised inference with a [`PosteriorEstimator`](@ref), where `d` is the dimension of the parameter vector. 
 
@@ -19,7 +19,7 @@ diagonal entries of $\boldsymbol{L}$).
 # Keyword arguments
 - `kwargs`: additional keyword arguments passed to [`MLP`](@ref).
 """
-@concrete struct Gaussian <: ApproximateDistribution
+@concrete struct Gaussian <: AbstractApproximateDistribution
     d
     num_summaries
     inference_network

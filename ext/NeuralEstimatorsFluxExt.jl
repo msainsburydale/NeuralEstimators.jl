@@ -36,7 +36,7 @@ _state(ensemble) = Flux.state(Flux.cpu(ensemble))
 
 # import NeuralEstimators: getestimator, _construct_train_state, _save_trainstate, _train_step, _risk
 
-# function _construct_train_state(estimator::NeuralEstimator, optimiser::Optimisers.AbstractRule)
+# function _construct_train_state(estimator::AbstractNeuralEstimator, optimiser::Optimisers.AbstractRule)
 #     FluxTrainState(estimator, optimiser, Optimisers.setup(optimiser, estimator))
 # end
 

@@ -1,8 +1,8 @@
 """
-    LuxEstimator(estimator::NeuralEstimator, ps, st)
-    LuxEstimator(estimator::NeuralEstimator; rng::AbstractRNG = Random.default_rng())
+    LuxEstimator(estimator::AbstractNeuralEstimator, ps, st)
+    LuxEstimator(estimator::AbstractNeuralEstimator; rng::AbstractRNG = Random.default_rng())
 
-Wraps a `NeuralEstimator` containing [Lux.jl](https://lux.csail.mit.edu/stable/) 
+Wraps a `AbstractNeuralEstimator` containing [Lux.jl](https://lux.csail.mit.edu/stable/) 
 networks together with their parameters `ps` and states `st`.
 
 The convenience constructor automatically calls `Lux.setup(rng, estimator)` to 
@@ -25,7 +25,7 @@ estimator.ps
 estimator.st
 ```
 """
-@concrete struct LuxEstimator <: NeuralEstimator
+@concrete struct LuxEstimator <: AbstractNeuralEstimator
     estimator
     ps
     st

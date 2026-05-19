@@ -74,29 +74,29 @@ end
         @test all([containertype(x) for x ∈ eachcol(a)] .== T)
     end
 
-    @testset "DataSet" begin
+    @testset "DataAndSummaries" begin
         K = 10
         Z = [randn(2, 5) for _ = 1:K]  # K data sets, each 2×5
         S = randn(3, K)                  # 3 expert summaries per data set
 
         # ---- Construction ----
         @testset "construction" begin
-            ds = DataSet(Z, S)
+            ds = DataAndSummaries(Z, S)
             @test ds.Z === Z
             @test ds.S === S
 
             # Without expert summaries
-            ds_no_s = DataSet(Z)
+            ds_no_s = DataAndSummaries(Z)
             @test ds_no_s.Z === Z
             @test isnothing(ds_no_s.S)
 
             # Assert mismatch between numobs(Z) and size(S, 2)
-            @test_throws AssertionError DataSet(Z, randn(3, K + 1))
+            @test_throws AssertionError DataAndSummaries(Z, randn(3, K + 1))
         end
 
         # ---- MLUtils interface ----
         @testset "numobs and getobs" begin
-            ds = DataSet(Z, S)
+            ds = DataAndSummaries(Z, S)
             @test numobs(ds) == K
 
             # getobs: single index
@@ -112,7 +112,7 @@ end
 
         # ---- getindex ----
         @testset "getindex" begin
-            ds = DataSet(Z, S)
+            ds = DataAndSummaries(Z, S)
             ds1 = ds[1]
             @test numobs(ds1) == 1
 
@@ -122,12 +122,12 @@ end
 
         # ---- utility methods ----
         @testset "numberreplicates" begin
-            ds = DataSet(Z, S)
+            ds = DataAndSummaries(Z, S)
             @test numberreplicates(ds) == numberreplicates(Z)
         end
 
         @testset "subsetreplicates" begin
-            ds = DataSet(Z, S)
+            ds = DataAndSummaries(Z, S)
             ds_sub = subsetreplicates(ds, 1:3)
             @test numobs(ds_sub) == K
             @test all(numberreplicates(ds_sub) .== 3)
@@ -135,10 +135,10 @@ end
 
         # ---- f32 ----
         @testset "f32" begin
-            ds = DataSet(Z)
+            ds = DataAndSummaries(Z)
             ds32 = f32(ds)
             @test eltype(ds32.Z[1]) == Float32
-            ds = DataSet(Z, S)
+            ds = DataAndSummaries(Z, S)
             ds32 = f32(ds)
             @test eltype(ds32.Z[1]) == Float32
             @test eltype(ds32.S) == Float32
@@ -152,13 +152,13 @@ end
             network = DeepSet(ψ, ϕ)
             estimator = PointEstimator(network)
 
-            ds = DataSet(Z, S) |> f32  # S has 3 rows, network outputs 4 → vcat gives 7
+            ds = DataAndSummaries(Z, S) |> f32  # S has 3 rows, network outputs 4 → vcat gives 7
             t = estimator(ds)
             @test size(t, 1) == num_summaries + size(S, 1)  # 4 + 3 = 7
             @test size(t, 2) == K
 
             # Without expert summaries: output size unchanged
-            ds_no_s = DataSet(Z) |> f32
+            ds_no_s = DataAndSummaries(Z) |> f32
             t_no_s = estimator(ds_no_s)
             @test size(t_no_s, 1) == num_summaries
             @test size(t_no_s, 2) == K

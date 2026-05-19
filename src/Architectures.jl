@@ -57,7 +57,7 @@ Fixed (non-trainable) transformations of the data can be incorporated alongside 
 ```math
 \hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}((\mathbf{T}(\mathbf{Z})', \mathbf{S}(\mathbf{Z})')'),
 ```
-where `S` is a function (or vector of functions) that maps data to a vector of fixed summary statistics. These are not differentiated through during training. In the case that `ψ` is set to `nothing`, only the fixed summaries will be used. For the common case where summary statistics are precomputed and stored alongside the data, see [`DataSet`](@ref) as an alternative approach.
+where `S` is a function (or vector of functions) that maps data to a vector of fixed summary statistics. These are not differentiated through during training. In the case that `ψ` is set to `nothing`, only the fixed summaries will be used. For the common case where summary statistics are precomputed and stored alongside the data, see [`DataAndSummaries`](@ref) as an alternative approach.
 
 Set-level inputs (e.g., covariates) ``𝐗`` can be passed
 directly into the outer network `ϕ` in the following manner: 

@@ -18,8 +18,8 @@ using Functors
 using InvertedIndices
 using LinearAlgebra
 using MLDataDevices: cpu_device, gpu_device, reactant_device, CPUDevice, CUDADevice, ReactantDevice, AbstractDevice
-using MLUtils: getobs, joinobs, DataLoader, flatten, zeros_like, unsqueeze
-import MLUtils: numobs
+using MLUtils: getobs, DataLoader, flatten, zeros_like, unsqueeze
+import MLUtils: numobs, joinobs
 using NamedArrays
 import NamedArrays: NamedMatrix
 using NNlib: logσ, softplus, softmax, relu, ⊠, batched_transpose, logsumexp, sigmoid
@@ -39,27 +39,25 @@ end
 export tanhloss, kpowerloss, intervalscore, quantileloss
 include("losses.jl")
 
+export DataAndSummaries, Summaries
 export AbstractParameterSet, NamedMatrix
-include("Parameters.jl")
-
-export DataSet, Summaries
-include("DataSet.jl")
+include("DataParameters.jl")
 
 export DeepSet, MLP, MultiHeadMLP, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference
 export IndicatorWeights, KernelWeights
 export vectotril, vectotriu
 include("Architectures.jl")
 
-export ApproximateDistribution, Gaussian, GaussianMixture, NormalisingFlow, numdistributionalparams
+export AbstractApproximateDistribution, Gaussian, GaussianMixture, NormalisingFlow, numdistributionalparams
 export CouplingLayer, AffineCouplingBlock, ActNorm, Permutation
-include(joinpath("ApproximateDistributions", "ApproximateDistributions.jl"))
+include(joinpath("ApproximateDistributions", "AbstractApproximateDistribution.jl"))
 for file in sort(readdir(joinpath(@__DIR__, "ApproximateDistributions")))
     endswith(file, ".jl") || continue
-    file != "ApproximateDistributions.jl" || continue
+    file != "AbstractApproximateDistribution.jl" || continue
     include(joinpath("ApproximateDistributions", file))
 end
 
-export NeuralEstimator, BayesEstimator
+export AbstractNeuralEstimator, AbstractBayesEstimator
 export PosteriorEstimator, RatioEstimator, PointEstimator, IntervalEstimator, QuantileEstimator
 export Ensemble, PiecewiseEstimator
 export LuxEstimator
