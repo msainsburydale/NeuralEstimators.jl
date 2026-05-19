@@ -62,7 +62,7 @@ In the following minimal example, we develop a neural estimator for $\boldsymbol
 ::: code-group
 
 ```julia [Point estimation]
-using NeuralEstimators, Lux
+using NeuralEstimators, Lux, Enzyme
 
 # Functions to sample from the prior and simulate data
 d, n = 2, 100  # dimension of θ and number of replicates
@@ -93,7 +93,7 @@ estimate(estimator, Z)           # point estimate
 ```
 
 ```julia [Posterior estimation]
-using NeuralEstimators, Lux
+using NeuralEstimators, Lux, Enzyme
 
 # Functions to sample from the prior and simulate data
 d, n = 2, 100  # dimension of θ and number of replicates
