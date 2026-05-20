@@ -137,7 +137,12 @@ end
 # Forward pass: Stateless (Lux)
 function (e::RatioEstimator)(Z, θ, ps, st)
     tz, st_s = _summarystatistics(e, Z, ps.summary_network, st.summary_network)
-    # tz = tz |> copy # NB: materialise to break Enzyme's trace
+    # NB: Enzyme's static analyis doesn't like it when we extract data 
+    #     from a custom struct (e.g., Summaries or DataAndSummaries) and then 
+    #     concatenate it with something else later. 
+    #     So, here we materialise (copy) to break Enzyme's trace (needed when freeze_summary_network = true and the summaries are stored in the field S of a Summaries object)
+    tz = tz |> copy
+    
     tθ, st_sθ = e.summary_network_θ(θ, ps.summary_network_θ, st.summary_network_θ)
     logr, st_i = e.inference_network(vcat(tz, tθ), ps.inference_network, st.inference_network)
     return logr, (summary_network = st_s, summary_network_θ = st_sθ, inference_network = st_i)

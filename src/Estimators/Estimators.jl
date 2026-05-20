@@ -80,13 +80,15 @@ _summarystatistics(estimator, d::DataAndSummaries{<:Summaries}) = vcat(d.Z.S, d.
 _summarystatistics(estimator, s::Summaries) = s.S
 
 # Stateless (Lux)
-# NB these internal functions require ps/st to be subsetted already (i.e., ps = ps.summary_network)
+# NB: These internal functions require ps/st to be subsetted already (i.e., ps = ps.summary_network)
+# NB: Enzyme's static analyis doesn't like it when we extract data from a custom struct (e.g., Summaries or DataAndSummaries) and then 
+#     concatenate it with something else later. So, here we materialise (copy) to break Enzyme's trace.
 _summarystatistics(estimator, Z, ps, st) = estimator.summary_network(Z, ps, st)
 function _summarystatistics(estimator, d::DataAndSummaries, ps, st)
     t, st_new = estimator.summary_network(d.Z, ps, st)
     vcat(t, copy(d.S)), st_new # NB: materialise (copy) to break Enzyme's trace
 end
 _summarystatistics(estimator, d::DataAndSummaries{T, Nothing}, ps, st) where {T} = estimator.summary_network(d.Z, ps, st)
-_summarystatistics(estimator, d::DataAndSummaries{<:Summaries}, ps, st) = vcat(d.Z.S, copy(d.S)), st # NB: materialise (copy) to break Enzyme's trace
+_summarystatistics(estimator, d::DataAndSummaries{<:Summaries}, ps, st) = vcat(copy(d.Z.S), copy(d.S)), st # NB: materialise (copy) to break Enzyme's trace
 _summarystatistics(estimator, s::Summaries, ps, st) = s.S, st
 

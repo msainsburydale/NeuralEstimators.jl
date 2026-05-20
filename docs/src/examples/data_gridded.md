@@ -287,4 +287,4 @@ estimator = RatioEstimator(network, d; num_summaries = num_summaries)
 estimator = train(estimator, θ_train, θ_val, simulator; simulator_args = 10)
 ```
 
-A key advantage of the [DeepSet](@ref) representation is that it can be applied to data sets of arbitrary sample size $m$. However, the posterior distribution, and summaries derived from it, typically depends on $m$. If data sets with varying $m$ are envisaged, the estimator should be designed to account for this dependence. See [Variable sample sizes](@ref) for further details.
+A key advantage of the [DeepSet](@ref) representation is that it can be applied to data sets of arbitrary sample size $m$. However, the posterior distribution, and summaries derived from it, typically depends on $m$. If data sets with varying $m$ are envisaged, the estimator should be designed to account for this dependence by including a range of sample sizes during training.
