@@ -80,7 +80,6 @@ end
 _stripnames(x::NamedArray) = x.array
 _stripnames(x::AbstractArray) = x
 
-
 """
 	DataAndSummaries(Z, S)
 A container that couples raw data `Z` (stored in a format amenable to the chosen neural-network architecture) 

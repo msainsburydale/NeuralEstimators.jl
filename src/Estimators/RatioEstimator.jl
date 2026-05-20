@@ -142,7 +142,7 @@ function (e::RatioEstimator)(Z, θ, ps, st)
     #     concatenate it with something else later. 
     #     So, here we materialise (copy) to break Enzyme's trace (needed when freeze_summary_network = true and the summaries are stored in the field S of a Summaries object)
     tz = tz |> copy
-    
+
     tθ, st_sθ = e.summary_network_θ(θ, ps.summary_network_θ, st.summary_network_θ)
     logr, st_i = e.inference_network(vcat(tz, tθ), ps.inference_network, st.inference_network)
     return logr, (summary_network = st_s, summary_network_θ = st_sθ, inference_network = st_i)
