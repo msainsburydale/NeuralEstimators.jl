@@ -214,7 +214,7 @@ function forward(layer::CouplingLayer, θ::AbstractMatrix, tz::AbstractMatrix)
     if !isnothing(layer.permutation)
         θ = forward(layer.permutation, θ)
     end
-    θ1 = layer.d₁ > 0 ? θ[1:layer.d₁, :] : similar(θ, 0, size(θ, 2))
+    θ1 = layer.d₁ > 0 ? θ[1:(layer.d₁), :] : similar(θ, 0, size(θ, 2))
     θ2 = θ[(layer.d₁ + 1):end, :]
     U1, ldj1 = forward(layer.block1, θ1, θ2, tz)
     U2, ldj2 = forward(layer.block2, θ2, U1, tz)
@@ -222,7 +222,7 @@ function forward(layer::CouplingLayer, θ::AbstractMatrix, tz::AbstractMatrix)
 end
 
 function inverse(layer::CouplingLayer, U::AbstractMatrix, tz::AbstractMatrix)
-    U1 = layer.d₁ > 0 ? U[1:layer.d₁, :] : similar(U, 0, size(U, 2))
+    U1 = layer.d₁ > 0 ? U[1:(layer.d₁), :] : similar(U, 0, size(U, 2))
     U2 = U[(layer.d₁ + 1):end, :]
     θ2 = inverse(layer.block2, U1, U2, tz)
     θ1 = inverse(layer.block1, θ2, U1, tz)
@@ -261,7 +261,7 @@ function forward(
     else
         st_perm = NamedTuple()
     end
-    θ1 = layer.d₁ > 0 ? θ[1:layer.d₁, :] : similar(θ, 0, size(θ, 2))
+    θ1 = layer.d₁ > 0 ? θ[1:(layer.d₁), :] : similar(θ, 0, size(θ, 2))
     θ2 = θ[(layer.d₁ + 1):end, :]
     U1, ldj1, st_b1 = forward(layer.block1, θ1, θ2, tz, ps.block1, st.block1)
     U2, ldj2, st_b2 = forward(layer.block2, θ2, U1, tz, ps.block2, st.block2)
@@ -276,7 +276,7 @@ function inverse(
     ps,
     st::NamedTuple
 )
-    U1 = layer.d₁ > 0 ? U[1:layer.d₁, :] : similar(U, 0, size(U, 2))
+    U1 = layer.d₁ > 0 ? U[1:(layer.d₁), :] : similar(U, 0, size(U, 2))
     U2 = U[(layer.d₁ + 1):end, :]
     θ2, st_b2 = inverse(layer.block2, U1, U2, tz, ps.block2, st.block2)
     θ1, st_b1 = inverse(layer.block1, θ2, U1, tz, ps.block1, st.block1)

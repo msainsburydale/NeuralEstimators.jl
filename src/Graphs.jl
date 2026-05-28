@@ -545,50 +545,50 @@ end
 function maternclusterprocess(; λ = 10, μ = 10, r = 0.1, xmin = 0, xmax = 1, ymin = 0, ymax = 1, unit_bounding_box::Bool = false)
 
     #Extended simulation windows parameters
-    rExt=r #extension parameter -- use cluster radius
-    xminExt=xmin-rExt
-    xmaxExt=xmax+rExt
-    yminExt=ymin-rExt
-    ymaxExt=ymax+rExt
+    rExt = r #extension parameter -- use cluster radius
+    xminExt = xmin-rExt
+    xmaxExt = xmax+rExt
+    yminExt = ymin-rExt
+    ymaxExt = ymax+rExt
     #rectangle dimensions
-    xDeltaExt=xmaxExt-xminExt
-    yDeltaExt=ymaxExt-yminExt
-    areaTotalExt=xDeltaExt*yDeltaExt #area of extended rectangle
+    xDeltaExt = xmaxExt-xminExt
+    yDeltaExt = ymaxExt-yminExt
+    areaTotalExt = xDeltaExt*yDeltaExt #area of extended rectangle
 
     #Simulate Poisson point process
     # numbPointsParent=rand(Poisson(areaTotalExt*λ)) #Poisson number of points
-    numbPointsParent=rpoisson(areaTotalExt*λ) #Poisson number of points
+    numbPointsParent = rpoisson(areaTotalExt*λ) #Poisson number of points
 
     #x and y coordinates of Poisson points for the parent
-    xxParent=xminExt .+ xDeltaExt*rand(numbPointsParent)
-    yyParent=yminExt .+ yDeltaExt*rand(numbPointsParent)
+    xxParent = xminExt .+ xDeltaExt*rand(numbPointsParent)
+    yyParent = yminExt .+ yDeltaExt*rand(numbPointsParent)
 
     #Simulate Poisson point process for the daughters (ie final poiint process)
     # numbPointsDaughter=rand(Poisson(μ),numbPointsParent)
-    numbPointsDaughter=[rpoisson(μ) for _ = 1:numbPointsParent]
-    numbPoints=sum(numbPointsDaughter) #total number of points
+    numbPointsDaughter = [rpoisson(μ) for _ = 1:numbPointsParent]
+    numbPoints = sum(numbPointsDaughter) #total number of points
 
     #Generate the (relative) locations in polar coordinates by
     #simulating independent variables.
-    theta=2*pi*rand(numbPoints) #angular coordinates
-    rho=r*sqrt.(rand(numbPoints)) #radial coordinates
+    theta = 2*pi*rand(numbPoints) #angular coordinates
+    rho = r*sqrt.(rand(numbPoints)) #radial coordinates
 
     #Convert polar to Cartesian coordinates
-    xx0=rho .* cos.(theta)
-    yy0=rho .* sin.(theta)
+    xx0 = rho .* cos.(theta)
+    yy0 = rho .* sin.(theta)
 
     #replicate parent points (ie centres of disks/clusters)
-    xx=vcat(fill.(xxParent, numbPointsDaughter)...)
-    yy=vcat(fill.(yyParent, numbPointsDaughter)...)
+    xx = vcat(fill.(xxParent, numbPointsDaughter)...)
+    yy = vcat(fill.(yyParent, numbPointsDaughter)...)
 
     #Shift centre of disk to (xx0,yy0)
-    xx=xx .+ xx0
-    yy=yy .+ yy0
+    xx = xx .+ xx0
+    yy = yy .+ yy0
 
     #thin points if outside the simulation window
-    booleInside=((xx .>= xmin) .& (xx .<= xmax) .& (yy .>= ymin) .& (yy .<= ymax))
-    xx=xx[booleInside]
-    yy=yy[booleInside]
+    booleInside = ((xx .>= xmin) .& (xx .<= xmax) .& (yy .>= ymin) .& (yy .<= ymax))
+    xx = xx[booleInside]
+    yy = yy[booleInside]
 
     S = hcat(xx, yy)
 

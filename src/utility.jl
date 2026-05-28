@@ -209,7 +209,7 @@ function vectotril(v; strict::Bool = false)
         d = (-1 + isqrt(1 + 8n)) ÷ 2
         d*(d+1)÷2 == n || error("vectotril: length of vector is not triangular")
         k = 0
-        L = [i >= j ? (k+=1; v[k]) : zero(T) for i = 1:d, j = 1:d]
+        L = [i >= j ? (k += 1; v[k]) : zero(T) for i = 1:d, j = 1:d]
         convert(ArrayType, L)
     end
 end
@@ -226,7 +226,7 @@ function vectotriu(v; strict::Bool = false)
         d = (-1 + isqrt(1 + 8n)) ÷ 2
         d*(d+1)÷2 == n || error("vectotriu: length of vector is not triangular")
         k = 0
-        U = [i <= j ? (k+=1; v[k]) : zero(T) for i = 1:d, j = 1:d]
+        U = [i <= j ? (k += 1; v[k]) : zero(T) for i = 1:d, j = 1:d]
         convert(ArrayType, U)
     end
 end
@@ -239,7 +239,7 @@ function vectotrilstrict(v)
     d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
     d*(d-1)÷2 == n || error("vectotrilstrict: length of vector is not triangular")
     k = 0
-    L = [i > j ? (k+=1; v[k]) : zero(T) for i = 1:d, j = 1:d]
+    L = [i > j ? (k += 1; v[k]) : zero(T) for i = 1:d, j = 1:d]
     convert(ArrayType, L)
 end
 
@@ -251,7 +251,7 @@ function vectotriustrict(v)
     d = (-1 + isqrt(1 + 8n)) ÷ 2 + 1
     d*(d-1)÷2 == n || error("vectotriustrict: length of vector is not triangular")
     k = 0
-    U = [i < j ? (k+=1; v[k]) : zero(T) for i = 1:d, j = 1:d]
+    U = [i < j ? (k += 1; v[k]) : zero(T) for i = 1:d, j = 1:d]
     convert(ArrayType, U)
 end
 
