@@ -91,4 +91,3 @@ end
 _summarystatistics(estimator, d::DataAndSummaries{T, Nothing}, ps, st) where {T} = estimator.summary_network(d.Z, ps, st)
 _summarystatistics(estimator, d::DataAndSummaries{<:Summaries}, ps, st) = vcat(copy(d.Z.S), copy(d.S)), st # NB: materialise (copy) to break Enzyme's trace
 _summarystatistics(estimator, s::Summaries, ps, st) = s.S, st
-
