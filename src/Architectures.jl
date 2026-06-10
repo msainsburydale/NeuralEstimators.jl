@@ -530,20 +530,21 @@ A traditional fully-connected multilayer perceptron (MLP) with input dimension `
 - `output_activation = identity`: the activation function used in the output layer.
 - `backend::Union{Nothing, Module} = nothing`: the backend to use for constructing the network (e.g., `Lux` or `Flux`). If `nothing`, the backend is resolved automatically.
 """
-function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128, activation = relu, output_activation = identity, backend::Union{Nothing, Module} = nothing)
+function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128, activation = relu, output_activation = identity, backend::Union{Nothing, Module} = nothing, kwargs...)
     @assert depth >= 0
     B = _resolvebackend(backend)
     if depth == 0
-        layers = Any[B.Dense(in => out, output_activation)]
+        layers = Any[B.Dense(in => out, output_activation; kwargs...)]
     else
         layers = []
-        push!(layers, B.Dense(in => width, activation))
-        append!(layers, [B.Dense(width => width, activation) for _ ∈ 2:depth])
-        push!(layers, B.Dense(width => out, output_activation))
+        push!(layers, B.Dense(in => width, activation; kwargs...))
+        append!(layers, [B.Dense(width => width, activation; kwargs...) for _ ∈ 2:depth])
+        push!(layers, B.Dense(width => out, output_activation; kwargs...))
     end
 
     return B.Chain(layers...)
 end
+
 
 """
     MultiHeadMLP(in::Integer, out::Integer, num_heads::Integer; growing::Bool = false, kwargs...)

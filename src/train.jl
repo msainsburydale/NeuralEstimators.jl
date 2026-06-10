@@ -28,7 +28,7 @@ The trained estimator is always returned on the CPU.
 - `freeze_summary_network = false`: if `true` and the estimator has a `summary_network` field, freezes the summary network parameters during training (i.e., only the inference network is updated). In this case, the summary statistics for a given instance of simulated data are computed only once, giving a significant speedup. This is useful for transfer learning, where a pretrained summary network is held fixed while a new inference network is trained for a different model or estimator type.
 - `device = nothing`: the device used for computation, e.g., `cpu_device()`, `gpu_device()`, or `reactant_device()` (the latter requires Lux.jl). If `nothing`, the device is inferred from `use_gpu`. Takes priority over `use_gpu`.
 - `use_gpu::Bool = true`: flag indicating whether to use a GPU if one is available. Ignored if `device` is provided.
-- `adtype::AbstractADType`: the automatic differentiation backend used to compute gradients during training. The default depends on the device and backend: `AutoEnzyme()` is used for Lux.jl on CPU; `AutoZygote()` is used for Flux.jl or whenever using CUDA GPU; and `AutoReactant()` is used for Reactant/XLA devices. If you encounter `EnzymeRuntimeActivityError`, try `AutoEnzyme(mode = set_runtime_activity(Enzyme.Reverse))`.
+- `adtype::AbstractADType`: the automatic differentiation backend used to compute gradients during training. By default `AutoReactant()` is used when `device isa ReactantDevice`, and `AutoZygote()` is used otherwise. If you encounter `EnzymeRuntimeActivityError` when using `AutoEnzyme()`, try `AutoEnzyme(mode = set_runtime_activity(Enzyme.Reverse))`.
 - `savepath::Union{Nothing, String} = tempdir()`: path to save information generated during training. Saving is disabled if `savepath = nothing`. Otherwise, the following files are always saved to both `savepath` and `tempdir()`:
   - `loss_per_epoch.csv`: training and validation risk at each epoch, in the first and second columns respectively.
   - `best_optimizer.bson`: optimiser and optimiser state corresponding to the best validation risk.
@@ -143,10 +143,8 @@ function _resolve_adtype(trainstate, device, adtype, verbose = true)
     if isnothing(adtype) # Set default adtype if not provided
         adtype = if device isa ReactantDevice
             AutoReactant()
-        elseif trainstate isa FluxTrainState || device isa CUDADevice
+        else #NB For now, using Zygote for Lux + CPU without Reactant, since this is documented as being faster. If this changes, just add a branch elseif trainstate isa FluxTrainState || device isa CUDADevice 
             AutoZygote()
-        else
-            AutoEnzyme()  # Lux + CPU
         end
     else # Soft adjustments
         if device isa ReactantDevice && !(adtype isa AutoReactant)

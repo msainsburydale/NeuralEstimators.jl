@@ -55,6 +55,24 @@ function LuxCore.parameterlength(q::AbstractApproximateDistribution)
         if getfield(q, f) isa LuxCore.AbstractLuxLayer)
 end
 
+# SpikeAndSlab: the generic AbstractApproximateDistribution methods above only
+# traverse fields that are AbstractLuxLayer, so they would skip the nested slab
+# (itself an AbstractApproximateDistribution). Handle classifier and slab explicitly.
+function LuxCore.initialparameters(rng::AbstractRNG, q::SpikeAndSlab)
+    (classifier = LuxCore.initialparameters(rng, q.classifier),
+     slab       = LuxCore.initialparameters(rng, q.slab))
+end
+function LuxCore.initialstates(rng::AbstractRNG, q::SpikeAndSlab)
+    (classifier = LuxCore.initialstates(rng, q.classifier),
+     slab       = LuxCore.initialstates(rng, q.slab))
+end
+function LuxCore.parameterlength(q::SpikeAndSlab)
+    LuxCore.parameterlength(q.classifier) + LuxCore.parameterlength(q.slab)
+end
+function LuxCore.statelength(q::SpikeAndSlab)
+    LuxCore.statelength(q.classifier) + LuxCore.statelength(q.slab)
+end
+
 function LuxCore.initialparameters(rng::AbstractRNG, flow::NormalisingFlow)
     (layers = map(l -> Lux.initialparameters(rng, l), flow.layers),)
 end

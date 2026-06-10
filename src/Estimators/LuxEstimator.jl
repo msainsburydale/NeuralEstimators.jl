@@ -36,7 +36,7 @@ function LuxEstimator(estimator::LuxEstimator)
 end
 
 # Methods - just pass on the estimator and its parameters/states
-for f in (:estimate, :summarystatistics, :assess, :sampleposterior, :bootstrap, :interval, :quantiles, :posteriormean, :posteriormedian, :posteriorquantile, :logratio, :_logdensity)
+for f in (:estimate, :summarystatistics, :assess, :sampleposterior, :spikeprobability, :bootstrap, :interval, :quantiles, :posteriormean, :posteriormedian, :posteriorquantile, :logratio, :_logdensity)
     @eval $f(estimator::LuxEstimator, args...; kwargs...) = $f(estimator.estimator, args..., estimator.ps, estimator.st; kwargs...)
 end
 

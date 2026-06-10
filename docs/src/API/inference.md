@@ -11,6 +11,8 @@ The following functions facilitate the use of a trained neural estimator with ob
 ```@docs
 sampleposterior
 
+spikeprobability
+
 logratio
 
 posteriormean 

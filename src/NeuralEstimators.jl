@@ -48,7 +48,7 @@ export IndicatorWeights, KernelWeights
 export vectotril, vectotriu
 include("Architectures.jl")
 
-export AbstractApproximateDistribution, Gaussian, GaussianMixture, NormalisingFlow, numdistributionalparams
+export AbstractApproximateDistribution, Gaussian, GaussianMixture, NormalisingFlow, SpikeAndSlab, numdistributionalparams
 export CouplingLayer, AffineCouplingBlock, ActNorm, Permutation
 include(joinpath("ApproximateDistributions", "AbstractApproximateDistribution.jl"))
 for file in sort(readdir(joinpath(@__DIR__, "ApproximateDistributions")))
@@ -81,7 +81,7 @@ include("TrainState.jl")
 export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
 include("assess.jl")
 
-export estimate, sampleposterior, logratio, posteriormean, posteriormedian, posteriorquantile, bootstrap, interval, quantiles
+export estimate, sampleposterior, spikeprobability, logratio, posteriormean, posteriormedian, posteriorquantile, bootstrap, interval, quantiles
 include("inference.jl")
 
 export stackarrays, expandgrid, numberreplicates, samplesize, drop, containertype, rowwisenorm, subsetreplicates

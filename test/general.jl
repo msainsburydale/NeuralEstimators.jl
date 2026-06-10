@@ -894,6 +894,59 @@ end
     end
 end
 
+@testset "PosteriorEstimator: SpikeAndSlab" begin
+    d1 = 1
+    num_summaries = 6
+
+    # Univariate spike-and-slab prior: spike at 0 with prob 0.5, else continuous
+    sampler1(K, d = nothing) = NamedMatrix(θ = Float32.(rand(K) .< 0.5) .* randn(Float32, K))
+    simulator1(θ::AbstractVector, m::Integer) = θ["θ"] .+ sort(randn(Float32, m))
+    simulator1(θ::AbstractMatrix, m::Integer) = reduce(hcat, simulator1.(eachcol(θ), m))
+    θ1 = sampler1(K)
+    Z1 = simulator1(θ1, m)
+
+    summary_network = Chain(Dense(m, 16, gelu), Dense(16, num_summaries))
+    q = SpikeAndSlab(d1, num_summaries) # convenience constructor (default slab = GaussianMixture)
+    @test numdistributionalparams(q) == 1 + numdistributionalparams(q.slab)
+
+    # Density evaluation, including spike (θ == 0) and slab (θ != 0) entries
+    θ_plain = reshape(Float32[0, 0.5, -0.3, 0, 1.2], 1, :)
+    tz = randn(Float32, num_summaries, size(θ_plain, 2))
+    dens = _logdensity(q, θ_plain, tz)
+    @test size(dens) == (1, size(θ_plain, 2))
+    @test all(isfinite, dens)
+
+    estimator = PosteriorEstimator(summary_network, d1; num_summaries = num_summaries, q = SpikeAndSlab)
+    estimator = PosteriorEstimator(summary_network, q)
+    @test numdistributionalparams(estimator) == numdistributionalparams(q)
+    estimator = train(estimator, sampler1, simulator1, simulator_args = m, epochs = 1, verbose = false)
+    samples = sampleposterior(estimator, Z1) # posterior draws
+    @test all([size(s) == (d1, 1000) for s in samples])
+    posteriormean(estimator, Z1)
+
+    # spikeprobability: vector for multiple data sets, scalar for a single data set
+    sp = spikeprobability(estimator, Z1)
+    @test length(sp) == K
+    @test all(0 .<= sp .<= 1)
+    sp1 = spikeprobability(estimator, simulator1(sampler1(1), m))
+    @test sp1 isa Real
+    @test 0 <= sp1 <= 1
+
+    # Custom slab type with non-identity transform/invtransform (positive-support slab)
+    sampler2(K, d = nothing) = NamedMatrix(θ = Float32.(rand(K) .< 0.5) .* (rand(Float32, K) .+ 0.5f0))
+    simulator2(θ::AbstractVector, m::Integer) = θ["θ"] .+ sort(randn(Float32, m))
+    simulator2(θ::AbstractMatrix, m::Integer) = reduce(hcat, simulator2.(eachcol(θ), m))
+    Z2 = simulator2(sampler2(K), m)
+
+    q2 = SpikeAndSlab(d1, num_summaries; slab = NormalisingFlow, transform = log, invtransform = exp)
+    @test numdistributionalparams(q2) == 1 + numdistributionalparams(q2.slab)
+    estimator2 = PosteriorEstimator(summary_network, q2)
+    estimator2 = train(estimator2, sampler2, simulator2, simulator_args = m, epochs = 1, verbose = false)
+    samples2 = sampleposterior(estimator2, Z2)
+    @test all([size(s) == (d1, 1000) for s in samples2])
+    @test all(all(s .>= 0) for s in samples2) # spike (0) or positive slab draws
+end
+
 # ---- Wrappers and helper functions for NeuralEstimators ----
 
 @testset "Ensemble: $dvc" for dvc ∈ devices

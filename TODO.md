@@ -19,6 +19,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Support for reading data from disk during training, to handle data sets that are too large to fit in memory.
 
 **Inference & diagnostics**
+- Straightforward way to incorporate box parameter constraints and ensure that posterior samples are in the prior support.
 - assess.jl/inference.jl for more general parameter shapes (currently assumes the parameters are stored as a matrix).
 
 ### Documentation
@@ -46,6 +47,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ### Backend
 - 🟡 Lux support for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules).
 - 🟡 Lux support for [SpatialGraphConv](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
+- The initial risks seem to be quite large when using Lux; use the same weight initialisation used by Flux.
 - Lux support for [CovarianceMatrix/CorrelationMatrix](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Output-layers).
 - Reactant support for [Gaussian](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) (issue is likely the triangular solve when computing the density).
 - SimpleChains.jl: enforce `CPUDevice`/`AutoZygote` during training and `CPUDevice` during inference (dispatching on `SimpleChainsLayer` within `_resolvedevice` and `_resolve_adtype`).
@@ -65,3 +67,10 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ### General
 - The package would benefit by leveraging the SciML ecosystem, for instance, using [Neural Ordinary Differential Equations](https://docs.sciml.ai/DiffEqFlux/dev/) for fast surrogate simulators, summary networks, and approximate distributions for posterior estimation.
+
+
+---
+
+## Breaking changes to decide upon before v1
+
+- Change the return type of `sampleposterior` to 3D array, with independent data sets in the final dimension. This is more conventional, and more natural for batched methods (e.g., `NormalisingFlow`).

@@ -28,7 +28,7 @@ function NormalisingFlow(
     num_coupling_layers::Integer = 6,
     use_act_norm::Bool = true,
     backend::Union{Nothing, Module} = nothing,
-    kwargs...,
+    kwargs...
 )
     @assert num_coupling_layers > 0
     backend = _resolvebackend(backend)

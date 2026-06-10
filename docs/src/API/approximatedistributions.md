@@ -16,6 +16,8 @@ Gaussian
 GaussianMixture
 
 NormalisingFlow
+
+SpikeAndSlab
 ```
 
 ## Methods

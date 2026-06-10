@@ -49,8 +49,6 @@ function distributionparameters(q::GaussianMixture, κ::AbstractMatrix)
     return w, μ, σ
 end
 
-#TODO reduce code rep between Stateful/Stateless methods
-
 # Stateful (Flux)
 function _logdensity(q::GaussianMixture, θ::AbstractMatrix, tz::AbstractMatrix)
     d, K = size(θ)

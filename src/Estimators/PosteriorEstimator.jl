@@ -133,3 +133,33 @@ function sampleposterior(estimator::PosteriorEstimator, Z, ps, st; N::Integer = 
     θ = sampleposterior(estimator.q, t, N, ps.q, st.q; device = device)
     return length(θ) == 1 ? θ[1] : θ
 end
+
+@doc raw"""
+	spikeprobability(estimator::PosteriorEstimator, Z)
+For a [`PosteriorEstimator`](@ref) whose approximate distribution is a [`SpikeAndSlab`](@ref),
+returns the estimated posterior probability that the parameter equals the spike value (i.e., the
+mixture probability ``\pi``), given data `Z`.
+
+Returns a scalar for a single data set, or a vector of probabilities for a collection of data sets.
+
+See also [`SpikeAndSlab`](@ref) and [`sampleposterior`](@ref).
+"""
+function spikeprobability end
+
+# Inference: Stateful (Flux)
+function spikeprobability(estimator::PosteriorEstimator, Z; device = nothing, use_gpu::Bool = true, kwargs...)
+    estimator.q isa SpikeAndSlab || throw(ArgumentError("`spikeprobability` is only defined for a `PosteriorEstimator` with a `SpikeAndSlab` approximate distribution"))
+    device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = false)
+    t = summarystatistics(estimator, Z; device = device, kwargs...)
+    π = spikeprobability(estimator.q, t)
+    return size(π, 2) == 1 ? π[1] : vec(π)
+end
+
+# Inference: Stateless (Lux)
+function spikeprobability(estimator::PosteriorEstimator, Z, ps, st; device = nothing, use_gpu::Bool = true, kwargs...)
+    estimator.q isa SpikeAndSlab || throw(ArgumentError("`spikeprobability` is only defined for a `PosteriorEstimator` with a `SpikeAndSlab` approximate distribution"))
+    device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = false)
+    t = summarystatistics(estimator, Z, ps, st; device = device, kwargs...)
+    π = spikeprobability(estimator.q, t, ps.q, st.q)
+    return size(π, 2) == 1 ? π[1] : vec(π)
+end

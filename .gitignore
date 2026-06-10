@@ -4,6 +4,7 @@
 Manifest.toml
 docs/build/
 test/testing-path
+devel/
 
 .Rproj.user
 .DS_Store
