@@ -7,6 +7,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ### Functionality
 
 **Estimator types & methods**
+- Function `infer()` that wraps `estimate()` and `sampleposterior()`.
 - Model selection/comparison: see [here](https://bayesflow.org/main/api/bayesflow.approximators.ModelComparisonApproximator.html#bayesflow.approximators.ModelComparisonApproximator), [this paper](https://arxiv.org/abs/2004.10629), and [this paper](https://arxiv.org/pdf/2503.23156).
 - Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
 - Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference.
@@ -23,7 +24,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - assess.jl/inference.jl for more general parameter shapes (currently assumes the parameters are stored as a matrix).
 
 ### Documentation
-- 🟡 Add illustrative data figures and diagnostic plots in all examples.
+- 🟡 Add illustrative data figures, terminal training output, and diagnostic plots in all examples.
 - In the Examples tab, index "Global parameters" and "Spatially indexed parameters" so it is clear that these are subsections, and put a hyperlink on "Gridded spatial data" with the two subsections in it (or at least with links to them).
 - Add code groups for Lux/Flux (containing `using Lux`/`using Flux`) in the examples.
 - Example: In the time-series example, also illustrate partially-exchangeable networks using DeepSet.
@@ -35,9 +36,8 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/) for inspiration).
 
 ### Performance
-- 🟡 Lux.jl + Reactant.jl currently has extra overhead during training: see the TODO in the Reactant extension.
-- 🟡 Reactant.jl in the inference stage.
-- 🟡 Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
+- Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
+- Reactant.jl in the inference stage.
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
 - For some operations involving only matrices and MLPs (e.g., inference-network transformations of summary statistics), it might be faster to always use the CPU (at least for certain batchsize ranges).
 - SimpleChains.jl: are the user-friendly constructors for each estimator type correctly converted to `SimpleChainsLayers`?

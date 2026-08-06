@@ -178,7 +178,7 @@ LuxEstimator(trainstate::TrainState) = LuxEstimator(trainstate.model, trainstate
 getestimator(trainstate::TrainState) = LuxEstimator(trainstate)
 _construct_train_state(estimator::LuxEstimator, optimiser::Optimisers.AbstractRule) = TrainState(estimator, optimiser)
 
-function _risk(trainstate::TrainState, loss, data, device, adtype = nothing) # TODO remove adtype argument once compute_gradients has been replaced in Reactant ext
+function _risk(trainstate::TrainState, loss, data, device)
     st = Lux.testmode(trainstate.states) #|> device
     ps = trainstate.parameters #|> device
     sum_loss = 0.0f0

@@ -1,4 +1,3 @@
-#TODO Remove adtype argument from _risk once we've sorted out Reactant compilation
 #TODO clean up saving/loading... think we want to save the best parameters and optimisers separately:
 # optimizer.bson: optimizer rule + optimizer state (continued training)
 # parameters.bson: neural-network parameters (and states) (continued training + loading in different session)
@@ -236,7 +235,7 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     _checkargs(batchsize, epochs, stopping_epochs, risk_history)
 
     verbose && print("Computing the initial validation risk...")
-    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device, adtype)
+    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device)
     verbose && println(" Initial validation risk = $min_val_risk")
 
     loss_per_epoch = [min_val_risk min_val_risk;]
@@ -256,7 +255,7 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
         # For each batch update trainstate and compute the training loss
         epoch_time = @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype)
-        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device, adtype)
+        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
         verbose && println("Epoch: $(lpad(epoch, ndigits(epochs)))  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(trainstate))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
 
@@ -369,7 +368,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     _checkargs(batchsize, epochs, stopping_epochs, risk_history)
 
     verbose && print("Computing the initial validation risk...")
-    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device, adtype)
+    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device)
     verbose && println(" Initial validation risk = $min_val_risk")
 
     loss_per_epoch = [min_val_risk min_val_risk;]
@@ -422,7 +421,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
         end
 
         # Compute and report the validation risk
-        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device, adtype)
+        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
         verbose && println("Epoch: $(lpad(epoch, ndigits(epochs)))  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(trainstate))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
 
@@ -551,7 +550,7 @@ function train(trainstate, sampler, simulator;
     _checkargs(batchsize, epochs, stopping_epochs, risk_history)
 
     verbose && print("Computing the initial validation risk...")
-    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device, adtype)
+    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device)
     verbose && println(" Initial validation risk = $min_val_risk")
 
     loss_per_epoch = [min_val_risk min_val_risk;]
@@ -620,7 +619,7 @@ function train(trainstate, sampler, simulator;
             train_risk = mean(train_risk) #TODO mean of means ≠ grand mean
         end
 
-        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device, adtype)
+        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
         verbose && println("Epoch: $(lpad(epoch, ndigits(epochs)))  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(trainstate))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
 

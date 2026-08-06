@@ -46,7 +46,7 @@ NeuralEstimatorsCUDAExt = "CUDA"
 NeuralEstimatorsFluxExt = "Flux"
 NeuralEstimatorsGNNExt = ["Flux", "GraphNeuralNetworks"]
 NeuralEstimatorsLuxExt = ["Lux", "LuxCore"]
-NeuralEstimatorsLuxReactantExt = ["Reactant", "Lux", "LuxCore"]
+NeuralEstimatorsReactantExt = ["Reactant", "Lux", "LuxCore"]
 NeuralEstimatorsPlottingMakieExt = ["Makie"]
 NeuralEstimatorsPlottingPlotsExt = ["Plots"]
 

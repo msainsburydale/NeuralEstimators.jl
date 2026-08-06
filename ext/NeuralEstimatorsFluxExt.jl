@@ -61,7 +61,7 @@ function _save_trainstate(trainstate::FluxTrainState, savepath; best::Bool = tru
     end
 end
 
-function _risk(trainstate::FluxTrainState, loss, data, device, adtype = nothing) # TODO remove adtype argument once compute_gradients has been replaced in Reactant ext
+function _risk(trainstate::FluxTrainState, loss, data, device)
     sum_loss = 0.0f0
     K = 0
     for (input, output) in data
