@@ -56,17 +56,6 @@ estimator = train(estimator, sampler, simulator, K = 1000)
 # Plot the risk history
 plotrisk()
 
-# Assess the estimator
-θ_test = sampler(250)
-Z_test = simulator(θ_test);
-grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
-
-
-### to discuss with Matt
-
-assessment = assess(estimator, θ_test, Z_test; grid = grid)
-plot(assessment)
-
 # Generate "observed" data 
 θ = sampler(1)
 z = simulator(θ)
@@ -130,7 +119,7 @@ function _inputoutput(estimator::RatioEstimator, Z, θ)
     # Ideally, these should use fresh (prior) theta draws when a sampler is available,
     # otherwise  permutation of the already sampled parameters is used; in this case, 
     # with probability 1 - 1/e ~= 0.63  https://math.stackexchange.com/questions/399500/why-is-the-derangement-probability-so-close-to-frac1e
-    # we mislabel at least one dependent pair as indepndent.
+    # we mislabel at least one dependent pair as independent.
     # Further, fresh theta draws lower the variance of the loss function estimators. 
 
     K = numobs(Z)
@@ -141,8 +130,7 @@ function _inputoutput(estimator::RatioEstimator, Z, θ)
         # might return a parameter set with names and any float type;
         # strip names below, as the data loader will handle the conversion to Float32
         θ̃  =_stripnames(_extractθ(estimator.sampler(K)))
-        @assert size(θ̃ ) == size(θ) "sampler must generate parameters of the same dimensions as theta; 
-                                        expected $(size(θ)) got $(size(θ̃))"
+        @assert size(θ̃ ) == size(θ) "sampler must generate parameters of the same dimensions as theta; expected $(size(θ)) got $(size(θ̃))"
         θ̃ 
     end
     Z̃ = Z
