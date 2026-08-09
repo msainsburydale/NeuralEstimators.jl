@@ -77,7 +77,7 @@ end
 
 # Backwards compatibility to allow for a sampler to not be passed to the RatioEstimator class
 # there is no clash with the constructor below, where the Integer type specification differs
-RatioEstimator(summary_network, summary_network_θ, inference_network) = 
+RatioEstimator(summary_network, summary_network_θ, inference_network) =
     RatioEstimator(summary_network, summary_network_θ, inference_network, nothing)
 
 # The sampler is intentionally kept out of the network
@@ -90,7 +90,7 @@ function RatioEstimator(
     summary_network, num_parameters::Integer, num_summaries::Integer;
     num_summaries_θ::Integer = 2num_parameters,
     summary_network_θ_kwargs::NamedTuple = (;),
-    sampler::Union{Nothing,Function} = nothing,
+    sampler::Union{Nothing, Function} = nothing,
     kwargs...
 )
     backend = _backendof(summary_network)
@@ -129,9 +129,9 @@ function _inputoutput(estimator::RatioEstimator, Z, θ)
         # this is the same sampler as the one passed to train(), hence it 
         # might return a parameter set with names and any float type;
         # strip names below, as the data loader will handle the conversion to Float32
-        θ̃  =_stripnames(_extractθ(estimator.sampler(K)))
-        @assert size(θ̃ ) == size(θ) "sampler must generate parameters of the same dimensions as theta; expected $(size(θ)) got $(size(θ̃))"
-        θ̃ 
+        θ̃ = _stripnames(_extractθ(estimator.sampler(K)))
+        @assert size(θ̃) == size(θ) "sampler must generate parameters of the same dimensions as theta; expected $(size(θ)) got $(size(θ̃))"
+        θ̃
     end
     Z̃ = Z
 

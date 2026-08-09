@@ -36,12 +36,12 @@ function Gaussian(d::Integer, num_summaries::Integer; backend::Union{Nothing, Mo
 
     inference_network = B.Chain(
         MLP(num_summaries, latent_dim; backend = B, kwargs...).layers..., B.Parallel(vcat,
-            B.Dense(latent_dim, d, identity),    # μ ∈ ℝ     
-            B.Chain(                             # L such that Σ = LL' is pos. def.
-                B.Dense(latent_dim, num_cov_matrix_params, identity),
-                LowerCholeskyFactor(d, B)
-            )
+        B.Dense(latent_dim, d, identity),    # μ ∈ ℝ     
+        B.Chain(                             # L such that Σ = LL' is pos. def.
+            B.Dense(latent_dim, num_cov_matrix_params, identity),
+            LowerCholeskyFactor(d, B)
         )
+    )
     )
 
     # x = d:-1:1

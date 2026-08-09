@@ -545,7 +545,6 @@ function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128
     return B.Chain(layers...)
 end
 
-
 """
     MultiHeadMLP(in::Integer, out::Integer, num_heads::Integer; growing::Bool = false, kwargs...)
 

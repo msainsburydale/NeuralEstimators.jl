@@ -54,16 +54,16 @@ end
     end
     @testset "stackarrays" begin
         # Vector containing arrays of the same size:
-        A = array(2, 3, 4);
-        v = [A, A];
-        N = ndims(A);
+        A = array(2, 3, 4)
+        v = [A, A]
+        N = ndims(A)
         @test stackarrays(v) == cat(v..., dims = N)
         @test stackarrays(v, merge = false) == cat(v..., dims = N + 1)
 
         # Vector containing arrays with differing final dimension size:
-        A₁ = array(2, 3, 4);
-        A₂ = array(2, 3, 5);
-        v = [A₁, A₂];
+        A₁ = array(2, 3, 4)
+        A₂ = array(2, 3, 5)
+        v = [A₁, A₂]
         @test stackarrays(v) == cat(v..., dims = N)
     end
     @testset "containertype" begin
@@ -200,11 +200,11 @@ end
         @test Ã₂ ≈ A₂
 
         # Randomly selecting k nodes within a node's neighbourhood disc
-        seed!(1);
+        seed!(1)
         A₃ = adjacencymatrix(S, k, r)
         @test A₃.n == A₃.m == n
         @test length(adjacencymatrix(S, k, 0.02).nzval) < k*n
-        seed!(1);
+        seed!(1)
         Ã₃ = adjacencymatrix(D, k, r)
         @test Ã₃ ≈ A₃
 
@@ -596,7 +596,7 @@ end
         @test typeof(θ̂) == typeof(θ)
 
         Σ = [Symmetric(cpu(vectotril(x)), :L) for x ∈ eachcol(θ̂)]
-        Σ = convert.(Matrix, Σ);
+        Σ = convert.(Matrix, Σ)
         @test all(isposdef.(Σ))
 
         L = l(θ, true)
@@ -725,7 +725,7 @@ Z = simulator(θ, m)
             estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 3, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
             estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
             estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
-            Z_train = Z_val = simulator(θ, m);
+            Z_train = Z_val = simulator(θ, m)
             train(estimator, θ, θ, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
             train(estimator, θ, θ, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose)
             train(estimator, θ, θ, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
@@ -989,11 +989,11 @@ end
     n = 2    # bivariate data
     d = 3    # dimension of parameter vector
     w = 128  # width of each hidden layer
-    ψ₁ = Chain(Dense(n, w, relu), Dense(w, w, relu));
-    ϕ₁ = Chain(Dense(w, w, relu), Dense(w, d));
+    ψ₁ = Chain(Dense(n, w, relu), Dense(w, w, relu))
+    ϕ₁ = Chain(Dense(w, w, relu), Dense(w, d))
     θ̂₁ = PointEstimator(DeepSet(ψ₁, ϕ₁))
-    ψ₂ = Chain(Dense(n, w, relu), Dense(w, w, relu));
-    ϕ₂ = Chain(Dense(w, w, relu), Dense(w, d));
+    ψ₂ = Chain(Dense(n, w, relu), Dense(w, w, relu))
+    ϕ₂ = Chain(Dense(w, w, relu), Dense(w, d))
     θ̂₂ = PointEstimator(DeepSet(ψ₂, ϕ₂))
     θ̂ = PiecewiseEstimator([θ̂₁, θ̂₂], 30)
     Z = [rand32(n, m) for m ∈ (10, 50)]
