@@ -57,8 +57,13 @@ for file in sort(readdir(joinpath(@__DIR__, "ApproximateDistributions")))
     include(joinpath("ApproximateDistributions", file))
 end
 
+# Batched Chebyshev machinery for 1D density fitting and inverse-CDF sampling,
+# used by the TelescopingRatioEstimator's sequential posterior sampler
+include("Chebyshev1d.jl")
+# i think we don't need to make anything in this script visible
+
 export AbstractNeuralEstimator, AbstractBayesEstimator
-export PosteriorEstimator, RatioEstimator, PointEstimator, IntervalEstimator, QuantileEstimator
+export PosteriorEstimator, RatioEstimator, TelescopingRatioEstimator, PointEstimator, IntervalEstimator, QuantileEstimator
 export Ensemble, PiecewiseEstimator
 export LuxEstimator
 export summarynetwork, setsummarynetwork, summarystatistics
@@ -81,7 +86,7 @@ include("TrainState.jl")
 export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
 include("assess.jl")
 
-export estimate, sampleposterior, spikeprobability, logratio, posteriormean, posteriormedian, posteriorquantile, bootstrap, interval, quantiles
+export estimate, sampleposterior, logposterior, spikeprobability, logratio, posteriormean, posteriormedian, posteriorquantile, bootstrap, interval, quantiles
 include("inference.jl")
 
 export stackarrays, expandgrid, numberreplicates, samplesize, drop, containertype, rowwisenorm, subsetreplicates

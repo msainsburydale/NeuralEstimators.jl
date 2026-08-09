@@ -16,6 +16,7 @@ Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
 Folds = "41a02a25-b8f0-4f67-bc48-60067656b558"
 Functors = "d9f16b24-f501-4c13-a1f2-28368ffc5196"
 InvertedIndices = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MLDataDevices = "7e8f7934-dd98-4c1a-8fe8-92b47a384d40"
 MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
@@ -31,10 +32,13 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 StatsFuns = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
 
 [weakdeps]
+AdvancedHMC = "0bf59076-c3b1-5ca4-86bd-e02cd72cde3d"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ColorSchemes = "35d6a980-a343-548e-a6ea-1d62b119f2f4"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 GraphNeuralNetworks = "cffab07f-9bc2-4db1-8861-388f63bf7694"
+LogDensityProblems = "6fdf6af0-433a-55f7-b3ed-c6c6e0b8df7c"
 Lux = "b2108857-7c20-44ae-9111-449ecde12c47"
 LuxCore = "bb33d45b-7691-41d6-9220-0943567d0623"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
@@ -42,6 +46,7 @@ Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 Reactant = "3c362404-f566-11ee-1572-e11a4b42c853"
 
 [extensions]
+NeuralEstimatorsAdvancedHMCExt = ["AdvancedHMC", "ForwardDiff", "LogDensityProblems"]
 NeuralEstimatorsCUDAExt = "CUDA"
 NeuralEstimatorsFluxExt = "Flux"
 NeuralEstimatorsGNNExt = ["Flux", "GraphNeuralNetworks"]
@@ -51,6 +56,7 @@ NeuralEstimatorsPlottingMakieExt = ["Makie"]
 NeuralEstimatorsPlottingPlotsExt = ["Plots"]
 
 [compat]
+AdvancedHMC = "0.8"
 ADTypes = "1"
 Accessors = "0.1"
 Adapt = "4.5.0"
@@ -63,10 +69,13 @@ ConcreteStructs = "0.2.3"
 DataFrames = "1"
 Distances = "0.10, 0.11"
 Flux = "0.16.8"
+ForwardDiff = "1"
 Folds = "0.2"
 Functors = "0.5.2"
 GraphNeuralNetworks = "1"
 InvertedIndices = "1"
+KernelAbstractions = "0.9.42"
+LogDensityProblems = "2"
 Lux = "1.31"
 LuxCore = "1.5"
 MLDataDevices = "1.17.4"
