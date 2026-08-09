@@ -189,7 +189,7 @@ end
 
 # Posterior sampling 
 function assess(
-    estimator::Union{PosteriorEstimator, RatioEstimator}, θ, Z, args...;
+    estimator::Union{PosteriorEstimator, RatioEstimator, TelescopingRatioEstimator}, θ, Z, args...;    
     parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
     estimator_name::Union{Nothing, String} = nothing,
     estimator_names::Union{Nothing, String} = nothing,
