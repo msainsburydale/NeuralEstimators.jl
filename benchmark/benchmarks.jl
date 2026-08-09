@@ -18,6 +18,8 @@ n = 2        # dimension of each data replicate
 m = 5        # number of replicates 
 d = 2        # dimension of the parameter vector θ
 w = 128      # width of each hidden layer 
+num_summaries = 3d
+θ₀ = reshape(Float32[5, 0.3], :, 1)  # single parameter configuration for inference benches
 
 function sample(K)
     μ = rand(Normal(0, 10.0f0), K)
@@ -28,37 +30,38 @@ end
 
 simulate(θ, m) = [ϑ[1] .+ ϑ[2] * randn(Float32, n, m) for ϑ ∈ eachcol(θ)]
 
+# Fresh DeepSet summary network for each estimator (avoids shared weights across suites)
+makesummary() = DeepSet(
+    Chain(Dense(n, w, relu), Dense(w, w, relu)),
+    Chain(Dense(w, w, relu), Dense(w, num_summaries))
+)
+
 SUITE = BenchmarkGroup()
 ##############################################################################################################
 #                                             PointEstimator
 ##############################################################################################################
 SUITE[:PointEstimator] = BenchmarkGroup()
 
-final_layer = Parallel(
-    vcat,
-    Dense(w, 1, identity),     # μ ∈ ℝ
-    Dense(w, 1, softplus)      # σ > 0
+inference_network = Chain(
+    Dense(num_summaries, w, relu),
+    Parallel(vcat, Dense(w, 1, identity), Dense(w, 1, softplus))  # μ ∈ ℝ, σ > 0
 )
-
-estimator = PointEstimator(DeepSet(
-    Chain(Dense(n, w, relu), Dense(w, d, relu)),
-    Chain(Dense(d, w, relu), final_layer)
-))
+estimator = PointEstimator(makesummary(), inference_network)
 
 SUITE[:PointEstimator][:train] = @benchmarkable(
-    train($estimator, $sample, simulate, epochs = 5, m = $m),
+    train($estimator, $sample, simulate, epochs = 5, simulator_args = $m),
     seconds = 15,
 )
 
 SUITE[:PointEstimator][:estimate] = @benchmarkable(
     estimate($estimator, data),
-    setup = (data = simulate([5, 0.3f0], $m))
+    setup = (data = simulate($θ₀, $m))
 )
 
 for B ∈ [1000, 5000]
     SUITE[:PointEstimator][:bootstrap, B] = @benchmarkable(
         bootstrap($estimator, data; B = $B),
-        setup = (data = simulate([5, 0.3f0], $m))
+        setup = (data = simulate($θ₀, $m))
     )
 end
 
@@ -75,25 +78,17 @@ SUITE[:PointEstimator][:assess] = @benchmarkable(
 ##############################################################################################################
 SUITE[:RatioEstimator] = BenchmarkGroup()
 
-estimator = RatioEstimator(DeepSet(
-    Chain(Dense(n, w, relu), Dense(w, w, relu), Dense(w, w, relu)),
-    Chain(Dense(w + d, w, relu), Dense(w, w, relu), Dense(w, 1))
-))
+estimator = RatioEstimator(makesummary(), d; num_summaries = num_summaries, sampler = sample)
 
 SUITE[:RatioEstimator][:train] = @benchmarkable(
-    train($estimator, $sample, simulate, epochs = 5, m = $m),
+    train($estimator, $sample, simulate, epochs = 5, simulator_args = $m),
     seconds = 30,
-)
-
-SUITE[:RatioEstimator][:sampleposterior] = @benchmarkable(
-    sampleposterior($estimator, data),
-    setup = (data = simulate([5, 0.3f0], $m))
 )
 
 SUITE[:RatioEstimator][:posteriormean] = @benchmarkable(
     posteriormean($estimator, data; grid),
     setup = (
-        data = simulate([5, 0.3f0], $m);
+        data = simulate($θ₀, $m);
         grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
     )
 )
@@ -101,7 +96,7 @@ SUITE[:RatioEstimator][:posteriormean] = @benchmarkable(
 SUITE[:RatioEstimator][:posteriormedian] = @benchmarkable(
     posteriormedian($estimator, data; grid),
     setup = (
-        data = simulate([5, 0.3f0], $m);
+        data = simulate($θ₀, $m);
         grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
     )
 )
@@ -109,7 +104,7 @@ SUITE[:RatioEstimator][:posteriormedian] = @benchmarkable(
 SUITE[:RatioEstimator][:sampleposterior] = @benchmarkable(
     sampleposterior($estimator, data; grid),
     setup = (
-        data = simulate([5, 0.3f0], $m);
+        data = simulate($θ₀, $m);
         grid = f32(expandgrid(0:0.01:1, 0:0.01:1))'
     )
 )
@@ -118,42 +113,36 @@ SUITE[:RatioEstimator][:sampleposterior] = @benchmarkable(
 ##############################################################################################################
 SUITE[:PosteriorEstimator] = BenchmarkGroup()
 
-estimator = PosteriorEstimator(
-    NormalisingFlow(d, 2 * d),
-    DeepSet(
-        Chain(Dense(n, w, relu), Dense(w, w, relu)),
-        Chain(Dense(w, w, relu), Dense(w, 2 * d))
-    )
-)
+estimator = PosteriorEstimator(makesummary(), d; num_summaries = num_summaries)
 
 SUITE[:PosteriorEstimator][:train] = @benchmarkable(
-    train($estimator, $sample, simulate, epochs = 5, m = $m),
+    train($estimator, $sample, simulate, epochs = 5, simulator_args = $m),
     seconds = 30,
 )
 
 SUITE[:PosteriorEstimator][:sampleposterior] = @benchmarkable(
     sampleposterior($estimator, data),
-    setup = (data = simulate([5, 0.3f0], $m))
+    setup = (data = simulate($θ₀, $m))
 )
 
 SUITE[:PosteriorEstimator][:sampleposterior_multipledatasets] = @benchmarkable(
     sampleposterior($estimator, data),
-    setup = (data = repeat(simulate([5, 0.3f0], $m), 500))
+    setup = (data = repeat(simulate($θ₀, $m), 500))
 )
 
 SUITE[:PosteriorEstimator][:posteriormean] = @benchmarkable(
     posteriormean($estimator, data),
-    setup = (data = simulate([5, 0.3f0], $m))
+    setup = (data = simulate($θ₀, $m))
 )
 
 SUITE[:PosteriorEstimator][:posteriormedian] = @benchmarkable(
     posteriormedian($estimator, data),
-    setup = (data = simulate([5, 0.3f0], $m))
+    setup = (data = simulate($θ₀, $m))
 )
 
 SUITE[:PosteriorEstimator][:posteriorquantile] = @benchmarkable(
     posteriorquantile($estimator, data, probs),
-    setup = (data = simulate([5, 0.3f0], $m); probs = [0.025, 0.975])
+    setup = (data = simulate($θ₀, $m); probs = [0.025, 0.975])
 )
 
 SUITE[:PosteriorEstimator][:assess] = @benchmarkable(
