@@ -6,6 +6,10 @@ CollapsedDocStrings = true
 
 The following functions facilitate the use of a trained neural estimator with observed data.
 
+```@docs
+infer
+```
+
 ### PosteriorEstimators and RatioEstimators
 
 ```@docs

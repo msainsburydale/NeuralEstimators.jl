@@ -62,7 +62,7 @@ In the following minimal example, we develop a neural estimator for $\boldsymbol
 ::: code-group
 
 ```julia [Point estimation]
-using NeuralEstimators, Lux, Enzyme
+using NeuralEstimators, Lux, Zygote
 
 # Functions to sample from the prior and simulate data
 d, n = 2, 100  # dimension of θ and number of replicates
@@ -86,14 +86,14 @@ assessment = assess(estimator, θ_test, Z_test)
 bias(assessment)
 rmse(assessment)
 
-# Apply to observed data (here, simulated as a stand-in)
+# Apply to observed data
 θ = sampler(1)                   # ground truth (not known in practice)
 Z = simulator(θ)                 # stand-in for real observations
-estimate(estimator, Z)           # point estimate
+infer(estimator, Z)              # point estimate
 ```
 
 ```julia [Posterior estimation]
-using NeuralEstimators, Lux, Enzyme
+using NeuralEstimators, Lux, Zygote
 
 # Functions to sample from the prior and simulate data
 d, n = 2, 100  # dimension of θ and number of replicates
@@ -117,14 +117,14 @@ assessment = assess(estimator, θ_test, Z_test)
 bias(assessment)
 rmse(assessment)
 
-# Apply to observed data (here, simulated as a stand-in)
+# Apply to observed data
 θ = sampler(1)                   # ground truth (not known in practice)
 Z = simulator(θ)                 # stand-in for real observations
-sampleposterior(estimator, Z)    # approximate posterior sample
+infer(estimator, Z)              # approximate posterior sample
 ```
 
 ```julia [Ratio estimation]
-using NeuralEstimators, Lux, Reactant
+using NeuralEstimators, Lux, Zygote, AdvancedHMC, ForwardDiff, LogDensityProblems
 
 # Functions to sample from the prior and simulate data
 d, n = 2, 100  # dimension of θ and number of replicates
@@ -139,19 +139,23 @@ network = Chain(Dense(n, 64, gelu), Dense(64, 64, gelu), Dense(64, d))
 estimator = RatioEstimator(network, d; num_summaries = d)
 
 # Train the estimator
-estimator = train(estimator, sampler, simulator, device = reactant_device())
+estimator = train(estimator, sampler, simulator)
+
+# Lower and upper bounds for θ
+lower = [-5.0, 0]
+upper = [5.0, 1] 
 
 # Assess the estimator
-θ_test = sampler(250)
+θ_test = sampler(100)
 Z_test = simulator(θ_test)
-assessment = assess(estimator, θ_test, Z_test)
+assessment = assess(estimator, θ_test, Z_test; lower = lower, upper = upper)
 bias(assessment)
 rmse(assessment)
 
-# Apply to observed data (here, simulated as a stand-in)
+# Apply to observed data
 θ = sampler(1)                   # ground truth (not known in practice)
 Z = simulator(θ)                 # stand-in for real observations
-sampleposterior(estimator, Z)    # approximate posterior sample
+infer(estimator, Z; lower = lower, upper = upper) # approximate posterior sample
 ```
 
 :::

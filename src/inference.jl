@@ -4,6 +4,15 @@ Applies `estimator` to data `Z` and returns the resulting estimates.
 """
 estimate(estimator::AbstractNeuralEstimator, z, args...; kwargs...) = _applywithdevice(estimator, z, args...; kwargs...)
 
+"""
+	infer(estimator::AbstractBayesEstimator, args...; kwargs...)
+	infer(estimator::Union{PosteriorEstimator, RatioEstimator, TelescopingRatioEstimator}, args...; kwargs...)
+Unified inference interface that dispatches to [`estimate`](@ref) for Bayes estimators
+and [`sampleposterior`](@ref) for posterior/ratio estimators.
+"""
+infer(estimator::AbstractBayesEstimator, args...; kwargs...) = estimate(estimator, args...; kwargs...)
+infer(estimator::Union{PosteriorEstimator, RatioEstimator, TelescopingRatioEstimator}, args...; kwargs...) = sampleposterior(estimator, args...; kwargs...)
+
 # ---- Point summaries from non-PointEstimators ----
 
 _doc_string = """

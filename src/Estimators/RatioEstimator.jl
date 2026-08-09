@@ -304,12 +304,30 @@ function _gridlogratio(estimator::RatioEstimator, summary_stats_Z, summary_stats
     return permutedims(reshape(log_ratios, G, K))  # K x G matrix
 end
 
-function sampleposterior(estimator::RatioEstimator, Z, ps, st;
-    grid,
+function sampleposterior(
+    estimator::RatioEstimator, Z, ps, st;
+    method::Symbol = :auto,
+    grid = nothing,
     N::Integer = 1000,
     logprior::Function = θ -> 0.0f0,
+    lower::Union{Nothing, AbstractVector} = nothing,
+    upper::Union{Nothing, AbstractVector} = nothing,
+    warmup::Integer = 750,
     kwargs...
 )
+    @assert method in (:auto, :grid, :hmc) "method must be :auto, :grid or :hmc"
+    if method === :auto
+        @assert !isnothing(grid) || (!isnothing(lower) && !isnothing(upper)) "supply either `grid` (grid sampling) or `lower` and `upper` (HMC sampling)"
+        method = isnothing(grid) ? :hmc : :grid
+    end
+    if method === :hmc
+        @assert !isnothing(lower) && !isnothing(upper) "method = :hmc requires the prior box bounds `lower` and `upper`"
+        @assert length(lower) == length(upper) && all(lower .< upper) "lower bounds must be strictly below upper bounds"
+        isempty(methods(_sampleposterior_hmc)) &&
+            error("method = :hmc requires the AdvancedHMC extension: run `using AdvancedHMC, ForwardDiff, LogDensityProblems` and retry")
+        return _sampleposterior_hmc(estimator, Z, ps, st; N = N, lower = lower, upper = upper, logprior = logprior, warmup = warmup, kwargs...)
+    end
+    @assert !isnothing(grid) "method = :grid requires a `grid` of candidate parameter values"
     grid = f32(grid)
 
     summary_stats_Z = summarystatistics(estimator, Z, ps, st; kwargs...)

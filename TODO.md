@@ -7,7 +7,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ### Functionality
 
 **Estimator types & methods**
-- Function `infer()` that wraps `estimate()` and `sampleposterior()`.
 - Model selection/comparison: see [here](https://bayesflow.org/main/api/bayesflow.approximators.ModelComparisonApproximator.html#bayesflow.approximators.ModelComparisonApproximator), [this paper](https://arxiv.org/abs/2004.10629), and [this paper](https://arxiv.org/pdf/2503.23156).
 - Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
 - Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference.
@@ -64,9 +63,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Automatic type-stability testing using [JET.jl](https://github.com/aviatesk/JET.jl).
 - Automatic quality testing with [Aqua.jl](https://github.com/JuliaTesting/Aqua.jl).
 - Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
-
-### General
-- The package would benefit by leveraging the SciML ecosystem, for instance, using [Neural Ordinary Differential Equations](https://docs.sciml.ai/DiffEqFlux/dev/) for fast surrogate simulators, summary networks, and approximate distributions for posterior estimation.
 
 
 ---

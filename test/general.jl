@@ -711,6 +711,7 @@ Z = simulator(θ, m)
 
         # Forward pass
         @test size(estimate(estimator, Z)) == (d, K)
+        @test infer(estimator, Z) == estimate(estimator, Z)
 
         @testset "train" begin
             testbackprop(estimator, Z, dvc)
@@ -870,6 +871,11 @@ end
     logratio(estimator, z; grid = grid)                # log of likelihood-to-evidence ratios
     samples = sampleposterior(estimator, z; grid = grid)         # posterior sample
     @test size(samples) == (2, 1000)
+    seed!(1)
+    samples1 = sampleposterior(estimator, z; grid = grid, N = 50)
+    seed!(1)
+    samples2 = infer(estimator, z; grid = grid, N = 50)
+    @test samples1 == samples2
 
     # Assessment (grid-based)
     assessment = assess(estimator, θ, Z; grid = grid)
@@ -886,6 +892,11 @@ end
         @test numdistributionalparams(estimator) == numdistributionalparams(q)
         samples = sampleposterior(estimator, Z) # posterior draws
         @test all([size(s) == (d, 1000) for s in samples])
+        seed!(1)
+        samples1 = sampleposterior(estimator, Z; N = 50)
+        seed!(1)
+        samples2 = infer(estimator, Z; N = 50)
+        @test samples1 == samples2
         posteriormean(estimator, Z)   # point estimate
         posteriormedian(estimator, Z) # point estimate
         posteriorquantile(estimator, Z, [0.1, 0.5]) # quantiles

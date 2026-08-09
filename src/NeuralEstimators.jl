@@ -86,7 +86,7 @@ include("TrainState.jl")
 export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
 include("assess.jl")
 
-export estimate, sampleposterior, logposterior, spikeprobability, logratio, posteriormean, posteriormedian, posteriorquantile, bootstrap, interval, quantiles
+export estimate, infer, sampleposterior, logposterior, spikeprobability, logratio, posteriormean, posteriormedian, posteriorquantile, bootstrap, interval, quantiles
 include("inference.jl")
 
 export stackarrays, expandgrid, numberreplicates, samplesize, drop, containertype, rowwisenorm, subsetreplicates

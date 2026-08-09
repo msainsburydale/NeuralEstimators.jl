@@ -22,13 +22,13 @@ using LogDensityProblems
 # The box map
 _toθ(lower, upper, u) = lower .+ (upper .- lower) ./ (1 .+ exp.(-u))
 
-struct _NRELogDensity{F}
+struct _NRELogDensity{Fθ, Finf, Fp}
     tz::Matrix{Float32}       # cached data summaries, one column
-    net_θ::Any                # estimator.summary_network_θ
-    net_inf::Any              # estimator.inference_network
+    apply_θ::Fθ               # θ-matrix -> parameter summaries
+    apply_inf::Finf           # vcat(tz, tθ) -> log-ratio
     lower::Vector{Float64}
     upper::Vector{Float64}
-    logprior::F
+    logprior::Fp
 end
 
 LogDensityProblems.dimension(t::_NRELogDensity) = length(t.lower)
@@ -38,30 +38,20 @@ function LogDensityProblems.logdensity(t::_NRELogDensity, u)
     θ = _toθ(t.lower, t.upper, u)
     # Jacobian of the sigmoid box map, written in θ: (b - a) s (1 - s) = (θ - a)(b - θ) / (b - a)
     logJ = sum(log.((θ .- t.lower) .* (t.upper .- θ) ./ (t.upper .- t.lower)))
-    tθ = t.net_θ(reshape(θ, :, 1))
-    return only(t.net_inf(vcat(t.tz, tθ))) + t.logprior(θ) + logJ
+    tθ = t.apply_θ(reshape(θ, :, 1))
+    return only(t.apply_inf(vcat(t.tz, tθ))) + t.logprior(θ) + logJ
 end
 
-function NeuralEstimators._sampleposterior_hmc(
-    estimator::RatioEstimator, Z;
-    N::Integer,
-    lower::AbstractVector,
-    upper::AbstractVector,
-    logprior::Function,
-    warmup::Integer,
-    kwargs...
-)
-    summary_stats_Z = summarystatistics(estimator, Z; kwargs...)
+function _nuts_samples(summary_stats_Z, apply_θ, apply_inf, lower, upper, logprior, N, warmup)
     d = length(lower)
     lo, hi = Float64.(collect(lower)), Float64.(collect(upper))
 
     samples = map(1:size(summary_stats_Z, 2)) do k
-        t = _NRELogDensity(summary_stats_Z[:, k:k], estimator.summary_network_θ,
-                           estimator.inference_network, lo, hi, logprior)
+        t = _NRELogDensity(summary_stats_Z[:, k:k], apply_θ, apply_inf, lo, hi, logprior)
         u0 = zeros(d)                                  # box midpoint after the transform
 
         # Standard AdvancedHMC: NUTS with multinomial sampling, generalised
-        # no-U-turn and Stan-style joint step-size and mass-matrix adaptation, at 100 200 and 500, should be enough unless the problem is super difficult
+        # no-U-turn and Stan-style joint step-size and mass-matrix adaptation
         metric = DiagEuclideanMetric(d)
         hamiltonian = Hamiltonian(metric, t, ForwardDiff)
         integrator = Leapfrog(find_good_stepsize(hamiltonian, u0))
@@ -82,6 +72,36 @@ function NeuralEstimators._sampleposterior_hmc(
     end
 
     return length(samples) == 1 ? samples[1] : samples
+end
+
+function NeuralEstimators._sampleposterior_hmc(
+    estimator::RatioEstimator, Z;
+    N::Integer,
+    lower::AbstractVector,
+    upper::AbstractVector,
+    logprior::Function,
+    warmup::Integer,
+    kwargs...
+)
+    summary_stats_Z = summarystatistics(estimator, Z; kwargs...)
+    apply_θ = θ -> estimator.summary_network_θ(θ)
+    apply_inf = x -> estimator.inference_network(x)
+    _nuts_samples(summary_stats_Z, apply_θ, apply_inf, lower, upper, logprior, N, warmup)
+end
+
+function NeuralEstimators._sampleposterior_hmc(
+    estimator::RatioEstimator, Z, ps, st;
+    N::Integer,
+    lower::AbstractVector,
+    upper::AbstractVector,
+    logprior::Function,
+    warmup::Integer,
+    kwargs...
+)
+    summary_stats_Z = summarystatistics(estimator, Z, ps, st; kwargs...)
+    apply_θ = θ -> first(estimator.summary_network_θ(θ, ps.summary_network_θ, st.summary_network_θ))
+    apply_inf = x -> first(estimator.inference_network(x, ps.inference_network, st.inference_network))
+    _nuts_samples(summary_stats_Z, apply_θ, apply_inf, lower, upper, logprior, N, warmup)
 end
 
 end
