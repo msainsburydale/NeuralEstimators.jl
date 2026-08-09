@@ -21,8 +21,7 @@ and can be used in various Bayesian
 (e.g., [Hermans et al., 2020](https://proceedings.mlr.press/v119/hermans20a.html))
 or frequentist
 (e.g., [Walchessen et al., 2024](https://doi.org/10.1016/j.spasta.2024.100848))
-inferential algorithms. For Bayesian inference, posterior samples can be obtained with [sampleposterior](@ref), either by NUTS (whcih the AdvancedHMC extension) or by 
-the simpler grid-based sampling (which is far less efficient in higher dimensions).
+inferential algorithms. For Bayesian inference, posterior samples can be obtained with [sampleposterior](@ref) using the NUTS algorithm or by grid-based sampling.
 
 # Keyword arguments
 - `num_summaries::Integer`: the number of summaries output by `summary_network`. Must match the output dimension of `summary_network`.
@@ -72,13 +71,12 @@ plot(assessment)
 θ = sampler(1)
 z = simulator(θ)
 
-# NUTS sampling (requires `using AdvancedHMC, ForwardDiff, LogDensityProblems`)
-sampleposterior(estimator, z; lower = [0.0, 0.0], upper = [1.0, 1.0]) # requires passing the bounds to map the domain on which we perform MCMC to unbounded
-
-
-# For backwards-compatibility: grid-based evaluation and sampling
+# Grid-based sampling
 logratio(estimator, z; grid = grid)                # log of likelihood-to-evidence ratios
 sampleposterior(estimator, z; grid = grid)         # posterior sampling
+
+# NUTS sampling (requires `using AdvancedHMC, ForwardDiff, LogDensityProblems`)
+sampleposterior(estimator, z; lower = [0.0, 0.0], upper = [1.0, 1.0]) # requires passing the parameter bounds
 ```
 """
 @concrete struct RatioEstimator <: AbstractNeuralEstimator
