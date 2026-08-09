@@ -60,11 +60,11 @@ end
 # (itself an AbstractApproximateDistribution). Handle classifier and slab explicitly.
 function LuxCore.initialparameters(rng::AbstractRNG, q::SpikeAndSlab)
     (classifier = LuxCore.initialparameters(rng, q.classifier),
-     slab       = LuxCore.initialparameters(rng, q.slab))
+        slab = LuxCore.initialparameters(rng, q.slab))
 end
 function LuxCore.initialstates(rng::AbstractRNG, q::SpikeAndSlab)
     (classifier = LuxCore.initialstates(rng, q.classifier),
-     slab       = LuxCore.initialstates(rng, q.slab))
+        slab = LuxCore.initialstates(rng, q.slab))
 end
 function LuxCore.parameterlength(q::SpikeAndSlab)
     LuxCore.parameterlength(q.classifier) + LuxCore.parameterlength(q.slab)

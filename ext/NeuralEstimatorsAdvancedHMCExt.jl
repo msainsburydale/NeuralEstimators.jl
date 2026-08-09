@@ -58,7 +58,7 @@ function _nuts_samples(summary_stats_Z, apply_θ, apply_inf, lower, upper, logpr
         kernel = HMCKernel(Trajectory{MultinomialTS}(integrator, GeneralisedNoUTurn()))
         adaptor = StanHMCAdaptor(MassMatrixAdaptor(metric), StepSizeAdaptor(0.8, integrator))
         draws, stats = AdvancedHMC.sample(hamiltonian, kernel, u0, N + warmup, adaptor, warmup;
-                                          verbose = false, progress = false)
+            verbose = false, progress = false)
 
         # Keep the last N regardless of whether the installed version drops warmup draws
         kept = draws[(end - N + 1):end]

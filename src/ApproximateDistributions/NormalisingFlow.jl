@@ -228,12 +228,10 @@ function inverse(layer::CouplingLayer, U::AbstractMatrix, tz::AbstractMatrix)
     θ1 = inverse(layer.block1, θ2, U1, tz)
     θ = vcat(θ1, θ2)
     if !isnothing(layer.permutation)
-        ;
-        θ = inverse(layer.permutation, θ);
+        θ = inverse(layer.permutation, θ)
     end
     if !isnothing(layer.actnorm)
-        ;
-        θ = inverse(layer.actnorm, θ);
+        θ = inverse(layer.actnorm, θ)
     end
     return θ
 end

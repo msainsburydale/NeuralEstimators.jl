@@ -62,12 +62,12 @@ sampleposterior(estimator, z; lower = [0.0, 0.0], upper = [1.0, 1.0])     # post
     heads           # MultiHeadMLP with growing inputs; head i takes the summaries and the first i coordinates θ1,..., θi of θ
     sampler         # same sampler that generates theta
 end
- 
+
 # The sampler is intentionally kept out of the network, same as in RatioEstimator.jl
 # e.g., to prevent silent transformations from cpu to gpu before _inputoutput invokes it
 # e.g., to not make the optimizer compute gradients w.r.t. sampler
 @functor TelescopingRatioEstimator (summary_network, heads)
- 
+
 # Constructor: summary network, number of parameters, number of summaries => one classifier head per parameter
 function TelescopingRatioEstimator(
     summary_network, num_parameters::Integer, num_summaries::Integer;
@@ -79,13 +79,13 @@ function TelescopingRatioEstimator(
     @info "TelescopingRatioEstimator: num_summaries = $num_summaries, num_heads = $num_parameters."
     TelescopingRatioEstimator(summary_network, heads, sampler)
 end
- 
+
 # Constructor: keyword num_summaries
 TelescopingRatioEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, kwargs...) = TelescopingRatioEstimator(summary_network, num_parameters, num_summaries; kwargs...)
- 
+
 # Number of heads (= number of parameters); both Flux and Lux store the branches of Parallel in `layers`; 
 _numheads(estimator::TelescopingRatioEstimator) = length(estimator.heads.layers)
- 
+
 # Evaluate a single head, without running the other heads through Parallel, which would be wastfeul, particularly when
 # Used by the sequential posterior sampler, which needs head i alone at many synthetic inputs.
 # Flux stores the branches in a Tuple, Lux in a NamedTuple; ps/st mirror the NamedTuple order,
@@ -95,26 +95,26 @@ _numheads(estimator::TelescopingRatioEstimator) = length(estimator.heads.layers)
 # important becaues it gives speed of sampling close to normalizing flows
 _head(estimator::TelescopingRatioEstimator, i::Integer, X) = estimator.heads.layers[i](X)
 _head(estimator::TelescopingRatioEstimator, i::Integer, X, ps, st) = first(estimator.heads.layers[i](X, ps.heads[i], st.heads[i]))
- 
+
 function _inputoutput(estimator::TelescopingRatioEstimator, Z, θ)
     d, K = size(θ)
     @assert d == _numheads(estimator) "θ has $d rows but the estimator has $(_numheads(estimator)) heads"
- 
+
     # Fresh prior draws: row i provides the focus coordinate of head i's independent pairs
     θ̃ = _stripnames(_extractθ(estimator.sampler(K)))
     @assert size(θ̃) == (d, K) "sampler(K) must return a $d × $K parameter matrix; got $(size(θ̃))"
- 
+
     # Binary class labels: rows 1:d for the dependent pairs, rows d+1:2d for the independent pairs.
     # Positives and negatives are stacked along rows (not columns) so that all components of the
     # input share numobs = K, as required by the data loader; this also keeps each (Z, θ, θ̃)
     # aligned under shuffling, which is importntt bc independent pairs reuse the
     # parameter prefix (i.e. first coodinates) of their dependent prefix.
     output = vcat(ones(Float32, d, K), zeros(Float32, d, K))
- 
+
     input = (Z, θ, θ̃)
     return input, output
 end
- 
+
 _loss(estimator::TelescopingRatioEstimator, loss = nothing) = logitbinarycrossentropy
 
 # Let θ1,...,θd, Z be the data. Head i is a classifier that inputs the data summaries,
@@ -125,14 +125,14 @@ _loss(estimator::TelescopingRatioEstimator, loss = nothing) = logitbinarycrossen
 #     differentiable for any number of heads
 _headinputs(tz, θ) = map(i -> vcat(tz, θ[1:i, :]), 1:size(θ, 1)) |> Tuple
 _headinputs(tz, θ, θ̃) = map(i -> vcat(tz, θ[1:(i - 1), :], θ̃[i:i, :]), 1:size(θ, 1)) |> Tuple
- 
+
 # Forward pass: Stateful (Flux)
 # Returns the d × K matrix of per-head logits; the total log-ratio is the sum over rows
 function (estimator::TelescopingRatioEstimator)(Z, θ)
     tz = _summarystatistics(estimator, Z)
     estimator.heads(_headinputs(tz, θ))
 end
- 
+
 # Training forward pass: 2d × K logits, matching the labels constructed in _inputoutput
 function (estimator::TelescopingRatioEstimator)(Z, θ, θ̃)
     tz = _summarystatistics(estimator, Z)
@@ -140,7 +140,7 @@ function (estimator::TelescopingRatioEstimator)(Z, θ, θ̃)
     neg = estimator.heads(_headinputs(tz, θ, θ̃))
     vcat(pos, neg)
 end
- 
+
 # Forward pass: Stateless (Lux)
 function (e::TelescopingRatioEstimator)(Z, θ, ps, st)
     tz, st_s = _summarystatistics(e, Z, ps.summary_network, st.summary_network)
@@ -148,7 +148,7 @@ function (e::TelescopingRatioEstimator)(Z, θ, ps, st)
     logits, st_h = e.heads(_headinputs(tz, θ), ps.heads, st.heads)
     return logits, (summary_network = st_s, heads = st_h)
 end
- 
+
 function (e::TelescopingRatioEstimator)(Z, θ, θ̃, ps, st)
     tz, st_s = _summarystatistics(e, Z, ps.summary_network, st.summary_network)
     tz = tz |> copy # materialise to break Enzyme's trace (see the note in RatioEstimator.jl) # to check with Matt
@@ -156,20 +156,20 @@ function (e::TelescopingRatioEstimator)(Z, θ, θ̃, ps, st)
     neg, st_h = e.heads(_headinputs(tz, θ, θ̃), ps.heads, st_h)
     return vcat(pos, neg), (summary_network = st_s, heads = st_h)
 end
- 
+
 # Tuple methods used internally during training
 # bridge between the generic training loop and the TRE's specific forward-pass
 (estimator::TelescopingRatioEstimator)(input::Tuple) = estimator(input...)
 (estimator::TelescopingRatioEstimator)(input::Tuple, ps, st) = estimator(input..., ps, st)
- 
+
 # ---- Inference: Stateful (Flux) ----
- 
+
 function logratio(estimator::TelescopingRatioEstimator, Z; grid, kwargs...)
     grid = f32(grid)
     summary_stats_Z = summarystatistics(estimator, Z; kwargs...)
     _gridlogratio(estimator, summary_stats_Z, grid)
 end
- 
+
 function _gridlogratio(estimator::TelescopingRatioEstimator, summary_stats_Z, grid::AbstractMatrix)
     K = size(summary_stats_Z, 2)    # number of data sets
     G = size(grid, 2)               # number of grid points
@@ -180,7 +180,7 @@ function _gridlogratio(estimator::TelescopingRatioEstimator, summary_stats_Z, gr
     log_ratios = sum(logits, dims = 1)  # total log-ratio: sum of the per-head conditional log-ratios
     return permutedims(reshape(log_ratios, G, K))  # K × G matrix
 end
- 
+
 @doc raw"""
 	sampleposterior(estimator::TelescopingRatioEstimator, Z; lower, upper, N = 1000, batchsize = 1, kwargs...)
 Draw posterior samples sequentially in the coordinate of theta: first generate 
@@ -217,7 +217,7 @@ function sampleposterior(
     headfun = (i, X) -> _head(estimator, i, X)
     _sampleposterior_blocks(estimator, headfun, summary_stats_Z, lower, upper, N, degree, logpriors, batchsize)
 end
- 
+
 # Chunk the data sets and run each block through the fused core. batchsize = 1 defaults to
 # processing the data sets in a one-at-a-time fashion.
 function _sampleposterior_blocks(estimator::TelescopingRatioEstimator, headfun, summary_stats_Z, lower, upper, N::Integer, degree::Integer, logpriors, batchsize::Integer)
@@ -231,7 +231,7 @@ function _sampleposterior_blocks(estimator::TelescopingRatioEstimator, headfun, 
     end
     return K == 1 ? samples[1] : samples
 end
- 
+
 # Backend-agnostic sequential core shared by sampleposterior, logposterior, and the
 # coverage checks in calibration.jl; `headfun(i, X)` evaluates head i on the input
 # matrix X and returns a 1 × size(X, 2) matrix of logits. All cheb envelope conventions
@@ -259,14 +259,14 @@ function _sequential_core(estimator::TelescopingRatioEstimator, headfun, tzs, lo
     @assert length(lower) == d && length(upper) == d "lower and upper must have one entry per parameter; expected length $d"
     @assert all(lower .< upper) "lower bounds must be strictly below upper bounds"
     isnothing(logpriors) || @assert length(logpriors) == d "logpriors must have one entry per parameter; expected length $d"
- 
+
     # Match the network's element type (typically Float32) throughout: the Chebyshev plans,
     # the node inputs, and the uniforms. Mixing in Float64 anywhere silently promotes the
     # whole pipeline.
     T = eltype(tzs)
     L = degree + 1
     B = size(tzs, 2)
- 
+
     # Fixed columns may lie outside the box (logposterior at arbitrary points): clamp
     # them for the polynomial work, remember which, and overwrite with -Inf at the end
     # (zero density under the truncated sampling law).
@@ -283,12 +283,12 @@ function _sequential_core(estimator::TelescopingRatioEstimator, headfun, tzs, lo
         θf = clamp.(θf, lo, hi)
     end
     @assert N > 0 || F > 0 "nothing to do: no drawn and no fixed columns"
- 
+
     θdrawn = Matrix{T}(undef, d, N * B)
     lq_drawn = logq && N > 0 ? zeros(T, N * B) : nothing
     lq_fixed = logq && F > 0 ? zeros(T, F * B) : nothing
- 
-    for i in 1:d
+
+    for i = 1:d
         plan = ChebPlan(lower[i], upper[i]; degree = degree, T = T)
         # NB: plan.nodes runs from upper[i] down to lower[i]; chebfit assumes function
         #     values in exactly that order, so evaluate the head at plan.nodes verbatim
@@ -334,11 +334,11 @@ function _sequential_core(estimator::TelescopingRatioEstimator, headfun, tzs, lo
             end
         end
     end
- 
+
     isnothing(lq_fixed) || (lq_fixed[.!inbox] .= T(-Inf))
     return θdrawn, lq_drawn, lq_fixed
 end
- 
+
 # Unnormalised density values at the Chebyshev nodes from per-head logits, optionally
 # weighted by the log marginal prior density at the nodes. The per-envelope maximum is
 # subtracted before exponentiating to prevent overflow for concentrated posteriors;
@@ -348,7 +348,7 @@ function _chebdensity(logits::AbstractVecOrMat, logp)
     s = isnothing(logp) ? logits : logits .+ logp
     exp.(s .- maximum(s, dims = 1))
 end
- 
+
 @doc raw"""
 	logposterior(estimator::TelescopingRatioEstimator, θpoints, Z; lower, upper, method = :raw, kwargs...)
 Log-density of the approximate posterior at each parameter configuration in `θpoints`
@@ -398,7 +398,7 @@ function logposterior(
     headfun = (i, X) -> _head(estimator, i, X)
     _logposterior_blocks(estimator, headfun, summary_stats_Z, θpoints, lower, upper, degree, logpriors)
 end
- 
+
 # Raw path: one row of logratio per data set (summed head logits at the query points),
 # plus the log prior, -Inf outside the box. Unnormalised, and relative to :chebyshev
 # the prefix-dependent normalisers are absorbed into the shape — see the docstring.
@@ -415,7 +415,7 @@ function _logposterior_raw(LR::AbstractMatrix, θpoints, lower, upper, logpriors
     end
     return length(results) == 1 ? results[1] : results
 end
- 
+
 # Same points evaluated for every data set; one core call per data set (N = 0, all
 # columns fixed). No fusing across data sets here: the joint coverage check, where the
 # workload is real, has its own fused path through _sequential_core.
@@ -426,15 +426,15 @@ function _logposterior_blocks(estimator::TelescopingRatioEstimator, headfun, sum
     end
     return length(results) == 1 ? results[1] : results
 end
- 
+
 # ---- Inference: Stateless (Lux) ----
- 
+
 function logratio(estimator::TelescopingRatioEstimator, Z, ps, st; grid, kwargs...)
     grid = f32(grid)
     summary_stats_Z = summarystatistics(estimator, Z, ps, st; kwargs...)
     _gridlogratio(estimator, summary_stats_Z, grid, ps.heads, st.heads)
 end
- 
+
 function _gridlogratio(estimator::TelescopingRatioEstimator, summary_stats_Z, grid::AbstractMatrix, ps_heads, st_heads)
     K = size(summary_stats_Z, 2)
     G = size(grid, 2)
@@ -444,7 +444,7 @@ function _gridlogratio(estimator::TelescopingRatioEstimator, summary_stats_Z, gr
     log_ratios = sum(logits, dims = 1)
     return permutedims(reshape(log_ratios, G, K))  # K × G matrix
 end
- 
+
 function sampleposterior(estimator::TelescopingRatioEstimator, Z, ps, st;
     lower::AbstractVector,
     upper::AbstractVector,
@@ -458,7 +458,7 @@ function sampleposterior(estimator::TelescopingRatioEstimator, Z, ps, st;
     headfun = (i, X) -> _head(estimator, i, X, ps, st)
     _sampleposterior_blocks(estimator, headfun, summary_stats_Z, lower, upper, N, degree, logpriors, batchsize)
 end
- 
+
 function logposterior(estimator::TelescopingRatioEstimator, θpoints::AbstractMatrix, Z, ps, st;
     lower::AbstractVector,
     upper::AbstractVector,
