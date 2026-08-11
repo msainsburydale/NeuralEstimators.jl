@@ -20,10 +20,12 @@ PosteriorEstimator
 
 ## Ratio estimators
 
-[`RatioEstimator`](@ref) approximates the likelihood-to-evidence ratio, enabling both frequentist and Bayesian inference through various downstream algorithms.
+[`RatioEstimator`](@ref) and [`TelescopingRatioEstimator`](@ref) approximate the likelihood-to-evidence ratio, enabling both frequentist and Bayesian inference through various downstream algorithms.
 
 ```@docs
 RatioEstimator
+
+TelescopingRatioEstimator
 ```
 
 ## Bayes estimators

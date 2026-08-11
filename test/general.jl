@@ -881,6 +881,45 @@ end
     assessment = assess(estimator, θ, Z; grid = grid)
 end
 
+@testset "TelescopingRatioEstimator" begin
+    num_summaries = 3d
+    summary_network = Chain(Dense(m, 16, gelu), Dense(16, num_summaries))
+    estimator = TelescopingRatioEstimator(
+        summary_network, d; num_summaries = num_summaries, sampler = sampler
+    )
+
+    # Forward pass: one logit per head
+    r = estimator(Z, θ)
+    @test size(r) == (d, K)
+
+    # Training
+    estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, verbose = false)
+
+    lower, upper = [0.0f0, 0.0f0], [1.0f0, 1.0f0]
+    grid = expandgrid(0:0.01:1, 0:0.01:1)'
+    z = getobs(Z, 1:1)
+
+    lr = logratio(estimator, z; grid = grid)
+    @test size(lr) == (1, size(grid, 2))
+
+    # Sequential Chebyshev sampling (default degree)
+    samples = sampleposterior(estimator, z; lower = lower, upper = upper)
+    @test size(samples) == (d, 1000)
+    @test all(lower .<= minimum(samples; dims = 2))
+    @test all(maximum(samples; dims = 2) .<= upper)
+
+    seed!(1)
+    samples1 = sampleposterior(estimator, z; lower = lower, upper = upper, N = 50)
+    seed!(1)
+    samples2 = infer(estimator, z; lower = lower, upper = upper, N = 50)
+    @test samples1 == samples2
+
+    lp = logposterior(estimator, grid, z; lower = lower, upper = upper)  # default :raw
+    @test size(lp) == (size(grid, 2),)
+
+    assessment = assess(estimator, θ, Z; lower = lower, upper = upper)
+end
+
 @testset "PosteriorEstimator" begin
     for approxdist in [NormalisingFlow, GaussianMixture, Gaussian]
         num_summaries = 3d
