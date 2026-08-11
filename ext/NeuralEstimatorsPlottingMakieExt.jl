@@ -2,7 +2,7 @@ module NeuralEstimatorsPlottingMakieExt
 
 using NeuralEstimators
 using Makie
-import Makie: plot;
+import Makie: plot
 export plot
 
 # ===========================================================================
@@ -129,7 +129,7 @@ function plot(assessment::Assessment; grid::Bool = false, prob = 0.99)
             sort!(sub, :prob)
             lines!(ax, sub.prob, sub.empirical_prob; color = :black, linewidth = 1.5)
             lines!(ax, [0.0, 1.0], [0.0, 1.0]; color = :red, linestyle = :dash, linewidth = 1.2)
-            xlims!(ax, 0.0, 1.0);
+            xlims!(ax, 0.0, 1.0)
             ylims!(ax, 0.0, 1.0)
         end
         return fig
@@ -464,11 +464,11 @@ function _adjust_gamma_optimize(N::Int, K::Int, conf_level::Float64)
     while (b - a) > 1e-8
         if fc < fd
             b, d_pt, fd = d_pt, c, fc
-            c = b - φ * (b - a);
+            c = b - φ * (b - a)
             fc = target(c)
         else
             a, c, fc = c, d_pt, fd
-            d_pt = a + φ * (b - a);
+            d_pt = a + φ * (b - a)
             fd = target(d_pt)
         end
     end

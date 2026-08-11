@@ -52,7 +52,7 @@ function chebnodes(degree::Integer, a::Real, b::Real)
     scl = T(0.5) * (b - a)
     return off .+ scl .* xstd
 end
- 
+
 """
     chebcoeffmatrix(degree; T = Float64)
  
@@ -60,17 +60,17 @@ The `(degree+1) × (degree+1)` matrix `D` mapping function values at the
 Chebyshev nodes of the second kind to first-kind Chebyshev coefficients: `c = D * fvals`.
 Domain-independent: a DCT-I with endpoint half-weights folded in.
 """
-function chebcoeffmatrix(degree::Integer; T::Type=Float64)
+function chebcoeffmatrix(degree::Integer; T::Type = Float64)
     n = degree
     D = Matrix{T}(undef, n + 1, n + 1)
-    for k in 0:n, j in 0:n
+    for k = 0:n, j = 0:n
         qk = (k == 0 || k == n) ? one(T) : T(2)     # coefficient-index weight
         sj = (j == 0 || j == n) ? T(0.5) : one(T)   # node-index weight
         D[k + 1, j + 1] = (qk / n) * sj * cos(T(k * j) * (T(π) / n))
     end
     return D
 end
- 
+
 """
     chebint_ab(coeff, a, b)
  
@@ -85,31 +85,31 @@ function chebint_ab(coeff::AbstractVector{T}, a::Real, b::Real) where {T}
     if L > 1
         out[3] = coeff[2] * scale / 4            # T_1 -> T_2
     end
-    @inbounds for j in 3:L                        # 0-based coeff index jj = 2 ... L-1
+    @inbounds for j = 3:L                        # 0-based coeff index jj = 2 ... L-1
         jj = j - 1
         cj = coeff[j] * scale
         out[jj + 2] += cj / (2 * (jj + 1))
-        out[jj]     -= cj / (2 * (jj - 1))
+        out[jj] -= cj / (2 * (jj - 1))
     end
     return out
 end
- 
+
 """
     chebintmatrix(degree, a, b; T = Float64)
  
 The `(degree+2) × (degree+1)` matrix `Mint` with `chebint_ab(coeff, a, b) ==
 Mint * coeff`, used for the batched/GPU integration path (`Mint * C`).
 """
-function chebintmatrix(degree::Integer, a::Real, b::Real; T::Type=Float64)
+function chebintmatrix(degree::Integer, a::Real, b::Real; T::Type = Float64)
     L = degree + 1
     basis = Matrix{T}(I, L, L)
-    return reduce(hcat, (chebint_ab(view(basis, :, j), T(a), T(b)) for j in 1:L))
+    return reduce(hcat, (chebint_ab(view(basis, :, j), T(a), T(b)) for j = 1:L))
 end
- 
+
 # -----------------------------------------------------------------------------
 # Evaluation (Clenshaw)
 # -----------------------------------------------------------------------------
- 
+
 """
     chebval_ab(x, coeff, a, b)
  
@@ -126,13 +126,13 @@ function chebval_ab(x, coeff::AbstractVector, a::Real, b::Real)
     L = length(coeff)
     d = zero(z)
     dd = zero(z)
-    @inbounds for k in L:-1:2
+    @inbounds for k = L:-1:2
         ck = coeff[k]
         d, dd = (2 .* z .* d .- dd .+ ck), d
     end
     return z .* d .- dd .+ coeff[1]
 end
- 
+
 # Scalar Clenshaw on one row of a pre-transposed coefficient matrix
 # `Ct :: K × L` (envelope k = row k), at the mapped coordinate `zz ∈ [-1, 1]`.
 # Plain scalar code: inlines into the KernelAbstractions kernel and compiles
@@ -141,12 +141,12 @@ end
     L = size(Ct, 2)
     d = zero(zz)
     dd = zero(zz)
-    @inbounds for j in L:-1:2
+    @inbounds for j = L:-1:2
         d, dd = muladd(2 * zz, d, Ct[k, j] - dd), d
     end
     @inbounds return muladd(zz, d, Ct[k, 1] - dd)
 end
- 
+
 """
     chebval_ab_batched(z, C, a, b)
  
@@ -159,7 +159,7 @@ function chebval_ab_batched(z::AbstractVector, C::AbstractMatrix, a::Real, b::Re
     d = zero(zz)
     dd = zero(zz)
     L = size(Ct, 2)
-    @inbounds for k in L:-1:2
+    @inbounds for k = L:-1:2
         d, dd = (2 .* zz .* d .- dd .+ @view(Ct[:, k])), d
     end
     return zz .* d .- dd .+ @view(Ct[:, 1])
@@ -181,12 +181,12 @@ function chebval_ab_batched(X::AbstractMatrix, C::AbstractMatrix, a::Real, b::Re
     d = zero(zz)
     dd = zero(zz)
     L = size(Ct, 2)
-    @inbounds for k in L:-1:2
+    @inbounds for k = L:-1:2
         d, dd = (2 .* zz .* d .- dd .+ transpose(@view(Ct[:, k]))), d
     end
     return zz .* d .- dd .+ transpose(@view(Ct[:, 1]))
 end
- 
+
 # -----------------------------------------------------------------------------
 # Inverse-CDF sampling: one fused Kernel Abstraction
 # -----------------------------------------------------------------------------
@@ -194,7 +194,6 @@ end
 # Thread i draws sample i. `Ct :: K × L` holds antiderivative coefficients,
 # one envelope per ROW (transposed so that, at each Clenshaw step j, adjacent
 # threads read adjacent memory — coalesced on GPU; 
-
 
 #### I think numpy serializes the same way
 
@@ -223,7 +222,7 @@ end
 #         return (lower .+ upper) ./ 2
 #     end
 # --------------------------------------------------------------------------------
- 
+
 """
     default_bisection_iters(T)
  
@@ -231,20 +230,20 @@ Interval halvings needed to reach relative machine precision
 53 for `Float64`, 24 for `Float32`. More iterations bring nothing.
 """
 default_bisection_iters(::Type{T}) where {T} = 1 - exponent(eps(float(real(T))))
- 
+
 @kernel function _invertcdf_kernel!(out, @Const(Ct), @Const(u), a, b, iters, spe)
     i = @index(Global)
     @inbounds if i <= length(out)
         T = eltype(out)
         k = (i - 1) ÷ spe + 1                      # envelope owning sample i
         lo = _clenshaw_row(Ct, k, -one(T))         # zz(a) = -1
-        Z  = _clenshaw_row(Ct, k,  one(T)) - lo    # zz(b) = +1
+        Z = _clenshaw_row(Ct, k, one(T)) - lo    # zz(b) = +1
         uk = T(u[i])
         ab = a + b
         binv = one(T) / (b - a)
         lower = a
         upper = b
-        for _ in 1:iters
+        for _ = 1:iters
             mid = (lower + upper) / 2
             zz = muladd(T(2), mid, -ab) * binv
             F = (_clenshaw_row(Ct, k, zz) - lo) / Z - uk   # CDF(mid) - u, nondecreasing
@@ -257,17 +256,16 @@ default_bisection_iters(::Type{T}) where {T} = 1 - exponent(eps(float(real(T))))
         out[i] = (lower + upper) / 2
     end
 end
- 
 
 function _invert_cdf_rows(Ct::AbstractMatrix, a::Real, b::Real, u::AbstractVector, iters::Int)
     backend = get_backend(Ct)
     get_backend(u) == backend ||
         throw(ArgumentError("coefficients and uniforms must be on the same device"))
-    spe, r = divrem(length(u), size(Ct,1)) # samples for eahc envelope
+    spe, r = divrem(length(u), size(Ct, 1)) # samples for eahc envelope
     r == 0 || throw(DimensionMismatch("length(u)=$(length(u)) must be a multiple of the number of envelopes $(size(Ct, 1))"))
     T = float(promote_type(eltype(Ct), eltype(u)))
     out = similar(u, T)
-    _invertcdf_kernel!(backend)(out, Ct, u, T(a), T(b), iters, spe; ndrange=length(u))
+    _invertcdf_kernel!(backend)(out, Ct, u, T(a), T(b), iters, spe; ndrange = length(u))
     KernelAbstractions.synchronize(backend)
     return out
 end
@@ -285,7 +283,7 @@ end
 ###                    iters::Integer=default_bisection_iters(eltype(u)))
 ###    return _invert_cdf_rows(reshape(ci, 1, :), a, b, u, Int(iters))
 ###end
- 
+
 """
     invert_cdf_batched(CI, a, b, u; iters = default_bisection_iters(eltype(CI)))
  
@@ -295,16 +293,16 @@ Batched inverse-CDF: one envelope per column of `CI` (`(deg+2) × K`), and
 the right order. `length(u) == K` recovers one sample per envelope.
 """
 function invert_cdf_batched(CI::AbstractMatrix, a::Real, b::Real, u::AbstractVector;
-                            iters::Integer=default_bisection_iters(eltype(CI)))
+    iters::Integer = default_bisection_iters(eltype(CI)))
     length(u) % size(CI, 2) == 0 ||
         throw(DimensionMismatch("uniforms per envelope must be constant: size(CI,2)=$(size(CI,2)), length(u)=$(length(u))"))
     return _invert_cdf_rows(permutedims(CI), a, b, u, Int(iters))
 end
- 
+
 # -----------------------------------------------------------------------------
 # ChebPlan: precomputed operators for a fixed degree and domain
 # -----------------------------------------------------------------------------
- 
+
 """
     ChebPlan(a, b; degree = 128, T = Float64)
  
@@ -314,7 +312,7 @@ Move to GPU by adapting the array fields to `CuArray`, e.g.
 `gpu_plan(p) = ChebPlan_on(CuArray, p)` below. This is the equivalent
 of static args from JAX in python.
 """
-struct ChebPlan{T,MT<:AbstractMatrix{T},VT<:AbstractVector{T}}
+struct ChebPlan{T, MT <: AbstractMatrix{T}, VT <: AbstractVector{T}}
     degree::Int
     a::T
     b::T
@@ -322,16 +320,16 @@ struct ChebPlan{T,MT<:AbstractMatrix{T},VT<:AbstractVector{T}}
     D::MT
     Mint::MT
 end
- 
-function ChebPlan(a::Real, b::Real; degree::Integer=128, T::Type=Float64)
+
+function ChebPlan(a::Real, b::Real; degree::Integer = 128, T::Type = Float64)
     a = T(a)
     b = T(b)
     nodes = collect(chebnodes(degree, a, b))::Vector{T}
-    D = chebcoeffmatrix(degree; T=T)
-    Mint = chebintmatrix(degree, a, b; T=T)
-    return ChebPlan{T,typeof(D),typeof(nodes)}(degree, a, b, nodes, D, Mint)
+    D = chebcoeffmatrix(degree; T = T)
+    Mint = chebintmatrix(degree, a, b; T = T)
+    return ChebPlan{T, typeof(D), typeof(nodes)}(degree, a, b, nodes, D, Mint)
 end
- 
+
 """
     ChebPlan_on(ArrayT, plan)
  
@@ -342,9 +340,9 @@ function ChebPlan_on(::Type{AT}, p::ChebPlan) where {AT}
     nodes = AT(p.nodes)
     D = AT(p.D)
     Mint = AT(p.Mint)
-    return ChebPlan{eltype(D),typeof(D),typeof(nodes)}(p.degree, p.a, p.b, nodes, D, Mint)
+    return ChebPlan{eltype(D), typeof(D), typeof(nodes)}(p.degree, p.a, p.b, nodes, D, Mint)
 end
- 
+
 """
     chebfit(plan, fvals)
  
@@ -352,7 +350,7 @@ Chebyshev coefficients from values at `plan.nodes`. `fvals`: vector (single
 envelope) or `(degree+1) × K` matrix (K envelopes) — a single matmul.
 """
 chebfit(plan::ChebPlan, fvals::AbstractVecOrMat) = plan.D * fvals
- 
+
 """
     chebintegrate(plan, coeff)
  
@@ -369,15 +367,13 @@ hold `CI`  (e.g. because they also sample from it) and should not pay the price 
 `M_int * C` twice when it's not needed.
 """
 function chebdefinite(CI::AbstractMatrix, a::Real, b::Real)
-    K = size(CI,2)
+    K = size(CI, 2)
     T = float(eltype(CI))
-    xb = fill!(similar(CI,T,K),T(b))
-    xa = fill!(similar(CI,T,K),T(a))
-    return chebval_ab_batched(xb,CI,a,b) .- chebval_ab_batched(xa, CI, a, b)
-    
+    xb = fill!(similar(CI, T, K), T(b))
+    xa = fill!(similar(CI, T, K), T(a))
+    return chebval_ab_batched(xb, CI, a, b) .- chebval_ab_batched(xa, CI, a, b)
 end
 
- 
 """
     chebintegral(plan, coeff)
  
@@ -389,9 +385,8 @@ function chebintegral(plan::ChebPlan, coeff::AbstractVector)
     return chebval_ab(plan.b, ci, plan.a, plan.b) - chebval_ab(plan.a, ci, plan.a, plan.b)
 end
 
-chebintegral(plan::ChebPlan, coeff::AbstractMatrix)=
-    chebdefinite(chebintegrate(plan,coeff),plan.a,plan.b)
-
+chebintegral(plan::ChebPlan, coeff::AbstractMatrix) =
+    chebdefinite(chebintegrate(plan, coeff), plan.a, plan.b)
 
 """
     cheblogq(x, C, Zi, a, b)
@@ -431,7 +426,7 @@ end
 #    ci = chebintegrate(plan, chebfit(plan, fvals))
 #    return invert_cdf(ci, plan.a, plan.b, u; iters=iters)
 #end
- 
+
 """
     chebsample(plan, F::AbstractMatrix, u::AbstractVector; iters...)
  
@@ -439,13 +434,12 @@ Batched: one envelope per column of `F` (`(degree+1) × K`), one uniform per
 envelope, one sample per envelope — the coordinate-`i` (`i ≥ 2`) case.
 """
 function chebsample(plan::ChebPlan, F::AbstractMatrix, u::AbstractVector;
-                    iters::Integer=default_bisection_iters(eltype(u)))
+    iters::Integer = default_bisection_iters(eltype(u)))
     size(F, 2) == length(u) ||
         throw(DimensionMismatch("one uniform per envelope: size(F,2)=$(size(F,2)), length(u)=$(length(u))"))
     CI = chebintegrate(plan, chebfit(plan, F))
-    return invert_cdf_batched(CI, plan.a, plan.b, u; iters=iters)
+    return invert_cdf_batched(CI, plan.a, plan.b, u; iters = iters)
 end
-
 
 """
     chebsample(plan, F::AbstractMatrix, U::AbstractMatrix; iters...)
@@ -455,9 +449,9 @@ envelope (`U` is `M × B`, column `b` for envelope `b`), returns `M × B` sample
 The per-head coverage check case: many draws from each of many envelopes.
 """
 function chebsample(plan::ChebPlan, F::AbstractMatrix, U::AbstractMatrix;
-                    iters::Integer=default_bisection_iters(eltype(U)))
+    iters::Integer = default_bisection_iters(eltype(U)))
     size(F, 2) == size(U, 2) ||
         throw(DimensionMismatch("one envelope per column: size(F,2)=$(size(F,2)), size(U,2)=$(size(U,2))"))
     CI = chebintegrate(plan, chebfit(plan, F))
-    return reshape(invert_cdf_batched(CI, plan.a, plan.b, vec(U); iters=iters), size(U))
+    return reshape(invert_cdf_batched(CI, plan.a, plan.b, vec(U); iters = iters), size(U))
 end
