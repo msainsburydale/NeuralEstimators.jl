@@ -182,11 +182,10 @@ end
 # ---- Inference: Stateful (Flux) ----
 
 """
-    logratio(estimator::RatioEstimator, Z; grid)
+    logratio(estimator::Union{RatioEstimator, TelescopingRatioEstimator}, Z; grid)
 Compute the log likelihood-to-evidence ratio for each parameter configuration in `grid`.
 
 # Arguments
-- `estimator`: a `RatioEstimator`
 - `Z`: observed data
 - `grid`: matrix of parameter values, where each column is a parameter configuration
 
@@ -210,37 +209,8 @@ function _gridlogratio(estimator::RatioEstimator, summary_stats_Z, summary_stats
     return permutedims(reshape(log_ratios, G, K))  # K x G matrix
 end
 
-@doc raw"""
-	sampleposterior(estimator::RatioEstimator, Z; method = :auto, kwargs...)
-Draw `N` posterior samples for each data set in `Z`, by one of two methods:
-
-- `method = :hmc` (recommended): NUTS (via the AdvancedHMC extension) on the continuous
-  pdf that is proportional to `exp(logratio(θ) + logprior(θ))` on the box `[lower, upper]`, one
-  chain per data set with `warmup` adaptation steps discarded. Off-grid, scales to larger
-  `d`, and is the default . Caveat: any MCMC algorithm may struggle with multi-modality / challenging geometries of the posterior.
-  Requires `using AdvancedHMC, ForwardDiff, LogDensityProblems`.
-- `method = :grid`: self-normalised sampling on a fixed `grid` (a `d x G` matrix, one
-  candidate parameter configuration per column): grid atoms are drawn with replacement,
-  with weights proporional to `exp.(logprior + logratio)`. Samples live on the grid, so resolution is
-  limited by `G` and the grid size is cursed in `d, but every mode on the grid is seen.
-
-`method = :auto` (the default) resolves to `:grid` when a `grid` is supplied and to
-`:hmc` otherwise, so existing `grid`-based calls keep their previous behaviour verbatim
-while `lower`/`upper` calls get HMC.
-
-# Keyword arguments
-- `N::Integer = 1000`: number of posterior samples per data set.
-- `logprior::Function = θ -> 0f0`: log prior density evaluated on a `d`-vector, up to a constant; the default is uniform. Used by both methods. For `:hmc` it must be differentiable in the ForwardDiff sense (plain arithmetic is fine).
-- `grid`: required for `:grid`.
-- `lower`, `upper`: prior box bounds, required for `:hmc`. The chain runs in unconstrained space through a sigmoid map onto the box, with the Jacobian accounted for.
-- `warmup::Integer = 750`: adaptation steps (`:hmc` only), discarded from the output; Stan uses between 500 and 1000.
-
-# Returns
-A `d x N` matrix for a single data set, or a vector of such matrices.
-"""
 function sampleposterior(
     estimator::RatioEstimator, Z;
-    method::Symbol = :auto,
     grid = nothing,
     N::Integer = 1000,
     logprior::Function = θ -> 0.0f0,
@@ -249,22 +219,15 @@ function sampleposterior(
     warmup::Integer = 750, # Stan uses between 500 and 1000; acceptance rate is 0.8 by default 
     kwargs...
 )
-    @assert method in (:auto, :grid, :hmc) "method must be :auto, :grid or :hmc"
-    if method === :auto
-        # if the user supplies the grid, we keep it that way 
-        # and importantly pre-existing `sampleposterior(estimator, Z; grid = ...)` call behaves as
-        # before, for backwards-compatibility. Otherwise default to HMC, which is the the recommended method.
-        @assert !isnothing(grid) || (!isnothing(lower) && !isnothing(upper)) "supply either `grid` (grid sampling) or `lower` and `upper` (HMC sampling)"
-        method = isnothing(grid) ? :hmc : :grid
-    end
-    if method === :hmc
-        @assert !isnothing(lower) && !isnothing(upper) "method = :hmc requires the prior box bounds `lower` and `upper`"
+    has_grid = !isnothing(grid)
+    has_box = !isnothing(lower) && !isnothing(upper)
+    @assert xor(has_grid, has_box) "supply either `grid` (grid sampling) or both `lower` and `upper` (HMC sampling), but not both"
+    if has_box
         @assert length(lower) == length(upper) && all(lower .< upper) "lower bounds must be strictly below upper bounds"
         isempty(methods(_sampleposterior_hmc)) &&
-            error("method = :hmc requires the AdvancedHMC extension: run `using AdvancedHMC, ForwardDiff, LogDensityProblems` and retry")
+            error("HMC sampling requires the AdvancedHMC extension: run `using AdvancedHMC, ForwardDiff, LogDensityProblems` and retry")
         return _sampleposterior_hmc(estimator, Z; N = N, lower = lower, upper = upper, logprior = logprior, warmup = warmup, kwargs...)
     end
-    @assert !isnothing(grid) "method = :grid requires a `grid` of candidate parameter values"
     grid = f32(grid)
 
     summary_stats = summarystatistics(estimator, Z; kwargs...)
@@ -283,7 +246,7 @@ end
 
 # Implemented by the AdvancedHMC extension (ext/NeuralEstimatorsAdvancedHMCExt.jl); no
 # methods exist unless AdvancedHMC, ForwardDiff and LogDensityProblems are loaded, which
-# the :hmc branch above checks for with a readable error.
+# the HMC branch above checks for with a readable error.
 function _sampleposterior_hmc end
 
 # ---- Inference: Stateless (Lux) ----
@@ -306,7 +269,6 @@ end
 
 function sampleposterior(
     estimator::RatioEstimator, Z, ps, st;
-    method::Symbol = :auto,
     grid = nothing,
     N::Integer = 1000,
     logprior::Function = θ -> 0.0f0,
@@ -315,19 +277,15 @@ function sampleposterior(
     warmup::Integer = 750,
     kwargs...
 )
-    @assert method in (:auto, :grid, :hmc) "method must be :auto, :grid or :hmc"
-    if method === :auto
-        @assert !isnothing(grid) || (!isnothing(lower) && !isnothing(upper)) "supply either `grid` (grid sampling) or `lower` and `upper` (HMC sampling)"
-        method = isnothing(grid) ? :hmc : :grid
-    end
-    if method === :hmc
-        @assert !isnothing(lower) && !isnothing(upper) "method = :hmc requires the prior box bounds `lower` and `upper`"
+    has_grid = !isnothing(grid)
+    has_box = !isnothing(lower) && !isnothing(upper)
+    @assert xor(has_grid, has_box) "supply either `grid` (grid sampling) or both `lower` and `upper` (HMC sampling), but not both"
+    if has_box
         @assert length(lower) == length(upper) && all(lower .< upper) "lower bounds must be strictly below upper bounds"
         isempty(methods(_sampleposterior_hmc)) &&
-            error("method = :hmc requires the AdvancedHMC extension: run `using AdvancedHMC, ForwardDiff, LogDensityProblems` and retry")
+            error("HMC sampling requires the AdvancedHMC extension: run `using AdvancedHMC, ForwardDiff, LogDensityProblems` and retry")
         return _sampleposterior_hmc(estimator, Z, ps, st; N = N, lower = lower, upper = upper, logprior = logprior, warmup = warmup, kwargs...)
     end
-    @assert !isnothing(grid) "method = :grid requires a `grid` of candidate parameter values"
     grid = f32(grid)
 
     summary_stats_Z = summarystatistics(estimator, Z, ps, st; kwargs...)

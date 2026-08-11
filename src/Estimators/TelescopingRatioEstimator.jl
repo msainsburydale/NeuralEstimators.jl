@@ -180,29 +180,13 @@ function _gridlogratio(estimator::TelescopingRatioEstimator, summary_stats_Z, gr
     log_ratios = sum(logits, dims = 1)  # total log-ratio: sum of the per-head conditional log-ratios
     return permutedims(reshape(log_ratios, G, K))  # K × G matrix
 end
- 
-@doc raw"""
-	sampleposterior(estimator::TelescopingRatioEstimator, Z; lower, upper, N = 1000, batchsize = 1, kwargs...)
-Draw posterior samples sequentially in the coordinate of theta: first generate 
-$\theta_1 \mid Z$ from head 1, then $\theta_2 \mid \theta_1, Z$ from head 2, and so on
-up to head number d. Each one-dimensional conditional density is approximated by a 
-Chebyshev polynomial of the given `degree` on `[lower[i], upper[i]]` and sampled exactly 
-through its inverse CDF, where exact means up to machine precision. Specifically, the sampling from
-the Chebyshev approximation is exact to machine-precision, not the approximation itself. The latter
-is harder to guarantee, although these approximations have excellent convergence properties, e.g.,
-super-polynomial if the activation functions are analytic.
- 
-The first coordinate uses a single envelope for all `N` samples; every other coordinate
-must build one envelope per sample, because each sample has a different prefix;
-the procedure is fitted and inverted in a single batched pass for efficiency.
- 
-# Keyword arguments
-- `lower::AbstractVector`, `upper::AbstractVector`: prior bounds for each of the `d` parameter coordinates. Samples are drawn from the posterior restricted to this box, which is exact when the prior is supported on it.
-- `N::Integer = 1000`: number of posterior samples.
-- `degree::Integer = 128`: degree of the Chebyshev approximation of each conditional density.
-- `logpriors = nothing`: `nothing` assumes the prior is uniform over the box (the typical case, and the density weight then cancels exactly); otherwise, a vector of `d` functions where `logpriors[i]` is the log marginal prior density of the `i`-th coordinate. This must agree with the marginals of the `sampler` used during training, otherwise samples are drawn from the wrong distribution.
-- `batchsize::Integer = 1`: number of data sets fused together (per coordinate) for efficiency, essentially like a batch. Defaults to 1; raising the value substantially improves computational efficiency when multiple data sets are available, at the cost of using more memory — out-of-memory errors are possible with large values.
-"""
+
+#NB The sampling from this Chebyshev approximation is exact up to machine precision, not the approximation itself. The latter
+# is harder to guarantee, although these approximations have excellent convergence properties, e.g.,
+# super-polynomial if the activation functions are analytic.
+# NB The first coordinate uses a single envelope for all `N` samples; every other coordinate
+# must build one envelope per sample, because each sample has a different prefix;
+# the procedure is fitted and inverted in a single batched pass for efficiency.
 function sampleposterior(
     estimator::TelescopingRatioEstimator, Z;
     lower::AbstractVector,

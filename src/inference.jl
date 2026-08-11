@@ -62,21 +62,51 @@ posteriorquantile(estimator, Z, probs, args...; kwargs...) = posteriorquantile(s
 # ---- Posterior sampling ----
 
 @doc raw"""
-	sampleposterior(estimator::PosteriorEstimator, Z; N::Integer = 1000, kwargs...)
-	sampleposterior(estimator::RatioEstimator, Z; grid, N::Integer = 1000, logprior::Function = θ -> 0f0, kwargs...)
+	sampleposterior(estimator::PosteriorEstimator, Z; N = 1000, kwargs...)
+	sampleposterior(estimator::RatioEstimator, Z; lower = nothing, upper = nothing, grid = nothing, logprior = θ -> 0f0, warmup = 750, N = 1000, kwargs...)
+	sampleposterior(estimator::TelescopingRatioEstimator, Z; lower, upper, logpriors = nothing, batchsize = 1, N = 1000, kwargs...)
 Samples from the approximate posterior distribution implied by `estimator`.
 
-The positional argument `N` controls the size of the posterior sample.
+The keyword argument `N` controls the size of the posterior sample (default 1000).
 
-If `Z` represents a single data set as determined by `numobs`, returns a $d$ × `N` matrix of posterior samples, where $d$ is the dimension of the parameter vector. Otherwise, if `Z` contains multiple data sets, a vector of matrices will be returned. 
+If `Z` represents a single data set as determined by `numobs`, returns a $d$ × `N` matrix of posterior samples, where $d$ is the dimension of the parameter vector. Otherwise, if `Z` contains multiple data sets, a vector of matrices will be returned.
 
-When using a `RatioEstimator`, the prior distribution $p(\boldsymbol{\theta})$ is controlled through the keyword argument `logprior` (by default, a uniform prior is used). The sampling algorithm is based on a fine-gridding of the
-parameter space, specified through the keyword argument `grid`. The approximate posterior density is 
-evaluated over this grid, which is then used to draw samples. This is effective when making inference with a
-small number of parameters. For models with a large number of parameters,
-other sampling algorithms (e.g., MCMC) may be needed (please contact the package maintainer).
+Remaining keyword arguments are passed onto [summarystatistics](@ref).
 
-Keyword arguments are passed onto [summarystatistics](@ref).
+# PosteriorEstimator
+Draws independent samples from the approximate posterior distribution associated with the estimator.
+
+# RatioEstimator
+Draw posterior samples by one of two approaches, selected by which keyword arguments are supplied:
+
+- **HMC** (supply `lower` and `upper`): NUTS (via the AdvancedHMC extension) on the continuous
+  pdf that is proportional to `exp(logratio(θ) + logprior(θ))` on the box with bounds `lower` and `upper`.
+  One chain per data set with `warmup` adaptation steps discarded.
+  Requires `using AdvancedHMC, ForwardDiff, LogDensityProblems`.
+- **Grid** (supply `grid`): discrete sampling on a fixed `grid` (a `d × G` matrix, one
+  candidate parameter configuration per column). Grid cells are drawn with replacement,
+  with weights proportional to `exp(logratio(θ) + logprior(θ))`.
+
+**Keyword arguments when sampling with RatioEstimators**: 
+
+- `logprior::Function = θ -> 0f0`: log prior density evaluated on a `d`-vector, up to a constant; the default is uniform. For HMC, it must be differentiable in the ForwardDiff sense (plain arithmetic is fine).
+- `grid::AbstractMatrix`: candidate parameter configurations for grid sampling.
+- `lower::AbstractVector`, `upper::AbstractVector`: prior box bounds for HMC. 
+- `warmup::Integer = 750`: adaptation steps for HMC, discarded from the output.
+
+# TelescopingRatioEstimator
+Draw posterior samples sequentially in the coordinates of $\theta$: first generate
+$\theta_1 \mid Z$, then $\theta_2 \mid \theta_1, Z$, and so on. 
+Each one-dimensional conditional density is approximated by a
+Chebyshev polynomial of the given `degree` on `[lower[i], upper[i]]`, and then sampled 
+by inversion sampling.
+
+**Keyword arguments when sampling with TelescopingRatioEstimators**: 
+
+- `lower::AbstractVector`, `upper::AbstractVector`: prior bounds for each of the `d` parameter coordinates. Samples are drawn from the posterior restricted to this box, which is exact when the prior is supported on it.
+- `degree::Integer = 128`: degree of the Chebyshev approximation of each conditional density.
+- `logpriors = nothing`: an iterable collection of `d` functions where `logpriors[i]` is the log marginal prior density for the `i`-th parameter. This must agree with the marginal priors of the parameter `sampler` used during training, otherwise samples are drawn from the wrong distribution. By default, assumes the prior is uniform over the box (the typical case, and the density weight then cancels exactly).
+- `batchsize::Integer = 1`: number of data sets fused together (per coordinate) for efficiency, essentially like a batch. Defaults to 1; raising the value substantially improves computational efficiency when multiple data sets are available, at the cost of using more memory.
 """
 function sampleposterior end
 

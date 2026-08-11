@@ -21,6 +21,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 **Inference & diagnostics**
 - Straightforward way to incorporate box parameter constraints and ensure that posterior samples are in the prior support.
 - assess.jl/inference.jl for more general parameter shapes (currently assumes the parameters are stored as a matrix).
+- Unidimensional coverage checks with TREs.
 
 ### Documentation
 - 🟡 Add illustrative data figures, terminal training output, and diagnostic plots in all examples.
@@ -35,6 +36,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/) for inspiration).
 
 ### Performance
+- 🟡 TRE: allow the summary statistics to stay on GPU during inference.
 - Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
 - Reactant.jl in the inference stage.
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).

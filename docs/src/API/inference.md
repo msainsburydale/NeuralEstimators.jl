@@ -10,12 +10,10 @@ The following functions facilitate the use of a trained neural estimator with ob
 infer
 ```
 
-### PosteriorEstimators and RatioEstimators
+### Posterior inference
 
 ```@docs
 sampleposterior
-
-spikeprobability
 
 logratio
 
@@ -24,9 +22,11 @@ posteriormean
 posteriormedian
 
 posteriorquantile
+
+spikeprobability
 ```
 
-### BayesEstimators
+### Point estimation
 
 ```@docs
 estimate

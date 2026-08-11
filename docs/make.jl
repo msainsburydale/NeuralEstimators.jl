@@ -1,15 +1,20 @@
-push!(LOAD_PATH, "../src/")
-using Documenter, DocumenterVitepress, NeuralEstimators
+# push!(LOAD_PATH, "../src/")
+# using Documenter, DocumenterVitepress, NeuralEstimators
 
-# Install the packages required by the package extensions
+# # Install the packages required by the package extensions
+# using Pkg
+# Pkg.activate(@__DIR__)
+# Pkg.develop(PackageSpec(path = joinpath(@__DIR__, "..")))
+# Pkg.add(["Makie"])
+# Pkg.instantiate()
+# using Makie
+
 using Pkg
 Pkg.activate(@__DIR__)
-Pkg.develop(PackageSpec(path = joinpath(@__DIR__, "..")))
-Pkg.add(["Makie"])
+Pkg.develop(PackageSpec(; path = joinpath(@__DIR__, "..")))
+Pkg.resolve()      # refresh NeuralEstimators' deps from ../Project.toml
 Pkg.instantiate()
-using Makie
-
-@info pwd()
+using Documenter, DocumenterVitepress, NeuralEstimators, Makie
 
 # Copy assets into subdirectories that reference them
 for subdir in ["examples"]
