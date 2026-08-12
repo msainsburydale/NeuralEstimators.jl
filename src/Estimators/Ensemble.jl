@@ -89,16 +89,33 @@ Base.length(e::Ensemble) = length(e.estimators)
 Base.eachindex(e::Ensemble) = eachindex(e.estimators)
 Base.show(io::IO, ensemble::Ensemble) = print(io, "\nEnsemble with $(length(ensemble.estimators)) component estimators")
 
-function train(ensemble::Ensemble, args...; kwargs...)
+# Concrete signatures matching the public train() entry points in train.jl.
+# A single `train(::Ensemble, args...; kwargs...)` method is ambiguous with
+# `train(::AbstractNeuralEstimator, θ_train, θ_val, Z_train, Z_val; ...)`
+# (Ensemble is more specific on the first argument; the typed method is more
+# specific on the remaining arguments). 
+function train(ensemble::Ensemble, θ_train::P, θ_val::P, Z_train::T, Z_val::T; kwargs...) where {P, T}
+    _train_ensemble(ensemble, θ_train, θ_val, Z_train, Z_val; kwargs...)
+end
+function train(ensemble::Ensemble, θ_train::P, θ_val::P, simulator; kwargs...) where {P}
+    _train_ensemble(ensemble, θ_train, θ_val, simulator; kwargs...)
+end
+function train(ensemble::Ensemble, sampler, simulator; kwargs...)
+    _train_ensemble(ensemble, sampler, simulator; kwargs...)
+end
+
+function _train_ensemble(ensemble::Ensemble, args...; kwargs...)
     kwargs = (; kwargs...)
     savepath = haskey(kwargs, :savepath) ? kwargs.savepath : nothing
     verbose = haskey(kwargs, :verbose) ? kwargs.verbose : true
     estimators = map(enumerate(ensemble.estimators)) do (i, estimator)
         verbose && @info "Training estimator $i of $(length(ensemble))"
-        if !isnothing(savepath)
-            kwargs = merge(kwargs, (savepath = joinpath(savepath, "estimator$i"),))
+        local_kwargs = if isnothing(savepath)
+            kwargs
+        else
+            merge(kwargs, (savepath = joinpath(savepath, "estimator$i"),))
         end
-        train(estimator, args...; kwargs...)
+        train(estimator, args...; local_kwargs...)
     end
     ensemble = Ensemble(estimators)
 

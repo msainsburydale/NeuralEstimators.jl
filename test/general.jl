@@ -1013,8 +1013,17 @@ end
     ensemble[1]
     @test length(ensemble) == J
 
-    # Training
+    # Training (on-the-fly simulation)
     ensemble = train(ensemble, sampler, simulator, simulator_args = m, epochs = 1, verbose = verbose, use_gpu = dvc == gpu)
+
+    # Training (fixed parameters and data) — exercises the Ensemble vs
+    # AbstractNeuralEstimator method that was previously ambiguous
+    θ_train = sampler(16)
+    θ_val = sampler(8)
+    Z_train = simulator(θ_train, m)
+    Z_val = simulator(θ_val, m)
+    ensemble = Ensemble([initestimator() for _ = 1:J])
+    ensemble = train(ensemble, θ_train, θ_val, Z_train, Z_val, epochs = 1, verbose = verbose, use_gpu = dvc == gpu)
 
     # Assessment
     assessment = assess(ensemble, θ, Z)
