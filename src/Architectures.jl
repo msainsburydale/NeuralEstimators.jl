@@ -629,7 +629,7 @@ function ResidualBlock(filter, channels; stride = 1, backend::Union{Nothing, Mod
         +
     else
         projection = B.Chain(
-            B.Conv((1, 1), channels; stride = stride, bias_kwarg => false),
+            B.Conv(ntuple(_ -> 1, length(filter)), channels; stride = stride, bias_kwarg => false),
             B.BatchNorm(channels[2])
         )
         B.Parallel(+, id, projection)
