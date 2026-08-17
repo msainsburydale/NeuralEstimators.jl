@@ -219,7 +219,7 @@ function assess(
     # Convert posterior samples to long form DataFrame 
     d, N, KJ = size(samples)
     sample_dfs = Vector{DataFrame}(undef, KJ)
-    for idx in 1:KJ
+    for idx = 1:KJ
         S = samples[:, :, idx]
 
         df_s = DataFrame(
