@@ -73,7 +73,14 @@ NamedMatrix(μ = randn(3), σ = rand(3))
 """
 function NamedMatrix(; kwargs...)
     row_names = [string(k) for k in keys(kwargs)]
-    matrix = reduce(vcat, [v' for v in values(kwargs)])
+    vals = collect(values(kwargs))
+
+    if all(x -> x isa Number, vals)
+        matrix = reshape(vals, :, 1)
+    else
+        matrix = reduce(vcat, [v' for v in vals])
+    end
+
     NamedArray(matrix, (row_names, 1:size(matrix, 2)), (:parameter, :sample))
 end
 
