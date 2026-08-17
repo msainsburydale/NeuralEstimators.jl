@@ -64,7 +64,7 @@ posteriorquantile(estimator, Z, probs, args...; kwargs...) = posteriorquantile(s
 @doc raw"""
 	sampleposterior(estimator::PosteriorEstimator, Z; N = 1000, kwargs...)
 	sampleposterior(estimator::RatioEstimator, Z; lower = nothing, upper = nothing, grid = nothing, logprior = θ -> 0f0, warmup = 750, N = 1000, kwargs...)
-	sampleposterior(estimator::TelescopingRatioEstimator, Z; lower, upper, logpriors = nothing, batchsize = 1, N = 1000, kwargs...)
+	sampleposterior(estimator::TelescopingRatioEstimator, Z; lower, upper, logpriors = nothing, chebyshev_batchsize = 1, N = 1000, kwargs...)
 Samples from the approximate posterior distribution implied by `estimator`.
 
 The keyword argument `N` controls the size of the posterior sample (default 1000).
@@ -89,7 +89,7 @@ Draw posterior samples by one of two approaches, selected by which keyword argum
 
 **Keyword arguments when sampling with RatioEstimators**: 
 
-- `logprior::Function = θ -> 0f0`: log prior density evaluated on a `d`-vector, up to a constant; the default is uniform. For HMC, it must be differentiable in the ForwardDiff sense (plain arithmetic is fine).
+- `logprior::Function = θ -> 0f0`: log prior density evaluated on a `d`-vector, up to a constant; the default is uniform. For HMC, it must be differentiable by `ForwardDiff.jl`.
 - `grid::AbstractMatrix`: candidate parameter configurations for grid sampling.
 - `lower::AbstractVector`, `upper::AbstractVector`: prior box bounds for HMC. 
 - `warmup::Integer = 750`: adaptation steps for HMC, discarded from the output.
@@ -98,15 +98,14 @@ Draw posterior samples by one of two approaches, selected by which keyword argum
 Draw posterior samples sequentially in the coordinates of $\theta$: first generate
 $\theta_1 \mid Z$, then $\theta_2 \mid \theta_1, Z$, and so on. 
 Each one-dimensional conditional density is approximated by a
-Chebyshev polynomial of the given `degree` on `[lower[i], upper[i]]`, and then sampled 
-by inversion sampling.
+Chebyshev polynomial of the given `degree` on `[lower[i], upper[i]]`, and then sampled by inversion sampling.
 
 **Keyword arguments when sampling with TelescopingRatioEstimators**: 
 
-- `lower::AbstractVector`, `upper::AbstractVector`: prior bounds for each of the `d` parameter coordinates. Samples are drawn from the posterior restricted to this box, which is exact when the prior is supported on it.
+- `lower::AbstractVector`, `upper::AbstractVector`: prior bounds for each of the `d` parameters.
 - `degree::Integer = 128`: degree of the Chebyshev approximation of each conditional density.
-- `logpriors = nothing`: an iterable collection of `d` functions where `logpriors[i]` is the log marginal prior density for the `i`-th parameter. This must agree with the marginal priors of the parameter `sampler` used during training, otherwise samples are drawn from the wrong distribution. By default, assumes the prior is uniform over the box (the typical case, and the density weight then cancels exactly).
-- `batchsize::Integer = 1`: number of data sets fused together (per coordinate) for efficiency, essentially like a batch. Defaults to 1; raising the value substantially improves computational efficiency when multiple data sets are available, at the cost of using more memory.
+- `logpriors = nothing`: an iterable collection of `d` functions where `logpriors[i]` is the log marginal prior density for the `i`-th parameter. This must agree with the marginal priors used during training, otherwise samples will be drawn from the wrong distribution. By default, assumes uniform marginal priors with bounds specified by `lower` and `upper`.
+- `chebyshev_batchsize::Integer = 1`: number of data sets fused together (per parameter) for efficiency.
 """
 function sampleposterior end
 

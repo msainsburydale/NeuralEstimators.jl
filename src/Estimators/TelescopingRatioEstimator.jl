@@ -194,20 +194,20 @@ function sampleposterior(
     N::Integer = 1000,
     degree::Integer = 128,
     logpriors::Union{Nothing, AbstractVector} = nothing,
-    batchsize::Integer = 1,
+    chebyshev_batchsize::Integer = 1,
     kwargs...
 )
     summary_stats_Z = summarystatistics(estimator, Z; kwargs...)
     headfun = (i, X) -> _head(estimator, i, X)
-    _sampleposterior_blocks(estimator, headfun, summary_stats_Z, lower, upper, N, degree, logpriors, batchsize)
+    _sampleposterior_blocks(estimator, headfun, summary_stats_Z, lower, upper, N, degree, logpriors, chebyshev_batchsize)
 end
 
-# Chunk the data sets and run each block through the fused core. batchsize = 1 defaults to
+# Chunk the data sets and run each block through the fused core. chebyshev_batchsize = 1 defaults to
 # processing the data sets in a one-at-a-time fashion.
-function _sampleposterior_blocks(estimator::TelescopingRatioEstimator, headfun, summary_stats_Z, lower, upper, N::Integer, degree::Integer, logpriors, batchsize::Integer)
+function _sampleposterior_blocks(estimator::TelescopingRatioEstimator, headfun, summary_stats_Z, lower, upper, N::Integer, degree::Integer, logpriors, chebyshev_batchsize::Integer)
     K = size(summary_stats_Z, 2)
     samples = Vector{Matrix{eltype(summary_stats_Z)}}(undef, K)
-    for block in Iterators.partition(1:K, batchsize)
+    for block in Iterators.partition(1:K, chebyshev_batchsize)
         θdrawn, _, _ = _sequential_core(estimator, headfun, summary_stats_Z[:, block], lower, upper, N, nothing, degree, logpriors)
         for (j, k) in enumerate(block)
             samples[k] = θdrawn[:, ((j - 1) * N + 1):(j * N)]
@@ -435,12 +435,12 @@ function sampleposterior(estimator::TelescopingRatioEstimator, Z, ps, st;
     N::Integer = 1000,
     degree::Integer = 128,
     logpriors::Union{Nothing, AbstractVector} = nothing,
-    batchsize::Integer = 1,
+    chebyshev_batchsize::Integer = 1,
     kwargs...
 )
     summary_stats_Z = summarystatistics(estimator, Z, ps, st; kwargs...)
     headfun = (i, X) -> _head(estimator, i, X, ps, st)
-    _sampleposterior_blocks(estimator, headfun, summary_stats_Z, lower, upper, N, degree, logpriors, batchsize)
+    _sampleposterior_blocks(estimator, headfun, summary_stats_Z, lower, upper, N, degree, logpriors, chebyshev_batchsize)
 end
 
 function logposterior(estimator::TelescopingRatioEstimator, θpoints::AbstractMatrix, Z, ps, st;
