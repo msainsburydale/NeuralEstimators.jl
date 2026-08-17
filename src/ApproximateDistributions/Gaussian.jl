@@ -157,9 +157,6 @@ function sampleposterior(q::Gaussian, tz::AbstractMatrix, N::Integer; device = n
     x = randn(eltype(μ), d, N, K)
     θ = unsqueeze(μ, dims = 2) .+ L ⊠ x  # d × N × K # NB equivalent to:  θ = reshape(μ, d, 1, K) .+ L ⊠ x
 
-    # Split into a vector for consistency with the output of other approximate distributions
-    θ = [θ[:, :, k] for k = 1:K]
-
     return θ
 end
 
@@ -200,9 +197,6 @@ function sampleposterior(q::Gaussian, tz::AbstractMatrix, N::Integer, ps_q, st_q
 
     x = randn(eltype(μ), d, N, K)
     θ = unsqueeze(μ, dims = 2) .+ L ⊠ x  # d × N × K # NB equivalent to:  θ = reshape(μ, d, 1, K) .+ L ⊠ x
-
-    # Split into a vector for consistency with the output of other approximate distributions
-    θ = [θ[:, :, k] for k = 1:K]
 
     return θ
 end

@@ -10,7 +10,7 @@ Subtypes `A <: AbstractApproximateDistribution` must implement the following met
     - Should return a `1 × K` matrix, where each entry is the log density `log q(θₖ | tₖ)` for the `k`-th data set evaluated at the `k`-th parameter vector `θ[:, k]`.
  - `sampleposterior(q::A, t::AbstractMatrix, N::Integer)`
     - Used during inference and therefore does not need to be differentiable.
-    - Should return a `Vector` of length `K`, where each element is a `d × N` matrix containing `N` samples from the approximate posterior `q(θ | tₖ)` for the `k`-th data set.
+    - Should return a `d × N × K` array containing `N` samples from the approximate posterior `q(θ | tₖ)` for each of the `K` data sets.
 """
 abstract type AbstractApproximateDistribution end
 

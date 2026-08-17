@@ -122,16 +122,14 @@ end
 function sampleposterior(estimator::PosteriorEstimator, Z; N::Integer = 1000, device = nothing, use_gpu::Bool = true, kwargs...)
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = false)
     t = summarystatistics(estimator, Z; device = device, kwargs...)
-    θ = sampleposterior(estimator.q, t, N; device = device)
-    return length(θ) == 1 ? θ[1] : θ
+    return sampleposterior(estimator.q, t, N; device = device)
 end
 
 # Inference: Stateless (Lux)
 function sampleposterior(estimator::PosteriorEstimator, Z, ps, st; N::Integer = 1000, device = nothing, use_gpu::Bool = true, kwargs...)
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = false)
     t = summarystatistics(estimator, Z, ps, st; device = device, kwargs...)
-    θ = sampleposterior(estimator.q, t, N, ps.q, st.q; device = device)
-    return length(θ) == 1 ? θ[1] : θ
+    return sampleposterior(estimator.q, t, N, ps.q, st.q; device = device)
 end
 
 @doc raw"""

@@ -155,7 +155,7 @@ After running `import NeuralEstimators: <function name>`:
 1. Define a convenience constructor with the signature: `MyDist(num_parameters::Integer, num_summaries::Integer; kwargs...)`. This ensures compatibility with `PosteriorEstimator`'s convenience constructor.
 1. `import NeuralEstimators: _logdensity, sampleposterior` and define methods:
    - `_logdensity(q::MyDist, θ::AbstractMatrix, t::AbstractMatrix)`: log-density of `q` evaluated at parameters `θ`, given summary statistics `t`.
-   - `sampleposterior(q::MyDist, t::AbstractMatrix, N::Integer; device)`: draws `N` posterior samples from `q` given summary statistics `t`, where each column of `t` corresponds to an independent data set.
+   - `sampleposterior(q::MyDist, t::AbstractMatrix, N::Integer; device)`: draws `N` posterior samples from `q` given summary statistics `t`, where each column of `t` corresponds to an independent data set. Should return a `d × N × K` array.
 1. Test the distribution by plugging it into a `PosteriorEstimator`, then train and assess the estimator to verify correctness.
 1. Write a docstring with a self-contained example that can be copy-pasted and run.
 

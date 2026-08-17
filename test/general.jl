@@ -495,8 +495,7 @@ end
             # sampling (employs backward/inverse pass, used during inference)
             N = 100
             samples = sampleposterior(flow, TZ, N; device = dvc)
-            @test length(samples) == K
-            @test size(samples[1]) == (d, N)
+            @test size(samples) == (d, N, K)
         end
     end
 end
@@ -870,7 +869,7 @@ end
     z = getobs(Z, 1:1)
     logratio(estimator, z; grid = grid)                # log of likelihood-to-evidence ratios
     samples = sampleposterior(estimator, z; grid = grid)         # posterior sample
-    @test size(samples) == (2, 1000)
+    @test size(samples) == (d, 1000, 1)
     seed!(1)
     samples1 = sampleposterior(estimator, z; grid = grid, N = 50)
     seed!(1)
@@ -904,9 +903,9 @@ end
 
     # Sequential Chebyshev sampling (default degree)
     samples = sampleposterior(estimator, z; lower = lower, upper = upper)
-    @test size(samples) == (d, 1000)
-    @test all(lower .<= minimum(samples; dims = 2))
-    @test all(maximum(samples; dims = 2) .<= upper)
+    @test size(samples) == (d, 1000, 1)
+    @test all(lower .<= minimum(samples; dims = (2, 3)))
+    @test all(maximum(samples; dims = (2, 3)) .<= upper)
 
     seed!(1)
     samples1 = sampleposterior(estimator, z; lower = lower, upper = upper, N = 50)
@@ -930,7 +929,7 @@ end
         estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, verbose = false)
         @test numdistributionalparams(estimator) == numdistributionalparams(q)
         samples = sampleposterior(estimator, Z) # posterior draws
-        @test all([size(s) == (d, 1000) for s in samples])
+        @test size(samples) == (d, 1000, K)
         seed!(1)
         samples1 = sampleposterior(estimator, Z; N = 50)
         seed!(1)
@@ -971,7 +970,7 @@ end
     @test numdistributionalparams(estimator) == numdistributionalparams(q)
     estimator = train(estimator, sampler1, simulator1, simulator_args = m, epochs = 1, verbose = false)
     samples = sampleposterior(estimator, Z1) # posterior draws
-    @test all([size(s) == (d1, 1000) for s in samples])
+    @test size(samples) == (d1, 1000, K)
     posteriormean(estimator, Z1)
 
     # spikeprobability: vector for multiple data sets, scalar for a single data set
@@ -993,8 +992,8 @@ end
     estimator2 = PosteriorEstimator(summary_network, q2)
     estimator2 = train(estimator2, sampler2, simulator2, simulator_args = m, epochs = 1, verbose = false)
     samples2 = sampleposterior(estimator2, Z2)
-    @test all([size(s) == (d1, 1000) for s in samples2])
-    @test all(all(s .>= 0) for s in samples2) # spike (0) or positive slab draws
+    @test size(samples2) == (d1, 1000, K)
+    @test all(samples2 .>= 0) # spike (0) or positive slab draws
 end
 
 # ---- Wrappers and helper functions for NeuralEstimators ----

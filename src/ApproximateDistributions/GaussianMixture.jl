@@ -110,7 +110,7 @@ function sampleposterior(q::GaussianMixture, tz::AbstractMatrix, N::Integer; dev
         μ[:, component_indices] .+ σ[:, component_indices] .* randn(d, N)
     end
 
-    return θ
+    return stack(θ)
 end
 
 # Stateless (Lux) 
@@ -176,5 +176,5 @@ function sampleposterior(q::GaussianMixture, tz::AbstractMatrix, N::Integer, ps_
         μ[:, component_indices] .+ σ[:, component_indices] .* randn(d, N)
     end
 
-    return θ
+    return stack(θ)
 end

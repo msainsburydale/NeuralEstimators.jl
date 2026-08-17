@@ -206,14 +206,13 @@ end
 # processing the data sets in a one-at-a-time fashion.
 function _sampleposterior_blocks(estimator::TelescopingRatioEstimator, headfun, summary_stats_Z, lower, upper, N::Integer, degree::Integer, logpriors, chebyshev_batchsize::Integer)
     K = size(summary_stats_Z, 2)
-    samples = Vector{Matrix{eltype(summary_stats_Z)}}(undef, K)
+    d = _numheads(estimator)
+    samples = Array{eltype(summary_stats_Z), 3}(undef, d, N, K)
     for block in Iterators.partition(1:K, chebyshev_batchsize)
         θdrawn, _, _ = _sequential_core(estimator, headfun, summary_stats_Z[:, block], lower, upper, N, nothing, degree, logpriors)
-        for (j, k) in enumerate(block)
-            samples[k] = θdrawn[:, ((j - 1) * N + 1):(j * N)]
-        end
+        samples[:, :, block] = reshape(θdrawn, d, N, length(block))
     end
-    return K == 1 ? samples[1] : samples
+    return samples
 end
 
 # Backend-agnostic sequential core shared by sampleposterior, logposterior, and the

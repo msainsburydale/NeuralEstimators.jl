@@ -241,7 +241,7 @@ function sampleposterior(
         reduce(hcat, StatsBase.wsample(eachcol(grid), weights, N; replace = true))
     end
 
-    return length(samples) == 1 ? samples[1] : samples
+    return stack(samples)
 end
 
 # Implemented by the AdvancedHMC extension (ext/NeuralEstimatorsAdvancedHMCExt.jl); no
@@ -299,5 +299,5 @@ function sampleposterior(
         reduce(hcat, StatsBase.wsample(eachcol(grid), weights, N; replace = true))
     end
 
-    return length(samples) == 1 ? samples[1] : samples
+    return stack(samples)
 end

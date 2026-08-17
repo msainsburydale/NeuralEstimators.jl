@@ -16,41 +16,51 @@ infer(estimator::Union{PosteriorEstimator, RatioEstimator, TelescopingRatioEstim
 # ---- Point summaries from non-PointEstimators ----
 
 _doc_string = """
-based either on a ``d`` × ``N`` matrix `θ` of posterior draws, where ``d`` denotes the number of parameters to make inference on, or directly from an estimator that allows for posterior sampling via [`sampleposterior()`](@ref).
+based either on a ``d`` × ``N`` matrix or a ``d`` × ``N`` × ``K`` array `θ` of posterior draws, where ``d`` denotes the number of parameters, ``N`` the number of draws, and ``K`` the number of independent data sets, or directly from an estimator that allows for posterior sampling via [`sampleposterior()`](@ref).
 """
 
 """
-	posteriormean(θ::AbstractMatrix)	
+	posteriormean(θ::AbstractMatrix)
+	posteriormean(θ::AbstractArray{<:Any, 3})
 	posteriormean(estimator, Z; kwargs...)	
 Computes the posterior mean $_doc_string
+
+For a ``d`` × ``N`` × ``K`` array the result is a ``d`` × ``K`` matrix.
 
 See also [`posteriormedian()`](@ref), [`posteriorquantile()`](@ref).
 """
 posteriormean(θ::AbstractMatrix) = mean(θ; dims = 2)
+posteriormean(θ::AbstractArray{<:Any, 3}) = dropdims(mean(θ; dims = 2); dims = 2)
 posteriormean(θ::AbstractVector{<:AbstractMatrix}) = reduce(hcat, posteriormean.(θ))
 posteriormean(estimator, Z, args...; kwargs...) = posteriormean(sampleposterior(estimator, Z, args...; kwargs...))
 
 """
-	posteriormedian(θ::AbstractMatrix)	
+	posteriormedian(θ::AbstractMatrix)
+	posteriormedian(θ::AbstractArray{<:Any, 3})
 	posteriormedian(estimator, Z; kwargs...)	
 Computes the vector of marginal posterior medians $_doc_string
+
+For a ``d`` × ``N`` × ``K`` array the result is a ``d`` × ``K`` matrix.
 
 See also [`posteriormean()`](@ref), [`posteriorquantile()`](@ref).
 """
 posteriormedian(θ::AbstractMatrix) = median(θ; dims = 2)
+posteriormedian(θ::AbstractArray{<:Any, 3}) = dropdims(median(θ; dims = 2); dims = 2)
 posteriormedian(θ::AbstractVector{<:AbstractMatrix}) = reduce(hcat, posteriormedian.(θ))
 posteriormedian(estimator, Z, args...; kwargs...) = posteriormedian(sampleposterior(estimator, Z, args...; kwargs...))
 
 """
-	posteriorquantile(θ::AbstractMatrix, probs)	
+	posteriorquantile(θ::AbstractMatrix, probs)
+	posteriorquantile(θ::AbstractArray{<:Any, 3}, probs)
 	posteriorquantile(estimator, Z, probs; kwargs...)	
 Computes the vector of marginal posterior quantiles with (a collection of) probability levels `probs`, $_doc_string
 
-The return value is a ``d`` × `length(probs)` matrix. 
+The return value is a ``d`` × `length(probs)` matrix for a single data set, or a ``d`` × `length(probs)` × ``K`` array for ``K`` data sets.
 
-See also [`posteriormedian()`](@ref), `posteriormean()`](@ref).
+See also [`posteriormedian()`](@ref), [`posteriormean()`](@ref).
 """
 posteriorquantile(θ::AbstractMatrix, probs) = mapslices(row -> quantile(row, probs), θ, dims = 2)
+posteriorquantile(θ::AbstractArray{<:Any, 3}, probs) = stack(posteriorquantile.(eachslice(θ; dims = 3), Ref(probs)))
 posteriorquantile(θ::AbstractVector{<:AbstractMatrix}, probs) = posteriorquantile.(θ, Ref(probs))
 posteriorquantile(estimator, Z, probs, args...; kwargs...) = posteriorquantile(sampleposterior(estimator, Z, args...; kwargs...), probs)
 
@@ -69,7 +79,7 @@ Samples from the approximate posterior distribution implied by `estimator`.
 
 The keyword argument `N` controls the size of the posterior sample (default 1000).
 
-If `Z` represents a single data set as determined by `numobs`, returns a $d$ × `N` matrix of posterior samples, where $d$ is the dimension of the parameter vector. Otherwise, if `Z` contains multiple data sets, a vector of matrices will be returned.
+Returns a $d$ × `N` × $K$ array of posterior samples, where $d$ is the dimension of the parameter vector and $K$ is the number of independent data sets in `Z` (so a single data set yields a $d$ × `N` × $1$ array).
 
 Remaining keyword arguments are passed onto [summarystatistics](@ref).
 
@@ -113,6 +123,7 @@ function sampleposterior end
 
 """
 	interval(θ::Matrix; probs = [0.05, 0.95], parameter_names = nothing)
+	interval(θ::AbstractArray{<:Any, 3}; probs = [0.05, 0.95], parameter_names = nothing)
 	interval(estimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu = true)
 Computes a confidence/credible interval based either on a ``d`` × ``B`` matrix `θ` of
 parameters (typically containing bootstrap estimates or posterior draws),
@@ -124,7 +135,9 @@ probability levels controlled by the keyword argument `probs`.
 
 The return type is a ``d`` × 2 matrix, whose first and second columns respectively
 contain the lower and upper bounds of the interval. The rows of this matrix can
-be named by passing a vector of strings to the keyword argument `parameter_names`. 
+be named by passing a vector of strings to the keyword argument `parameter_names`.
+When `θ` is a ``d`` × ``N`` × ``K`` array, a vector of such matrices is returned
+(a single matrix when ``K = 1``).
 """
 function interval(bs; probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 1:size(bs, 1)])
     d, B = size(bs)
@@ -136,6 +149,11 @@ function interval(bs; probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 
     l = ci[:, 1]
     u = ci[:, 2]
     labelinterval(l, u, parameter_names)
+end
+
+function interval(θ::AbstractArray{<:Any, 3}; kwargs...)
+    intervals = [interval(s; kwargs...) for s in eachslice(θ; dims = 3)]
+    return length(intervals) == 1 ? intervals[1] : intervals
 end
 
 function interval(estimator::IntervalEstimator, Z, args...; parameter_names = nothing, use_gpu::Bool = true)

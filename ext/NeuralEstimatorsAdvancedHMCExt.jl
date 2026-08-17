@@ -71,7 +71,7 @@ function _nuts_samples(summary_stats_Z, apply_θ, apply_inf, lower, upper, logpr
         Float32.(_toθ(lo, hi, reduce(hcat, kept)))     # d × N, back on the box
     end
 
-    return length(samples) == 1 ? samples[1] : samples
+    return stack(samples)
 end
 
 function NeuralEstimators._sampleposterior_hmc(

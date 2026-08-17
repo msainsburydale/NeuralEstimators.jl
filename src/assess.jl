@@ -209,7 +209,7 @@ function assess(
     empirical_risk = nothing # _computerisk(estimator, θ, Z)
 
     # Obtain point estimates 
-    estimates = reduce(hcat, map.(pointsummary, eachrow.(samples)))
+    estimates = dropdims(mapslices(pointsummary, samples; dims = 2); dims = 2)
 
     # Convert true and estimated parameter to DataFrame, then merge
     estimates = _estimates_to_df(estimates, parameter_names, K, J, m)
@@ -217,9 +217,10 @@ function assess(
     estimates = _attach_truth(θ_df, estimates)
 
     # Convert posterior samples to long form DataFrame 
-    sample_dfs = Vector{DataFrame}(undef, length(samples))
-    for (idx, S) in enumerate(samples)
-        d, N = size(S)
+    d, N, KJ = size(samples)
+    sample_dfs = Vector{DataFrame}(undef, KJ)
+    for idx in 1:KJ
+        S = samples[:, :, idx]
 
         df_s = DataFrame(
             parameter = repeat(parameter_names, inner = N),
