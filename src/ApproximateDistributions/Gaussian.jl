@@ -12,7 +12,7 @@ lower-triangular Cholesky factor $\boldsymbol{L}$ of the dense covariance matrix
 
 When using a `Gaussian` distribution as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) 
 summary statistics are mapped to the distribution parameters $\boldsymbol{\kappa}$ using a multilayer 
-perceptron ([MLP](@ref "MLP")) with appropriately chosen output activation functions 
+perceptron ([`MLP`](@ref)) with appropriately chosen output activation functions 
 (`identity` for $\boldsymbol{\mu}$ and the off-diagonal entries of $\boldsymbol{L}$, [softplus](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#NNlib.softplus) for the 
 diagonal entries of $\boldsymbol{L}$).
 

@@ -263,7 +263,7 @@ num_summaries = 3d   # number of summary statistics for θ
 network = DeepSet(ψ, ϕ)
 ```
 
-An additional advantage of using a [DeepSet](@ref) is that the input structure is more flexible than that of a generic CNN. In particular, it operates on a vector of arrays, where each array corresponds to a single data set and may have arbitrary dimension
+An additional advantage of using a [`DeepSet`](@ref) is that the input structure is more flexible than that of a generic CNN. In particular, it operates on a vector of arrays, where each array corresponds to a single data set and may have arbitrary dimension
 
 The rest of the code given above remains exactly the same, with the number of replicates $m$ passed into `train` via the keyword argument `simulator_args`:
 
@@ -287,4 +287,4 @@ estimator = RatioEstimator(network, d; num_summaries = num_summaries)
 estimator = train(estimator, θ_train, θ_val, simulator; simulator_args = 10)
 ```
 
-A key advantage of the [DeepSet](@ref) representation is that it can be applied to data sets of arbitrary sample size $m$. However, the posterior distribution, and summaries derived from it, typically depends on $m$. If data sets with varying $m$ are envisaged, the estimator should be designed to account for this dependence by including a range of sample sizes during training.
+A key advantage of the [`DeepSet`](@ref) representation is that it can be applied to data sets of arbitrary sample size $m$. However, the posterior distribution, and summaries derived from it, typically depends on $m$. If data sets with varying $m$ are envisaged, the estimator should be designed to account for this dependence by including a range of sample sizes during training.

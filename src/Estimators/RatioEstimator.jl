@@ -16,12 +16,12 @@ For numerical stability, training is done on the log-scale using the relation
 $\log r(\boldsymbol{Z}, \boldsymbol{\theta}) = \text{logit}(c^*(\boldsymbol{Z}, \boldsymbol{\theta}))$, 
 where $c^*(\cdot, \cdot)$ denotes the Bayes classifier as described in the [methodology](@ref "Neural ratio estimators") section. 
 
-Given data `Z` and parameters `θ`, the estimated ratio can be obtained using [logratio](@ref) 
+Given data `Z` and parameters `θ`, the estimated ratio can be obtained using [`logratio`](@ref) 
 and can be used in various Bayesian
 (e.g., [Hermans et al., 2020](https://proceedings.mlr.press/v119/hermans20a.html))
 or frequentist
 (e.g., [Walchessen et al., 2024](https://doi.org/10.1016/j.spasta.2024.100848))
-inferential algorithms. For Bayesian inference, posterior samples can be obtained with [sampleposterior](@ref) using the NUTS algorithm or by grid-based sampling.
+inferential algorithms. For Bayesian inference, posterior samples can be obtained with [`sampleposterior`](@ref) using the NUTS algorithm or by grid-based sampling.
 
 # Keyword arguments
 - `num_summaries::Integer`: the number of summaries output by `summary_network`. Must match the output dimension of `summary_network`.

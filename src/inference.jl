@@ -81,7 +81,7 @@ The keyword argument `N` controls the size of the posterior sample (default 1000
 
 Returns a $d$ × `N` × $K$ array of posterior samples, where $d$ is the dimension of the parameter vector and $K$ is the number of independent data sets in `Z` (so a single data set yields a $d$ × `N` × $1$ array).
 
-Remaining keyword arguments are passed onto [summarystatistics](@ref).
+Remaining keyword arguments are passed onto [`summarystatistics`](@ref).
 
 # PosteriorEstimator
 Draws independent samples from the approximate posterior distribution associated with the estimator.

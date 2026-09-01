@@ -20,7 +20,7 @@ prior support of ``\theta_i``.
 
 The functions ``c_i(⋅)`` may be collectively defined by a ``d``-dimensional [`Compress`](@ref) object, which can constrain the interval estimator's output to the prior support. If these functions are unspecified, they will be set to the identity function so that the range of the intervals will be unrestricted.
 
-The return value when applied to data using [`estimate`()](@ref) is a matrix with ``2d`` rows, where the first and second ``d`` rows correspond to the lower and upper bounds, respectively. The function [`interval()`](@ref) can be used to format this output in a readable ``d`` × 2 matrix.  
+The return value when applied to data using [`estimate`](@ref) is a matrix with ``2d`` rows, where the first and second ``d`` rows correspond to the lower and upper bounds, respectively. The function [`interval`](@ref) can be used to format this output in a readable ``d`` × 2 matrix.  
 
 See also [`QuantileEstimator`](@ref).
 
