@@ -10,7 +10,7 @@
 [R-repo-img]: https://img.shields.io/badge/R-interface-blue.svg
 [R-repo-url]: https://github.com/msainsburydale/NeuralEstimators
 
-`NeuralEstimators` is a Julia package for **fast**, **simulation-based** inference using neural networks. It is designed for settings where likelihoods are intractable or classical methods such as MCMC are computationally expensive. The package supports: 
+`NeuralEstimators` is a Julia package for **fast simulation-based inference** using neural networks. It is designed for settings where likelihoods are intractable or classical methods such as MCMC are computationally expensive. The package supports: 
 
 - Neural posterior estimation (NPE): directly learn the posterior distribution
 - Neural ratio estimation (NRE): approximate likelihood ratios for flexible frequentist or Bayesian inference

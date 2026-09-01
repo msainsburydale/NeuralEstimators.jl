@@ -1,6 +1,6 @@
 @doc raw"""
 	TelescopingRatioEstimator <: AbstractNeuralEstimator
-	TelescopingRatioEstimator(summary_network, num_parameters; num_summaries, sampler, kwargs...)
+	TelescopingRatioEstimator(num_parameters, summary_network = identity; num_summaries, sampler, kwargs...)
 A neural estimator that factorises the likelihood-to-evidence ratio sequentally accross parameter diemsnions, with
 one classifier MLP head per parameter coordinate. Currently, the implementation only supports the case in which
 the prior factorizes p(\boldsymbol{\theta}) = \prod_{i=1}^d p(\theta^i). In this case, we have that
@@ -20,6 +20,7 @@ No MCMC, no grid, and the cost grows linearly rather than exponentially in $d$.
 
 The data are summarised by `summary_network`; the heads are a `MultiHeadMLP` with growing
 inputs, head $i$ taking the summaries together with $\theta_1, \dots, \theta_i$.
+If `summary_network` is omitted, it defaults to the identity function, for use with expert summary statistics provided as a matrix. See [Expert summary statistics](@ref).
 
 # Keyword arguments
 - `num_summaries::Integer`: the number of summaries output by `summary_network`. Must match the output dimension of `summary_network`.
@@ -41,7 +42,7 @@ num_summaries = 3d
 summary_network = Chain(Dense(m, 32, gelu), Dense(32, 16, gelu), Dense(16, num_summaries))
 
 # Initialise the estimator
-estimator = TelescopingRatioEstimator(summary_network, d; num_summaries = num_summaries, sampler = sampler)
+estimator = TelescopingRatioEstimator(d, summary_network; num_summaries = num_summaries, sampler = sampler)
 
 # Train the estimator
 estimator = train(estimator, sampler, simulator, K = 10000)
@@ -68,20 +69,22 @@ end
 # e.g., to not make the optimizer compute gradients w.r.t. sampler
 @functor TelescopingRatioEstimator (summary_network, heads)
 
-# Constructor: summary network, number of parameters, number of summaries => one classifier head per parameter
+# Constructor: number of parameters and optional summary network => one classifier head per parameter
 function TelescopingRatioEstimator(
-    summary_network, num_parameters::Integer, num_summaries::Integer;
+    num_parameters::Integer, summary_network = identity;
+    num_summaries::Integer,
     sampler::Function,
     kwargs...
 )
+    summary_network = _resolvesummarynetwork(summary_network; kwargs...)
     backend = _backendof(summary_network)
-    heads = MultiHeadMLP(num_summaries, 1, num_parameters; backend = backend, growing = true, output_activation = identity, kwargs...)
+    heads = MultiHeadMLP(num_summaries, 1, num_parameters; backend = backend, growing = true, output_activation = identity, _dropbackend(kwargs)...)
     @info "TelescopingRatioEstimator: num_summaries = $num_summaries, num_heads = $num_parameters."
     TelescopingRatioEstimator(summary_network, heads, sampler)
 end
 
-# Constructor: keyword num_summaries
-TelescopingRatioEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, kwargs...) = TelescopingRatioEstimator(summary_network, num_parameters, num_summaries; kwargs...)
+# Constructor: consistent argument ordering
+TelescopingRatioEstimator(summary_network, num_parameters::Integer; kwargs...) = TelescopingRatioEstimator(num_parameters, summary_network; kwargs...)
 
 # Number of heads (= number of parameters); both Flux and Lux store the branches of Parallel in `layers`; 
 _numheads(estimator::TelescopingRatioEstimator) = length(estimator.heads.layers)

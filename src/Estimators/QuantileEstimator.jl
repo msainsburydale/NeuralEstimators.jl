@@ -1,7 +1,6 @@
 @doc raw"""
 	IntervalEstimator <: AbstractBayesEstimator
-	IntervalEstimator(summary_network, num_parameters; num_summaries, kwargs...)
-	IntervalEstimator(summary_network, num_parameters, num_summaries; kwargs...)
+	IntervalEstimator(num_parameters, summary_network = identity; num_summaries, kwargs...)
 A neural estimator that jointly estimates marginal posterior credible intervals based on the probability levels `probs` (by default, 95% central credible intervals).
 
 The estimator summarises the data ``\boldsymbol{Z}`` using a `summary_network` whose output is passed to two MLP inference networks, ``\boldsymbol{u}(\cdot)`` and ``\boldsymbol{v}(\cdot)``, each mapping from the summary space to ``\mathbb{R}^d``.
@@ -47,7 +46,7 @@ num_summaries = 3d
 summary_network = Chain(Dense(m, 64, relu), Dense(64, 64, relu), Dense(64, num_summaries))
 
 # Initialise and train the estimator
-estimator = IntervalEstimator(summary_network, d; num_summaries = num_summaries)
+estimator = IntervalEstimator(d, summary_network; num_summaries = num_summaries)
 estimator = train(estimator, sampler, simulator, K = 3000)
 
 # Assessment
@@ -72,29 +71,30 @@ struct IntervalEstimator{M, N, H, C, G} <: AbstractBayesEstimator
     g::G
 end
 
-# Constructor: summary network, number of parameters, number of summaries => two MLP inference networks
+# Constructor: number of parameters and optional summary network => two MLP inference networks
 function IntervalEstimator(
-    summary_network, num_parameters::Integer, num_summaries::Integer;
+    num_parameters::Integer, summary_network = identity;
+    num_summaries::Integer,
     c::Union{Function, Compress} = identity,
     probs = [0.025, 0.975],
     g = softplus,
     kwargs...
 )
+    summary_network = _resolvesummarynetwork(summary_network; kwargs...)
     if !isa(probs, AbstractArray)
         probs = [probs]
     end
     @assert all(0 .< probs .< 1)
     B = _backendof(summary_network)
-    u = MLP(num_summaries, num_parameters; backend = B, output_activation = identity, kwargs...)
-    v = MLP(num_summaries, num_parameters; backend = B, output_activation = identity, kwargs...)
+    nt = _dropbackend(kwargs)
+    u = MLP(num_summaries, num_parameters; backend = B, output_activation = identity, nt...)
+    v = MLP(num_summaries, num_parameters; backend = B, output_activation = identity, nt...)
     @info "IntervalEstimator: num_summaries = $num_summaries."
-    estimator = IntervalEstimator(summary_network, u, v, c, probs, g)
-    estimator
+    IntervalEstimator(summary_network, u, v, c, probs, g)
 end
 
-# Constructor: keyword num_summaries
-IntervalEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, kwargs...) =
-    IntervalEstimator(summary_network, num_parameters, num_summaries; kwargs...)
+# Constructor: consistent argument ordering
+IntervalEstimator(summary_network, num_parameters::Integer; kwargs...) = IntervalEstimator(num_parameters, summary_network; kwargs...)
 
 Optimisers.trainable(est::IntervalEstimator) = (summary_network = est.summary_network, u = est.u, v = est.v)
 
@@ -107,7 +107,7 @@ end
 
 @doc raw"""
 	QuantileEstimator <: AbstractBayesEstimator
-	QuantileEstimator(summary_network, num_parameters; num_summaries, kwargs...)
+	QuantileEstimator(num_parameters, summary_network = identity; num_summaries, kwargs...)
 A neural estimator that jointly estimates a fixed set of marginal posterior
 quantiles, with probability levels $\{\tau_1, \dots, \tau_T\}$ controlled by the
 keyword argument `probs`. This generalises [`IntervalEstimator`](@ref) to support an arbitrary number of probability levels. 
@@ -176,7 +176,7 @@ summary_network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, num_s
 # ---- Quantiles of θᵢ ∣ 𝐙, i = 1, …, d ----
 
 # Initialise the estimator
-estimator = QuantileEstimator(summary_network, d; num_summaries = num_summaries)
+estimator = QuantileEstimator(d, summary_network; num_summaries = num_summaries)
 
 # Training
 estimator = train(estimator, sampler, simulator)
@@ -195,8 +195,8 @@ quantiles(estimator, Z)
 # ---- Quantiles of θᵢ ∣ 𝐙, θ₋ᵢ ----
 
 # Initialise estimators respectively targeting quantiles of μ∣Z,σ and σ∣Z,μ
-q₁ = QuantileEstimator(summary_network, d; num_summaries = num_summaries, i = 1)
-q₂ = QuantileEstimator(summary_network, d; num_summaries = num_summaries, i = 2)
+q₁ = QuantileEstimator(d, summary_network; num_summaries = num_summaries, i = 1)
+q₂ = QuantileEstimator(d, summary_network; num_summaries = num_summaries, i = 2)
 
 # Training
 q₁ = train(q₁, sampler, simulator)
@@ -222,9 +222,10 @@ end
 const QuantileEstimatorDiscrete = QuantileEstimator
 export QuantileEstimatorDiscrete
 
-# Constructor: summary network, number of parameters, number of summaries => MLP inference networks
+# Constructor: number of parameters and optional summary network => MLP inference networks
 function QuantileEstimator(
-    summary_network, num_parameters::Integer, num_summaries::Integer;
+    num_parameters::Integer, summary_network = identity;
+    num_summaries::Integer,
     probs = [0.025, 0.5, 0.975],
     g = softplus,
     i::Union{Integer, Nothing} = nothing,
@@ -232,6 +233,7 @@ function QuantileEstimator(
     summary_network_θ_kwargs::NamedTuple = (;),
     kwargs...
 )
+    summary_network = _resolvesummarynetwork(summary_network; kwargs...)
     if !isa(probs, AbstractArray)
         probs = [probs]
     end
@@ -244,6 +246,7 @@ function QuantileEstimator(
     B = _backendof(summary_network)
     T = length(probs)
     num_out = isnothing(i) ? num_parameters : 1
+    nt = _dropbackend(kwargs)
 
     if isnothing(i)
         inference_input_dim = num_summaries
@@ -253,15 +256,14 @@ function QuantileEstimator(
         inference_input_dim = num_summaries + num_summaries_θ
     end
 
-    v = [MLP(inference_input_dim, num_out; backend = B, output_activation = identity, kwargs...) for _ = 1:T]
+    v = [MLP(inference_input_dim, num_out; backend = B, output_activation = identity, nt...) for _ = 1:T]
 
     @info "QuantileEstimator: num_summaries = $num_summaries, T = $T quantile levels$(isnothing(i) ? "" : ", full conditional i = $i")."
     QuantileEstimator(summary_network, summary_network_θ, v, probs, g, i)
 end
 
-# Constructor: keyword num_summaries
-QuantileEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, kwargs...) =
-    QuantileEstimator(summary_network, num_parameters, num_summaries; kwargs...)
+# Constructor: consistent argument ordering
+QuantileEstimator(summary_network, num_parameters::Integer; kwargs...) = QuantileEstimator(num_parameters, summary_network; kwargs...)
 
 Optimisers.trainable(est::QuantileEstimator) = isnothing(est.summary_network_θ) ?
                                                (summary_network = est.summary_network, v = est.v) :

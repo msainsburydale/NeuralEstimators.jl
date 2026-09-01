@@ -10,6 +10,15 @@ An abstract supertype for neural Bayes estimators.
 """
 abstract type AbstractBayesEstimator <: AbstractNeuralEstimator end
 
+# ---- Identity layer ----
+
+_identity_layer(backend::Module) = _identity_layer(Val(nameof(backend)))
+_identity_layer(::Val{:Flux}) = identity  # plain Julia function, valid as a Flux layer
+_is_identity(f) = f === identity || f isa typeof(identity) || (hasproperty(f, :func) && f.func === identity)
+
+_resolvesummarynetwork(ψ; backend = nothing, kwargs...) = _is_identity(ψ) ? _identity_layer(_resolvebackend(backend)) : ψ
+_dropbackend(kwargs) = Base.structdiff(NamedTuple(kwargs), (; backend = nothing))
+
 # ---- Summary network helper functions ----
 
 _has_summary_network(e) = hasfield(typeof(e), :summary_network)

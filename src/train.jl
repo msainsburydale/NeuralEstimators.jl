@@ -43,7 +43,7 @@ The trained estimator is always returned on the CPU.
 # Keyword arguments common to `train(estimator, sampler, simulator)` and `train(estimator, θ_train, θ_val, simulator)`:
 - `simulator_args = ()`: positional arguments passed to `simulator`.
 - `simulator_kwargs::NamedTuple = (;)`: keyword arguments passed to `simulator`.
-- `epochs_per_Z_refresh = 1`: the number of passes to make through the training set before the training data are refreshed.
+- `epochs_per_refresh = 1`: the number of passes to make through the training set before the training data are refreshed.
 - `simulate_just_in_time = false`: flag indicating whether we should simulate just-in-time, in the sense that only a `batchsize` number of parameter vectors and corresponding data are in memory at a given time.
 
 # Keyword arguments unique to `train(estimator, sampler, simulator)`:
@@ -51,7 +51,7 @@ The trained estimator is always returned on the CPU.
 - `sampler_kwargs::NamedTuple = (;)`: keyword arguments passed to `sampler`.
 - `K = 10000`: number of parameter vectors in the training set.
 - `K_val = K ÷ 2` number of parameter vectors in the validation set.
-- `epochs_per_θ_refresh = 1`: the number of passes to make through the training set before the training parameters are refreshed. Must be a multiple of `epochs_per_Z_refresh`.
+- `epochs_per_θ_refresh = epochs_per_refresh`: the number of passes to make through the training set before the training parameters are refreshed. Must be a multiple of `epochs_per_refresh`.
 
 # Examples
 ```julia
@@ -166,6 +166,15 @@ function _resolve_adtype(trainstate, device, adtype, verbose = true)
     verbose && @info "Automatic differentiation: $(nameof(typeof(adtype)))"
 
     return adtype
+end
+
+function _resolve_epochs_per_refresh(epochs_per_refresh, epochs_per_Z_refresh)
+    if !isnothing(epochs_per_Z_refresh)
+        @warn "`epochs_per_Z_refresh` is deprecated; use `epochs_per_refresh`"
+        epochs_per_refresh != 1 && throw(ArgumentError("Do not pass both `epochs_per_refresh` and `epochs_per_Z_refresh`"))
+        return epochs_per_Z_refresh
+    end
+    return epochs_per_refresh
 end
 
 function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
@@ -294,7 +303,8 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     simulator_args = (), m = nothing, # trailing deprecated argument
     simulator_kwargs::NamedTuple = (;),
     batchsize::Integer = 32,
-    epochs_per_Z_refresh::Integer = 1,
+    epochs_per_refresh::Integer = 1,
+    epochs_per_Z_refresh = nothing, # deprecated alias
     epochs::Integer = 100,
     loss = mae,
     savepath::Union{Nothing, String} = tempdir(),
@@ -313,9 +323,11 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
         simulator_args = (m,)
     end
 
-    @assert epochs_per_Z_refresh > 0
-    if simulate_just_in_time && epochs_per_Z_refresh != 1
-        @error "We cannot simulate the data just-in-time if we aren't refreshing the data every epoch; please either set `simulate_just_in_time = false` or `epochs_per_Z_refresh = 1`"
+    epochs_per_refresh = _resolve_epochs_per_refresh(epochs_per_refresh, epochs_per_Z_refresh)
+
+    @assert epochs_per_refresh > 0
+    if simulate_just_in_time && epochs_per_refresh != 1
+        @error "We cannot simulate the data just-in-time if we aren't refreshing the data every epoch; please either set `simulate_just_in_time = false` or `epochs_per_refresh = 1`"
     end
 
     # Determine device
@@ -360,7 +372,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
 
     # We may store Z_train in its entirety either to reduce simulation overhead or we are
     # not refreshing Z_train every epoch so we need it for subsequent epochs
-    store_entire_train_set = !simulate_just_in_time || epochs_per_Z_refresh != 1
+    store_entire_train_set = !simulate_just_in_time || epochs_per_refresh != 1
 
     # ---- Common setup ----
 
@@ -390,7 +402,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
 
         if store_entire_train_set
             # Simulate new training data if needed
-            if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
+            if epoch == 1 || (epoch % epochs_per_refresh) == 0
                 verbose && print("Simulating training data...")
                 train_set = nothing
                 GC.gc(false)
@@ -463,8 +475,10 @@ function train(trainstate, sampler, simulator;
     sampler_kwargs::NamedTuple = (;),
     simulator_args = (), m = nothing, # trailing deprecated argument
     simulator_kwargs::NamedTuple = (;),
-    epochs_per_θ_refresh::Integer = 1, epochs_per_theta_refresh::Integer = 1,
-    epochs_per_Z_refresh::Integer = 1,
+    epochs_per_refresh::Integer = 1,
+    epochs_per_Z_refresh = nothing, # deprecated alias
+    epochs_per_θ_refresh = nothing,
+    epochs_per_theta_refresh = nothing,
     simulate_just_in_time::Bool = false,
     loss = mae,
     batchsize::Integer = 32,
@@ -484,17 +498,19 @@ function train(trainstate, sampler, simulator;
         simulator_args = (m,)
     end
 
-    @assert epochs_per_θ_refresh == 1 || epochs_per_theta_refresh == 1 "Only one of `epochs_per_θ_refresh` or `epochs_per_theta_refresh` should be provided"
-    if epochs_per_theta_refresh != 1
+    epochs_per_refresh = _resolve_epochs_per_refresh(epochs_per_refresh, epochs_per_Z_refresh)
+    if !isnothing(epochs_per_theta_refresh)
+        !isnothing(epochs_per_θ_refresh) && throw(ArgumentError("Only one of `epochs_per_θ_refresh` or `epochs_per_theta_refresh` should be provided"))
         epochs_per_θ_refresh = epochs_per_theta_refresh
     end
+    isnothing(epochs_per_θ_refresh) && (epochs_per_θ_refresh = epochs_per_refresh)
 
     @assert K > 0
-    @assert epochs_per_Z_refresh > 0
+    @assert epochs_per_refresh > 0
     @assert epochs_per_θ_refresh > 0
-    @assert epochs_per_θ_refresh % epochs_per_Z_refresh == 0 "`epochs_per_θ_refresh` must be a multiple of `epochs_per_Z_refresh`"
+    @assert epochs_per_θ_refresh % epochs_per_refresh == 0 "`epochs_per_θ_refresh` must be a multiple of `epochs_per_refresh`"
 
-    store_entire_train_set = epochs_per_Z_refresh > 1 || !simulate_just_in_time
+    store_entire_train_set = epochs_per_refresh > 1 || !simulate_just_in_time
 
     # Number of batches of θ in each epoch
     num_batches = ceil(Int, K / batchsize)
@@ -578,7 +594,7 @@ function train(trainstate, sampler, simulator;
         if store_entire_train_set
 
             # Simulate new training data if needed
-            if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
+            if epoch == 1 || (epoch % epochs_per_refresh) == 0
 
                 # Possibly also refresh the parameter set
                 if epoch == 1 || (epoch % epochs_per_θ_refresh) == 0

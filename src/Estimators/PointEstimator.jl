@@ -2,7 +2,7 @@
 	PointEstimator <: AbstractBayesEstimator
     PointEstimator(network)
     PointEstimator(summary_network, inference_network)
-    PointEstimator(summary_network, num_parameters; num_summaries, kwargs...)
+    PointEstimator(num_parameters, summary_network = identity; num_summaries, kwargs...)
 A neural point estimator mapping data to a point summary of the posterior distribution.
 
 The neural network can be provided in two ways:
@@ -50,27 +50,24 @@ estimate(estimator, Z)   # point estimate
     inference_network
 end
 
-# Constructor: summary network, number of parameters, number of summaries => MLP inference network
-function PointEstimator(summary_network, num_parameters::Integer, num_summaries::Integer; kwargs...)
+# Constructor: number of parameters and optional summary network => MLP inference network
+function PointEstimator(num_parameters::Integer, summary_network = identity; num_summaries::Integer, kwargs...)
+    summary_network = _resolvesummarynetwork(summary_network; kwargs...)
     backend = _backendof(summary_network)
-    inference_network = MLP(num_summaries, num_parameters; backend = backend, kwargs...)
+    inference_network = MLP(num_summaries, num_parameters; backend = backend, _dropbackend(kwargs)...)
     @info "PointEstimator: num_summaries = $num_summaries."
-    estimator = PointEstimator(summary_network, inference_network)
-    estimator
+    PointEstimator(summary_network, inference_network)
 end
 
-# Constructor: num_summaries as keyword
-PointEstimator(summary_network, num_parameters::Integer; num_summaries, kwargs...) = PointEstimator(summary_network, num_parameters, num_summaries; kwargs...)
+# Constructor: consistent argument ordering 
+PointEstimator(summary_network, num_parameters::Integer; kwargs...) = PointEstimator(num_parameters, summary_network; kwargs...)
 
-# Constructor: Old workflow, summary network represents the entire network
+# Constructor: simple workflow, single network
 function PointEstimator(network)
     @info "Constructing PointEstimator with a single network. Consider separating the summary and inference networks as PointEstimator(summary_network, inference_network), which enables additional functionality." # such as transfer learning and model-misspecification detection."
     backend = _backendof(network)
     PointEstimator(network, _identity_layer(backend))
 end
-_identity_layer(backend::Module) = _identity_layer(Val(nameof(backend)))
-_identity_layer(::Val{:Flux}) = identity  # plain Julia function, valid as a Flux layer
-_is_identity(f) = f === identity || f isa typeof(identity) || (hasproperty(f, :func) && f.func === identity)
 
 # Forward pass: Stateful (Flux)
 (estimator::PointEstimator)(Z) = estimator.inference_network(_summarystatistics(estimator, Z))

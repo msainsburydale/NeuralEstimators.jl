@@ -720,10 +720,11 @@ Z = simulator(θ, m)
             estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, sampler_args = (d,), freeze_summary_network = true)
             estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose)
             estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
-            estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose)
-            estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 3, epochs_per_Z_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
+            estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 2, epochs_per_refresh = 2, use_gpu = use_gpu, verbose = verbose, sampler_args = (d,))
+            estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 4, epochs_per_refresh = 2, use_gpu = use_gpu, verbose = verbose)
+            estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 3, epochs_per_refresh = 1, simulate_just_in_time = true, use_gpu = use_gpu, verbose = verbose)
             estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 1, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
-            estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 4, epochs_per_Z_refresh = 2, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
+            estimator = train(estimator, θ, θ, simulator, simulator_args = m, epochs = 4, epochs_per_refresh = 2, use_gpu = use_gpu, verbose = verbose, freeze_summary_network = true)
             Z_train = Z_val = simulator(θ, m)
             train(estimator, θ, θ, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose, savepath = "testing-path")
             train(estimator, θ, θ, Z_train, Z_val; epochs = 1, use_gpu = use_gpu, verbose = verbose)
@@ -994,6 +995,44 @@ end
     samples2 = sampleposterior(estimator2, Z2)
     @test size(samples2) == (d1, 1000, K)
     @test all(samples2 .>= 0) # spike (0) or positive slab draws
+end
+
+@testset "Expert summaries only (no summary network)" begin
+    num_summaries = 4
+    S = randn(Float32, num_summaries, K)
+    mlp_kwargs = (depth = 1, width = 16)
+
+    point = PointEstimator(d; num_summaries = num_summaries, mlp_kwargs...)
+    @test summarynetwork(point) === identity
+    @test size(estimate(point, S; use_gpu = false)) == (d, K)
+
+    interval = IntervalEstimator(d; num_summaries = num_summaries, mlp_kwargs...)
+    @test size(interval(S)) == (2d, K)
+
+    quantile = QuantileEstimator(d; num_summaries = num_summaries, mlp_kwargs...)
+    @test size(quantile(S)) == (3d, K)
+
+    posterior = PosteriorEstimator(d; num_summaries = num_summaries, q = Gaussian, mlp_kwargs...)
+    samples = sampleposterior(posterior, S; N = 10, use_gpu = false)
+    @test size(samples) == (d, 10, K)
+
+    ratio = RatioEstimator(d; num_summaries = num_summaries, mlp_kwargs...)
+    @test size(ratio(S, θ)) == (1, K)
+
+    telescoping = TelescopingRatioEstimator(d; num_summaries = num_summaries, sampler = sampler, mlp_kwargs...)
+    @test size(telescoping(S, θ)) == (d, K)
+
+    # Both argument orders construct the same way
+    ψ = Chain(Dense(m, num_summaries))
+    e_new = PointEstimator(d, ψ; num_summaries = num_summaries, mlp_kwargs...)
+    e_old = PointEstimator(ψ, d; num_summaries = num_summaries, mlp_kwargs...)
+    @test summarynetwork(e_new) === ψ
+    @test summarynetwork(e_old) === ψ
+    p_new = PosteriorEstimator(d, ψ; num_summaries = num_summaries, q = Gaussian, mlp_kwargs...)
+    p_old = PosteriorEstimator(ψ, d; num_summaries = num_summaries, q = Gaussian, mlp_kwargs...)
+    @test summarynetwork(p_new) === ψ
+    @test summarynetwork(p_old) === ψ
+    @test_throws ArgumentError PointEstimator(d, num_summaries; num_summaries = num_summaries)
 end
 
 # ---- Wrappers and helper functions for NeuralEstimators ----

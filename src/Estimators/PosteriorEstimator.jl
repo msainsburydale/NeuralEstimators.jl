@@ -1,10 +1,10 @@
 @doc raw"""
 	PosteriorEstimator <: AbstractNeuralEstimator
 	PosteriorEstimator(summary_network, q::AbstractApproximateDistribution)
-	PosteriorEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, q::AbstractApproximateDistribution = NormalisingFlow, kwargs...)
+	PosteriorEstimator(num_parameters::Integer, summary_network = identity; num_summaries::Integer, q::AbstractApproximateDistribution = NormalisingFlow, kwargs...)
 A neural estimator that approximates the posterior distribution $p(\boldsymbol{\theta} \mid \boldsymbol{Z})$, based on a neural `summary_network` and an approximate distribution `q` (see the available in-built [Approximate distributions](@ref)).
 
-The `summary_network` maps data $\boldsymbol{Z}$ to a vector of learned summary statistics $\boldsymbol{t} \in \mathbb{R}^{d^*}$, which are then used to condition the approximate distribution `q`. The precise way in which the summary statistics condition `q` depends on the choice of approximate distribution: for example, [`Gaussian`](@ref) and [`GaussianMixture`](@ref) use an MLP to map $\boldsymbol{t}$ directly to distributional parameters, while [`NormalisingFlow`](@ref) uses $\boldsymbol{t}$ as a conditioning input at each coupling layer.
+The `summary_network` maps data $\boldsymbol{Z}$ to a vector of learned summary statistics $\boldsymbol{t} \in \mathbb{R}^{d^*}$, which are then used to condition the approximate distribution `q`. The precise way in which the summary statistics condition `q` depends on the choice of approximate distribution: for example, [`Gaussian`](@ref) and [`GaussianMixture`](@ref) use an MLP to map $\boldsymbol{t}$ directly to distributional parameters, while [`NormalisingFlow`](@ref) uses $\boldsymbol{t}$ as a conditioning input at each coupling layer. 
 
 The convenience constructor builds `q` internally given `num_parameters` and `num_summaries`, with any additional keyword arguments passed to the constructor of `q`.
 
@@ -28,7 +28,7 @@ num_summaries = 3d
 summary_network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, num_summaries))
 
 # Initialise the estimator, with q built internally
-estimator = PosteriorEstimator(summary_network, d; num_summaries = num_summaries)
+estimator = PosteriorEstimator(d, summary_network; num_summaries = num_summaries)
 
 # Or, build q explicitly
 q = NormalisingFlow(d; num_summaries = num_summaries)
@@ -54,21 +54,22 @@ posteriormean(estimator, Z)   # point estimate
     q
 end
 
-# Constructor: summary network, number of parameters, number of summaries => build approximate distribution automatically
-function PosteriorEstimator(summary_network, num_parameters::Integer, num_summaries::Integer; q = NormalisingFlow, kwargs...)
+# Constructor: number of parameters and optional summary network => build approximate distribution automatically
+function PosteriorEstimator(num_parameters::Integer, summary_network = identity; num_summaries::Integer, q = NormalisingFlow, kwargs...)
+    summary_network = _resolvesummarynetwork(summary_network; kwargs...)
     # Convert string to type if needed
     if q isa String
         q = getfield(@__MODULE__, Symbol(q))
     end
     @info "PosteriorEstimator: num_summaries = $num_summaries, q = $q."
     backend = _backendof(summary_network)
-    PosteriorEstimator(summary_network, q(num_parameters, num_summaries; backend = backend, kwargs...))
+    PosteriorEstimator(summary_network, q(num_parameters, num_summaries; backend = backend, _dropbackend(kwargs)...))
 end
 
-# Constructor: keyword num_summaries
-PosteriorEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, kwargs...) = PosteriorEstimator(summary_network, num_parameters, num_summaries; kwargs...)
+# Constructor: consistent argument ordering
+PosteriorEstimator(summary_network, num_parameters::Integer; kwargs...) = PosteriorEstimator(num_parameters, summary_network; kwargs...)
 
-# Constructor: consistent argument ordering 
+# Constructor: consistent argument ordering
 function PosteriorEstimator(q::A, summary_network) where {A <: AbstractApproximateDistribution}
     return PosteriorEstimator(summary_network, q)
 end

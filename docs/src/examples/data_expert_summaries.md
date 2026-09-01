@@ -26,7 +26,7 @@ using Flux
 
 ## Expert summaries only
 
-A neural estimator based only on expert summary statistics (see, e.g., [Gerber and Nychka, 2021](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382); [Rai et al., 2024](https://onlinelibrary.wiley.com/doi/abs/10.1002/env.2845)) can be constructed by setting the summary network to be the identity function and providing the summary statistics as a matrix. For convenience, several [User-defined summary statistics](@ref) are provided with the package.
+A neural estimator based only on user-defined expert summary statistics (see, e.g., [Gerber and Nychka, 2021](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382); [Rai et al., 2024](https://onlinelibrary.wiley.com/doi/abs/10.1002/env.2845); [Lambe et al, 2026](https://arxiv.org/abs/2506.01258)) can be constructed by omitting the summary network and providing the expert summaries as a matrix.
 
 ### Sampling parameters and simulating data
 
@@ -51,32 +51,20 @@ simulator(θ::AbstractMatrix, n) = reduce(hcat, simulator.(eachcol(θ), Ref(n)))
 
 ### Constructing the neural estimator
 
-Since the summary statistics are precomputed, no summary network is needed: we set it to the identity function and wrap it in a neural estimator in the usual way.
-
-::: code-group
-
-```julia [Lux]
-summary_network = Lux.WrappedFunction(identity)
-```
-
-```julia [Flux]
-summary_network = identity
-```
-
-:::
+Since the summary statistics are precomputed, no summary network is needed: omit it and pass `num_summaries` in the usual way.
 
 ::: code-group
 
 ```julia [Point estimator]
-estimator = PointEstimator(summary_network, d; num_summaries = num_summaries)
+estimator = PointEstimator(d; num_summaries = num_summaries)
 ```
 
 ```julia [Posterior estimator]
-estimator = PosteriorEstimator(summary_network, d; num_summaries = num_summaries, q = GaussianMixture)
+estimator = PosteriorEstimator(d; num_summaries = num_summaries, q = GaussianMixture)
 ```
 
 ```julia [Ratio estimator]
-estimator = RatioEstimator(summary_network, d; num_summaries = num_summaries)
+estimator = RatioEstimator(d; num_summaries = num_summaries)
 ```
 
 :::

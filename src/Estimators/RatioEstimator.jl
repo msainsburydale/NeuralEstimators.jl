@@ -1,6 +1,6 @@
 @doc raw"""
 	RatioEstimator <: AbstractNeuralEstimator
-	RatioEstimator(summary_network, num_parameters; num_summaries, kwargs...)
+	RatioEstimator(num_parameters, summary_network = identity; num_summaries, kwargs...)
 A neural estimator that estimates the likelihood-to-evidence ratio,
 ```math
 r(\boldsymbol{Z}, \boldsymbol{\theta}) \equiv p(\boldsymbol{Z} \mid \boldsymbol{\theta})/p(\boldsymbol{Z}),
@@ -46,9 +46,9 @@ summary_network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, num_s
 
 # Initialise the estimator
 
-estimator = RatioEstimator(summary_network, d; num_summaries = num_summaries, sampler = sampler)
+estimator = RatioEstimator(d, summary_network; num_summaries = num_summaries, sampler = sampler)
 # backwards compatibility version
-# estimator = RatioEstimator(summary_network, d; num_summaries = num_summaries)
+# estimator = RatioEstimator(d, summary_network; num_summaries = num_summaries)
 
 # Train the estimator
 estimator = train(estimator, sampler, simulator, K = 1000)
@@ -85,23 +85,26 @@ RatioEstimator(summary_network, summary_network_θ, inference_network) =
 # e.g., to not make the optimizer compute gradients w.r.t. sampler
 @functor RatioEstimator (summary_network, summary_network_θ, inference_network)
 
-# Constructor: summary network, number of parameters, number of summaries => MLP inference network
+# Constructor: number of parameters and optional summary network => MLP inference network
 function RatioEstimator(
-    summary_network, num_parameters::Integer, num_summaries::Integer;
+    num_parameters::Integer, summary_network = identity;
+    num_summaries::Integer,
     num_summaries_θ::Integer = 2num_parameters,
     summary_network_θ_kwargs::NamedTuple = (;),
     sampler::Union{Nothing, Function} = nothing,
     kwargs...
 )
+    summary_network = _resolvesummarynetwork(summary_network; kwargs...)
     backend = _backendof(summary_network)
+    nt = _dropbackend(kwargs)
     summary_network_θ = MLP(num_parameters, num_summaries_θ; backend = backend, output_activation = identity, summary_network_θ_kwargs...)
-    inference_network = MLP(num_summaries + num_summaries_θ, 1; backend = backend, output_activation = identity, kwargs...)
+    inference_network = MLP(num_summaries + num_summaries_θ, 1; backend = backend, output_activation = identity, nt...)
     @info "RatioEstimator: num_summaries = $num_summaries."
     RatioEstimator(summary_network, summary_network_θ, inference_network, sampler)
 end
 
-# Constructor: keyword num_summaries
-RatioEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, kwargs...) = RatioEstimator(summary_network, num_parameters, num_summaries; kwargs...)
+# Constructor: consistent argument ordering
+RatioEstimator(summary_network, num_parameters::Integer; kwargs...) = RatioEstimator(num_parameters, summary_network; kwargs...)
 
 function _mergedata(Z, Z̃)
     if Z isa AbstractVector

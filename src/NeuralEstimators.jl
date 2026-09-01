@@ -76,6 +76,13 @@ for file in sort(readdir(joinpath(@__DIR__, "Estimators")))
     include(joinpath("Estimators", file))
 end
 
+# Two integers is ambiguous between T(d, summary_network) and T(summary_network, d). Reject it with a clear error.
+for T in (:PointEstimator, :PosteriorEstimator, :IntervalEstimator, :QuantileEstimator, :RatioEstimator, :TelescopingRatioEstimator)
+    @eval function $T(::Integer, ::Integer; kwargs...)
+        throw(ArgumentError("summary_network cannot be an Integer"))
+    end
+end
+
 export train
 export plotrisk, loadrisk, loadoptimiser
 include("train.jl")

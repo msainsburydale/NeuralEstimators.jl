@@ -210,3 +210,13 @@ TRAINING_SCENARIOS = [
         end
     end
 end
+
+@testset "No summary network" begin
+    S = randn(Float32, d, 8)
+    for backend in (Flux, Lux)
+        est = PointEstimator(d; num_summaries = d, depth = 1, width = 8, backend = backend)
+        est = backend === Lux ? LuxEstimator(est) : est
+        out = estimate(est, S; use_gpu = false)
+        @test size(out) == (d, 8)
+    end
+end
