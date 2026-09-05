@@ -9,7 +9,7 @@ variogram(Z::AbstractMatrix; n_bins::Int = 20, maxlag = 0.5) = vec(variogram(res
 function variogram(Z::AbstractArray{<:Real, 3}; n_bins::Int = 20, maxlag = 0.5)
     (0 < maxlag <= 1) || throw(ArgumentError("maxlag must be in (0, 1]"))
     nx, ny, K = size(Z)
-    T  = float(eltype(Z))
+    T = float(eltype(Z))
     px = nextpow(2, 2nx - 1)
     py = nextpow(2, 2ny - 1)
 
@@ -24,17 +24,17 @@ function variogram(Z::AbstractArray{<:Real, 3}; n_bins::Int = 20, maxlag = 0.5)
     F2 = FFTW.rfft(P2, 1:2)
     FM = FFTW.rfft(M, 1:2)
 
-    C  = FFTW.irfft(Fp .* conj.(Fp), px, 1:2)
+    C = FFTW.irfft(Fp .* conj.(Fp), px, 1:2)
     Q1 = FFTW.irfft(F2 .* conj.(FM), px, 1:2)
     Q2 = FFTW.irfft(FM .* conj.(F2), px, 1:2)
-    S  = reshape(Q1 .+ Q2 .- 2 .* C, px * py, K)
+    S = reshape(Q1 .+ Q2 .- 2 .* C, px * py, K)
 
     idxs, bins, counts = _variogram_lagmap(nx, ny, px, py, n_bins, maxlag)
     sums = zeros(T, n_bins, K)
     @inbounds for t in eachindex(idxs)
         b = bins[t]
         i = idxs[t]
-        for k in 1:K
+        for k = 1:K
             sums[b, k] += S[i, k]
         end
     end
@@ -51,12 +51,12 @@ function _variogram_lagmap(nx::Int, ny::Int, px::Int, py::Int, n_bins::Int, maxl
     counts = zeros(Int, n_bins)
     sizehint!(idxs, nx * ny)
     sizehint!(bins, nx * ny)
-    @inbounds for j in 1:py
+    @inbounds for j = 1:py
         dy = j - 1
         dy > py ÷ 2 && (dy -= py)
         absdy = abs(dy)
         absdy >= ny && continue
-        for i in 1:px
+        for i = 1:px
             dx = i - 1
             dx > px ÷ 2 && (dx -= px)
             absdx = abs(dx)
