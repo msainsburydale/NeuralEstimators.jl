@@ -697,7 +697,6 @@ _loss(estimator, loss) = loss
 # Constructs inputs and outputs (default simulated data and corresponding true parameters, respectively)
 _inputoutput(estimator, Z, θ) = (Z, θ)
 
-
 # Thin wrapper around DataLoader. `train` resolves shuffle/partial (validation is
 # never shuffled; partial defaults to false only under ReactantDevice).
 # NB: redirect_stderr suppresses batchsize warning from DataLoader
@@ -714,7 +713,6 @@ function _dataloader(estimator, Z, θ, batchsize; kwargs...)
     _DataLoader(data, batchsize; kwargs...)
 end
 _dataloader(estimator::LuxEstimator, Z, θ, batchsize; kwargs...) = _dataloader(estimator.estimator, Z, θ, batchsize; kwargs...)
-
 
 # Learning rate from an optimiser rule
 _findlr(trainstate) = _findlr(trainstate.optimizer)
