@@ -62,14 +62,14 @@ function variogram(z::AbstractVector, D::AbstractMatrix; n_bins = 20, maxlag = 0
     (0 < maxlag <= 1) || throw(ArgumentError("maxlag must be in (0, 1]"))
     n = length(z)
     hmax = maxlag * maximum(D)
-    edges  = range(0, hmax; length = n_bins + 1)
-    sums   = zeros(n_bins)
+    edges = range(0, hmax; length = n_bins + 1)
+    sums = zeros(n_bins)
     counts = zeros(Int, n_bins)
-    @inbounds for j in 1:n, i in (j+1):n
+    @inbounds for j = 1:n, i = (j + 1):n
         d = D[i, j]
         d > hmax && continue
         bin = min(searchsortedlast(edges, d), n_bins)
-        sums[bin]   += (z[i] - z[j])^2
+        sums[bin] += (z[i] - z[j])^2
         counts[bin] += 1
     end
     sums ./ (2 .* counts)

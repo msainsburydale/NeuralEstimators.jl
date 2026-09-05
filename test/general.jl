@@ -409,7 +409,7 @@ end
         Zstack = randn(nx, ny, 3)
         v_fft_stack = variogram(Zstack; n_bins)
         @test size(v_fft_stack) == (n_bins, 3)
-        v_pair_stack = reduce(hcat, (variogram(vec(Zstack[:, :, k]), Dsmall; n_bins) for k in 1:3))
+        v_pair_stack = reduce(hcat, (variogram(vec(Zstack[:, :, k]), Dsmall; n_bins) for k = 1:3))
         @test isapprox(v_pair_stack, v_fft_stack; rtol = 1e-8, nans = true)
 
         v_pair_full = variogram(vec(Zsmall), Dsmall; n_bins, maxlag = 1)
