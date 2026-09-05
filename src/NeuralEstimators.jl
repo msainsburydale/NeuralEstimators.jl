@@ -99,7 +99,7 @@ include("inference.jl")
 export stackarrays, expandgrid, numberreplicates, samplesize, drop, containertype, rowwisenorm, subsetreplicates
 include("utility.jl")
 
-export samplesize, logsamplesize, invsqrtsamplesize, samplecorrelation, samplecovariance
+export samplesize, logsamplesize, invsqrtsamplesize, samplecorrelation, samplecovariance, variogram
 include("summarystatistics.jl")
 
 export EM, removedata, encodedata

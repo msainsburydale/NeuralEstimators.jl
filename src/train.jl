@@ -22,6 +22,8 @@ The trained estimator is always returned on the CPU.
 - `epochs = 100`: number of epochs to train the neural network. An epoch is one complete pass through the entire training data set when doing stochastic gradient descent.
 - `stopping_epochs = 5`: cease training if the risk does not improve in this number of epochs.
 - `batchsize = 32`: the batchsize to use when performing stochastic gradient descent, that is, the number of training samples processed between each update of the neural-network parameters.
+- `shuffle = true`: whether to shuffle the training set at each epoch. The validation set is never shuffled, so that leftover-batch dropout (see `partial`) drops a fixed subset rather than a random one.
+- `partial = nothing`: whether to include the final incomplete batch when the number of samples is not divisible by `batchsize`. If `nothing`, defaults to `false` when `device isa ReactantDevice` (XLA compiles per batch shape, so a leftover batch is a second compiled graph) and `true` otherwise (use the full training and validation sets).
 - `optimiser::Optimisers.AbstractRule = Adam(5e-4)`: any [Optimisers.jl](https://fluxml.ai/Optimisers.jl/stable/) optimisation rule for updating the neural-network parameters. When the training data or parameters are fixed, one may wish to use regularisation to help prevent overfitting; see [Regularisation](@ref).
 - `lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule}`: defines the learning-rate schedule for adaptively changing the learning rate during training. Accepts either a [ParameterSchedulers.jl](https://fluxml.ai/ParameterSchedulers.jl/dev/) object or `nothing` for a fixed learning rate. By default, it uses [`CosAnneal`](https://fluxml.ai/ParameterSchedulers.jl/dev/api/cyclic/#ParameterSchedulers.CosAnneal) with a maximum set to the initial learning rate from `optimiser`, a minimum of zero, and a period equal to the number of epochs. The learning rate is updated at the end of each epoch. 
 - `freeze_summary_network = false`: if `true` and the estimator has a `summary_network` field, freezes the summary network parameters during training (i.e., only the inference network is updated). In this case, the summary statistics for a given instance of simulated data are computed only once, giving a significant speedup. This is useful for transfer learning, where a pretrained summary network is held fixed while a new inference network is trained for a different model or estimator type.
@@ -168,6 +170,9 @@ function _resolve_adtype(trainstate, device, adtype, verbose = true)
     return adtype
 end
 
+_resolvepartial(partial::Bool, _) = partial
+_resolvepartial(::Nothing, device) = !(device isa ReactantDevice)
+
 function _resolve_epochs_per_refresh(epochs_per_refresh, epochs_per_Z_refresh)
     if !isnothing(epochs_per_Z_refresh)
         @warn "`epochs_per_Z_refresh` is deprecated; use `epochs_per_refresh`"
@@ -179,6 +184,8 @@ end
 
 function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     batchsize::Integer = 32,
+    shuffle::Bool = true,
+    partial::Union{Nothing, Bool} = nothing,
     epochs::Integer = 100,
     loss = mae,
     savepath::Union{Nothing, String} = tempdir(),
@@ -194,6 +201,7 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
     # Determine device
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
+    partial = _resolvepartial(partial, device)
 
     # Determine adtype and check deep-learning backend + adtype + device are compatible
     adtype = _resolve_adtype(trainstate, device, adtype, verbose)
@@ -233,10 +241,10 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     end
 
     verbose && println("Constructing the training set...")
-    train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
+    train_set = _dataloader(estimator, Z_train, θ_train, batchsize; shuffle = shuffle, partial = partial)
 
     verbose && println("Constructing the validation set...")
-    val_set = _dataloader(estimator, Z_val, θ_val, batchsize)
+    val_set = _dataloader(estimator, Z_val, θ_val, batchsize; shuffle = false, partial = partial)
 
     # ---- Common setup ----
 
@@ -303,6 +311,8 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     simulator_args = (), m = nothing, # trailing deprecated argument
     simulator_kwargs::NamedTuple = (;),
     batchsize::Integer = 32,
+    shuffle::Bool = true,
+    partial::Union{Nothing, Bool} = nothing,
     epochs_per_refresh::Integer = 1,
     epochs_per_Z_refresh = nothing, # deprecated alias
     epochs::Integer = 100,
@@ -332,6 +342,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
 
     # Determine device
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
+    partial = _resolvepartial(partial, device)
 
     # Determine adtype and check deep-learning backend + adtype + device are compatible
     adtype = _resolve_adtype(trainstate, device, adtype, verbose)
@@ -368,7 +379,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     end
 
     verbose && println("Constructing the validation set...")
-    val_set = _dataloader(estimator, Z_val, θ_val, batchsize)
+    val_set = _dataloader(estimator, Z_val, θ_val, batchsize; shuffle = false, partial = partial)
 
     # We may store Z_train in its entirety either to reduce simulation overhead or we are
     # not refreshing Z_train every epoch so we need it for subsequent epochs
@@ -412,7 +423,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
                 if freeze_summary_network
                     epoch_time += @elapsed Z_train = Summaries(summarystatistics(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
                 end
-                train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
+                train_set = _dataloader(estimator, Z_train, θ_train, batchsize; shuffle = shuffle, partial = partial)
             end
             # Update estimator and compute the training risk
             epoch_time += @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype)
@@ -420,9 +431,9 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
             # Update estimator and compute the training risk
             train_risk = []
             t = 0.0
-            for θ ∈ _DataLoader(θ_train, batchsize)
+            for θ ∈ _DataLoader(θ_train, batchsize; shuffle = shuffle, partial = partial)
                 t += @elapsed Z = simulator(θ, simulator_args...; simulator_kwargs...)
-                set = _dataloader(estimator, Z, θ, batchsize)
+                set = _dataloader(estimator, Z, θ, batchsize; shuffle = shuffle, partial = partial)
                 epoch_time += @elapsed rsk, trainstate = _train_step(trainstate, loss, set, device, adtype)
 
                 push!(train_risk, rsk)
@@ -482,6 +493,8 @@ function train(trainstate, sampler, simulator;
     simulate_just_in_time::Bool = false,
     loss = mae,
     batchsize::Integer = 32,
+    shuffle::Bool = true,
+    partial::Union{Nothing, Bool} = nothing,
     epochs::Integer = 100,
     savepath::Union{Nothing, String} = tempdir(),
     stopping_epochs::Integer = 5,
@@ -517,6 +530,7 @@ function train(trainstate, sampler, simulator;
 
     # Determine device
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
+    partial = _resolvepartial(partial, device)
 
     # Determine adtype and check deep-learning backend + adtype + device are compatible
     adtype = _resolve_adtype(trainstate, device, adtype, verbose)
@@ -558,7 +572,7 @@ function train(trainstate, sampler, simulator;
     end
 
     verbose && println("Constructing the validation set...")
-    val_set = _dataloader(estimator, Z_val, θ_val, batchsize)
+    val_set = _dataloader(estimator, Z_val, θ_val, batchsize; shuffle = false, partial = partial)
 
     # ---- Common setup ----
 
@@ -614,7 +628,7 @@ function train(trainstate, sampler, simulator;
                 if freeze_summary_network
                     epoch_time += @elapsed Z_train = Summaries(summarystatistics(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
                 end
-                train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
+                train_set = _dataloader(estimator, Z_train, θ_train, batchsize; shuffle = shuffle, partial = partial)
             end
 
             # For each batch, update estimator and compute the training risk
@@ -628,7 +642,7 @@ function train(trainstate, sampler, simulator;
             epoch_time += @elapsed for _ ∈ 1:num_batches
                 θ = sampler(batchsize, sampler_args...; sampler_kwargs...)
                 Z = simulator(θ, simulator_args...; simulator_kwargs...)
-                dat = _dataloader(estimator, Z, θ, batchsize)
+                dat = _dataloader(estimator, Z, θ, batchsize; shuffle = shuffle, partial = partial)
                 rsk, trainstate = _train_step(trainstate, loss, dat, device, adtype)
                 push!(train_risk, rsk)
             end
@@ -683,22 +697,24 @@ _loss(estimator, loss) = loss
 # Constructs inputs and outputs (default simulated data and corresponding true parameters, respectively)
 _inputoutput(estimator, Z, θ) = (Z, θ)
 
-function _dataloader(estimator, Z, θ, batchsize)
-    data = _inputoutput(estimator, Z, _stripnames(_extractθ(θ)))
-    _DataLoader(data, batchsize)
-end
 
-_dataloader(estimator::LuxEstimator, Z, θ, batchsize) = _dataloader(estimator.estimator, Z, θ, batchsize)
-
-# Thin wrapper around DataLoader with sensible training defaults
+# Thin wrapper around DataLoader. `train` resolves shuffle/partial (validation is
+# never shuffled; partial defaults to false only under ReactantDevice).
 # NB: redirect_stderr suppresses batchsize warning from DataLoader
 function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
     oldstd = stdout
     redirect_stderr(devnull)
-    data_loader = DataLoader(f32(data), batchsize = batchsize, shuffle = shuffle, partial = partial)
+    data_loader = DataLoader(f32(data); batchsize = batchsize, shuffle = shuffle, partial = partial)
     redirect_stderr(oldstd)
     return data_loader
 end
+
+function _dataloader(estimator, Z, θ, batchsize; kwargs...)
+    data = _inputoutput(estimator, Z, _stripnames(_extractθ(θ)))
+    _DataLoader(data, batchsize; kwargs...)
+end
+_dataloader(estimator::LuxEstimator, Z, θ, batchsize; kwargs...) = _dataloader(estimator.estimator, Z, θ, batchsize; kwargs...)
+
 
 # Learning rate from an optimiser rule
 _findlr(trainstate) = _findlr(trainstate.optimizer)

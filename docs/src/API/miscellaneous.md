@@ -21,22 +21,6 @@ subsetreplicates
 EM
 ```
 
-## User-defined summary statistics
-
-```@docs
-NeighbourhoodVariogram
-
-samplecorrelation
-
-samplecovariance
-
-samplesize
-
-logsamplesize
-
-invsqrtsamplesize
-```
-
 ## Utility functions
 
 ```@docs

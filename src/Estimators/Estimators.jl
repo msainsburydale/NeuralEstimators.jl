@@ -65,6 +65,15 @@ function summarystatistics(estimator::AbstractNeuralEstimator, d::DataAndSummari
     isnothing(d.S) ? t : vcat(t, d.S)
 end
 
+#TODO Perhaps the cleanest approach is to also define a Summaries type, which is always passed through the .expert_network. Expect users to always provide expert summaries as Summaries(T) or DataAndSummaries(T), and the expert_network is then always applied consistently. Users can provide their own expert_network (allows structured statistics, like fields, I guess).
+#TODO Might also be clearer to write "embedding_network" rather than "summary_network"
+# function summarystatistics(estimator::AbstractNeuralEstimator, d::DataAndSummaries; kwargs...)
+#     t = _applywithdevice(estimator.summary_network, d.Z; kwargs...)
+#     s = _applywithdevice(estimator.expert_network, d.S; kwargs...)
+#     # isnothing(d.S) ? t : vcat(t, d.S) # #TODO Don't think it makes sense to allow DataAndSummaries to have an empty field
+#     vcat(t, d.S)
+# end
+
 # Stateless (Lux)
 # NB these public functions assume that ps/st have not been subsetted
 function summarystatistics(estimator::AbstractNeuralEstimator, Z, ps, st; kwargs...)

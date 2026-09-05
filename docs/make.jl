@@ -49,6 +49,7 @@ makedocs(
             "API/assessment.md",
             "API/inference.md",
             "API/architectures.md",
+            "API/summarystatistics.md",
             "API/approximatedistributions.md",
             "API/lossfunctions.md",
             "API/miscellaneous.md",

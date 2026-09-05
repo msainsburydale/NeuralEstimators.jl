@@ -5,6 +5,7 @@ using CairoMakie
 using CUDA
 using DataFrames
 using Distances
+using FFTW
 using Flux
 using Flux: batch, DataLoader, mae, mse, numobs, getobs, f32
 using GraphNeuralNetworks
@@ -391,6 +392,35 @@ end
     nv(g)
     @test length(nv(g)) == 10
     @test all(nv(g) .>= 0)
+
+    # empirical variogram (CPU only; not device-aware)
+    if dvc == cpu_device()
+        n_bins = 20
+        nx = ny = 8
+        Zsmall = randn(nx, ny)
+        Dsmall = pairwise(Euclidean(), expandgrid(1:nx, 1:ny), dims = 1)
+        v_pair = variogram(vec(Zsmall), Dsmall; n_bins)
+        @test length(v_pair) == n_bins
+        @test all(x -> isnan(x) || x >= 0, v_pair)
+
+        v_fft = variogram(Zsmall; n_bins)
+        @test isapprox(v_pair, v_fft; rtol = 1e-8, nans = true)
+
+        Zstack = randn(nx, ny, 3)
+        v_fft_stack = variogram(Zstack; n_bins)
+        @test size(v_fft_stack) == (n_bins, 3)
+        v_pair_stack = reduce(hcat, (variogram(vec(Zstack[:, :, k]), Dsmall; n_bins) for k in 1:3))
+        @test isapprox(v_pair_stack, v_fft_stack; rtol = 1e-8, nans = true)
+
+        v_pair_full = variogram(vec(Zsmall), Dsmall; n_bins, maxlag = 1)
+        v_fft_full = variogram(Zsmall; n_bins, maxlag = 1)
+        @test isapprox(v_pair_full, v_fft_full; rtol = 1e-8, nans = true)
+
+        @test_throws ArgumentError variogram(vec(Zsmall), Dsmall; maxlag = 0)
+        @test_throws ArgumentError variogram(vec(Zsmall), Dsmall; maxlag = 1.1)
+        @test_throws ArgumentError variogram(Zsmall; maxlag = 0)
+        @test_throws ArgumentError variogram(Zsmall; maxlag = 1.1)
+    end
 end
 
 @testset "Loss functions: $dvc" for dvc ∈ devices
