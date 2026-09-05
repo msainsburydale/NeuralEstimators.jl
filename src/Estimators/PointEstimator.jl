@@ -70,7 +70,7 @@ function PointEstimator(network)
 end
 
 # Forward pass: Stateful (Flux)
-function (e::PointEstimator)(Z) 
+function (e::PointEstimator)(Z)
     e.inference_network(_summarystatistics(e, Z))
 end
 
