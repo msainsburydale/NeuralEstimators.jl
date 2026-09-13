@@ -299,7 +299,6 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 ) where {P, T}
-
     progress = _TrainDisplay(verbose)
 
     # Determine device
