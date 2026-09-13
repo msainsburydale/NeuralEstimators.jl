@@ -1,7 +1,7 @@
 module NeuralEstimatorsReactantExt
 
 using NeuralEstimators
-using NeuralEstimators: numobs, cpu, getestimator, _construct_train_state
+using NeuralEstimators: numobs, cpu, getestimator, _construct_train_state, _TrainDisplay, _SILENT_DISPLAY
 using Lux
 using LuxCore
 using Optimisers
@@ -88,8 +88,11 @@ function _risk(r::ReactantTrainState, loss, data, device::ReactantDevice)
     return cpu(sum_loss / K), r
 end
 
-function _train_step(r::ReactantTrainState, loss, data, device, adtype)
-    risk, new_ts = _train_step(r.trainstate, loss, data, device, adtype)
+_train_step(r::ReactantTrainState, loss, data, device, adtype) =
+    _train_step(r, loss, data, device, adtype, _SILENT_DISPLAY, 0, 1)
+
+function _train_step(r::ReactantTrainState, loss, data, device, adtype, progress::_TrainDisplay, epoch::Integer, epochs::Integer)
+    risk, new_ts = _train_step(r.trainstate, loss, data, device, adtype, progress, epoch, epochs)
     r.trainstate = new_ts
     return risk, r
 end

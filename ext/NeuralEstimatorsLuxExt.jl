@@ -1,7 +1,7 @@
 module NeuralEstimatorsLuxExt
 
 using NeuralEstimators
-using NeuralEstimators: @set, _uses_deepset, numobs, _resolvedevice, _DataLoader, cpu
+using NeuralEstimators: @set, _uses_deepset, numobs, _resolvedevice, _DataLoader, cpu, _TrainDisplay, _bar!, _SILENT_DISPLAY
 import NeuralEstimators: estimate
 import NeuralEstimators: summarystatistics, _summarystatistics, _applywithdevice
 
@@ -193,8 +193,10 @@ function _risk(trainstate::TrainState, loss, data, device)
     return cpu(sum_loss / K), trainstate
 end
 
-function _train_step(trainstate::Lux.Training.TrainState, loss, data, device, adtype)
+_train_step(trainstate::Lux.Training.TrainState, loss, data, device, adtype) =
+    _train_step(trainstate, loss, data, device, adtype, _SILENT_DISPLAY, 0, 1)
 
+function _train_step(trainstate::Lux.Training.TrainState, loss, data, device, adtype, progress::_TrainDisplay, epoch::Integer, epochs::Integer)
     # Wrap the 2-argument loss into the 4-argument form required by single_train_step!
     function lux_loss(model, ps, st, (input, output))
         ŷ, st_new = model(input, ps, st)
@@ -203,11 +205,15 @@ function _train_step(trainstate::Lux.Training.TrainState, loss, data, device, ad
 
     sum_loss = 0.0f0
     K = 0
+    n = length(data)
+    i = 0
     for (input, output) in data
+        i += 1
         input, output = input |> device, output |> device
         _, loss_val, _, trainstate = Lux.Training.single_train_step!(adtype, lux_loss, (input, output), trainstate)
         sum_loss += loss_val * numobs(input)
         K += numobs(input)
+        _bar!(progress, epoch, epochs, i, n)
     end
     return cpu(sum_loss / K), trainstate
 end

@@ -1,5 +1,6 @@
 using NeuralEstimators
 using NeuralEstimators: _check_sizes, _extractθ, rowwisenorm, triangularnumber, forward, inverse, _logdensity
+using NeuralEstimators: _TrainDisplay, _status!, _finishline!, _epoch_status, _bar!
 using NeuralEstimators: ActNorm, Permutation, AffineCouplingBlock, CouplingLayer
 using CairoMakie
 using CUDA
@@ -361,6 +362,64 @@ end
         @test all([cpu(v)[i] ∈ cpu(U) for i ∈ 1:n])
         @test containertype(U) == containertype(v)
     end
+end
+
+@testset "Training display" begin
+    io = IOBuffer()
+    d = _TrainDisplay(io, false)
+    _status!(d, "hello")
+    @test String(take!(io)) == "hello\n"
+
+    _status!(d, "phase"; transient = true)
+    @test String(take!(io)) == ""
+
+    _finishline!(d)
+    @test String(take!(io)) == ""
+
+    d = _TrainDisplay(io, true)
+    _status!(d, "hello")
+    @test String(take!(io)) == "\rhello\e[K"
+
+    _status!(d, "phase"; transient = true)
+    @test String(take!(io)) == "\rphase\e[K"
+
+    _finishline!(d)
+    @test String(take!(io)) == "\n"
+
+    msg = _epoch_status(6, 100, 0.049, 0.054, 0.046, 2, 5, 5e-4, 0.114)
+    @test occursin("6/100", msg)
+    @test occursin("Training risk: 0.049", msg)
+    @test occursin("Validation risk: 0.054", msg)
+    @test occursin("Best: 0.046", msg)
+    @test occursin("Epochs since improvement: 2/5", msg)
+    @test occursin("5.00E-04", msg)
+    @test occursin("0.114 seconds", msg)
+
+    d = _TrainDisplay(true; io = IOBuffer())
+    @test d.overwrite == false
+    d = _TrainDisplay(false; io = IOBuffer())
+    @test d.overwrite == false
+
+    io = IOBuffer()
+    d = _TrainDisplay(io, false)
+    _status!(d, "header")
+    take!(io)
+    _bar!(d, 4, 100, 45, 100)
+    @test String(take!(io)) == ""
+
+    io = IOBuffer()
+    d = _TrainDisplay(io, true)
+    _status!(d, "header")
+    take!(io)
+    _bar!(d, 4, 100, 45, 100)
+    out1 = String(take!(io))
+    @test occursin("%|", out1)
+    @test occursin("45/100", out1)
+    _bar!(d, 4, 100, 100, 100)
+    out2 = String(take!(io))
+    @test occursin("\e[A", out2)
+    @test occursin("%|", out2)
+    @test occursin("100/100", out2)
 end
 
 @testset "User-defined summary statistics: $dvc" for dvc ∈ devices
