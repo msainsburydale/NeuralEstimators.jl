@@ -249,7 +249,7 @@ end
 function _erase_block!(io::IO, nlines::Int)
     if nlines > 1
         print(io, "\r\e[K")
-        for _ in 1:(nlines - 1)
+        for _ = 1:(nlines - 1)
             print(io, "\e[A\r\e[K")
         end
     else
@@ -338,7 +338,6 @@ function _bar_string(epoch, epochs, i, n; width::Int = 32)
     return "Epoch$(lpad(epoch, ndigits(epochs)))/$epochs  batch $i"
 end
 
-
 function _epoch_status(epoch, epochs, train_risk, val_risk, min_val_risk, early_stopping_counter, stopping_epochs, lr, epoch_time)
     return "Epoch$(lpad(epoch, ndigits(epochs)))/$epochs  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Best: $(round(min_val_risk, digits = 3))  Epochs since improvement: $early_stopping_counter/$stopping_epochs  Learning rate: $(@sprintf "%.2E" lr)  Epoch time: $(round(epoch_time, digits = 3)) seconds"
 end
@@ -391,7 +390,6 @@ function _finishline!(d::_TrainDisplay)
     flush(io)
     return nothing
 end
-
 
 function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     batchsize::Integer = 32,
