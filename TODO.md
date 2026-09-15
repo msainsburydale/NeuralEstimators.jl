@@ -36,7 +36,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/) for inspiration).
 
 ### Performance
-- 🟡 TRE: allow the summary statistics to stay on GPU during inference.
 - Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
 - Reactant.jl in the inference stage.
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
@@ -64,6 +63,3 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Automatic type-stability testing using [JET.jl](https://github.com/aviatesk/JET.jl).
 - Automatic quality testing with [Aqua.jl](https://github.com/JuliaTesting/Aqua.jl).
 - Turn some docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
-
-### Misc.
-- Add a CITATION.cff file (see, e.g., [Lux.jl](https://github.com/LuxDL/Lux.jl/blob/main/CITATION.cff)).

@@ -186,12 +186,16 @@ mutable struct _TrainDisplay
     io::IO
     overwrite::Bool
     header::String
+    param_status::String
+    data_status::String
     bar::String
     has_bar::Bool
+    nlines::Int
     last_bar_time::Float64
+    term_cols::Int
 end
 
-_TrainDisplay(io::IO, overwrite::Bool) = _TrainDisplay(io, overwrite, "", "", false, 0.0)
+_TrainDisplay(io::IO, overwrite::Bool) = _TrainDisplay(io, overwrite, "", "", "", "", false, 0, 0.0, 0)
 
 # Just-in-time `_train_step` calls the same method with a display that never prints.
 const _SILENT_DISPLAY = _TrainDisplay(devnull, false)
@@ -211,18 +215,66 @@ function _TrainDisplay(verbose::Bool; io::Union{IO, Nothing} = nothing)
     return _TrainDisplay(out, _can_overwrite(out))
 end
 
-function _redraw!(d::_TrainDisplay)
-    io = d.io
-    if d.has_bar
-        print(io, "\r\e[K\e[A\r\e[K")
+function _term_cols(io::IO)
+    try
+        c = displaysize(io)[2]
+        return c > 0 ? Int(c) : 80
+    catch
+        return 80
+    end
+end
+
+function _fit_line(s::AbstractString, cols::Int)
+    cols < 1 && return ""
+    textwidth(s) <= cols && return String(s)
+    buf = IOBuffer()
+    w = 0
+    for c in s
+        cw = textwidth(c)
+        w + cw > cols && break
+        print(buf, c)
+        w += cw
+    end
+    return String(take!(buf))
+end
+
+function _display_lines(d::_TrainDisplay)
+    lines = String[d.header]
+    !isempty(d.bar) && push!(lines, d.bar)
+    !isempty(d.param_status) && push!(lines, d.param_status)
+    !isempty(d.data_status) && push!(lines, d.data_status)
+    return lines
+end
+
+function _erase_block!(io::IO, nlines::Int)
+    if nlines > 1
+        print(io, "\r\e[K")
+        for _ in 1:(nlines - 1)
+            print(io, "\e[A\r\e[K")
+        end
     else
         print(io, '\r')
     end
-    print(io, d.header, "\e[K")
-    if !isempty(d.bar)
-        print(io, '\n', d.bar, "\e[K")
-        d.has_bar = true
+    return nothing
+end
+
+function _redraw!(d::_TrainDisplay)
+    io = d.io
+    cols = _term_cols(io)
+    if d.nlines > 0 && d.term_cols > 0 && cols < d.term_cols
+        # Width shrank: previous rows may have wrapped, so in-place erase is unsafe.
+        print(io, '\n')
+        d.nlines = 0
     end
+    lines = map(line -> _fit_line(line, cols), _display_lines(d))
+    _erase_block!(io, d.nlines)
+    for (i, line) in enumerate(lines)
+        print(io, line, "\e[K")
+        i < length(lines) && print(io, '\n')
+    end
+    d.nlines = length(lines)
+    d.has_bar = !isempty(d.bar)
+    d.term_cols = cols
     flush(io)
     return nothing
 end
@@ -239,15 +291,56 @@ function _status!(d::_TrainDisplay, msg; transient::Bool = false)
     return nothing
 end
 
-function _bar_string(epoch, epochs, i, n; width::Int = 16)
+function _refresh_label(kind::Symbol, first::Bool)
+    verb = first ? "Simulating" : "Refreshing"
+    kind === :parameters && return "$verb training parameters..."
+    kind === :data && return "$verb training data..."
+    throw(ArgumentError("Unknown refresh kind: $kind"))
+end
+
+function _refresh_status!(d::_TrainDisplay, kind::Symbol, elapsed::Union{Nothing, Real} = nothing; first::Bool = false)
+    if isnothing(elapsed)
+        d.overwrite || return nothing
+        msg = _refresh_label(kind, first)
+    else
+        msg = _refresh_label(kind, first) * " finished in $(round(elapsed, digits = 3)) seconds."
+    end
+    if kind === :parameters
+        d.param_status = msg
+    else
+        d.data_status = msg
+    end
+    if d.overwrite
+        _redraw!(d)
+    else
+        println(d.io, msg)
+        flush(d.io)
+    end
+    return nothing
+end
+
+function _clear_refresh!(d::_TrainDisplay)
+    isempty(d.param_status) && isempty(d.data_status) && return nothing
+    d.param_status = ""
+    d.data_status = ""
+    d.overwrite && _redraw!(d)
+    return nothing
+end
+
+function _bar_string(epoch, epochs, i, n; width::Int = 32)
     if n > 0
         frac = i / n
         filled = clamp(round(Int, frac * width), 0, width)
         bar = "█"^filled * "░"^(width - filled)
         pct = lpad(string(round(Int, 100 * frac)), 3)
-        return "Epoch $(lpad(epoch, ndigits(epochs)))/$epochs  $pct%|$bar| $i/$n"
+        return "Epoch$(lpad(epoch, ndigits(epochs)))/$epochs $pct%|$bar| $i/$n"
     end
-    return "Epoch $(lpad(epoch, ndigits(epochs)))/$epochs  batch $i"
+    return "Epoch$(lpad(epoch, ndigits(epochs)))/$epochs  batch $i"
+end
+
+
+function _epoch_status(epoch, epochs, train_risk, val_risk, min_val_risk, early_stopping_counter, stopping_epochs, lr, epoch_time)
+    return "Epoch$(lpad(epoch, ndigits(epochs)))/$epochs  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Best: $(round(min_val_risk, digits = 3))  Epochs since improvement: $early_stopping_counter/$stopping_epochs  Learning rate: $(@sprintf "%.2E" lr)  Epoch time: $(round(epoch_time, digits = 3)) seconds"
 end
 
 const _BAR_DT = 0.1
@@ -268,20 +361,37 @@ end
 
 function _finishline!(d::_TrainDisplay)
     d.overwrite || return nothing
-    if d.has_bar
-        print(d.io, "\r\e[K\e[A\r\e[K", d.header, "\e[K\n")
-        d.has_bar = false
-        d.bar = ""
-    else
-        print(d.io, '\n')
+    io = d.io
+    cols = _term_cols(io)
+    old = d.nlines
+    if old > 0 && d.term_cols > 0 && cols < d.term_cols
+        print(io, '\n')
+        old = 0
     end
-    flush(d.io)
+    d.bar = ""
+    d.has_bar = false
+    lines = map(line -> _fit_line(line, cols), _display_lines(d))
+    if old > 1
+        _erase_block!(io, old)
+        for line in lines
+            print(io, line, "\e[K\n")
+        end
+    elseif old == 0
+        for line in lines
+            println(io, line)
+        end
+        isempty(lines) && print(io, '\n')
+    else
+        print(io, '\n')
+    end
+    d.nlines = 0
+    d.param_status = ""
+    d.data_status = ""
+    d.term_cols = cols
+    flush(io)
     return nothing
 end
 
-function _epoch_status(epoch, epochs, train_risk, val_risk, min_val_risk, early_stopping_counter, stopping_epochs, lr, epoch_time)
-    return "Epoch: $(lpad(epoch, ndigits(epochs)))/$epochs  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Best: $(round(min_val_risk, digits = 3))  Epochs since improvement: $early_stopping_counter/$stopping_epochs  Learning rate: $(@sprintf "%.2E" lr)  Epoch time: $(round(epoch_time, digits = 3)) seconds"
-end
 
 function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     batchsize::Integer = 32,
@@ -401,7 +511,7 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
             stopped_early = true
             if verbose
                 _finishline!(progress)
-                println("Stopping early since the validation loss has not improved in $stopping_epochs epochs")
+                println("Stopping early since the validation risk has not improved in $stopping_epochs epochs")
             end
             break
         end
@@ -530,12 +640,18 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
             if epoch == 1 || (epoch % epochs_per_refresh) == 0
                 train_set = nothing
                 GC.gc(false)
-                t = @elapsed Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
-                epoch_time += t
-                if freeze_summary_network
-                    epoch_time += @elapsed Z_train = Summaries(summarystatistics(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+                verbose && _refresh_status!(progress, :data; first = epoch == 1)
+                t = @elapsed begin
+                    Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
+                    if freeze_summary_network
+                        Z_train = Summaries(summarystatistics(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+                    end
+                    train_set = _dataloader(estimator, Z_train, θ_train, batchsize; shuffle = shuffle, partial = partial)
                 end
-                train_set = _dataloader(estimator, Z_train, θ_train, batchsize; shuffle = shuffle, partial = partial)
+                epoch_time += t
+                verbose && _refresh_status!(progress, :data, t; first = epoch == 1)
+            else
+                _clear_refresh!(progress)
             end
             # Update estimator and compute the training risk
             epoch_time += @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype, progress, epoch, epochs)
@@ -585,7 +701,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
             stopped_early = true
             if verbose
                 _finishline!(progress)
-                println("Stopping early since the validation loss has not improved in $stopping_epochs epochs")
+                println("Stopping early since the validation risk has not improved in $stopping_epochs epochs")
             end
             break
         end
@@ -739,17 +855,28 @@ function train(trainstate, sampler, simulator;
                 if epoch == 1 || (epoch % epochs_per_θ_refresh) == 0
                     θ_train = nothing
                     GC.gc(false)
-                    θ_train = sampler(K, sampler_args...; sampler_kwargs...)
+                    verbose && _refresh_status!(progress, :parameters; first = epoch == 1)
+                    t = @elapsed θ_train = sampler(K, sampler_args...; sampler_kwargs...)
+                    epoch_time += t
+                    verbose && _refresh_status!(progress, :parameters, t; first = epoch == 1)
+                else
+                    progress.param_status = ""
                 end
 
                 train_set = nothing
                 GC.gc(false)
-                t = @elapsed Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
-                epoch_time += t
-                if freeze_summary_network
-                    epoch_time += @elapsed Z_train = Summaries(summarystatistics(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+                verbose && _refresh_status!(progress, :data; first = epoch == 1)
+                t = @elapsed begin
+                    Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
+                    if freeze_summary_network
+                        Z_train = Summaries(summarystatistics(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+                    end
+                    train_set = _dataloader(estimator, Z_train, θ_train, batchsize; shuffle = shuffle, partial = partial)
                 end
-                train_set = _dataloader(estimator, Z_train, θ_train, batchsize; shuffle = shuffle, partial = partial)
+                epoch_time += t
+                verbose && _refresh_status!(progress, :data, t; first = epoch == 1)
+            else
+                _clear_refresh!(progress)
             end
 
             # For each batch, update estimator and compute the training risk
@@ -798,7 +925,7 @@ function train(trainstate, sampler, simulator;
             stopped_early = true
             if verbose
                 _finishline!(progress)
-                println("Stopping early since the validation loss has not improved in $stopping_epochs epochs")
+                println("Stopping early since the validation risk has not improved in $stopping_epochs epochs")
             end
             break
         end

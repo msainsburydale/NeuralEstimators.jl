@@ -1,6 +1,6 @@
 using NeuralEstimators
 using NeuralEstimators: _check_sizes, _extractθ, rowwisenorm, triangularnumber, forward, inverse, _logdensity
-using NeuralEstimators: _TrainDisplay, _status!, _finishline!, _epoch_status, _bar!
+using NeuralEstimators: _TrainDisplay, _status!, _finishline!, _epoch_status, _bar!, _refresh_status!, _clear_refresh!, _fit_line
 using NeuralEstimators: ActNorm, Permutation, AffineCouplingBlock, CouplingLayer
 using CairoMakie
 using CUDA
@@ -420,6 +420,86 @@ end
     @test occursin("\e[A", out2)
     @test occursin("%|", out2)
     @test occursin("100/100", out2)
+
+    io = IOBuffer()
+    d = _TrainDisplay(io, false)
+    _refresh_status!(d, :data)
+    @test String(take!(io)) == ""
+    _refresh_status!(d, :data, 2.0)
+    @test String(take!(io)) == "Refreshing training data... finished in 2.0 seconds.\n"
+    _refresh_status!(d, :parameters, 0.412)
+    @test String(take!(io)) == "Refreshing training parameters... finished in 0.412 seconds.\n"
+    _refresh_status!(d, :data, 2.0; first = true)
+    @test String(take!(io)) == "Simulating training data... finished in 2.0 seconds.\n"
+    _refresh_status!(d, :parameters, 0.412; first = true)
+    @test String(take!(io)) == "Simulating training parameters... finished in 0.412 seconds.\n"
+
+    io = IOBuffer()
+    d = _TrainDisplay(io, true)
+    _status!(d, "header")
+    take!(io)
+    _refresh_status!(d, :parameters; first = true)
+    out = String(take!(io))
+    @test occursin("Simulating training parameters...", out)
+    @test !occursin("finished in", out)
+    @test !occursin("Refreshing", out)
+    _refresh_status!(d, :parameters, 0.412; first = true)
+    _refresh_status!(d, :data, 2.105; first = true)
+    out = String(take!(io))
+    @test occursin("Simulating training parameters... finished in 0.412 seconds.", out)
+    @test occursin("Simulating training data... finished in 2.105 seconds.", out)
+    @test occursin("\e[A", out)
+    _bar!(d, 4, 100, 45, 100)
+    out = String(take!(io))
+    @test occursin("%|", out)
+    @test occursin("45/100", out)
+    @test occursin("finished in 0.412 seconds.", out)
+    @test findfirst("%|", out) < findfirst("Simulating", out)
+    _refresh_status!(d, :data, 1.5)
+    out = String(take!(io))
+    @test occursin("Refreshing training data... finished in 1.5 seconds.", out)
+    @test findfirst("%|", out) < findfirst("Refreshing", out)
+    _clear_refresh!(d)
+    @test isempty(d.param_status)
+    @test isempty(d.data_status)
+    out = String(take!(io))
+    @test occursin("header", out)
+    @test occursin("%|", out)
+    @test !occursin("Refreshing", out)
+    @test !occursin("Simulating", out)
+    _finishline!(d)
+    out = String(take!(io))
+    @test occursin("header", out)
+    @test occursin("\n", out)
+    @test !occursin("%|", out)
+
+    @test _fit_line("hello", 80) == "hello"
+    @test _fit_line("hello", 3) == "hel"
+    @test _fit_line("hello", 0) == ""
+    @test _fit_line("█"^10 * "░"^10, 8) == "█"^8
+    @test textwidth(_fit_line("█"^10 * "░"^10, 8)) == 8
+
+    buf = IOBuffer()
+    io = IOContext(buf, :displaysize => (24, 20))
+    d = _TrainDisplay(io, true)
+    long = "abcdefghijklmnopqrstuvwxyz"
+    _status!(d, long)
+    out = String(take!(buf))
+    @test occursin("abcdefghijklmnopqrst", out)
+    @test !occursin("uvwxyz", out)
+    @test textwidth(_fit_line(long, 20)) == 20
+
+    buf = IOBuffer()
+    io = IOContext(buf, :displaysize => (24, 80))
+    d = _TrainDisplay(io, true)
+    _status!(d, "hello")
+    take!(buf)
+    d.term_cols = 200
+    d.nlines = 1
+    _status!(d, "hello")
+    out = String(take!(buf))
+    @test startswith(out, "\n")
+    @test occursin("hello", out)
 end
 
 @testset "User-defined summary statistics: $dvc" for dvc ∈ devices
