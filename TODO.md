@@ -63,4 +63,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ### Testing
 - Automatic type-stability testing using [JET.jl](https://github.com/aviatesk/JET.jl).
 - Automatic quality testing with [Aqua.jl](https://github.com/JuliaTesting/Aqua.jl).
-- Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
+- Turn some docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
+
+### Misc.
+- Add a CITATION.cff file (see, e.g., [Lux.jl](https://github.com/LuxDL/Lux.jl/blob/main/CITATION.cff)).
