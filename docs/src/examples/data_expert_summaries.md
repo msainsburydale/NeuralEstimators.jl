@@ -10,12 +10,37 @@ In the following examples, we develop a neural estimator to infer $\boldsymbol{\
 ```julia
 using NeuralEstimators
 using Statistics: mean, std
+using CairoMakie
 ```
+
+To improve computational efficiency, various GPU backends are supported. Once the relevant package is loaded and a compatible GPU is available, it will be used automatically:
+
+::: code-group
+
+```julia [NVIDIA GPUs]
+using CUDA, cuDNN
+```
+
+```julia [AMD ROCm GPUs]
+using AMDGPU
+```
+
+```julia [Metal M-Series GPUs]
+using Metal
+```
+
+```julia [Intel GPUs]
+using oneAPI
+```
+
+:::
+
+Select a deep-learning backend:
 
 ::: code-group
 
 ```julia [Lux]
-using Lux, Enzyme
+using Lux, Zygote
 ```
 
 ```julia [Flux]
@@ -49,6 +74,23 @@ simulator(θ::AbstractVector, n) = simulator(θ, rand(n))
 simulator(θ::AbstractMatrix, n) = reduce(hcat, simulator.(eachcol(θ), Ref(n)))
 ```
 
+Since the simulator returns summary statistics rather than raw data, it is the distribution of those statistics that the estimator sees. Plotting them over draws from the prior, and over the range of sample sizes used during training, shows what information is available to it:
+
+```julia
+θ = sampler(1000)
+S = simulator(θ, 30:1000)
+
+labels = ["Sample mean", "Sample standard deviation", "log(n)"]
+fig = Figure(size = (900, 250))
+for j in 1:3
+    ax = Axis(fig[1, j], xlabel = labels[j])
+    hist!(ax, S[j, :], bins = 30, color = (:black, 0.6))
+end
+fig
+```
+
+![Distribution of the expert summary statistics over the prior](assets/figures/expert_summaries_data.png)
+
 ### Constructing the neural estimator
 
 Since the summary statistics are precomputed, no summary network is needed: omit it and pass `num_summaries` in the usual way.
@@ -80,6 +122,18 @@ n_training = 30:1000
 estimator = train(estimator, sampler, simulator; simulator_args = (n_training,))
 ```
 
+Training progress is reported in the terminal:
+
+![Terminal output during training](assets/figures/expert_summaries_training.gif)
+
+The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref):
+
+```julia
+plotrisk()
+```
+
+![Empirical risk during training](assets/figures/expert_summaries_training_risk.png)
+
 ### Assessing the estimator
 
 The function [`assess`](@ref) can then be used to assess the trained estimator based on unseen test data:
@@ -92,7 +146,10 @@ Z_test = simulator(θ_test, n_test)
 assessment = assess(estimator, θ_test, Z_test)
 bias(assessment)
 rmse(assessment)
+plot(assessment)
 ```
+
+![Estimates from expert summaries alone](assets/figures/expert_summaries_assessment.png)
 
 ### Applying the estimator to observed data
 
@@ -182,6 +239,10 @@ Next, we train the estimator using [`train`](@ref):
 estimator = train(estimator, sampler, simulator)
 ```
 
+Training progress is reported in the terminal:
+
+![Terminal output during training](assets/figures/expert_summaries_training_2.gif)
+
 ### Assessing the estimator
 
 The function [`assess`](@ref) can then be used to assess the trained estimator based on unseen test data:
@@ -193,7 +254,10 @@ Z_test = simulator(θ_test)
 assessment = assess(estimator, θ_test, Z_test)
 bias(assessment)
 rmse(assessment)
+plot(assessment)
 ```
+
+![Estimates from expert and learned summaries combined](assets/figures/expert_summaries_assessment_2.png)
 
 ### Applying the estimator to observed data
 

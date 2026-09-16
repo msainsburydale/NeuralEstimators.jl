@@ -333,14 +333,14 @@ function _bar_string(epoch, epochs, i, n; width::Int = 32)
         filled = clamp(round(Int, frac * width), 0, width)
         bar = "█"^filled * "░"^(width - filled)
         pct = lpad(string(round(Int, 100 * frac)), 3)
-        return "Epoch$(lpad(epoch, ndigits(epochs)))/$epochs $pct%|$bar| $i/$n"
+        return "Epoch $(lpad(epoch, ndigits(epochs)))/$epochs $pct%|$bar| $i/$n"
     end
-    return "Epoch$(lpad(epoch, ndigits(epochs)))/$epochs  batch $i"
+    return "Epoch $(lpad(epoch, ndigits(epochs)))/$epochs  batch $i"
 end
 
 
 function _epoch_status(epoch, epochs, train_risk, val_risk, min_val_risk, early_stopping_counter, stopping_epochs, lr, epoch_time)
-    return "Epoch$(lpad(epoch, ndigits(epochs)))/$epochs  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Best: $(round(min_val_risk, digits = 3))  Epochs since improvement: $early_stopping_counter/$stopping_epochs  Learning rate: $(@sprintf "%.2E" lr)  Epoch time: $(round(epoch_time, digits = 3)) seconds"
+    return "Epoch $(lpad(epoch, ndigits(epochs)))/$epochs  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Best: $(round(min_val_risk, digits = 3))  Epochs since improvement: $early_stopping_counter/$stopping_epochs  Learning rate: $(@sprintf "%.2E" lr)  Epoch time: $(round(epoch_time, digits = 3)) seconds"
 end
 
 const _BAR_DT = 0.1

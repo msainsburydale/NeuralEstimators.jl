@@ -33,14 +33,14 @@ makedocs(
         "Examples" => [
             "examples/data_replicated.md",
             "examples/data_temporal.md",
-            "Gridded spatial data" => [
-                "Global parameters" => "examples/data_gridded.md",
-                "Spatially varying parameters" => "examples/data_gridded_nonstationary.md"
-            ],
             "examples/data_irregularspatial.md",
             "examples/data_spatiotemporal.md",
             "examples/data_expert_summaries.md",
-            "examples/data_missing_censored.md"
+            "examples/data_missing_censored.md",
+            "Gridded spatial data" => [
+                "Global parameters" => "examples/data_gridded.md",
+                "Spatially varying parameters" => "examples/data_gridded_nonstationary.md"
+            ]
         ],
         "API" => [
             "Parameters and data" => "API/parametersdata.md",

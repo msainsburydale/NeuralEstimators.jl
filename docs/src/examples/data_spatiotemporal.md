@@ -147,7 +147,7 @@ num_summaries  = 3d  # number of summaries output by the network
 network = DeepSet(ψ, ϕ)
 ```
 
-## Bonus: Visualizing spatio-temporal dependence
+## Visualizing spatio-temporal dependence
 
 Before initializing the neural estimator with our chosen neural-network architecture, let's simulate and visualize some realizations from the model. 
 
@@ -199,7 +199,7 @@ end
 display(fig)
 ```
 
-![Effect of temporal range](../assets/figures/spatiotemporal.png)
+![Effect of temporal range](assets/figures/spatiotemporal_data.png)
 
 ## Constructing the neural estimator
 
@@ -233,7 +233,17 @@ estimator = train(estimator, θ_train, θ_val, Z_train, Z_val)
 # estimator = train(estimator, sampler, simulator; K = K)
 ```
 
-The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref).
+Training progress is reported in the terminal:
+
+![Terminal output during training](assets/figures/spatiotemporal_training.gif)
+
+The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref):
+
+```julia
+plotrisk()
+```
+
+![Empirical risk during training](assets/figures/spatiotemporal_training_risk.png)
 
 One may wish to save a trained estimator and load it in a later session: see [Saving and loading estimators](@ref) for details on how this can be done.
 
@@ -254,7 +264,7 @@ rmse(assessment)    # θ₁ = ..., θ₂ = ...
 plot(assessment)
 ```
 
-![Recovery plot](../assets/figures/spatiotemporal_assessment.png)
+![Recovery plot](assets/figures/spatiotemporal_assessment.png)
 
 ## Applying the estimator to observed data
 

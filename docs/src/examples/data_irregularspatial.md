@@ -99,6 +99,25 @@ end
 simulator(parameters::Parameters, m::Integer = 1) = simulator(parameters, range(m, m))
 ```
 
+Plotting a few simulated data sets shows both the irregular spatial configurations sampled from the cluster process and the effect of the range parameter:
+
+```julia
+parameters = Parameters(reshape([0.05, 0.15, 0.5], 1, 3),
+	[maternclusterprocess(λ = 30, μ = 10) for _ in 1:3])
+Z = simulator(parameters)
+
+fig = Figure(size = (900, 300))
+for k in 1:3
+	S = parameters.S[k]
+	ax = Axis(fig[1, k], title = "θ = $(parameters.θ[k])", aspect = DataAspect())
+	hidedecorations!(ax)
+	scatter!(ax, S[:, 1], S[:, 2], color = vec(Z[k].ndata.Z), colormap = :balance)
+end
+fig
+```
+
+![Simulated data at irregular locations for three values of the range parameter](assets/figures/irregularspatial_data.png)
+
 ## Constructing the neural network
 
 We use a GNN architecture tailored to isotropic spatial dependence models; for further details, see [Sainsbury-Dale et al. (2025, Sec. 2.2)](https://doi.org/10.1080/10618600.2024.2433671). We also employ a sparse approximation of the empirical variogram as an expert summary statistic ([Gerber and Nychka, 2021](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382)).
@@ -167,7 +186,17 @@ K = 1000
 estimator = train(estimator, θ_train, θ_val, simulator, epochs = 10)
 ```
 
-The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref).
+Training progress is reported in the terminal:
+
+![Terminal output during training](assets/figures/irregularspatial_training.gif)
+
+The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref):
+
+```julia
+plotrisk()
+```
+
+![Empirical risk during training](assets/figures/irregularspatial_training_risk.png)
 
 One may wish to save a trained estimator and load it in a later session: see [Saving and loading estimators](@ref) for details on how this can be done.
 
@@ -190,7 +219,7 @@ risk(assessment)
 plot(assessment)
 ```
 
-![Estimates from a graph neural network (GNN) based neural Bayes estimator](assets/figures//spatial.png)
+![Estimates from a graph neural network (GNN) based neural Bayes estimator](assets/figures/irregularspatial_assessment.png)
 
 ## Applying the estimator to observed data
 

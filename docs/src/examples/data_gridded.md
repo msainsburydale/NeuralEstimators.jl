@@ -89,6 +89,23 @@ function simulator(parameters::Parameters)
 end
 ```
 
+Simulating a few fields and plotting them shows how strongly the range parameter controls the spatial structure the estimator must learn to read:
+
+```julia
+θ = Parameters(NamedMatrix(θ = [0.05, 0.15, 0.5]))
+Z = simulator(θ)
+
+fig = Figure(size = (900, 300))
+for k in 1:3
+	ax = Axis(fig[1, k], title = "θ = $(θ.θ[k])", aspect = DataAspect())
+	hidedecorations!(ax)
+	heatmap!(ax, Z[:, :, 1, k], colormap = :balance)
+end
+fig
+```
+
+![Simulated fields for three values of the range parameter](assets/figures/gridded_data.png)
+
 ## Constructing the neural network
 
 For data collected over a regular grid, the neural network is typically a convolutional neural network (CNN; see, e.g., [Dumoulin and Visin, 2016](https://arxiv.org/abs/1603.07285)). 
@@ -165,7 +182,19 @@ K = 5000
 estimator = train(estimator, θ_train, θ_val, simulator)
 ```
 
-The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref). One may wish to save a trained estimator and load it in a later session: see [Saving and loading estimators](@ref) for details on how this can be done.
+Training progress is reported in the terminal:
+
+![Terminal output during training](assets/figures/gridded_training.gif)
+
+The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref):
+
+```julia
+plotrisk()
+```
+
+![Empirical risk during training](assets/figures/gridded_training_risk.png)
+
+One may wish to save a trained estimator and load it in a later session: see [Saving and loading estimators](@ref) for details on how this can be done.
 
 ## Assessing the estimator
 
@@ -185,7 +214,7 @@ rmse(assessment)
 plot(assessment)
 ```
 
-![Gridded spatial Gaussian process example: Estimates vs. truth](assets/figures//gridded.png)
+![Gridded spatial Gaussian process example: Estimates vs. truth](assets/figures/gridded_assessment.png)
 
 ## Applying the estimator to observed data
 
@@ -263,7 +292,7 @@ num_summaries = 3d   # number of summary statistics for θ
 network = DeepSet(ψ, ϕ)
 ```
 
-An additional advantage of using a [`DeepSet`](@ref) is that the input structure is more flexible than that of a generic CNN. In particular, it operates on a vector of arrays, where each array corresponds to a single data set and may have arbitrary dimension
+An additional advantage of using a [`DeepSet`](@ref) is that the input structure is more flexible than that of a generic CNN. In particular, it operates on a vector of arrays, where each array corresponds to a single data set and may have arbitrary dimension.
 
 The rest of the code given above remains exactly the same, with the number of replicates $m$ passed into `train` via the keyword argument `simulator_args`:
 
@@ -286,5 +315,7 @@ estimator = RatioEstimator(network, d; num_summaries = num_summaries)
 ```julia
 estimator = train(estimator, θ_train, θ_val, simulator; simulator_args = 10)
 ```
+
+![Terminal output while training on replicated data](assets/figures/gridded_bonus-replicated-data_training.gif)
 
 A key advantage of the [`DeepSet`](@ref) representation is that it can be applied to data sets of arbitrary sample size $m$. However, the posterior distribution, and summaries derived from it, typically depends on $m$. If data sets with varying $m$ are envisaged, the estimator should be designed to account for this dependence by including a range of sample sizes during training.
