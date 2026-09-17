@@ -22,8 +22,8 @@ using LogDensityProblems
 # The box map
 _toθ(lower, upper, u) = lower .+ (upper .- lower) ./ (1 .+ exp.(-u))
 
-struct _NRELogDensity{F}
-    tz::Matrix{Float32}       # cached data summaries, one column
+struct _NRELogDensity{M <: AbstractMatrix,F}
+    tz::M       # cached data summaries, one column
     net_θ::Any                # estimator.summary_network_θ
     net_inf::Any              # estimator.inference_network
     lower::Vector{Float64}
