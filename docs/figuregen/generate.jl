@@ -21,8 +21,8 @@ const EXAMPLES = joinpath(DOCS, "src", "examples")
 const GENERATED = joinpath(FIGUREGEN, "generated")
 
 find_tool(name) = something(Sys.which(name), let p = joinpath(homedir(), ".local", "bin", name)
-        isfile(p) ? p : nothing
-    end, Some(nothing))
+    isfile(p) ? p : nothing
+end, Some(nothing))
 
 # ---------------------------------------------------------------------------
 # Turning a recording into a GIF
