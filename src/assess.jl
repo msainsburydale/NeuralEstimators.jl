@@ -164,7 +164,6 @@ function assess(
 
     if !isnothing(probs)
         @assert length(probs) == 2
-        @assert !(Z isa Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer"
         bs = bootstrap.(Ref(estimator), Z, use_gpu = use_gpu, B = B)
         # compute bootstrap intervals and convert to same format returned by IntervalEstimator
         intervals = stack(vec.(interval.(bs, probs = probs)))

@@ -811,47 +811,62 @@ end
 
 @testset "DeepSet: $dvc" for dvc ∈ devices
     # Test
-    # - with and without expert summary statistics
-    # - with and without set-level inputs
+    # - with and without conditioning on sample size
     # - common data formats
     n = 10     # dimension of each data replicate
     M = (3, 4) # number of replicates in each data set
     w = 32     # width of each hidden layer
     d = 5      # output dimension
     dₜ = 16    # dimension of neural summary statistic
-    for S in (nothing, samplesize)
-        for dₓ in (0, 2) # dimension of set-level inputs
-            for data in ("unstructured", "grid", "graph")
-                dₛ = isnothing(S) ? 0 : 1 # dimension of expert summary statistic
-                if data == "unstructured"
-                    Z = [rand32(n, m) for m ∈ M]
-                    ψ = Chain(Dense(n, w), Dense(w, dₜ), MLUtils.flatten)
-                elseif data == "grid"
-                    Z = [rand32(10, 10, 1, m) for m ∈ M]
-                    ψ = Chain(Conv((5, 5), 1 => dₜ), GlobalMeanPool(), MLUtils.flatten)
-                elseif data == "graph"
-                    Z = [spatialgraph(rand(100, 2), rand(100, m)) for m ∈ (4, 4)] #TODO doesn't work for variable number of replicates i.e., m ∈ M; also, this can break when n is taken to be small like n=5 (run it many times and you will eventually see ERROR: AssertionError: DataStore: data[e] has 1 observations, but n = 0)
-                    propagation = Chain(SpatialGraphConv(1 => 16), SpatialGraphConv(16 => dₜ))
-                    readout = GlobalPool(mean)
-                    ψ = GNNSummary(propagation, readout)
-                end
-                ϕ = Chain(Dense(dₜ + dₛ + dₓ, w, relu), Dense(w, d)) # outer network
-                ds = DeepSet(ψ, ϕ; S = S)
-                show(devnull, ds)
-                if dₓ > 0
-                    X = [rand32(dₓ) for _ ∈ eachindex(Z)]
-                    input = (Z, X)
-                else
-                    input = Z
-                end
-                # Forward evaluation
-                y = ds(input)
-                @test size(y) == (d, length(M))
-                # Basic back propagation
-                testbackprop(ds, input, dvc)
+    for condition_on_sample_size in (false, true)
+        for data in ("unstructured", "grid", "graph")
+            dₛ = condition_on_sample_size ? 1 : 0
+            if data == "unstructured"
+                Z = [rand32(n, m) for m ∈ M]
+                ψ = Chain(Dense(n, w), Dense(w, dₜ), MLUtils.flatten)
+            elseif data == "grid"
+                Z = [rand32(10, 10, 1, m) for m ∈ M]
+                ψ = Chain(Conv((5, 5), 1 => dₜ), GlobalMeanPool(), MLUtils.flatten)
+            elseif data == "graph"
+                Z = [spatialgraph(rand(100, 2), rand(100, m)) for m ∈ (4, 4)] #TODO doesn't work for variable number of replicates i.e., m ∈ M; also, this can break when n is taken to be small like n=5 (run it many times and you will eventually see ERROR: AssertionError: DataStore: data[e] has 1 observations, but n = 0)
+                propagation = Chain(SpatialGraphConv(1 => 16), SpatialGraphConv(16 => dₜ))
+                readout = GlobalPool(mean)
+                ψ = GNNSummary(propagation, readout)
             end
+            ϕ = Chain(Dense(dₜ + dₛ, w, relu), Dense(w, d)) # outer network
+            ds = DeepSet(ψ, ϕ; condition_on_sample_size)
+            show(devnull, ds)
+            # Forward evaluation
+            y = ds(Z)
+            @test size(y) == (d, length(M))
+            # Basic back propagation
+            testbackprop(ds, Z, dvc)
         end
     end
+end
+
+@testset "DeepSet convenience constructor: $dvc" for dvc ∈ devices
+    n = 10
+    M = (3, 4)
+    w = 32
+    dₜ = 16
+    d = 5
+    Z = [rand32(n, m) for m ∈ M]
+    ψ = Chain(Dense(n, w, relu), Dense(w, dₜ, relu))
+
+    ds = DeepSet(ψ; latent_dim = dₜ, output_dim = d)
+    y = ds(Z)
+    @test size(y) == (d, length(M))
+    testbackprop(ds, Z, dvc)
+
+    ds = DeepSet(ψ; latent_dim = dₜ, output_dim = d, condition_on_sample_size = true)
+    y = ds(Z)
+    @test size(y) == (d, length(M))
+    testbackprop(ds, Z, dvc)
+
+    ds = DeepSet(ψ; latent_dim = dₜ, output_dim = d, width = 16)
+    y = ds(Z)
+    @test size(y) == (d, length(M))
 end
 
 # ---- Estimators ----

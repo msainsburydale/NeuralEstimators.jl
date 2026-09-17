@@ -287,7 +287,6 @@ end
 # ---- Non-parametric bootstrapping ----
 
 function bootstrap(estimator, Z, args...; B::Integer = 400, use_gpu::Bool = true, blocks = nothing, trim::Bool = true)
-    @assert !(typeof(Z) <: Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer"
 
     # Generate B bootstrap data sets 
     if !isnothing(blocks)

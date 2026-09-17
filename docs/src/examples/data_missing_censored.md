@@ -516,19 +516,20 @@ UW_train = simulatecensored(θ_train, τ_train, m)
 UW_val   = simulatecensored(θ_val, τ_val, m)
 ```
 
-In this example, the probability level $\tau$ can be incorporated as an input to the neural network by treating it as an input to the outer neural network of the [`DeepSet`](@ref) architecture. To do this, we increase the input dimension of the outer network by one, and then combine the data $\{\boldsymbol{U}, \boldsymbol{W}\}$ and $\tau$ as a tuple (see [`DeepSet`](@ref) for details). 
+In this example, the probability level $\tau$ is incorporated as an extra input via [`DataAndSummaries`](@ref), which concatenates $\tau$ with the learned DeepSet summaries before they are passed to the inference network. See [Expert summary statistics](@ref).
 
 ```julia
-# Construct neural network based on DeepSet architecture
-ψ = Chain(Dense(n * 2, w, relu),Dense(w, w, relu))    
-ϕ = Chain(Dense(w + 1, w, relu), final_layer)
-network = DeepSet(ψ, ϕ)
-
-# Initialise the estimator
-estimator = PointEstimator(network)
+# Summary network (DeepSet) and inference network (MLP; input dimension increased by one to accommodate τ)
+ψ = Chain(Dense(n * 2, w, relu), Dense(w, w, relu))
+ϕ = Chain(Dense(w, w, relu))
+summary_network = DeepSet(ψ, ϕ)
+inference_network = Chain(Dense(w + 1, w, relu), final_layer)
+estimator = PointEstimator(summary_network, inference_network)
 
 # Train the estimator
-estimator = train(estimator, θ_train, θ_val, (UW_train, τ_train), (UW_val, τ_val))
+estimator = train(estimator, θ_train, θ_val,
+      DataAndSummaries(UW_train, τ_train),
+      DataAndSummaries(UW_val, τ_val))
 ```
 
 ![Terminal output while training the estimator amortised with respect to τ](assets/figures/missing_censored_peaks-over-threshold-censoring_training.gif)
@@ -544,12 +545,12 @@ Below, we assess the estimator for different values of $\tau$. As expected, RMSE
 # Assessment with τ fixed to 0 (no censoring)
 τ_test1  = fill(0.0, 1000)'
 UW_test1 = simulatecensored(θ_test, τ_test1, m)
-assessment1 = assess(estimator, θ_test, (UW_test1, τ_test1), parameter_names = ["ρ", "δ"], estimator_name = "τ = 0")   
+assessment1 = assess(estimator, θ_test, DataAndSummaries(UW_test1, τ_test1), parameter_names = ["ρ", "δ"], estimator_name = "τ = 0")   
 
 # Assessment with τ fixed to 0.8
 τ_test2  = fill(0.8, 1000)'
 UW_test2 = simulatecensored(θ_test, τ_test2, m)
-assessment2 = assess(estimator, θ_test, (UW_test2, τ_test2), parameter_names = ["ρ", "δ"], estimator_name = "τ = 0.8")   
+assessment2 = assess(estimator, θ_test, DataAndSummaries(UW_test2, τ_test2), parameter_names = ["ρ", "δ"], estimator_name = "τ = 0.8")   
 
 # Compare results between the two censoring probability levels
 assessment = merge(assessment1, assessment2)

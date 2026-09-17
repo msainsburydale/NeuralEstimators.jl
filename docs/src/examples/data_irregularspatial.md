@@ -84,17 +84,25 @@ end
 
 ## Simulating data
 
+We also employ a sparse approximation of the empirical variogram as an expert summary statistic ([Gerber and Nychka, 2021](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382)). This is precomputed in the simulator and returned alongside the graphs via [`DataAndSummaries`](@ref).
+
 ```julia
+h_max = 0.15   # maximum distance to consider
+q = 10         # number of variogram bins
+nv = NeighbourhoodVariogram(h_max, q)
+
 function simulator(parameters::Parameters, m)
 	K = size(parameters, 2)
 	m = rand(m, K)
-	map(1:K) do k
+	Z = map(1:K) do k
 		L = parameters.L[k]
 		g = parameters.g[k]
 		n = size(L, 1)
 		Z = L * randn(n, m[k])
 		spatialgraph(g, Z)
 	end
+	S = reduce(hcat, nv.(Z))
+	return DataAndSummaries(Z, S)
 end
 simulator(parameters::Parameters, m::Integer = 1) = simulator(parameters, range(m, m))
 ```
@@ -111,7 +119,7 @@ for k in 1:3
 	S = parameters.S[k]
 	ax = Axis(fig[1, k], title = "θ = $(parameters.θ[k])", aspect = DataAspect())
 	hidedecorations!(ax)
-	scatter!(ax, S[:, 1], S[:, 2], color = vec(Z[k].ndata.Z), colormap = :balance)
+	scatter!(ax, S[:, 1], S[:, 2], color = vec(Z.Z[k].ndata.Z), colormap = :balance)
 end
 fig
 ```
@@ -120,15 +128,14 @@ fig
 
 ## Constructing the neural network
 
-We use a GNN architecture tailored to isotropic spatial dependence models; for further details, see [Sainsbury-Dale et al. (2025, Sec. 2.2)](https://doi.org/10.1080/10618600.2024.2433671). We also employ a sparse approximation of the empirical variogram as an expert summary statistic ([Gerber and Nychka, 2021](https://onlinelibrary.wiley.com/doi/abs/10.1002/sta4.382)).
+We use a GNN architecture tailored to isotropic spatial dependence models; for further details, see [Sainsbury-Dale et al. (2025, Sec. 2.2)](https://doi.org/10.1080/10618600.2024.2433671). The empirical variogram computed in the simulator is concatenated with the learned GNN summaries via [`DataAndSummaries`](@ref); see [Expert summary statistics](@ref).
 
 ```julia
-d = 1                # dimension of the parameter vector θ
-num_summaries = 3d   # number of summary statistics for θ
+d = 1                       # dimension of the parameter vector θ
+num_learned_summaries = 3d  # number of learned summary statistics for θ
+num_expert_summaries  = q   # NeighbourhoodVariogram bins
 
 # Spatial weight functions: continuous surrogates for 0-1 basis functions
-h_max = 0.15   # maximum distance to consider
-q = 10         # output dimension of the spatial weights
 w = KernelWeights(h_max, q)
 
 # Propagation module
@@ -143,18 +150,15 @@ readout = GlobalPool(mean)
 # Inner network
 ψ = GNNSummary(propagation, readout)
 
-# Expert summary statistic: empirical variogram
-S = NeighbourhoodVariogram(h_max, q)
-
 # Outer network
 ϕ = Chain(
-	Dense(2q, 128, relu),
+	Dense(q, 128, relu),
 	Dense(128, 128, relu),
-	Dense(128, num_summaries)
+	Dense(128, num_learned_summaries)
 )
 
 # DeepSet object
-network = DeepSet(ψ, ϕ; S = S)
+network = DeepSet(ψ, ϕ)
 ```
 
 ## Constructing the neural estimator
@@ -164,15 +168,15 @@ We now construct a neural estimator by wrapping the neural network in the subtyp
 ::: code-group
 
 ```julia [Point estimator]
-estimator = PointEstimator(network, d; num_summaries = num_summaries)
+estimator = PointEstimator(network, d; num_summaries = num_learned_summaries + num_expert_summaries)
 ```
 
 ```julia [Posterior estimator]
-estimator = PosteriorEstimator(network, d; num_summaries = num_summaries)
+estimator = PosteriorEstimator(network, d; num_summaries = num_learned_summaries + num_expert_summaries)
 ```
 
 ```julia [Ratio estimator]
-estimator = RatioEstimator(network, d; num_summaries = num_summaries)
+estimator = RatioEstimator(network, d; num_summaries = num_learned_summaries + num_expert_summaries)
 ```
 
 :::

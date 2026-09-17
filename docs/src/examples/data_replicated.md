@@ -82,6 +82,8 @@ In this package, the neural network specified by the user is typically a summary
 
 In this example, our data are replicated, and we therefore adopt the DeepSets framework, implemented via [`DeepSet`](@ref). A `DeepSet` consists of three components: an inner network that acts directly on each data replicate; a function that aggregates the outputs of the inner network; and an outer network (typically an MLP) that maps the aggregated output to $\mathbb{R}^{d^*}$. The architecture of the inner network depends on the structure of the data; for unstructured data (i.e., without spatial or temporal correlation within each replicate), an MLP is used, with input dimension matching the dimensionality of each replicate (here, one).
 
+When the sample size $m$ varies, the posterior typically depends on $m$. This dependence can be accounted for by setting `condition_on_sample_size = true` when constructing the [`DeepSet`](@ref) (and increasing the input dimension of `ϕ` by one).
+
 ```julia
 n = 1                # dimension of each data replicate (univariate)
 d = 2                # dimension of the parameter vector θ

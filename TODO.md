@@ -12,9 +12,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference.
 - Ensemble methods with general estimator types (e.g., PosteriorEstimator, RatioEstimator).
 
-**Summary networks**
-- 🟡 By default, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) should condition on the (log) sample size (it's easy to forget). This can be done via a convenience constructor; given keyword argument `latent_dim`, calls `MLP` to construct the outer network and automatically conditions on (a learned embedding of) the sample size.
-
 **Training**
 - Support for reading data from disk during training, to handle data sets that are too large to fit in memory.
 
@@ -33,7 +30,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/) for inspiration).
 
 ### Performance
-- 🟡 [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) slows down drastically with increasing batchsize, which is the opposite of what should happen.
+- 🟡 [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) slows down drastically with increasing batchsize, which is the opposite of what should happen (mainly on the CPU, but it doesn't speed up with increasing batchsize like it should on the GPU either).
 - Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
 - Reactant.jl in the inference stage.
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).

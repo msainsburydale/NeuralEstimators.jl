@@ -1,7 +1,6 @@
 
 # ---- DeepSet ----
 
-#TODO delete some of the methods (redundant now that we've changed the fields of RatioEstimator)
 #TODO Remove ElementwiseAggregator?
 
 @concrete struct ElementwiseAggregator
@@ -9,31 +8,13 @@
 end
 (e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
 
-"""
-	(S::AbstractVector)(z)
-	(S::Tuple)(z)
-Method allows a collection of vector-valued functions to be applied to a single
-input `z` and then concatenated, which allows users to provide a collection of
-functions as a user-defined summary statistic in [`DeepSet`](@ref) objects.
-
-Examples
-```julia
-f(z) = rand32(2)
-g(z) = rand32(3) .+ z
-S = [f, g]
-S(1)
-```
-"""
-(S::AbstractVector)(z) = reduce(vcat, [s(z) for s in S])
-(S::Tuple)(z) = reduce(vcat, [s(z) for s in S])
-
 @doc raw"""
-    DeepSet(ψ, ϕ, a = mean; S = nothing)
-	(ds::DeepSet)(Z::Vector{A}) where A <: Any
-	(ds::DeepSet)(tuple::Tuple{Vector{A}, Vector{Vector}}) where A <: Any
+    DeepSet(ψ, ϕ, a = mean; condition_on_sample_size = false)
+    DeepSet(ψ; a = mean, latent_dim, output_dim, condition_on_sample_size = false, kwargs...)
+	(object::DeepSet)(Z::AbstractVector)
 The DeepSets representation ([Zaheer et al., 2017](https://arxiv.org/abs/1703.06114); [Sainsbury-Dale et al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522)),
 ```math
-\hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}(\mathbf{T}(\mathbf{Z})), \quad
+\mathbf{S}(\mathbf{Z}) = \boldsymbol{\phi}(\mathbf{T}(\mathbf{Z})), \quad
 \mathbf{T}(\mathbf{Z}) = \mathbf{a}(\{\boldsymbol{\psi}(\mathbf{Z}_i) : i = 1, \dots, m\}),
 ```
 where 𝐙 ≡ (𝐙₁', …, 𝐙ₘ')' are exchangeable replicates of data, 
@@ -48,30 +29,23 @@ element of the vector is associated with one data set (i.e., one set of exchange
 Exchangeable replicates within each data set are stored in the batch dimension. For example, with data collected over a two-dimensional grid and with `ψ` chosen to be a CNN, `A` should be a 4-dimensional array, 
 with replicates stored in the 4ᵗʰ dimension. 
 
-For computational efficiency, 
-array data are first concatenated along their final dimension 
+For computational efficiency, array data are first concatenated along their final dimension 
 (i.e., the replicates dimension) before being passed into the inner network `ψ`, 
-thereby ensuring that `ψ` is applied to a single large array, rather than multiple small ones. 
+thereby ensuring that `ψ` is applied to a single large array rather than multiple small ones. 
 
-Fixed (non-trainable) transformations of the data can be incorporated alongside the learned summaries via the `S` argument:
+When data sets of varying sample size $m$ are envisaged, set
+`condition_on_sample_size = true` to concatenate $\log m$ with $\mathbf{T}(\mathbf{Z})$
+before it is passed to `ϕ`:
 ```math
-\hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}((\mathbf{T}(\mathbf{Z})', \mathbf{S}(\mathbf{Z})')'),
+\mathbf{S}(\mathbf{Z}) = \boldsymbol{\phi}((\mathbf{T}(\mathbf{Z})', \log m)').
 ```
-where `S` is a function (or vector of functions) that maps data to a vector of fixed summary statistics. These are not differentiated through during training. In the case that `ψ` is set to `nothing`, only the fixed summaries will be used. For the common case where summary statistics are precomputed and stored alongside the data, see [`DataAndSummaries`](@ref) as an alternative approach.
+In this case, the input dimension of `ϕ` must be one greater than the dimension of $\mathbf{T}(\mathbf{Z})$.
 
-Set-level inputs (e.g., covariates) ``𝐗`` can be passed
-directly into the outer network `ϕ` in the following manner: 
-```math
-\hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}((\mathbf{T}(\mathbf{Z})', \mathbf{X}')'),
-```
-or, when fixed transformations are also used,
-```math
-\hat{\boldsymbol{\theta}}(\mathbf{Z}) = \boldsymbol{\phi}((\mathbf{T}(\mathbf{Z})', \mathbf{S}(\mathbf{Z})', \mathbf{X}')').
-```
-This is done by calling the `DeepSet` object on a
-`Tuple{Vector{A}, Vector{Vector}}`, where the first element of the tuple
-contains a vector of data sets and the second element contains a vector of
-set-level inputs (i.e., one vector for each data set).
+The convenience constructor `DeepSet(ψ; latent_dim, output_dim, ...)` builds `ϕ` as an [`MLP`](@ref)
+from $\mathbf{T}(\mathbf{Z})$ to the DeepSet output. Here `latent_dim` is the dimension of
+$\mathbf{T}(\mathbf{Z})$ (so `ψ` must output `latent_dim`) and `output_dim` is the dimension of
+$\mathbf{S}(\mathbf{Z})$. If `condition_on_sample_size = true`, the MLP input dimension is
+`latent_dim + 1`. Additional keyword arguments are passed to [`MLP`](@ref).
 
 !!! note
     `DeepSet` is currently only implemented for the `Flux` backend.
@@ -95,18 +69,13 @@ ds = DeepSet(ψ, ϕ)
 # Apply DeepSet object to data
 ds(Z)
 
-# With fixed transformations S
-dₛ = 1   # dimension of fixed summary statistic
-ϕ  = Chain(Dense(dₜ + dₛ, w, relu), Dense(w, d))
-ds = DeepSet(ψ, ϕ; S = logsamplesize)
+# Convenience constructor: latent_dim is dim(T(Z)), output_dim is dim(S(Z))
+ds = DeepSet(ψ; latent_dim = dₜ, output_dim = d)
 ds(Z)
 
-# With set-level inputs 
-dₓ = 2 # dimension of set-level inputs 
-ϕ  = Chain(Dense(dₜ + dₓ, w, relu), Dense(w, d))
-ds = DeepSet(ψ, ϕ)
-X  = [rand32(dₓ) for _ ∈ eachindex(Z)]
-ds((Z, X))
+# Condition on log sample size (MLP input dimension increased by one)
+ds = DeepSet(ψ; latent_dim = dₜ, output_dim = d, condition_on_sample_size = true, width = 32)
+ds(Z)
 ```
 """
 @concrete struct DeepSet
@@ -115,72 +84,33 @@ ds((Z, X))
     a
     S
 end
-function DeepSet(ψ, ϕ, a::Function = mean; S = nothing)
-    @assert !isnothing(ψ) | !isnothing(S) "At least one of `ψ` or `S` must be given"
+function DeepSet(ψ, ϕ, a::Function = mean; condition_on_sample_size::Bool = false)
+    S = condition_on_sample_size ? logsamplesize : nothing
     DeepSet(ψ, ϕ, ElementwiseAggregator(a), S)
 end
-Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nExpert statistics: $(D.S)\nOuter network:  $(D.ϕ)")
+function DeepSet(ψ; a::Function = mean, latent_dim::Integer, output_dim::Integer, condition_on_sample_size::Bool = false, kwargs...)
+    in_dim = latent_dim + Int(condition_on_sample_size)
+    ϕ = MLP(in_dim, output_dim; kwargs...)
+    DeepSet(ψ, ϕ, a; condition_on_sample_size)
+end
+Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nConditioning on log sample size: $(!isnothing(D.S))\nOuter network:  $(D.ϕ)")
 
 # Single data set
 function (d::DeepSet)(Z::A) where {A}
     d.ϕ(_deepsetsummaries(d, Z))
-end
-# Single data set with set-level covariates
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractVector{T}} where {T}
-    Z, x = tup
-    t = _deepsetsummaries(d, Z)
-    u = vcat(t, x)
-    d.ϕ(u)
-end
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{A, B}} where {A, B <: AbstractMatrix{T}} where {T}
-    Z, x = tup
-    if size(x, 2) == 1
-        # Catches the simple case that the user accidentally passed an Nx1 matrix rather than an N-dimensional vector. 
-        d((Z, vec(x)))
-    else
-        # Designed for situations where we have a fixed data set and want to
-        # evaluate the object for many different set-level covariates
-        t = _deepsetsummaries(d, Z) # only needs to be computed once
-        tx = vcat(repeat(t, 1, size(x, 2)), x) # NB ideally we'd avoid copying t so many times here, using @view
-        d.ϕ(tx)
-    end
 end
 # Multiple data sets
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A}
     # Stack into a single array before applying the outer network
     d.ϕ(stackarrays(_deepsetsummaries(d, Z)))
 end
-# Multiple data sets with set-level covariates
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B <: AbstractVector{T}} where {T}
-    Z, x = tup
-    t = _deepsetsummaries(d, Z)
-    tx = vcat.(t, x)
-    d.ϕ(stackarrays(tx))
-end
-function (d::DeepSet)(tup::Tup) where {Tup <: Tuple{V, M}} where {V <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
-    Z, x = tup
-    if size(x, 2) == length(Z)
-        # Catches the simple case that the user accidentally passed an NxM matrix rather than an M-dimensional vector of N-vector.
-        d((Z, eachcol(x)))
-    else
-        # Designed for situations where we have a several data sets and we want
-        # to evaluate the object for many different set-level covariates
-        [d((z, x)) for z in Z]
-    end
-end
 
 # Single data set
 function _deepsetsummaries(d::DeepSet, Z::A) where {A}
-    if !isnothing(d.ψ)
-        t = d.a(d.ψ(Z))
-    end
+    t = d.a(d.ψ(Z))
     if !isnothing(d.S)
         s = @ignore_derivatives d.S(Z)
-        if !isnothing(d.ψ)
-            t = vcat(t, s)
-        else
-            t = s
-        end
+        t = vcat(t, s)
     end
     return t
 end
@@ -191,35 +121,29 @@ end
 
 # Multiple data sets: optimised version for array data
 function _deepsetsummaries(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
-    if !isnothing(d.ψ)
-        if _first_N_minus_1_dims_identical(Z)
-            # Stack Z = [A₁, A₂, ...] into a single large N-dimensional array and then apply the inner network
-            ψa = d.ψ(stackarrays(Z))
+    if _first_N_minus_1_dims_identical(Z)
+        # Stack Z = [A₁, A₂, ...] into a single large N-dimensional array and then apply the inner network
+        ψa = d.ψ(stackarrays(Z))
 
-            # Compute the indices needed for aggregation (i.e., the indicies associated with each Aᵢ in the stacked array)
-            mᵢ = size.(Z, N) # number of replicates for every element in Z
-            cs = cumsum(mᵢ)
-            indices = [(cs[i] - mᵢ[i] + 1):cs[i] for i ∈ eachindex(Z)]
+        # Compute the indices needed for aggregation (i.e., the indicies associated with each Aᵢ in the stacked array)
+        mᵢ = size.(Z, N) # number of replicates for every element in Z
+        cs = cumsum(mᵢ)
+        indices = [(cs[i] - mᵢ[i] + 1):cs[i] for i ∈ eachindex(Z)]
 
-            # Construct the summary statistics
-            t = map(indices) do idx
-                d.a(getobs(ψa, idx))
-            end
-
-            if !isnothing(d.S)
-                s = @ignore_derivatives d.S.(Z)
-                if !isnothing(d.ψ)
-                    t = vcat.(t, s)
-                else
-                    t = s
-                end
-            end
-
-            return t
-        else
-            # Array sizes differ, so therefore cannot stack together; use simple (and slower) broadcasting method (identical to general fallback method defined above)
-            return _deepsetsummaries.(Ref(d), Z)
+        # Construct the summary statistics
+        t = map(indices) do idx
+            d.a(getobs(ψa, idx))
         end
+
+        if !isnothing(d.S)
+            s = @ignore_derivatives d.S.(Z)
+            t = vcat.(t, s)
+        end
+
+        return t
+    else
+        # Array sizes differ, so therefore cannot stack together; use simple (and slower) broadcasting method (identical to general fallback method defined above)
+        return _deepsetsummaries.(Ref(d), Z)
     end
 end
 

@@ -73,12 +73,8 @@ end
 # Wraps a bare array in a single-element vector when using a DeepSet-based network,
 # allowing users to pass a single dataset without manually wrapping it in a vector
 function _check_deepset_input(z)
-    bare_array = typeof(z) <: AbstractArray && !(typeof(z) <: AbstractVector)
-    bare_array_in_tuple = typeof(z) <: Tuple && !(typeof(z[1]) <: AbstractVector)
-    if bare_array
+    if typeof(z) <: AbstractArray && !(typeof(z) <: AbstractVector)
         z = [z]
-    elseif bare_array_in_tuple
-        z = ([z[1]], z[2])
     end
     return z
 end
@@ -297,18 +293,6 @@ end
 function numberreplicates(Z::V) where {V <: AbstractVector{T}} where {T <: Union{Number, Missing}}
     numberreplicates(reshape(Z, :, 1))
 end
-function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
-    Z = tup[1]
-    X = tup[2]
-    @assert length(Z) == length(X)
-    numberreplicates(Z)
-end
-function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, M}} where {V₁ <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
-    Z = tup[1]
-    X = tup[2]
-    @assert length(Z) == size(X, 2)
-    numberreplicates(Z)
-end
 
 """
 	subsetreplicates(Z::V, i) where {V <: AbstractArray{A}} where {A <: Any}
@@ -353,13 +337,6 @@ function subsetreplicates end
 
 function subsetreplicates(Z::V, i) where {V <: AbstractVector{A}} where {A}
     subsetreplicates.(Z, Ref(i))
-end
-
-function subsetreplicates(tup::Tup, i) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
-    Z = tup[1]
-    X = tup[2]
-    @assert length(Z) == length(X)
-    (subsetreplicates(Z, i), X) # X is not subsetted because it is set-level information
 end
 
 function subsetreplicates(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}

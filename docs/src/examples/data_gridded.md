@@ -318,4 +318,4 @@ estimator = train(estimator, θ_train, θ_val, simulator; simulator_args = 10)
 
 ![Terminal output while training on replicated data](assets/figures/gridded_bonus-replicated-data_training.gif)
 
-A key advantage of the [`DeepSet`](@ref) representation is that it can be applied to data sets of arbitrary sample size $m$. However, the posterior distribution, and summaries derived from it, typically depends on $m$. If data sets with varying $m$ are envisaged, the estimator should be designed to account for this dependence by including a range of sample sizes during training.
+A key advantage of the [`DeepSet`](@ref) representation is that it can be applied to data sets of arbitrary sample size $m$. However, the posterior distribution, and summaries derived from it, typically depends on $m$. If data sets with varying $m$ are envisaged, the estimator should be designed to account for this dependence by including a range of sample sizes during training, and by setting `condition_on_sample_size = true` when constructing the [`DeepSet`](@ref) (increasing the input dimension of `ϕ` by one).
