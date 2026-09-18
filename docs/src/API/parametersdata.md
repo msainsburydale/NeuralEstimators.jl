@@ -22,6 +22,10 @@ Simulated data sets are stored as mini-batches in a format amenable to the chose
 
 Precomputed (expert) summary statistics can be incorporated by wrapping the simulated data and summary statistics in a [`DataAndSummaries`](@ref) object.
 
+A vector of data sets (as used by [`DeepSet`](@ref)) can optionally be concatenated into a single array with [`PackedReplicates`](@ref), so that a minibatch is one array rather than one array per data set.
+
 ```@docs
 DataAndSummaries
+
+PackedReplicates
 ```

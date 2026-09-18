@@ -18,8 +18,8 @@ using Functors
 using InvertedIndices
 using LinearAlgebra
 using MLDataDevices: cpu_device, gpu_device, reactant_device, CPUDevice, CUDADevice, ReactantDevice, AbstractDevice
-using MLUtils: getobs, DataLoader, flatten, zeros_like, unsqueeze
-import MLUtils: numobs, joinobs
+using MLUtils: DataLoader, flatten, zeros_like, unsqueeze
+import MLUtils: numobs, joinobs, getobs
 using NamedArrays
 import NamedArrays: NamedMatrix
 using NNlib: logσ, softplus, softmax, relu, ⊠, batched_transpose, logsumexp, sigmoid, scatter, gather
@@ -39,14 +39,18 @@ end
 export tanhloss, kpowerloss, intervalscore, quantileloss
 include("losses.jl")
 
-export DataAndSummaries, Summaries
+export DataAndSummaries, Summaries, PackedReplicates
 export AbstractParameterSet, NamedMatrix
 include("DataParameters.jl")
 
 export DeepSet, MLP, MultiHeadMLP, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference
 export IndicatorWeights, KernelWeights
 export vectotril, vectotriu
-include("Architectures.jl")
+for file in sort(readdir(joinpath(@__DIR__, "Architectures")))
+    endswith(file, ".jl") || continue
+    include(joinpath("Architectures", file))
+end
+
 
 export AbstractApproximateDistribution, Gaussian, GaussianMixture, NormalisingFlow, SpikeAndSlab, numdistributionalparams
 export CouplingLayer, AffineCouplingBlock, ActNorm, Permutation
@@ -60,7 +64,6 @@ end
 # Batched Chebyshev machinery for 1D density fitting and inverse-CDF sampling,
 # used by the TelescopingRatioEstimator's sequential posterior sampler
 include("Chebyshev1d.jl")
-# i think we don't need to make anything in this script visible
 
 export AbstractNeuralEstimator, AbstractBayesEstimator
 export PosteriorEstimator, RatioEstimator, TelescopingRatioEstimator, PointEstimator, IntervalEstimator, QuantileEstimator

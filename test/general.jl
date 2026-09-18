@@ -177,6 +177,103 @@ end
         end
     end
 
+    @testset "PackedReplicates" begin
+        n = 2
+        Z_eq = [array(n, 4) for _ = 1:3]
+        Z_var = [array(n, m) for m in (3, 5, 4)]
+
+        @testset "construction" begin
+            for Z in (Z_eq, Z_var)
+                P = PackedReplicates(Z)
+                @test P.data == stackarrays(Z)
+                @test P.sample_sizes == [size(z, ndims(z)) for z in Z]
+                @test size(P.data) == (n, sum(P.sample_sizes))
+                @test numobs(P) == length(Z)
+            end
+
+            P = PackedReplicates(Z_var)
+            show(devnull, P)
+            @test_throws ErrorException PackedReplicates(Z_var; max_sample_size = 8)
+            @test_throws ArgumentError PackedReplicates(P.data, [1, 1])
+            @test_throws ArgumentError PackedReplicates(AbstractArray[])
+        end
+
+        @testset "numobs, getobs, getindex" begin
+            P = PackedReplicates(Z_var)
+            @test numobs(P) == 3
+
+            P1 = getobs(P, 1)
+            @test numobs(P1) == 1
+            @test P1.sample_sizes == [3]
+            @test P1.data == Z_var[1]
+
+            P_sub = getobs(P, 1:2)
+            @test numobs(P_sub) == 2
+            @test P_sub.sample_sizes == [3, 5]
+            @test P_sub.data == stackarrays(Z_var[1:2])
+
+            P_vec = getobs(P, [1, 2])
+            @test P_vec.sample_sizes == [3, 5]
+            @test P_vec.data == P_sub.data
+
+            P_shuf = getobs(P, [3, 1])
+            @test P_shuf.sample_sizes == [4, 3]
+            @test P_shuf.data == stackarrays(Z_var[[3, 1]])
+
+            @test P[1].data == P1.data
+            @test P[1:2].data == P_sub.data
+        end
+
+        @testset "joinobs" begin
+            P = PackedReplicates(Z_var)
+            P12 = getobs(P, 1:2)
+            P3 = getobs(P, 3)
+            Pj = joinobs(P12, P3)
+            @test Pj.sample_sizes == P.sample_sizes
+            @test Pj.data == P.data
+        end
+
+        @testset "numberreplicates and subsetreplicates" begin
+            P = PackedReplicates(Z_var)
+            @test numberreplicates(P) == [3, 5, 4]
+
+            P_sub = subsetreplicates(P, 1:2)
+            @test numobs(P_sub) == 3
+            @test P_sub.sample_sizes == [2, 2, 2]
+            @test P_sub.data == stackarrays([z[:, 1:2] for z in Z_var])
+
+            P1 = subsetreplicates(P, 1)
+            @test P1.sample_sizes == [1, 1, 1]
+            @test size(P1.data, 2) == 3
+        end
+
+        @testset "f32" begin
+            Z = [randn(n, m) for m in (3, 5, 4)]
+            P = PackedReplicates(Z)
+            P32 = f32(P)
+            @test eltype(P32.data) == Float32
+            @test P32.sample_sizes == P.sample_sizes
+        end
+
+        @testset "device" begin
+            P = PackedReplicates(Z_var) |> f32
+            for dvc in devices
+                Pdev = P |> dvc
+                @test typeof(Pdev.data) == typeof(P.data |> dvc)
+                @test Array(Pdev.data) == P.data
+                @test Pdev.sample_sizes == P.sample_sizes
+            end
+        end
+
+        @testset "DataLoader" begin
+            P = PackedReplicates(Z_var)
+            loader = DataLoader(P; batchsize = 2)
+            batch = first(loader)
+            @test batch isa PackedReplicates
+            @test numobs(batch) == 2
+        end
+    end
+
     @test isnothing(_check_sizes(1, 1))
 
     @testset "maternclusterprocess" begin
@@ -849,6 +946,11 @@ end
             # Forward evaluation
             y = ds(Z)
             @test size(y) == (d, length(M))
+            if data != "graph"
+                P = PackedReplicates(Z)
+                @test ds(P) ≈ y
+                testbackprop(ds, P, dvc)
+            end
             # Basic back propagation
             testbackprop(ds, Z, dvc)
         end
@@ -878,10 +980,15 @@ end
                 # Forward evaluation
                 @test ds(Z) ≈ reduce(hcat, [ds(z) for z ∈ Z])
 
+                P = PackedReplicates(Z)
+                @test ds(P) ≈ ds(Z)
+
                 # Back propagation
                 ∇ = Flux.gradient(ds -> sum(abs2, ds(Z)), ds)[1]
                 ∇ᵣ = Flux.gradient(ds -> sum(abs2, reduce(hcat, [ds(z) for z ∈ Z])), ds)[1]
+                ∇ₚ = Flux.gradient(ds -> sum(abs2, ds(P)), ds)[1]
                 @test all(isapprox.(trainables(∇), trainables(∇ᵣ), rtol = 1.0f-3))
+                @test all(isapprox.(trainables(∇), trainables(∇ₚ), rtol = 1.0f-3))
             end
         end
     end

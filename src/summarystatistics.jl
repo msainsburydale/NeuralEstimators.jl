@@ -83,6 +83,7 @@ Computes the number of replicates in the data set `Z`.
 Note that this function is a wrapper around [`numberreplicates`](@ref) with return type equal to the eltype of `Z`.
 """
 samplesize(Z) = eltype(Z)(numberreplicates(Z))
+samplesize(P::PackedReplicates) = eltype(P.data).(P.sample_sizes)
 
 """
 	logsamplesize(Z)

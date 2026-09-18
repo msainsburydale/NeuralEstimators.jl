@@ -30,6 +30,8 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/) for inspiration).
 
 ### Performance
+- 🟡 Lux + Reactant support for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules). Reactant requires arrays of fixed dimension: introduce a type that packs and pads the data sets.
+- 🟡 Lux + Reactant support for [SpatialGraphConv](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
 - Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
 - Reactant.jl in the inference stage.
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
@@ -38,10 +40,9 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - SimpleChains.jl: are the user-friendly constructors for each estimator type correctly converted to `SimpleChainsLayers`?
 - Lux.jl: Initial risks are much larger than Flux.jl when training NPEs.
 - Add a check for NaNs in the inputs/outputs. Also, if the training risk or validation risk becomes NaN, immediately halt training.
+- Optimize [`spatialgraph`](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/miscellaneous#Utility-functions).
 
 ### Backend
-- 🟡 Lux support for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules).
-- 🟡 Lux support for [SpatialGraphConv](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
 - Checkpointing with Lux + Reactant: is our use of `deepcopy` okay? Note that the [Reactant source code](https://github.com/EnzymeAD/Reactant.jl/blob/main/src/ConcreteRArray.jl) includes a comment warning against the use of `deepcopy`. 
 - The initial risks tend to be large when using Lux; use the same weight initialization as Flux.
 - Lux support for [CovarianceMatrix/CorrelationMatrix](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Output-layers).

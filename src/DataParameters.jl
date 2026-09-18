@@ -134,6 +134,98 @@ joinobs(d1::DataAndSummaries, d2::DataAndSummaries) = DataAndSummaries(_mergedat
 numberreplicates(d::DataAndSummaries) = numberreplicates(d.Z)
 subsetreplicates(d::DataAndSummaries, idx) = DataAndSummaries(subsetreplicates(d.Z, idx), d.S)
 
+# ---- PackedReplicates ----
+
+@doc raw"""
+    PackedReplicates(Z::V) where V <: AbstractVector{A} where A <: AbstractArray
+A container that concatenates a vector of data sets into a single array, storing
+the original sample sizes alongside the packed data. Intended to be used with [`DeepSet`](@ref).
+
+Each element of `Z` is one data set, with exchangeable replicates stored in the
+last dimension. The packed `data` has final dimension of size `sum(sample_sizes))`,
+where `sample_sizes[i]` is the number of replicates in the `i`th data set.
+
+# Examples
+```julia
+using NeuralEstimators
+
+n = 2 # dimension of each data replicate
+Z = [rand(Float32, n, m) for m in (3, 5, 4)]
+P = PackedReplicates(Z)          # data size (n, 12), sample_sizes == [3, 5, 4]
+P[1:2]                           # first two data sets
+```
+"""
+struct PackedReplicates{A <: AbstractArray, S}
+    data::A
+    sample_sizes::S
+    function PackedReplicates(data::A, sample_sizes::S) where {A <: AbstractArray, S}
+        n_last = size(data, ndims(data))
+        n_sum = sum(sample_sizes)
+        n_last == n_sum || throw(ArgumentError("size(data, ndims) = $n_last does not match sum(sample_sizes) = $n_sum"))
+        new{A, S}(data, sample_sizes)
+    end
+end
+@functor PackedReplicates (data,)
+
+function PackedReplicates(Z::AbstractVector{<:AbstractArray}; max_sample_size = nothing)
+    isnothing(max_sample_size) || error("padding is not yet implemented")
+    isempty(Z) && throw(ArgumentError("Z must contain at least one data set"))
+    sample_sizes = Int[size(z, ndims(z)) for z in Z]
+    PackedReplicates(stackarrays(Z), sample_sizes)
+end
+
+numobs(P::PackedReplicates) = length(P.sample_sizes)
+
+function getobs(P::PackedReplicates, idx)
+    i = idx isa Integer ? (idx:idx) : idx
+    m = collect(P.sample_sizes[i])
+    cs = cumsum(P.sample_sizes)
+    if _iscontiguousobs(i)
+        cols = (cs[first(i)] - P.sample_sizes[first(i)] + 1):cs[last(i)]
+        PackedReplicates(getobs(P.data, cols), m)
+    else
+        bags = [getobs(P.data, (cs[j] - P.sample_sizes[j] + 1):cs[j]) for j in i]
+        PackedReplicates(stackarrays(bags), m)
+    end
+end
+
+_iscontiguousobs(::AbstractUnitRange) = true
+function _iscontiguousobs(idx)
+    length(idx) <= 1 && return true
+    prev = first(idx)
+    for j in Iterators.drop(idx, 1)
+        j == prev + 1 || return false
+        prev = j
+    end
+    return true
+end
+
+Base.getindex(P::PackedReplicates, i) = getobs(P, i)
+
+function joinobs(a::PackedReplicates, b::PackedReplicates)
+    ndims(a.data) == ndims(b.data) || throw(ArgumentError("Cannot join PackedReplicates with different numbers of dimensions"))
+    size(a.data)[1:(end - 1)] == size(b.data)[1:(end - 1)] ||
+        throw(ArgumentError("Cannot join PackedReplicates with different leading dimensions"))
+    PackedReplicates(stackarrays([a.data, b.data]), vcat(a.sample_sizes, b.sample_sizes))
+end
+
+numberreplicates(P::PackedReplicates) = P.sample_sizes
+
+function subsetreplicates(P::PackedReplicates, i)
+    idx = i isa Integer ? (i:i) : i
+    bags = [getobs(P.data, slice) for slice in _replicateslices(P.sample_sizes)]
+    subset = [getobs(b, idx) for b in bags]
+    PackedReplicates(stackarrays(subset), Int[numberreplicates(b) for b in subset])
+end
+
+function _replicateslices(sample_sizes)
+    cs = cumsum(sample_sizes)
+    [(cs[i] - sample_sizes[i] + 1):cs[i] for i in eachindex(sample_sizes)]
+end
+
+Base.show(io::IO, P::PackedReplicates) = print(io, "PackedReplicates with $(numobs(P)) data sets packed into an array of size $(size(P.data))")
+Base.show(io::IO, ::MIME"text/plain", P::PackedReplicates) = print(io, P)
+
 # ---- Summaries wrapper type ----
 
 """
