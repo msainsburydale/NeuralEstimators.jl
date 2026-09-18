@@ -1,7 +1,7 @@
 module NeuralEstimatorsLuxExt
 
 using NeuralEstimators
-using NeuralEstimators: @set, _uses_deepset, numobs, _resolvedevice, _DataLoader, cpu, _TrainDisplay, _bar!, _SILENT_DISPLAY
+using NeuralEstimators: @set, _uses_deepset, _check_deepset_input, numobs, _resolvedevice, _DataLoader, cpu, _TrainDisplay, _bar!, _SILENT_DISPLAY
 import NeuralEstimators: estimate
 import NeuralEstimators: summarystatistics, _summarystatistics, _applywithdevice
 
@@ -14,9 +14,11 @@ using Random
 
 import LuxCore: initialparameters, initialstates, parameterlength, statelength
 
-# Tell Lux how to traverse estimator structs 
-# NB These reuels imply that all neural networks must be full Lux models (can't use DeepSet directly, would need a Lux version)
-const LuxTraversable = Union{LuxCore.AbstractLuxLayer, AbstractApproximateDistribution}
+# Tell Lux how to traverse estimator structs
+# Nested networks must be AbstractLuxLayer, AbstractApproximateDistribution, or DeepSet
+const LuxTraversable = Union{LuxCore.AbstractLuxLayer, AbstractApproximateDistribution, DeepSet}
+
+include(joinpath(@__DIR__, "..", "src", "Architectures", "DeepSet_Lux.jl"))
 
 function LuxCore.initialparameters(rng::AbstractRNG, estimator::AbstractNeuralEstimator)
     NamedTuple(f => LuxCore.initialparameters(rng, getfield(estimator, f))

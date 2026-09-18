@@ -30,7 +30,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/) for inspiration).
 
 ### Performance
-- 🟡 Lux + Reactant support for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules). Reactant requires arrays of fixed dimension: introduce a type that packs and pads the data sets.
+- 🟡 Reactant support for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules). Reactant probably requires arrays of fixed dimension (might need padding + masking).
 - 🟡 Lux + Reactant support for [SpatialGraphConv](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
 - Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
 - Reactant.jl in the inference stage.

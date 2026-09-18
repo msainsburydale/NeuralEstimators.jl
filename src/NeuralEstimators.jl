@@ -48,6 +48,7 @@ export IndicatorWeights, KernelWeights
 export vectotril, vectotriu
 for file in sort(readdir(joinpath(@__DIR__, "Architectures")))
     endswith(file, ".jl") || continue
+    file == "DeepSet_Lux.jl" && continue  # loaded by NeuralEstimatorsLuxExt
     include(joinpath("Architectures", file))
 end
 
