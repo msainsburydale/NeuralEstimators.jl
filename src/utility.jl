@@ -387,16 +387,22 @@ function stackarrays(v::AbstractVector{A}; merge::Bool = true) where {A <: Abstr
     N = ndims(v[1])  # number of dimensions of the arrays
     lastdims = size.(v, N)  # get size along last dimension for each array
 
-    if length(unique(lastdims)) == 1
-        a = cat(v...; dims = N+1)  # make a new (N+1)-dimensional array
+    # NB the arrays are combined with stack() and reduce(hcat, ⋅) rather than cat(v...; dims), since
+    # splatting v is very slow when it contains many arrays (as it does when the batch size is large)
+    if allequal(lastdims)
+        a = stack(v)  # make a new (N+1)-dimensional array
         if merge
             sz = size(a)
             a = reshape(a, ntuple(i -> sz[i], N-1)..., sz[N]*sz[N + 1])  # merge last two dims
         end
     else
         if merge
-            # Direct cat along last dimension
-            a = cat(v...; dims = N)
+            # Concatenate along the last dimension, temporarily flattening the leading dimensions so
+            # that reduce(hcat, ⋅) (which allocates the output once) can be used
+            leading = size(v[1])[1:(N - 1)]
+            @assert all(x -> size(x)[1:(N - 1)] == leading, v) "Cannot concatenate arrays that differ in their first $(N - 1) dimensions"
+            a = reduce(hcat, map(x -> reshape(x, prod(leading), :), v))
+            a = reshape(a, leading..., :)
         else
             error("Cannot stack arrays with differing sizes along dimension $N without merging.")
         end

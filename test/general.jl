@@ -67,6 +67,16 @@ end
         A₂ = array(2, 3, 5)
         v = [A₁, A₂]
         @test stackarrays(v) == cat(v..., dims = N)
+
+        # Many arrays (the arrays must not be splatted into cat(), which is slow)
+        v = [array(3, m) for m ∈ rand(2:9, 256)]
+        @test stackarrays(v) == reduce(hcat, v)
+        v = [array(3, 4) for _ ∈ 1:256]
+        @test stackarrays(v) == reduce(hcat, v)
+
+        # Differentiability
+        v = [rand32(3, m) for m ∈ (4, 5, 6)]
+        @test all(Flux.gradient(v -> sum(abs2, stackarrays(v)), v)[1] .≈ map(x -> 2x, v))
     end
     @testset "containertype" begin
         a = rand(3, 4)
@@ -841,6 +851,38 @@ end
             @test size(y) == (d, length(M))
             # Basic back propagation
             testbackprop(ds, Z, dvc)
+        end
+    end
+end
+
+@testset "DeepSet aggregation: $dvc" for dvc ∈ devices
+    # The replicates of all data sets are aggregated in a single vectorised call: check that this
+    # agrees with applying the DeepSet to each data set separately, in both value and gradient
+    n = 10     # dimension of each data replicate
+    w = 32     # width of each hidden layer
+    d = 5      # output dimension
+    dₜ = 16    # dimension of neural summary statistic
+    logsumexp = Flux.NNlib.logsumexp
+    customaggregator(x; dims) = mean(x, dims = dims) # aggregation function without a segmented implementation
+    aggregators = (mean, sum, maximum, minimum, logsumexp, customaggregator)
+
+    @testset "a = $a" for a ∈ aggregators
+        for M ∈ ((3, 3, 3), (3, 4, 7)) # equal and varying sample sizes
+            for condition_on_sample_size ∈ (false, true)
+                dₛ = condition_on_sample_size ? 1 : 0
+                ψ = Chain(Dense(n, w, relu), Dense(w, dₜ, relu))
+                ϕ = Chain(Dense(dₜ + dₛ, w, relu), Dense(w, d))
+                ds = DeepSet(ψ, ϕ, a; condition_on_sample_size) |> dvc
+                Z = [rand32(n, m) for m ∈ M] |> dvc
+
+                # Forward evaluation
+                @test ds(Z) ≈ reduce(hcat, [ds(z) for z ∈ Z])
+
+                # Back propagation
+                ∇ = Flux.gradient(ds -> sum(abs2, ds(Z)), ds)[1]
+                ∇ᵣ = Flux.gradient(ds -> sum(abs2, reduce(hcat, [ds(z) for z ∈ Z])), ds)[1]
+                @test all(isapprox.(trainables(∇), trainables(∇ᵣ), rtol = 1.0f-3))
+            end
         end
     end
 end

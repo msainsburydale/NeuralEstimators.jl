@@ -102,8 +102,12 @@ end
 # Multiple data sets
 function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A}
     # Stack into a single array before applying the outer network
-    d.ϕ(stackarrays(_deepsetsummaries(d, Z)))
+    d.ϕ(_stacksummaries(_deepsetsummaries(d, Z)))
 end
+
+# The summaries are returned as a single array (array data), or as one array per data set (graph data and the broadcasting fallback)
+_stacksummaries(t::AbstractArray) = t
+_stacksummaries(t::AbstractVector{<:AbstractArray}) = stackarrays(t)
 
 # Single data set
 function _deepsetsummaries(d::DeepSet, Z::A) where {A}
@@ -122,22 +126,19 @@ end
 # Multiple data sets: optimised version for array data
 function _deepsetsummaries(d::DeepSet, Z::V) where {V <: AbstractVector{A}} where {A <: AbstractArray{T, N}} where {T, N}
     if _first_N_minus_1_dims_identical(Z)
-        # Stack Z = [A₁, A₂, ...] into a single large N-dimensional array and then apply the inner network
-        ψa = d.ψ(stackarrays(Z))
+        # Stack Z = [A₁, A₂, ...] into a single large N-dimensional array and then apply the inner network.
+        # NB the stacking is data marshalling only: gradients reach the parameters of ψ through ψ(⋅), and
+        # the gradient with respect to the data is never needed, so keep the stacking off the AD tape
+        mᵢ = @ignore_derivatives size.(Z, N) # number of replicates for every element in Z
+        Zstacked = @ignore_derivatives stackarrays(Z)
+        ψa = d.ψ(Zstacked)
 
-        # Compute the indices needed for aggregation (i.e., the indicies associated with each Aᵢ in the stacked array)
-        mᵢ = size.(Z, N) # number of replicates for every element in Z
-        cs = cumsum(mᵢ)
-        indices = [(cs[i] - mᵢ[i] + 1):cs[i] for i ∈ eachindex(Z)]
-
-        # Construct the summary statistics
-        t = map(indices) do idx
-            d.a(getobs(ψa, idx))
-        end
+        # Aggregate over the replicates of each data set, returning an array whose final dimension indexes the data sets
+        t = _aggregatereplicates(d.a, ψa, mᵢ)
 
         if !isnothing(d.S)
-            s = @ignore_derivatives d.S.(Z)
-            t = vcat.(t, s)
+            s = @ignore_derivatives _rowofsummaries(d.S, Z, t)
+            t = vcat(t, s)
         end
 
         return t
@@ -145,6 +146,78 @@ function _deepsetsummaries(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
         # Array sizes differ, so therefore cannot stack together; use simple (and slower) broadcasting method (identical to general fallback method defined above)
         return _deepsetsummaries.(Ref(d), Z)
     end
+end
+
+# Applies S to each data set, returning a row vector with the same array type as t (so that vcat(t, s) stays on device)
+function _rowofsummaries(S, Z, t::AbstractArray{T}) where {T}
+    s = similar(t, T, 1, length(Z))
+    copyto!(s, T[S(z) for z ∈ Z])
+    return s
+end
+
+"""
+    _aggregatereplicates(a, ψa, mᵢ)
+
+Aggregates the replicates of each data set, where the replicates of all data sets are stored contiguously
+in the final dimension of `ψa` and `mᵢ[i]` gives the number of replicates in the `i`th data set.
+
+Returns an array whose final dimension indexes the data sets.
+
+The aggregation is done in a single vectorised call, rather than by aggregating each data set in turn.
+The latter is much slower under automatic differentiation, since the pullback of each slice `ψa[.., idx]`
+allocates an array the size of the whole of `ψa`, making the reverse pass quadratic in the number of data sets.
+"""
+function _aggregatereplicates(a::ElementwiseAggregator, ψa::AbstractArray{T, N}, mᵢ) where {T, N}
+    K = length(mᵢ)
+    if allequal(mᵢ)
+        # Equal sample sizes: give the replicates their own dimension and aggregate over it,
+        # which supports any aggregation function taking a dims keyword argument
+        x = reshape(ψa, size(ψa)[1:(N - 1)]..., first(mᵢ), K)
+        return dropdims(a.a(x, dims = N); dims = N)
+    elseif _segmentable(a.a)
+        # Varying sample sizes: aggregate with a single segmented reduction
+        idx = @ignore_derivatives _bagindices(ψa, mᵢ)
+        return _segmentedaggregate(a.a, ψa, idx, (size(ψa)[1:(N - 1)]..., K))
+    else
+        return _aggregateeachdataset(a, ψa, mᵢ)
+    end
+end
+_aggregatereplicates(a, ψa, mᵢ) = _aggregateeachdataset(a, ψa, mᵢ)
+
+# Aggregates each data set in turn, for aggregation functions that cannot be expressed as a segmented reduction
+function _aggregateeachdataset(a, ψa, mᵢ)
+    cs = @ignore_derivatives cumsum(mᵢ)
+    indices = @ignore_derivatives [(cs[i] - mᵢ[i] + 1):cs[i] for i ∈ eachindex(mᵢ)]
+    return stackarrays(map(idx -> a(getobs(ψa, idx)), indices))
+end
+
+# Maps each replicate in the stacked array to the data set that it belongs to. The indices are placed on the
+# same device as ψa, since the pullback of scatter() constructs its workspace with similar(idx, ⋅)
+function _bagindices(ψa, mᵢ)
+    idx = similar(ψa, Int32, sum(mᵢ))
+    copyto!(idx, inverse_rle(1:length(mᵢ), mᵢ))
+    return idx
+end
+
+# Aggregation functions that can be expressed as a segmented reduction over the final dimension.
+# Each function listed here must have a corresponding method of _segmentedaggregate() below
+_segmentable(a) = false
+_segmentable(::typeof(mean)) = true
+_segmentable(::typeof(sum)) = true
+_segmentable(::typeof(maximum)) = true
+_segmentable(::typeof(minimum)) = true
+_segmentable(::typeof(logsumexp)) = true
+
+_segmentedaggregate(::typeof(mean), ψa, idx, dstsize) = scatter(mean, ψa, idx; dstsize = dstsize)
+_segmentedaggregate(::typeof(sum), ψa, idx, dstsize) = scatter(+, ψa, idx; dstsize = dstsize)
+_segmentedaggregate(::typeof(maximum), ψa, idx, dstsize) = scatter(max, ψa, idx; dstsize = dstsize)
+_segmentedaggregate(::typeof(minimum), ψa, idx, dstsize) = scatter(min, ψa, idx; dstsize = dstsize)
+function _segmentedaggregate(::typeof(logsumexp), ψa, idx, dstsize)
+    # Shift by the maximum of each data set for numerical stability. Since logsumexp is invariant to
+    # this shift, the shift is treated as a constant (as it is in standard implementations of logsumexp)
+    mx = @ignore_derivatives scatter(max, ψa, idx; dstsize = dstsize)
+    e = exp.(ψa .- @ignore_derivatives(gather(mx, idx)))
+    return mx .+ log.(scatter(+, e, idx; dstsize = dstsize))
 end
 
 function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})

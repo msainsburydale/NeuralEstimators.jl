@@ -22,7 +22,7 @@ using MLUtils: getobs, DataLoader, flatten, zeros_like, unsqueeze
 import MLUtils: numobs, joinobs
 using NamedArrays
 import NamedArrays: NamedMatrix
-using NNlib: logσ, softplus, softmax, relu, ⊠, batched_transpose, logsumexp, sigmoid
+using NNlib: logσ, softplus, softmax, relu, ⊠, batched_transpose, logsumexp, sigmoid, scatter, gather
 using Optimisers
 using ParameterSchedulers
 using Printf: @sprintf
