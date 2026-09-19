@@ -34,6 +34,7 @@ end
 # Cache key for compiled risk: must support RatioEstimator inputs `(Z, θ)`, etc.
 _compile_key(x::AbstractArray) = size(x)
 _compile_key(x::Tuple) = map(_compile_key, x)
+_compile_key(P::PackedReplicates) = isnothing(P.mask) ? (size(P.data), Tuple(P.sample_sizes)) : (size(P.data), size(P.mask))
 _compile_key(x) = x
 
 # Forward field access used by train.jl (e.g. .optimizer, .optimizer_state)

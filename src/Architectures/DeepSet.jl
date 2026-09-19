@@ -9,9 +9,9 @@ end
 
 @doc raw"""
     DeepSet(ψ, ϕ, a = mean; condition_on_sample_size = false)
-    DeepSet(ψ; a = mean, latent_dim, output_dim, condition_on_sample_size = false, kwargs...)
-	(object::DeepSet)(Z)
-	(object::DeepSet)(Z, ps, st)
+    DeepSet(ψ; latent_dim, output_dim, a = mean, condition_on_sample_size = false, kwargs...)
+	(object::DeepSet)(Z::V) where V <: AbstractVector{A} where A
+    (object::DeepSet)(P::PackedReplicates)
 The DeepSets representation ([Zaheer et al., 2017](https://arxiv.org/abs/1703.06114); [Sainsbury-Dale et al., 2024](https://www.tandfonline.com/doi/full/10.1080/00031305.2023.2249522)),
 ```math
 \mathbf{S}(\mathbf{Z}) = \boldsymbol{\phi}(\mathbf{T}(\mathbf{Z})), \quad
@@ -24,15 +24,19 @@ function.
 The function `a` must operate on arrays and have a keyword argument `dims` for 
 specifying the dimension of aggregation (e.g., `mean`, `sum`, `maximum`, `minimum`, `logsumexp`).
 
+The convenience constructor `DeepSet(ψ; latent_dim, output_dim, ...)` builds `ϕ` as an [`MLP`](@ref),
+where `latent_dim` is the dimension of $\mathbf{T}(\mathbf{Z})$ (i.e., the output dimension of `ψ`) and 
+`output_dim` is the dimension of $\mathbf{S}(\mathbf{Z})$. Additional keyword arguments are passed to [`MLP`](@ref).
+
 `DeepSet` objects act on data of type `Vector{A}`, where each
 element of the vector is associated with one data set (i.e., one set of exchangeable replicates), and where `A` depends on the chosen architecture for `ψ`. 
 Exchangeable replicates within each data set are stored in the batch dimension. For example, with data collected over a two-dimensional grid and with `ψ` chosen to be a CNN, `A` should be a 4-dimensional array, 
-with replicates stored in the 4ᵗʰ dimension. A vector of arrays may optionally be
-wrapped in [`PackedReplicates`](@ref) so that the concatenated batch is a single array.
+with replicates stored in the 4ᵗʰ dimension. Alternatively, a vector of arrays may be wrapped in [`PackedReplicates`](@ref) so that the data are stored as a single multidimensional array and 
+device-transfer overhead is reduced when training with a GPU.
 
 For computational efficiency, array data are first concatenated along their final dimension 
 (i.e., the replicates dimension) before being passed into the inner network `ψ`, 
-thereby ensuring that `ψ` is applied to a single large array rather than multiple small ones. 
+thereby ensuring that `ψ` is applied to a single large array rather than multiple small ones.
 
 When data sets of varying sample size $m$ are envisaged, set
 `condition_on_sample_size = true` to concatenate $\log m$ with $\mathbf{T}(\mathbf{Z})$
@@ -42,13 +46,11 @@ before it is passed to `ϕ`:
 ```
 In this case, the input dimension of `ϕ` must be one greater than the dimension of $\mathbf{T}(\mathbf{Z})$.
 
-The convenience constructor `DeepSet(ψ; latent_dim, output_dim, ...)` builds `ϕ` as an [`MLP`](@ref)
-from $\mathbf{T}(\mathbf{Z})$ to the DeepSet output. Here `latent_dim` is the dimension of
-$\mathbf{T}(\mathbf{Z})$ (so `ψ` must output `latent_dim`) and `output_dim` is the dimension of
-$\mathbf{S}(\mathbf{Z})$. If `condition_on_sample_size = true`, the MLP input dimension is
-`latent_dim + 1`. Additional keyword arguments are passed to [`MLP`](@ref).
+!!! note "Variable sample sizes and Reactant"
+    When training with `Reactant` on data sets of varying sample size, data `Z` must be wrapped in `PackedReplicates(Z; max_sample_size = M)` with a fixed cap `M` so that every batch has the same array shape.
 
-Graph data via [`GNNSummary`](@ref) is currently supported only with the `Flux` backend.
+!!! note "Graph data"
+    Graph data via [`GNNSummary`](@ref) is currently supported only with the `Flux` backend.
 
 # Examples
 ```julia
@@ -60,44 +62,18 @@ n = 10 # dimension of each replicate
 Z = [rand32(n, m) for m ∈ (3, 4)]
 
 # Construct DeepSet object
-dₜ = 16  # dimension of neural summary statistic
-w  = 32  # width of hidden layers
-ψ  = Chain(Dense(n, w, relu), Dense(w, dₜ, relu))
-ϕ  = Chain(Dense(dₜ, w, relu), Dense(w, d))
+latent_dim = 16
+output_dim = 8
+ψ  = Chain(Dense(n, 32, relu), Dense(32, latent_dim, relu))
+ϕ  = Chain(Dense(latent_dim, 32, relu), Dense(32, output_dim))
 ds = DeepSet(ψ, ϕ)
+
+# Convenience constructor
+ds = DeepSet(ψ; latent_dim = latent_dim, output_dim = output_dim)
 
 # Apply DeepSet object to data
 ds(Z)
 ds(PackedReplicates(Z))
-
-using BenchmarkTools
-Z = [rand32(n, rand(300:400)) for _ in 1:10000]
-@btime ds(Z)
-P = PackedReplicates(Z) 
-@btime ds(P)
-
-
-# Convenience constructor: latent_dim is dim(T(Z)), output_dim is dim(S(Z))
-ds = DeepSet(ψ; latent_dim = dₜ, output_dim = d)
-ds(Z)
-
-# Condition on log sample size (MLP input dimension increased by one)
-ds = DeepSet(ψ; latent_dim = dₜ, output_dim = d, condition_on_sample_size = true, width = 32)
-ds(Z)
-```
-
-```julia
-using NeuralEstimators, Lux, Random
-rng = Random.default_rng()
-
-d, n, dₜ, w = 5, 10, 16, 32
-Z = [rand(Float32, n, m) for m ∈ (3, 4)]
-ψ = Chain(Dense(n => w, relu), Dense(w => dₜ, relu))
-ϕ = Chain(Dense(dₜ => w, relu), Dense(w => d))
-ds = DeepSet(ψ, ϕ)
-ps, st = Lux.setup(rng, ds)
-ds(Z, ps, st)[1]
-ds(PackedReplicates(Z), ps, st)[1]
 ```
 """
 @concrete struct DeepSet
@@ -168,9 +144,14 @@ function _deepsetsummaries(d::DeepSet, Z::V) where {V <: AbstractVector{A}} wher
 end
 
 function _deepsetsummaries(d::DeepSet, P::PackedReplicates)
-    t = _aggregatereplicates(d.a, d.ψ(P.data), P.sample_sizes)
+    t = _aggregatereplicates(d.a, d.ψ(P.data), P)
     if !isnothing(d.S)
-        s = @ignore_derivatives _rowofsummaries(d.S, P, t)
+        s = if isnothing(P.mask)
+            @ignore_derivatives _rowofsummaries(d.S, P, t)
+        else
+            # Derive m from the traced mask so log m is not baked into the XLA graph
+            _rowofsummaries(d.S, P, t)
+        end
         t = vcat(t, s)
     end
     return t
@@ -183,9 +164,13 @@ function _rowofsummaries(S, Z, t::AbstractArray{T}) where {T}
     return s
 end
 function _rowofsummaries(S, P::PackedReplicates, t::AbstractArray{T}) where {T}
-    s = similar(t, T, 1, numobs(P))
-    copyto!(s, T.(S(P)))
-    return s
+    if isnothing(P.mask)
+        s = similar(t, T, 1, numobs(P))
+        copyto!(s, T.(S(P)))
+        return s
+    else
+        return reshape(T.(S(P)), 1, :)
+    end
 end
 
 """
@@ -200,6 +185,13 @@ The aggregation is done in a single vectorised call, rather than by aggregating 
 The latter is much slower under automatic differentiation, since the pullback of each slice `ψa[.., idx]`
 allocates an array the size of the whole of `ψa`, making the reverse pass quadratic in the number of data sets.
 """
+function _aggregatereplicates(a::ElementwiseAggregator, ψa::AbstractArray, P::PackedReplicates)
+    if isnothing(P.mask)
+        return _aggregatereplicates(a, ψa, P.sample_sizes)
+    else
+        return _maskedaggregate(a.a, ψa, P.mask)
+    end
+end
 function _aggregatereplicates(a::ElementwiseAggregator, ψa::AbstractArray{T, N}, mᵢ) where {T, N}
     K = length(mᵢ)
     if allequal(mᵢ)
@@ -215,6 +207,7 @@ function _aggregatereplicates(a::ElementwiseAggregator, ψa::AbstractArray{T, N}
         return _aggregateeachdataset(a, ψa, mᵢ)
     end
 end
+_aggregatereplicates(a, ψa, P::PackedReplicates) = _aggregatereplicates(a, ψa, P.sample_sizes)
 _aggregatereplicates(a, ψa, mᵢ) = _aggregateeachdataset(a, ψa, mᵢ)
 
 # Aggregates each data set in turn, for aggregation functions that cannot be expressed as a segmented reduction
@@ -251,6 +244,31 @@ function _segmentedaggregate(::typeof(logsumexp), ψa, idx, dstsize)
     mx = @ignore_derivatives scatter(max, ψa, idx; dstsize = dstsize)
     e = exp.(ψa .- @ignore_derivatives(gather(mx, idx)))
     return mx .+ log.(scatter(+, e, idx; dstsize = dstsize))
+end
+
+# Padded PackedReplicates: rectangular layout (…, M, K) with a traced 0/1 mask of size (M, K)
+function _maskedaggregate(a, ψa::AbstractArray{T, N}, mask) where {T, N}
+    _segmentable(a) || throw(ArgumentError("Padded PackedReplicates only support mean, sum, maximum, minimum, and logsumexp aggregation"))
+    M, K = size(mask)
+    x = reshape(ψa, size(ψa)[1:(N - 1)]..., M, K)
+    w = reshape(mask, ntuple(_ -> 1, N - 1)..., M, K)
+    return _maskedaggregate_op(a, x, w, N)
+end
+_maskedaggregate_op(::typeof(mean), x, w, dims) =
+    dropdims(sum(x .* w, dims = dims) ./ sum(w, dims = dims); dims = dims)
+_maskedaggregate_op(::typeof(sum), x, w, dims) =
+    dropdims(sum(x .* w, dims = dims); dims = dims)
+function _maskedaggregate_op(::typeof(maximum), x, w, dims)
+    T = eltype(x)
+    dropdims(maximum(ifelse.(w .> 0, x, T(-Inf)); dims = dims); dims = dims)
+end
+function _maskedaggregate_op(::typeof(minimum), x, w, dims)
+    T = eltype(x)
+    dropdims(minimum(ifelse.(w .> 0, x, T(Inf)); dims = dims); dims = dims)
+end
+function _maskedaggregate_op(::typeof(logsumexp), x, w, dims)
+    T = eltype(x)
+    dropdims(logsumexp(ifelse.(w .> 0, x, T(-Inf)); dims = dims); dims = dims)
 end
 
 function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})

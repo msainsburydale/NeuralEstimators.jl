@@ -40,9 +40,13 @@ end
 
 function _deepsetsummaries(d::DeepSet, P::PackedReplicates, ps_ψ, st_ψ)
     ψa, st_new = d.ψ(P.data, ps_ψ, st_ψ)
-    t = _aggregatereplicates(d.a, ψa, P.sample_sizes)
+    t = _aggregatereplicates(d.a, ψa, P)
     if !isnothing(d.S)
-        s = @ignore_derivatives _rowofsummaries(d.S, P, t)
+        s = if isnothing(P.mask)
+            @ignore_derivatives _rowofsummaries(d.S, P, t)
+        else
+            _rowofsummaries(d.S, P, t)
+        end
         t = vcat(t, s)
     end
     return t, st_new

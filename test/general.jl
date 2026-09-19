@@ -193,9 +193,56 @@ end
 
             P = PackedReplicates(Z_var)
             show(devnull, P)
-            @test_throws ErrorException PackedReplicates(Z_var; max_sample_size = 8)
             @test_throws ArgumentError PackedReplicates(P.data, [1, 1])
             @test_throws ArgumentError PackedReplicates(AbstractArray[])
+            @test_throws ArgumentError PackedReplicates(Z_var; max_sample_size = 4)
+        end
+
+        @testset "padding" begin
+            P = PackedReplicates(Z_var; max_sample_size = 8)
+            show(devnull, P)
+            @test P.sample_sizes == [3, 5, 4]
+            @test size(P.data) == (n, 8 * 3)
+            @test size(P.mask) == (8, 3)
+            @test P.data[:, 1:3] == Z_var[1]
+            @test all(P.data[:, 4:8] .== 0)
+            @test P.mask[1:3, 1] == ones(Float32, 3)
+            @test all(iszero, P.mask[4:8, 1])
+            @test all(isone, P.mask[1:5, 2])
+            @test all(iszero, P.mask[6:8, 2])
+
+            P1 = getobs(P, 1)
+            @test numobs(P1) == 1
+            @test P1.sample_sizes == [3]
+            @test size(P1.data) == (n, 8)
+            @test P1.data[:, 1:3] == Z_var[1]
+            @test size(P1.mask) == (8, 1)
+
+            P_sub = getobs(P, 1:2)
+            @test P_sub.sample_sizes == [3, 5]
+            @test size(P_sub.data) == (n, 16)
+            @test P_sub.data[:, 1:3] == Z_var[1]
+            @test P_sub.data[:, 9:13] == Z_var[2]
+
+            P_shuf = getobs(P, [3, 1])
+            @test P_shuf.sample_sizes == [4, 3]
+            @test P_shuf.data[:, 1:4] == Z_var[3]
+            @test P_shuf.data[:, 9:11] == Z_var[1]
+
+            P12 = getobs(P, 1:2)
+            P3 = getobs(P, 3)
+            Pj = joinobs(P12, P3)
+            @test Pj.sample_sizes == P.sample_sizes
+            @test Pj.data == P.data
+            @test Pj.mask == P.mask
+            @test_throws ArgumentError joinobs(P, PackedReplicates(Z_var))
+
+            P_rep = subsetreplicates(P, 1:2)
+            @test numobs(P_rep) == 3
+            @test P_rep.sample_sizes == [2, 2, 2]
+            @test size(P_rep.mask) == (8, 3)
+            @test P_rep.data[:, 1:2] == Z_var[1][:, 1:2]
+            @test P_rep.data[:, 9:10] == Z_var[2][:, 1:2]
         end
 
         @testset "numobs, getobs, getindex" begin
@@ -253,15 +300,31 @@ end
             P32 = f32(P)
             @test eltype(P32.data) == Float32
             @test P32.sample_sizes == P.sample_sizes
+            @test isnothing(P32.mask)
+
+            Ppad = PackedReplicates(Z; max_sample_size = 8)
+            Ppad32 = f32(Ppad)
+            @test eltype(Ppad32.data) == Float32
+            @test eltype(Ppad32.mask) == Float32
+            @test Ppad32.sample_sizes == Ppad.sample_sizes
         end
 
         @testset "device" begin
             P = PackedReplicates(Z_var) |> f32
+            Ppad = PackedReplicates(Z_var; max_sample_size = 8) |> f32
             for dvc in devices
                 Pdev = P |> dvc
                 @test typeof(Pdev.data) == typeof(P.data |> dvc)
                 @test Array(Pdev.data) == P.data
                 @test Pdev.sample_sizes == P.sample_sizes
+                @test isnothing(Pdev.mask)
+
+                Ppaddev = Ppad |> dvc
+                @test typeof(Ppaddev.data) == typeof(Ppad.data |> dvc)
+                @test typeof(Ppaddev.mask) == typeof(Ppad.mask |> dvc)
+                @test Array(Ppaddev.data) == Ppad.data
+                @test Array(Ppaddev.mask) == Ppad.mask
+                @test Ppaddev.sample_sizes == Ppad.sample_sizes
             end
         end
 
@@ -989,6 +1052,13 @@ end
                 ∇ₚ = Flux.gradient(ds -> sum(abs2, ds(P)), ds)[1]
                 @test all(isapprox.(trainables(∇), trainables(∇ᵣ), rtol = 1.0f-3))
                 @test all(isapprox.(trainables(∇), trainables(∇ₚ), rtol = 1.0f-3))
+
+                if a !== customaggregator
+                    Ppad = PackedReplicates(Z; max_sample_size = maximum(M))
+                    @test ds(Ppad) ≈ ds(Z)
+                    ∇ₚₚ = Flux.gradient(ds -> sum(abs2, ds(Ppad)), ds)[1]
+                    @test all(isapprox.(trainables(∇), trainables(∇ₚₚ), rtol = 1.0f-3))
+                end
             end
         end
     end
