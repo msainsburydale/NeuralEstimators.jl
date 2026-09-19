@@ -52,7 +52,6 @@ for file in sort(readdir(joinpath(@__DIR__, "Architectures")))
     include(joinpath("Architectures", file))
 end
 
-
 export AbstractApproximateDistribution, Gaussian, GaussianMixture, NormalisingFlow, SpikeAndSlab, numdistributionalparams
 export CouplingLayer, AffineCouplingBlock, ActNorm, Permutation
 include(joinpath("ApproximateDistributions", "AbstractApproximateDistribution.jl"))

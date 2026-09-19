@@ -162,8 +162,8 @@ end
         K_small = 16
         θ_tr = sampler(K_small)
         θ_va = sampler(K_small)
-        Z_tr = [randn(Float32, 1, 10) for _ in 1:K_small]
-        Z_va = [randn(Float32, 1, 10) for _ in 1:K_small]
+        Z_tr = [randn(Float32, 1, 10) for _ = 1:K_small]
+        Z_va = [randn(Float32, 1, 10) for _ = 1:K_small]
         est = train(est, θ_tr, θ_va, Z_tr, Z_va; epochs = 1, verbose = false, device = cpu_device(), adtype = AutoZygote())
         out = estimate(est, Z_tr; use_gpu = false)
         @test size(out) == (d, K_small)
@@ -337,5 +337,3 @@ end
         @test size(out) == (d, 8)
     end
 end
-
-

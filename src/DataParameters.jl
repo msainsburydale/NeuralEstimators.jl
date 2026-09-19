@@ -295,8 +295,8 @@ function subsetreplicates(P::PackedReplicates, i)
         PackedReplicates(stackarrays(subset), Int[numberreplicates(b) for b in subset])
     else
         M = size(P.mask, 1)
-        bags = [getobs(P.data, ((j - 1) * M + 1):(j * M)) for j in 1:numobs(P)]
-        real_bags = [getobs(bags[j], 1:P.sample_sizes[j]) for j in 1:numobs(P)]
+        bags = [getobs(P.data, ((j - 1) * M + 1):(j * M)) for j = 1:numobs(P)]
+        real_bags = [getobs(bags[j], 1:P.sample_sizes[j]) for j = 1:numobs(P)]
         subset = [getobs(b, idx) for b in real_bags]
         PackedReplicates(subset; max_sample_size = M)
     end
