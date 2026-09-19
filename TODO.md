@@ -52,7 +52,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ### Refactoring/API improvements
 - Clean and improve the plotting code/logic; ideally move this to an external package within the JuliaSBI organization.
-- Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl/Lux.jl.
 - Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
    * This can be easily done for the common cases (Chain, DeepSet), with an `@info` given to tell the user what we inferred. For other cases, just error and tell the user to specify the number of summaries explicitly. Can also make the function used to compute the number of summaries public (and overloadable for custom structs). 
 

@@ -99,8 +99,8 @@ end
 @testset "DeepSet Lux" begin
     rng = Random.default_rng()
     n_ds, w, dₜ, out_dim = 10, 32, 16, 5
-    makeψ() = Lux.Chain(Lux.Dense(n_ds => w, relu), Lux.Dense(w => dₜ, relu))
-    makeϕ(dₛ = 0) = Lux.Chain(Lux.Dense(dₜ + dₛ => w, relu), Lux.Dense(w => out_dim))
+    makeψ() = Lux.Chain(Lux.Dense(n_ds => w, Lux.relu), Lux.Dense(w => dₜ, Lux.relu))
+    makeϕ(dₛ = 0) = Lux.Chain(Lux.Dense(dₜ + dₛ => w, Lux.relu), Lux.Dense(w => out_dim))
 
     @testset "forward and gradients" begin
         for M in ((3, 3, 3), (3, 4, 7))
@@ -149,8 +149,8 @@ end
     @testset "PointEstimator smoke test" begin
         num_summaries = 8
         ds = DeepSet(
-            Lux.Chain(Lux.Dense(1 => 16, relu), Lux.Dense(16 => num_summaries, relu)),
-            Lux.Chain(Lux.Dense(num_summaries => 16, relu), Lux.Dense(16 => num_summaries))
+            Lux.Chain(Lux.Dense(1 => 16, Lux.relu), Lux.Dense(16 => num_summaries, Lux.relu)),
+            Lux.Chain(Lux.Dense(num_summaries => 16, Lux.relu), Lux.Dense(16 => num_summaries))
         )
         est = LuxEstimator(PointEstimator(ds, d; num_summaries = num_summaries, depth = 1, width = 8))
         K_small = 16
