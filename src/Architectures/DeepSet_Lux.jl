@@ -56,7 +56,7 @@ function _deepsetsummaries_each(d::DeepSet, Z, ps_ψ, st_ψ)
     t1, st_new = _deepsetsummaries(d, first(Z), ps_ψ, st_ψ)
     t = Vector{typeof(t1)}(undef, length(Z))
     t[1] = t1
-    for i in 2:length(Z)
+    for i = 2:length(Z)
         t[i], st_new = _deepsetsummaries(d, Z[i], ps_ψ, st_ψ)
     end
     return t, st_new

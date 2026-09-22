@@ -439,7 +439,9 @@ function adjacencymatrix(S::Mat, k::Integer; metric = Euclidean()) where {Mat <:
     I = Vector{Int64}(undef, 0)
     J = Vector{Int64}(undef, 0)
     V = Vector{T}(undef, 0)
-    sizehint!(I, n * kₙ); sizehint!(J, n * kₙ); sizehint!(V, n * kₙ)
+    sizehint!(I, n * kₙ)
+    sizehint!(J, n * kₙ)
+    sizehint!(V, n * kₙ)
     for i ∈ 1:n
         idxᵢ = idx[i]
         distᵢ = dist[i]
@@ -482,7 +484,9 @@ function subsetneighbours(A::SparseMatrixCSC{T}, k::Integer) where {T}
         if length(nzⱼ) <= k+1
             # if there are fewer than k+1 neighbours already, we don't need to do anything
             for p ∈ nzⱼ
-                push!(I, rows[p]); push!(J, j); push!(V, vals[p])
+                push!(I, rows[p])
+                push!(J, j)
+                push!(V, vals[p])
             end
         else
             # compute the empirical τ-quantiles of the distances within the neighbourhood
@@ -505,7 +509,9 @@ function subsetneighbours(A::SparseMatrixCSC{T}, k::Integer) where {T}
                 p★ ∈ selected || push!(selected, p★)
             end
             for p ∈ selected
-                push!(I, rows[p]); push!(J, j); push!(V, vals[p])
+                push!(I, rows[p])
+                push!(J, j)
+                push!(V, vals[p])
             end
         end
     end
