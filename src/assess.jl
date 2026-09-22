@@ -164,7 +164,6 @@ function assess(
 
     if !isnothing(probs)
         @assert length(probs) == 2
-        @assert !(Z isa Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer"
         bs = bootstrap.(Ref(estimator), Z, use_gpu = use_gpu, B = B)
         # compute bootstrap intervals and convert to same format returned by IntervalEstimator
         intervals = stack(vec.(interval.(bs, probs = probs)))
@@ -189,7 +188,7 @@ end
 
 # Posterior sampling 
 function assess(
-    estimator::Union{PosteriorEstimator, RatioEstimator, TelescopingRatioEstimator}, θ, Z, args...;    
+    estimator::Union{PosteriorEstimator, RatioEstimator, TelescopingRatioEstimator}, θ, Z, args...;
     parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
     estimator_name::Union{Nothing, String} = nothing,
     estimator_names::Union{Nothing, String} = nothing,
@@ -209,7 +208,7 @@ function assess(
     empirical_risk = nothing # _computerisk(estimator, θ, Z)
 
     # Obtain point estimates 
-    estimates = reduce(hcat, map.(pointsummary, eachrow.(samples)))
+    estimates = dropdims(mapslices(pointsummary, samples; dims = 2); dims = 2)
 
     # Convert true and estimated parameter to DataFrame, then merge
     estimates = _estimates_to_df(estimates, parameter_names, K, J, m)
@@ -217,9 +216,10 @@ function assess(
     estimates = _attach_truth(θ_df, estimates)
 
     # Convert posterior samples to long form DataFrame 
-    sample_dfs = Vector{DataFrame}(undef, length(samples))
-    for (idx, S) in enumerate(samples)
-        d, N = size(S)
+    d, N, KJ = size(samples)
+    sample_dfs = Vector{DataFrame}(undef, KJ)
+    for idx = 1:KJ
+        S = samples[:, :, idx]
 
         df_s = DataFrame(
             parameter = repeat(parameter_names, inner = N),

@@ -4,6 +4,8 @@ using NeuralEstimators, ADTypes, Enzyme, Zygote, Reactant
 using Lux
 using Flux
 using SimpleChains
+using Random
+using Statistics: mean
 
 d = 2
 n = 100
@@ -79,6 +81,121 @@ function make_estimator(backend, estimator_type::Symbol)
     end
 
     mod === Lux ? (est |> LuxEstimator) : est
+end
+
+# ──────────────────────────────────────────────────────────────────────────────
+# DeepSet (Lux)
+# ──────────────────────────────────────────────────────────────────────────────
+
+function _leafarrays(x, acc = Any[])
+    if x isa AbstractArray
+        push!(acc, x)
+    elseif x isa Union{NamedTuple, Tuple}
+        foreach(v -> _leafarrays(v, acc), x)
+    end
+    return acc
+end
+
+@testset "DeepSet Lux" begin
+    rng = Random.default_rng()
+    n_ds, w, dₜ, out_dim = 10, 32, 16, 5
+    makeψ() = Lux.Chain(Lux.Dense(n_ds => w, Lux.relu), Lux.Dense(w => dₜ, Lux.relu))
+    makeϕ(dₛ = 0) = Lux.Chain(Lux.Dense(dₜ + dₛ => w, Lux.relu), Lux.Dense(w => out_dim))
+
+    @testset "forward and gradients" begin
+        for M in ((3, 3, 3), (3, 4, 7))
+            for condition_on_sample_size in (false, true)
+                dₛ = Int(condition_on_sample_size)
+                ds = DeepSet(makeψ(), makeϕ(dₛ); condition_on_sample_size)
+                ps, st = Lux.setup(rng, ds)
+                @test haskey(ps, :ψ) && haskey(ps, :ϕ)
+                @test haskey(st, :ψ) && haskey(st, :ϕ)
+
+                Z = [rand(Float32, n_ds, m) for m in M]
+                y, st_new = ds(Z, ps, st)
+                @test size(y) == (out_dim, length(M))
+                @test haskey(st_new, :ψ) && haskey(st_new, :ϕ)
+
+                P = PackedReplicates(Z)
+                yP, _ = ds(P, ps, st)
+                @test yP ≈ y
+
+                Ppad = PackedReplicates(Z; max_sample_size = maximum(M))
+                yPad, _ = ds(Ppad, ps, st)
+                @test yPad ≈ y
+
+                y1, _ = ds(Z[1], ps, st)
+                @test size(y1, 1) == out_dim
+
+                gs = Zygote.gradient(ps -> sum(abs2, first(ds(Z, ps, st))), ps)[1]
+                gsP = Zygote.gradient(ps -> sum(abs2, first(ds(P, ps, st))), ps)[1]
+                gsPad = Zygote.gradient(ps -> sum(abs2, first(ds(Ppad, ps, st))), ps)[1]
+                @test !isempty(_leafarrays(gs))
+                @test all(isapprox.(_leafarrays(gs), _leafarrays(gsP); rtol = 1.0f-3))
+                @test all(isapprox.(_leafarrays(gs), _leafarrays(gsPad); rtol = 1.0f-3))
+            end
+        end
+    end
+
+    @testset "convenience constructor infers Lux backend" begin
+        ds = DeepSet(makeψ(); latent_dim = dₜ, output_dim = out_dim)
+        @test ds.ϕ isa Lux.Chain
+        ps, st = Lux.setup(rng, ds)
+        Z = [rand(Float32, n_ds, m) for m in (3, 4)]
+        y, _ = ds(Z, ps, st)
+        @test size(y) == (out_dim, 2)
+
+        ds = DeepSet(makeψ(); latent_dim = dₜ, output_dim = out_dim, condition_on_sample_size = true)
+        @test ds.ϕ isa Lux.Chain
+        ps, st = Lux.setup(rng, ds)
+        y, _ = ds(Z, ps, st)
+        @test size(y) == (out_dim, 2)
+    end
+
+    @testset "PointEstimator smoke test" begin
+        num_summaries = 8
+        ds = DeepSet(
+            Lux.Chain(Lux.Dense(1 => 16, Lux.relu), Lux.Dense(16 => num_summaries, Lux.relu)),
+            Lux.Chain(Lux.Dense(num_summaries => 16, Lux.relu), Lux.Dense(16 => num_summaries))
+        )
+        est = LuxEstimator(PointEstimator(ds, d; num_summaries = num_summaries, depth = 1, width = 8))
+        K_small = 16
+        θ_tr = sampler(K_small)
+        θ_va = sampler(K_small)
+        Z_tr = [randn(Float32, 1, 10) for _ = 1:K_small]
+        Z_va = [randn(Float32, 1, 10) for _ = 1:K_small]
+        est = train(est, θ_tr, θ_va, Z_tr, Z_va; epochs = 1, verbose = false, device = cpu_device(), adtype = AutoZygote())
+        out = estimate(est, Z_tr; use_gpu = false)
+        @test size(out) == (d, K_small)
+    end
+end
+
+@testset "DeepSet Lux Reactant padded PackedReplicates" begin
+    if CUDA.functional()
+        reactant_ok = try
+            Reactant.set_default_backend("gpu")
+            true
+        catch
+            @warn "Reactant GPU backend unavailable, skipping DeepSet Reactant test"
+            false
+        end
+        if reactant_ok
+            num_summaries = 8
+            ds = DeepSet(
+                Lux.Chain(Lux.Dense(1 => 16, Lux.relu), Lux.Dense(16 => num_summaries, Lux.relu)),
+                Lux.Chain(Lux.Dense(num_summaries => 16, Lux.relu), Lux.Dense(16 => num_summaries))
+            )
+            est = LuxEstimator(PointEstimator(ds, d; num_summaries = num_summaries, depth = 1, width = 8))
+            K_small = 16
+            θ_tr = sampler(K_small)
+            θ_va = sampler(K_small)
+            Z_tr = PackedReplicates([randn(Float32, 1, m) for m in rand(5:10, K_small)]; max_sample_size = 10)
+            Z_va = PackedReplicates([randn(Float32, 1, m) for m in rand(5:10, K_small)]; max_sample_size = 10)
+            est = train(est, θ_tr, θ_va, Z_tr, Z_va; epochs = 1, verbose = false, device = reactant_device())
+            out = estimate(est, Z_tr; use_gpu = false)
+            @test size(out) == (d, K_small)
+        end
+    end
 end
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -208,5 +325,15 @@ TRAINING_SCENARIOS = [
                 end
             end
         end
+    end
+end
+
+@testset "No summary network" begin
+    S = randn(Float32, d, 8)
+    for backend in (Flux, Lux)
+        est = PointEstimator(d; num_summaries = d, depth = 1, width = 8, backend = backend)
+        est = backend === Lux ? LuxEstimator(est) : est
+        out = estimate(est, S; use_gpu = false)
+        @test size(out) == (d, 8)
     end
 end

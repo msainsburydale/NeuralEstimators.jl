@@ -107,6 +107,24 @@ end
 simulator(θ::AbstractMatrix, T::Integer) = stack([simulator(ϑ, T) for ϑ in eachcol(θ)])
 ```
 
+Plotting a couple of simulated series is a useful check that the sampler and simulator agree, and shows the variety of dynamics implied by the prior:
+
+```julia
+θ = sampler(2)
+Z = simulator(θ, 100)
+
+fig = Figure(size = (900, 350))
+for k in 1:2
+    ax = Axis(fig[k, 1], xlabel = k == 2 ? "t" : "", ylabel = "Z")
+    lines!(ax, Z[1, :, k], label = "Z₁")
+    lines!(ax, Z[2, :, k], label = "Z₂")
+    k == 1 && axislegend(ax, position = :rt, orientation = :horizontal)
+end
+fig
+```
+
+![Two simulated realisations of the VAR(1) process](assets/figures/temporal_data.png)
+
 ## Constructing the neural network
 
 Because the data are a time series, the neural network should capture temporal dependencies. Two natural choices are a **1D CNN** (which extracts local patterns via convolution over time) and an **LSTM** (which maintains a hidden state across the full sequence).
@@ -197,6 +215,18 @@ estimator = train(estimator, θ_train, θ_val, Z_train, Z_val)
 
 :::
 
+Training progress is reported in the terminal:
+
+![Terminal output during training](assets/figures/temporal_training.gif)
+
+The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref):
+
+```julia
+plotrisk()
+```
+
+![Empirical risk during training](assets/figures/temporal_training_risk.png)
+
 ## Assessing the estimator
 
 The function [`assess`](@ref) can then be used to assess the trained estimator based on unseen test data simulated from the statistical model:
@@ -214,6 +244,8 @@ bias(assessment)
 rmse(assessment)
 plot(assessment)
 ```
+
+![VAR(1) example: Estimates vs. truth](assets/figures/temporal_assessment.png)
 
 ## Applying the estimator to observed data
 

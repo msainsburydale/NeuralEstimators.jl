@@ -1,4 +1,3 @@
-#TODO Remove adtype argument from _risk once we've sorted out Reactant compilation
 #TODO clean up saving/loading... think we want to save the best parameters and optimisers separately:
 # optimizer.bson: optimizer rule + optimizer state (continued training)
 # parameters.bson: neural-network parameters (and states) (continued training + loading in different session)
@@ -23,6 +22,8 @@ The trained estimator is always returned on the CPU.
 - `epochs = 100`: number of epochs to train the neural network. An epoch is one complete pass through the entire training data set when doing stochastic gradient descent.
 - `stopping_epochs = 5`: cease training if the risk does not improve in this number of epochs.
 - `batchsize = 32`: the batchsize to use when performing stochastic gradient descent, that is, the number of training samples processed between each update of the neural-network parameters.
+- `shuffle = true`: whether to shuffle the training set at each epoch. The validation set is never shuffled, so that leftover-batch dropout (see `partial`) drops a fixed subset rather than a random one.
+- `partial = nothing`: whether to include the final incomplete batch when the number of samples is not divisible by `batchsize`. If `nothing`, defaults to `false` when `device isa ReactantDevice` (XLA compiles per batch shape, so a leftover batch is a second compiled graph) and `true` otherwise (use the full training and validation sets).
 - `optimiser::Optimisers.AbstractRule = Adam(5e-4)`: any [Optimisers.jl](https://fluxml.ai/Optimisers.jl/stable/) optimisation rule for updating the neural-network parameters. When the training data or parameters are fixed, one may wish to use regularisation to help prevent overfitting; see [Regularisation](@ref).
 - `lr_schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule}`: defines the learning-rate schedule for adaptively changing the learning rate during training. Accepts either a [ParameterSchedulers.jl](https://fluxml.ai/ParameterSchedulers.jl/dev/) object or `nothing` for a fixed learning rate. By default, it uses [`CosAnneal`](https://fluxml.ai/ParameterSchedulers.jl/dev/api/cyclic/#ParameterSchedulers.CosAnneal) with a maximum set to the initial learning rate from `optimiser`, a minimum of zero, and a period equal to the number of epochs. The learning rate is updated at the end of each epoch. 
 - `freeze_summary_network = false`: if `true` and the estimator has a `summary_network` field, freezes the summary network parameters during training (i.e., only the inference network is updated). In this case, the summary statistics for a given instance of simulated data are computed only once, giving a significant speedup. This is useful for transfer learning, where a pretrained summary network is held fixed while a new inference network is trained for a different model or estimator type.
@@ -44,7 +45,7 @@ The trained estimator is always returned on the CPU.
 # Keyword arguments common to `train(estimator, sampler, simulator)` and `train(estimator, θ_train, θ_val, simulator)`:
 - `simulator_args = ()`: positional arguments passed to `simulator`.
 - `simulator_kwargs::NamedTuple = (;)`: keyword arguments passed to `simulator`.
-- `epochs_per_Z_refresh = 1`: the number of passes to make through the training set before the training data are refreshed.
+- `epochs_per_refresh = 1`: the number of passes to make through the training set before the training data are refreshed.
 - `simulate_just_in_time = false`: flag indicating whether we should simulate just-in-time, in the sense that only a `batchsize` number of parameter vectors and corresponding data are in memory at a given time.
 
 # Keyword arguments unique to `train(estimator, sampler, simulator)`:
@@ -52,7 +53,7 @@ The trained estimator is always returned on the CPU.
 - `sampler_kwargs::NamedTuple = (;)`: keyword arguments passed to `sampler`.
 - `K = 10000`: number of parameter vectors in the training set.
 - `K_val = K ÷ 2` number of parameter vectors in the validation set.
-- `epochs_per_θ_refresh = 1`: the number of passes to make through the training set before the training parameters are refreshed. Must be a multiple of `epochs_per_Z_refresh`.
+- `epochs_per_θ_refresh = epochs_per_refresh`: the number of passes to make through the training set before the training parameters are refreshed. Must be a multiple of `epochs_per_refresh`.
 
 # Examples
 ```julia
@@ -169,8 +170,231 @@ function _resolve_adtype(trainstate, device, adtype, verbose = true)
     return adtype
 end
 
+_resolvepartial(partial::Bool, _) = partial
+_resolvepartial(::Nothing, device) = !(device isa ReactantDevice)
+
+function _resolve_epochs_per_refresh(epochs_per_refresh, epochs_per_Z_refresh)
+    if !isnothing(epochs_per_Z_refresh)
+        @warn "`epochs_per_Z_refresh` is deprecated; use `epochs_per_refresh`"
+        epochs_per_refresh != 1 && throw(ArgumentError("Do not pass both `epochs_per_refresh` and `epochs_per_Z_refresh`"))
+        return epochs_per_Z_refresh
+    end
+    return epochs_per_refresh
+end
+
+mutable struct _TrainDisplay
+    io::IO
+    overwrite::Bool
+    header::String
+    param_status::String
+    data_status::String
+    bar::String
+    has_bar::Bool
+    nlines::Int
+    last_bar_time::Float64
+    term_cols::Int
+end
+
+_TrainDisplay(io::IO, overwrite::Bool) = _TrainDisplay(io, overwrite, "", "", "", "", false, 0, 0.0, 0)
+
+# Just-in-time `_train_step` calls the same method with a display that never prints.
+const _SILENT_DISPLAY = _TrainDisplay(devnull, false)
+
+_can_overwrite(io::IO) = isa(io, Base.TTY)
+
+# stderr/stdout are unbuffered when they are TTYs.
+function _progress_stream()
+    isa(stderr, Base.TTY) && return stderr
+    isa(stdout, Base.TTY) && return stdout
+    return stderr
+end
+
+function _TrainDisplay(verbose::Bool; io::Union{IO, Nothing} = nothing)
+    verbose || return _TrainDisplay(stderr, false)
+    out = isnothing(io) ? _progress_stream() : io
+    return _TrainDisplay(out, _can_overwrite(out))
+end
+
+function _term_cols(io::IO)
+    try
+        c = displaysize(io)[2]
+        return c > 0 ? Int(c) : 80
+    catch
+        return 80
+    end
+end
+
+function _fit_line(s::AbstractString, cols::Int)
+    cols < 1 && return ""
+    textwidth(s) <= cols && return String(s)
+    buf = IOBuffer()
+    w = 0
+    for c in s
+        cw = textwidth(c)
+        w + cw > cols && break
+        print(buf, c)
+        w += cw
+    end
+    return String(take!(buf))
+end
+
+function _display_lines(d::_TrainDisplay)
+    lines = String[d.header]
+    !isempty(d.bar) && push!(lines, d.bar)
+    !isempty(d.param_status) && push!(lines, d.param_status)
+    !isempty(d.data_status) && push!(lines, d.data_status)
+    return lines
+end
+
+function _erase_block!(io::IO, nlines::Int)
+    if nlines > 1
+        print(io, "\r\e[K")
+        for _ = 1:(nlines - 1)
+            print(io, "\e[A\r\e[K")
+        end
+    else
+        print(io, '\r')
+    end
+    return nothing
+end
+
+function _redraw!(d::_TrainDisplay)
+    io = d.io
+    cols = _term_cols(io)
+    if d.nlines > 0 && d.term_cols > 0 && cols < d.term_cols
+        # Width shrank: previous rows may have wrapped, so in-place erase is unsafe.
+        print(io, '\n')
+        d.nlines = 0
+    end
+    lines = map(line -> _fit_line(line, cols), _display_lines(d))
+    _erase_block!(io, d.nlines)
+    for (i, line) in enumerate(lines)
+        print(io, line, "\e[K")
+        i < length(lines) && print(io, '\n')
+    end
+    d.nlines = length(lines)
+    d.has_bar = !isempty(d.bar)
+    d.term_cols = cols
+    flush(io)
+    return nothing
+end
+
+function _status!(d::_TrainDisplay, msg; transient::Bool = false)
+    transient && !d.overwrite && return
+    d.header = String(msg)
+    if d.overwrite
+        _redraw!(d)
+    else
+        println(d.io, d.header)
+        flush(d.io)
+    end
+    return nothing
+end
+
+function _refresh_label(kind::Symbol, first::Bool)
+    verb = first ? "Simulating" : "Refreshing"
+    kind === :parameters && return "$verb training parameters..."
+    kind === :data && return "$verb training data..."
+    throw(ArgumentError("Unknown refresh kind: $kind"))
+end
+
+function _refresh_status!(d::_TrainDisplay, kind::Symbol, elapsed::Union{Nothing, Real} = nothing; first::Bool = false)
+    if isnothing(elapsed)
+        d.overwrite || return nothing
+        msg = _refresh_label(kind, first)
+    else
+        msg = _refresh_label(kind, first) * " finished in $(round(elapsed, digits = 3)) seconds."
+    end
+    if kind === :parameters
+        d.param_status = msg
+    else
+        d.data_status = msg
+    end
+    if d.overwrite
+        _redraw!(d)
+    else
+        println(d.io, msg)
+        flush(d.io)
+    end
+    return nothing
+end
+
+function _clear_refresh!(d::_TrainDisplay)
+    isempty(d.param_status) && isempty(d.data_status) && return nothing
+    d.param_status = ""
+    d.data_status = ""
+    d.overwrite && _redraw!(d)
+    return nothing
+end
+
+function _bar_string(epoch, epochs, i, n; width::Int = 32)
+    if n > 0
+        frac = i / n
+        filled = clamp(round(Int, frac * width), 0, width)
+        bar = "█"^filled * "░"^(width - filled)
+        pct = lpad(string(round(Int, 100 * frac)), 3)
+        return "Epoch $(lpad(epoch, ndigits(epochs)))/$epochs $pct%|$bar| $i/$n"
+    end
+    return "Epoch $(lpad(epoch, ndigits(epochs)))/$epochs  batch $i"
+end
+
+function _epoch_status(epoch, epochs, train_risk, val_risk, min_val_risk, early_stopping_counter, stopping_epochs, lr, epoch_time)
+    return "Epoch $(lpad(epoch, ndigits(epochs)))/$epochs  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Best: $(round(min_val_risk, digits = 3))  Epochs since improvement: $early_stopping_counter/$stopping_epochs  Learning rate: $(@sprintf "%.2E" lr)  Epoch time: $(round(epoch_time, digits = 3)) seconds"
+end
+
+const _BAR_DT = 0.1
+
+@inline function _bar!(d::_TrainDisplay, epoch, epochs, i, n)
+    d.overwrite || return nothing
+    t = time()
+    last_batch = n > 0 && i >= n
+    # Skip the print/flush except on the first batch, the last batch, or every _BAR_DT seconds
+    if d.has_bar && !last_batch && i != 1 && (t - d.last_bar_time) < _BAR_DT
+        return nothing
+    end
+    d.bar = _bar_string(epoch, epochs, i, n)
+    _redraw!(d)
+    d.last_bar_time = time()
+    return nothing
+end
+
+function _finishline!(d::_TrainDisplay)
+    d.overwrite || return nothing
+    io = d.io
+    cols = _term_cols(io)
+    old = d.nlines
+    if old > 0 && d.term_cols > 0 && cols < d.term_cols
+        print(io, '\n')
+        old = 0
+    end
+    d.bar = ""
+    d.has_bar = false
+    lines = map(line -> _fit_line(line, cols), _display_lines(d))
+    if old > 1
+        _erase_block!(io, old)
+        for line in lines
+            print(io, line, "\e[K\n")
+        end
+    elseif old == 0
+        for line in lines
+            println(io, line)
+        end
+        isempty(lines) && print(io, '\n')
+    else
+        print(io, '\n')
+    end
+    d.nlines = 0
+    d.param_status = ""
+    d.data_status = ""
+    d.term_cols = cols
+    flush(io)
+    return nothing
+end
+
 function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     batchsize::Integer = 32,
+    shuffle::Bool = true,
+    partial::Union{Nothing, Bool} = nothing,
     epochs::Integer = 100,
     loss = mae,
     savepath::Union{Nothing, String} = tempdir(),
@@ -183,9 +407,11 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 ) where {P, T}
+    progress = _TrainDisplay(verbose)
 
     # Determine device
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
+    partial = _resolvepartial(partial, device)
 
     # Determine adtype and check deep-learning backend + adtype + device are compatible
     adtype = _resolve_adtype(trainstate, device, adtype, verbose)
@@ -213,31 +439,30 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
             return trainstate
         else
             _freeze_summary_network!(trainstate)
-            verbose && print("Computing summary statistics...")
+            verbose && _status!(progress, "Computing summary statistics..."; transient = true)
             t = @elapsed begin
                 #TODO device management here
                 Z_train = Summaries(summarystatistics(estimator, Z_train; device = device, batchsize = batchsize))
                 Z_val = Summaries(summarystatistics(estimator, Z_val; device = device, batchsize = batchsize))
             end
-            verbose && println(" Finished in $(round(t, digits = 3)) seconds")
             train_time += t
         end
     end
 
-    verbose && println("Constructing the training set...")
-    train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
+    verbose && _status!(progress, "Constructing the training set..."; transient = true)
+    train_set = _dataloader(estimator, Z_train, θ_train, batchsize; shuffle = shuffle, partial = partial)
 
-    verbose && println("Constructing the validation set...")
-    val_set = _dataloader(estimator, Z_val, θ_val, batchsize)
+    verbose && _status!(progress, "Constructing the validation set..."; transient = true)
+    val_set = _dataloader(estimator, Z_val, θ_val, batchsize; shuffle = false, partial = partial)
 
     # ---- Common setup ----
 
     loss = _loss(estimator, loss)
     _checkargs(batchsize, epochs, stopping_epochs, risk_history)
 
-    verbose && print("Computing the initial validation risk...")
-    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device, adtype)
-    verbose && println(" Initial validation risk = $min_val_risk")
+    verbose && _status!(progress, "Computing the initial validation risk..."; transient = true)
+    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device)
+    verbose && _status!(progress, "Initial validation risk = $min_val_risk"; transient = true)
 
     loss_per_epoch = [min_val_risk min_val_risk;]
     if !isnothing(risk_history)
@@ -248,6 +473,7 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
 
     trainstate_best = deepcopy(trainstate)
     early_stopping_counter = 0
+    stopped_early = false
 
     # ---- End common setup ----
 
@@ -255,10 +481,10 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
         GC.gc(false)
 
         # For each batch update trainstate and compute the training loss
-        epoch_time = @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype)
-        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device, adtype)
+        epoch_time = @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype, progress, epoch, epochs)
+        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
-        verbose && println("Epoch: $(lpad(epoch, ndigits(epochs)))  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(trainstate))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
+        lr = _findlr(trainstate)
 
         # Update the learning rate
         if !isnothing(lr_schedule)
@@ -275,13 +501,24 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
             trainstate_best = deepcopy(trainstate)
         else
             early_stopping_counter += 1
-            early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
+        end
+
+        verbose && _status!(progress, _epoch_status(epoch, epochs, train_risk, val_risk, min_val_risk, early_stopping_counter, stopping_epochs, lr, epoch_time))
+
+        if early_stopping_counter >= stopping_epochs
+            stopped_early = true
+            if verbose
+                _finishline!(progress)
+                println("Stopping early since the validation risk has not improved in $stopping_epochs epochs")
+            end
+            break
         end
     end
 
     _thaw!(trainstate)
     _save_trainstate(trainstate, savepath; best = false)
 
+    !stopped_early && verbose && _finishline!(progress)
     _forcegc(verbose)
     verbose && println("Finished training in $(train_time) seconds")
     if !isnothing(savepath) && savepath != tempdir()
@@ -295,7 +532,10 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     simulator_args = (), m = nothing, # trailing deprecated argument
     simulator_kwargs::NamedTuple = (;),
     batchsize::Integer = 32,
-    epochs_per_Z_refresh::Integer = 1,
+    shuffle::Bool = true,
+    partial::Union{Nothing, Bool} = nothing,
+    epochs_per_refresh::Integer = 1,
+    epochs_per_Z_refresh = nothing, # deprecated alias
     epochs::Integer = 100,
     loss = mae,
     savepath::Union{Nothing, String} = tempdir(),
@@ -309,18 +549,23 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     freeze_summary_network::Bool = false,
     adtype::Union{AbstractADType, Nothing} = nothing
 ) where {P}
+    progress = _TrainDisplay(verbose)
+
     if !isnothing(m)
         @warn "`m` is deprecated, use `simulator_args` instead"
         simulator_args = (m,)
     end
 
-    @assert epochs_per_Z_refresh > 0
-    if simulate_just_in_time && epochs_per_Z_refresh != 1
-        @error "We cannot simulate the data just-in-time if we aren't refreshing the data every epoch; please either set `simulate_just_in_time = false` or `epochs_per_Z_refresh = 1`"
+    epochs_per_refresh = _resolve_epochs_per_refresh(epochs_per_refresh, epochs_per_Z_refresh)
+
+    @assert epochs_per_refresh > 0
+    if simulate_just_in_time && epochs_per_refresh != 1
+        @error "We cannot simulate the data just-in-time if we aren't refreshing the data every epoch; please either set `simulate_just_in_time = false` or `epochs_per_refresh = 1`"
     end
 
     # Determine device
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
+    partial = _resolvepartial(partial, device)
 
     # Determine adtype and check deep-learning backend + adtype + device are compatible
     adtype = _resolve_adtype(trainstate, device, adtype, verbose)
@@ -333,9 +578,8 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
         throw(ArgumentError("Gaussian approximate distribution is not supported with ReactantDevice. If this affects your use case, please contact the package maintainer."))
     end
 
-    verbose && print("Simulating validation data...")
+    verbose && _status!(progress, "Simulating validation data..."; transient = true)
     train_time = @elapsed Z_val = simulator(θ_val, simulator_args...; simulator_kwargs...)
-    verbose && println(" Simulated in $(round(train_time, digits = 3)) seconds")
 
     if freeze_summary_network
         if !_has_summary_network(estimator)
@@ -349,28 +593,27 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
             return trainstate
         else
             _freeze_summary_network!(trainstate)
-            verbose && print("Computing summary statistics...")
+            verbose && _status!(progress, "Computing summary statistics..."; transient = true)
             t = @elapsed Z_val = Summaries(summarystatistics(estimator, Z_val; device = device, batchsize = batchsize))
-            verbose && println(" Finished in $(round(t, digits = 3)) seconds")
             train_time += t
         end
     end
 
-    verbose && println("Constructing the validation set...")
-    val_set = _dataloader(estimator, Z_val, θ_val, batchsize)
+    verbose && _status!(progress, "Constructing the validation set..."; transient = true)
+    val_set = _dataloader(estimator, Z_val, θ_val, batchsize; shuffle = false, partial = partial)
 
     # We may store Z_train in its entirety either to reduce simulation overhead or we are
     # not refreshing Z_train every epoch so we need it for subsequent epochs
-    store_entire_train_set = !simulate_just_in_time || epochs_per_Z_refresh != 1
+    store_entire_train_set = !simulate_just_in_time || epochs_per_refresh != 1
 
     # ---- Common setup ----
 
     loss = _loss(estimator, loss)
     _checkargs(batchsize, epochs, stopping_epochs, risk_history)
 
-    verbose && print("Computing the initial validation risk...")
-    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device, adtype)
-    verbose && println(" Initial validation risk = $min_val_risk")
+    verbose && _status!(progress, "Computing the initial validation risk..."; transient = true)
+    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device)
+    verbose && _status!(progress, "Initial validation risk = $min_val_risk"; transient = true)
 
     loss_per_epoch = [min_val_risk min_val_risk;]
     if !isnothing(risk_history)
@@ -381,6 +624,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
 
     trainstate_best = deepcopy(trainstate)
     early_stopping_counter = 0
+    stopped_early = false
 
     # ---- End common setup ----
 
@@ -391,40 +635,46 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
 
         if store_entire_train_set
             # Simulate new training data if needed
-            if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
-                verbose && print("Simulating training data...")
+            if epoch == 1 || (epoch % epochs_per_refresh) == 0
                 train_set = nothing
                 GC.gc(false)
-                t = @elapsed Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
-                verbose && println(" Finished in $(round(t, digits = 3)) seconds")
-                epoch_time += t
-                if freeze_summary_network
-                    epoch_time += @elapsed Z_train = Summaries(summarystatistics(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+                verbose && _refresh_status!(progress, :data; first = epoch == 1)
+                t = @elapsed begin
+                    Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
+                    if freeze_summary_network
+                        Z_train = Summaries(summarystatistics(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+                    end
+                    train_set = _dataloader(estimator, Z_train, θ_train, batchsize; shuffle = shuffle, partial = partial)
                 end
-                train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
+                epoch_time += t
+                verbose && _refresh_status!(progress, :data, t; first = epoch == 1)
+            else
+                _clear_refresh!(progress)
             end
             # Update estimator and compute the training risk
-            epoch_time += @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype)
+            epoch_time += @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype, progress, epoch, epochs)
         else
             # Update estimator and compute the training risk
             train_risk = []
             t = 0.0
-            for θ ∈ _DataLoader(θ_train, batchsize)
+            loader = _DataLoader(θ_train, batchsize; shuffle = shuffle, partial = partial)
+            n = length(loader)
+            for (i, θ) ∈ enumerate(loader)
                 t += @elapsed Z = simulator(θ, simulator_args...; simulator_kwargs...)
-                set = _dataloader(estimator, Z, θ, batchsize)
+                set = _dataloader(estimator, Z, θ, batchsize; shuffle = shuffle, partial = partial)
                 epoch_time += @elapsed rsk, trainstate = _train_step(trainstate, loss, set, device, adtype)
+                _bar!(progress, epoch, epochs, i, n)
 
                 push!(train_risk, rsk)
             end
-            verbose && println("Total simulation time: $(round(t, digits = 3)) seconds")
             epoch_time += t
             train_risk = mean(train_risk) #TODO mean of means ≠ grand mean
         end
 
         # Compute and report the validation risk
-        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device, adtype)
+        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
-        verbose && println("Epoch: $(lpad(epoch, ndigits(epochs)))  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(trainstate))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
+        lr = _findlr(trainstate)
 
         # Update the learning rate
         if !isnothing(lr_schedule)
@@ -441,13 +691,24 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
             trainstate_best = deepcopy(trainstate)
         else
             early_stopping_counter += 1
-            early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
+        end
+
+        verbose && _status!(progress, _epoch_status(epoch, epochs, train_risk, val_risk, min_val_risk, early_stopping_counter, stopping_epochs, lr, epoch_time))
+
+        if early_stopping_counter >= stopping_epochs
+            stopped_early = true
+            if verbose
+                _finishline!(progress)
+                println("Stopping early since the validation risk has not improved in $stopping_epochs epochs")
+            end
+            break
         end
     end
 
     _thaw!(trainstate)
     _save_trainstate(trainstate, savepath; best = false)
 
+    !stopped_early && verbose && _finishline!(progress)
     _forcegc(verbose)
     verbose && println("Finished training in $(train_time) seconds")
     if !isnothing(savepath) && savepath != tempdir()
@@ -464,11 +725,15 @@ function train(trainstate, sampler, simulator;
     sampler_kwargs::NamedTuple = (;),
     simulator_args = (), m = nothing, # trailing deprecated argument
     simulator_kwargs::NamedTuple = (;),
-    epochs_per_θ_refresh::Integer = 1, epochs_per_theta_refresh::Integer = 1,
-    epochs_per_Z_refresh::Integer = 1,
+    epochs_per_refresh::Integer = 1,
+    epochs_per_Z_refresh = nothing, # deprecated alias
+    epochs_per_θ_refresh = nothing,
+    epochs_per_theta_refresh = nothing,
     simulate_just_in_time::Bool = false,
     loss = mae,
     batchsize::Integer = 32,
+    shuffle::Bool = true,
+    partial::Union{Nothing, Bool} = nothing,
     epochs::Integer = 100,
     savepath::Union{Nothing, String} = tempdir(),
     stopping_epochs::Integer = 5,
@@ -480,28 +745,33 @@ function train(trainstate, sampler, simulator;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 )
+    progress = _TrainDisplay(verbose)
+
     if !isnothing(m)
         @warn "`m` is deprecated, use `simulator_args` instead"
         simulator_args = (m,)
     end
 
-    @assert epochs_per_θ_refresh == 1 || epochs_per_theta_refresh == 1 "Only one of `epochs_per_θ_refresh` or `epochs_per_theta_refresh` should be provided"
-    if epochs_per_theta_refresh != 1
+    epochs_per_refresh = _resolve_epochs_per_refresh(epochs_per_refresh, epochs_per_Z_refresh)
+    if !isnothing(epochs_per_theta_refresh)
+        !isnothing(epochs_per_θ_refresh) && throw(ArgumentError("Only one of `epochs_per_θ_refresh` or `epochs_per_theta_refresh` should be provided"))
         epochs_per_θ_refresh = epochs_per_theta_refresh
     end
+    isnothing(epochs_per_θ_refresh) && (epochs_per_θ_refresh = epochs_per_refresh)
 
     @assert K > 0
-    @assert epochs_per_Z_refresh > 0
+    @assert epochs_per_refresh > 0
     @assert epochs_per_θ_refresh > 0
-    @assert epochs_per_θ_refresh % epochs_per_Z_refresh == 0 "`epochs_per_θ_refresh` must be a multiple of `epochs_per_Z_refresh`"
+    @assert epochs_per_θ_refresh % epochs_per_refresh == 0 "`epochs_per_θ_refresh` must be a multiple of `epochs_per_refresh`"
 
-    store_entire_train_set = epochs_per_Z_refresh > 1 || !simulate_just_in_time
+    store_entire_train_set = epochs_per_refresh > 1 || !simulate_just_in_time
 
     # Number of batches of θ in each epoch
     num_batches = ceil(Int, K / batchsize)
 
     # Determine device
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = verbose)
+    partial = _resolvepartial(partial, device)
 
     # Determine adtype and check deep-learning backend + adtype + device are compatible
     adtype = _resolve_adtype(trainstate, device, adtype, verbose)
@@ -514,13 +784,11 @@ function train(trainstate, sampler, simulator;
         throw(ArgumentError("Gaussian approximate distribution is not supported with ReactantDevice. If this affects your use case, please contact the package maintainer."))
     end
 
-    verbose && print("Sampling validation parameters...")
+    verbose && _status!(progress, "Sampling validation parameters..."; transient = true)
     train_time = @elapsed θ_val = sampler(K_val, sampler_args...; sampler_kwargs...)
-    verbose && println(" Finished in $(round(train_time, digits = 3)) seconds")
 
-    verbose && print("Simulating validation data...")
+    verbose && _status!(progress, "Simulating validation data..."; transient = true)
     t = @elapsed Z_val = simulator(θ_val, simulator_args...; simulator_kwargs...)
-    verbose && println(" Finished in $(round(t, digits = 3)) seconds")
     train_time += t
 
     if freeze_summary_network
@@ -535,24 +803,23 @@ function train(trainstate, sampler, simulator;
             return trainstate
         else
             _freeze_summary_network!(trainstate)
-            verbose && print("Computing summary statistics...")
+            verbose && _status!(progress, "Computing summary statistics..."; transient = true)
             t = @elapsed Z_val = Summaries(summarystatistics(estimator, Z_val; device = device, batchsize = batchsize))
-            verbose && println(" Finished in $(round(t, digits = 3)) seconds")
             train_time += t
         end
     end
 
-    verbose && println("Constructing the validation set...")
-    val_set = _dataloader(estimator, Z_val, θ_val, batchsize)
+    verbose && _status!(progress, "Constructing the validation set..."; transient = true)
+    val_set = _dataloader(estimator, Z_val, θ_val, batchsize; shuffle = false, partial = partial)
 
     # ---- Common setup ----
 
     loss = _loss(estimator, loss)
     _checkargs(batchsize, epochs, stopping_epochs, risk_history)
 
-    verbose && print("Computing the initial validation risk...")
-    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device, adtype)
-    verbose && println(" Initial validation risk = $min_val_risk")
+    verbose && _status!(progress, "Computing the initial validation risk..."; transient = true)
+    min_val_risk, trainstate = _risk(trainstate, loss, val_set, device)
+    verbose && _status!(progress, "Initial validation risk = $min_val_risk"; transient = true)
 
     loss_per_epoch = [min_val_risk min_val_risk;]
     if !isnothing(risk_history)
@@ -563,6 +830,7 @@ function train(trainstate, sampler, simulator;
 
     trainstate_best = deepcopy(trainstate)
     early_stopping_counter = 0
+    stopped_early = false
 
     # ---- End common setup ----
 
@@ -579,50 +847,58 @@ function train(trainstate, sampler, simulator;
         if store_entire_train_set
 
             # Simulate new training data if needed
-            if epoch == 1 || (epoch % epochs_per_Z_refresh) == 0
+            if epoch == 1 || (epoch % epochs_per_refresh) == 0
 
                 # Possibly also refresh the parameter set
                 if epoch == 1 || (epoch % epochs_per_θ_refresh) == 0
-                    verbose && print("Refreshing the training parameters...")
                     θ_train = nothing
                     GC.gc(false)
+                    verbose && _refresh_status!(progress, :parameters; first = epoch == 1)
                     t = @elapsed θ_train = sampler(K, sampler_args...; sampler_kwargs...)
-                    verbose && println(" Finished in $(round(t, digits = 3)) seconds")
+                    epoch_time += t
+                    verbose && _refresh_status!(progress, :parameters, t; first = epoch == 1)
+                else
+                    progress.param_status = ""
                 end
 
-                verbose && print("Refreshing the training data...")
                 train_set = nothing
                 GC.gc(false)
-                t = @elapsed Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
-                verbose && println(" Finished in $(round(t, digits = 3)) seconds")
-                epoch_time += t
-                if freeze_summary_network
-                    epoch_time += @elapsed Z_train = Summaries(summarystatistics(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+                verbose && _refresh_status!(progress, :data; first = epoch == 1)
+                t = @elapsed begin
+                    Z_train = simulator(θ_train, simulator_args...; simulator_kwargs...)
+                    if freeze_summary_network
+                        Z_train = Summaries(summarystatistics(estimator, Z_train; use_gpu = use_gpu, batchsize = batchsize))
+                    end
+                    train_set = _dataloader(estimator, Z_train, θ_train, batchsize; shuffle = shuffle, partial = partial)
                 end
-                train_set = _dataloader(estimator, Z_train, θ_train, batchsize)
+                epoch_time += t
+                verbose && _refresh_status!(progress, :data, t; first = epoch == 1)
+            else
+                _clear_refresh!(progress)
             end
 
             # For each batch, update estimator and compute the training risk
-            epoch_time += @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype)
+            epoch_time += @elapsed train_risk, trainstate = _train_step(trainstate, loss, train_set, device, adtype, progress, epoch, epochs)
 
         else
             # Full simulation on the fly and just-in-time sampling
             # Precomputation is incompatible with just-in-time simulation since
             # each batch is simulated and immediately consumed.
             train_risk = []
-            epoch_time += @elapsed for _ ∈ 1:num_batches
+            epoch_time += @elapsed for i ∈ 1:num_batches
                 θ = sampler(batchsize, sampler_args...; sampler_kwargs...)
                 Z = simulator(θ, simulator_args...; simulator_kwargs...)
-                dat = _dataloader(estimator, Z, θ, batchsize)
+                dat = _dataloader(estimator, Z, θ, batchsize; shuffle = shuffle, partial = partial)
                 rsk, trainstate = _train_step(trainstate, loss, dat, device, adtype)
+                _bar!(progress, epoch, epochs, i, num_batches)
                 push!(train_risk, rsk)
             end
             train_risk = mean(train_risk) #TODO mean of means ≠ grand mean
         end
 
-        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device, adtype)
+        epoch_time += @elapsed val_risk, _ = _risk(trainstate, loss, val_set, device)
         loss_per_epoch = vcat(loss_per_epoch, [train_risk val_risk])
-        verbose && println("Epoch: $(lpad(epoch, ndigits(epochs)))  Training risk: $(round(train_risk, digits = 3))  Validation risk: $(round(val_risk, digits = 3))  Learning rate: $(@sprintf "%.2E" _findlr(trainstate))  Epoch time: $(round(epoch_time, digits = 3)) seconds")
+        lr = _findlr(trainstate)
 
         # Update the learning rate
         if !isnothing(lr_schedule)
@@ -639,13 +915,24 @@ function train(trainstate, sampler, simulator;
             trainstate_best = deepcopy(trainstate)
         else
             early_stopping_counter += 1
-            early_stopping_counter > stopping_epochs && verbose && (println("Stopping early since the validation loss has not improved in $stopping_epochs epochs"); break)
+        end
+
+        verbose && _status!(progress, _epoch_status(epoch, epochs, train_risk, val_risk, min_val_risk, early_stopping_counter, stopping_epochs, lr, epoch_time))
+
+        if early_stopping_counter >= stopping_epochs
+            stopped_early = true
+            if verbose
+                _finishline!(progress)
+                println("Stopping early since the validation risk has not improved in $stopping_epochs epochs")
+            end
+            break
         end
     end
 
     _thaw!(trainstate)
     _save_trainstate(trainstate, savepath; best = false)
 
+    !stopped_early && verbose && _finishline!(progress)
     _forcegc(verbose)
     verbose && println("Finished training in $(train_time) seconds")
     if !isnothing(savepath) && savepath != tempdir()
@@ -668,22 +955,23 @@ _loss(estimator, loss) = loss
 # Constructs inputs and outputs (default simulated data and corresponding true parameters, respectively)
 _inputoutput(estimator, Z, θ) = (Z, θ)
 
-function _dataloader(estimator, Z, θ, batchsize)
-    data = _inputoutput(estimator, Z, _stripnames(_extractθ(θ)))
-    _DataLoader(data, batchsize)
-end
-
-_dataloader(estimator::LuxEstimator, Z, θ, batchsize) = _dataloader(estimator.estimator, Z, θ, batchsize)
-
-# Thin wrapper around DataLoader with sensible training defaults
+# Thin wrapper around DataLoader. `train` resolves shuffle/partial (validation is
+# never shuffled; partial defaults to false only under ReactantDevice).
 # NB: redirect_stderr suppresses batchsize warning from DataLoader
 function _DataLoader(data, batchsize::Integer; shuffle = true, partial = false)
-    oldstd = stdout
-    redirect_stderr(devnull)
-    data_loader = DataLoader(f32(data), batchsize = batchsize, shuffle = shuffle, partial = partial)
-    redirect_stderr(oldstd)
-    return data_loader
+    # redirect_stderr do-block restores the original stderr; the previous
+    # implementation restored stdout, so after the first batch all later
+    # console output (including the status line) went to line-buffered stdout.
+    return redirect_stderr(devnull) do
+        DataLoader(f32(data); batchsize = batchsize, shuffle = shuffle, partial = partial)
+    end
 end
+
+function _dataloader(estimator, Z, θ, batchsize; kwargs...)
+    data = _inputoutput(estimator, Z, _stripnames(_extractθ(θ)))
+    _DataLoader(data, batchsize; kwargs...)
+end
+_dataloader(estimator::LuxEstimator, Z, θ, batchsize; kwargs...) = _dataloader(estimator.estimator, Z, θ, batchsize; kwargs...)
 
 # Learning rate from an optimiser rule
 _findlr(trainstate) = _findlr(trainstate.optimizer)

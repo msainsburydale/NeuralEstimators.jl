@@ -18,11 +18,12 @@ using Functors
 using InvertedIndices
 using LinearAlgebra
 using MLDataDevices: cpu_device, gpu_device, reactant_device, CPUDevice, CUDADevice, ReactantDevice, AbstractDevice
-using MLUtils: getobs, DataLoader, flatten, zeros_like, unsqueeze
-import MLUtils: numobs, joinobs
+using MLUtils: DataLoader, flatten, zeros_like, unsqueeze
+import MLUtils: numobs, joinobs, getobs
 using NamedArrays
 import NamedArrays: NamedMatrix
-using NNlib: logσ, softplus, softmax, relu, ⊠, batched_transpose, logsumexp, sigmoid
+using NearestNeighbors: KDTree, BallTree, BruteTree, knn, inrange, MinkowskiMetric # NB used for adjacencymatrix()
+using NNlib: logσ, softplus, softmax, relu, ⊠, batched_transpose, logsumexp, sigmoid, scatter, gather
 using Optimisers
 using ParameterSchedulers
 using Printf: @sprintf
@@ -32,21 +33,21 @@ using Statistics: mean, median, sum, quantile
 using StatsBase
 using StatsBase: wsample, sample
 
-function __init__()
-    ENV["MLDATADEVICES_SILENCE_WARN_NO_GPU"] = "1"
-end
-
 export tanhloss, kpowerloss, intervalscore, quantileloss
 include("losses.jl")
 
-export DataAndSummaries, Summaries
+export DataAndSummaries, Summaries, PackedReplicates
 export AbstractParameterSet, NamedMatrix
 include("DataParameters.jl")
 
 export DeepSet, MLP, MultiHeadMLP, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference
 export IndicatorWeights, KernelWeights
 export vectotril, vectotriu
-include("Architectures.jl")
+for file in sort(readdir(joinpath(@__DIR__, "Architectures")))
+    endswith(file, ".jl") || continue
+    file == "DeepSet_Lux.jl" && continue  # loaded by NeuralEstimatorsLuxExt
+    include(joinpath("Architectures", file))
+end
 
 export AbstractApproximateDistribution, Gaussian, GaussianMixture, NormalisingFlow, SpikeAndSlab, numdistributionalparams
 export CouplingLayer, AffineCouplingBlock, ActNorm, Permutation
@@ -60,11 +61,10 @@ end
 # Batched Chebyshev machinery for 1D density fitting and inverse-CDF sampling,
 # used by the TelescopingRatioEstimator's sequential posterior sampler
 include("Chebyshev1d.jl")
-# i think we don't need to make anything in this script visible
 
 export AbstractNeuralEstimator, AbstractBayesEstimator
 export PosteriorEstimator, RatioEstimator, TelescopingRatioEstimator, PointEstimator, IntervalEstimator, QuantileEstimator
-export Ensemble, PiecewiseEstimator
+export Ensemble
 export LuxEstimator
 export summarynetwork, setsummarynetwork, summarystatistics
 include(joinpath("Estimators", "Estimators.jl"))
@@ -74,6 +74,13 @@ for file in sort(readdir(joinpath(@__DIR__, "Estimators")))
     file != "Estimators.jl" || continue
     file != "Ensemble.jl" || continue
     include(joinpath("Estimators", file))
+end
+
+# Two integers is ambiguous between T(d, summary_network) and T(summary_network, d). Reject it with a clear error.
+for T in (:PointEstimator, :PosteriorEstimator, :IntervalEstimator, :QuantileEstimator, :RatioEstimator, :TelescopingRatioEstimator)
+    @eval function $T(::Integer, ::Integer; kwargs...)
+        throw(ArgumentError("summary_network cannot be an Integer"))
+    end
 end
 
 export train
@@ -86,13 +93,13 @@ include("TrainState.jl")
 export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscore, empiricalprob
 include("assess.jl")
 
-export estimate, sampleposterior, logposterior, spikeprobability, logratio, posteriormean, posteriormedian, posteriorquantile, bootstrap, interval, quantiles
+export estimate, infer, sampleposterior, logposterior, spikeprobability, logratio, posteriormean, posteriormedian, posteriorquantile, bootstrap, interval, quantiles
 include("inference.jl")
 
 export stackarrays, expandgrid, numberreplicates, samplesize, drop, containertype, rowwisenorm, subsetreplicates
 include("utility.jl")
 
-export samplesize, logsamplesize, invsqrtsamplesize, samplecorrelation, samplecovariance
+export samplesize, logsamplesize, invsqrtsamplesize, samplecorrelation, samplecovariance, variogram
 include("summarystatistics.jl")
 
 export EM, removedata, encodedata

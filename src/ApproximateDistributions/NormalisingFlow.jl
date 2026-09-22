@@ -75,7 +75,7 @@ function sampleposterior(flow::NormalisingFlow, tz::AbstractMatrix, N::Integer; 
     tz = device(tz)
     flow = device(flow)
     θ = inverse(flow, U, tz) |> cpu_device()
-    return [θ[:, ((i - 1) * N + 1):(i * N)] for i = 1:K]
+    return reshape(θ, flow.d, N, K)
 end
 
 # ---- Lux (stateless) -------------------------------------------------------
@@ -146,8 +146,7 @@ function sampleposterior(
     tz = device(tz)
     θ, _ = inverse(flow, U, tz, ps, st)
     θ = cpu_device()(θ)
-    samples = [θ[:, ((i - 1) * N + 1):(i * N)] for i = 1:K]
-    return samples
+    return reshape(θ, flow.d, N, K)
 end
 
 # --------------------------------------------------------------------------
@@ -228,12 +227,10 @@ function inverse(layer::CouplingLayer, U::AbstractMatrix, tz::AbstractMatrix)
     θ1 = inverse(layer.block1, θ2, U1, tz)
     θ = vcat(θ1, θ2)
     if !isnothing(layer.permutation)
-        ;
-        θ = inverse(layer.permutation, θ);
+        θ = inverse(layer.permutation, θ)
     end
     if !isnothing(layer.actnorm)
-        ;
-        θ = inverse(layer.actnorm, θ);
+        θ = inverse(layer.actnorm, θ)
     end
     return θ
 end

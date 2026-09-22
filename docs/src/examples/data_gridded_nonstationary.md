@@ -30,9 +30,7 @@ using Folds
 using GaussianRandomFields
 using LinearAlgebra
 using MLUtils: unsqueeze
-using Plots
-using UnicodePlots
-unicodeplots() # plotting directly in terminal
+using CairoMakie
 ```
 
 To improve computational efficiency, various GPU backends are supported. Once the relevant package is loaded and a compatible GPU is available, it will be used automatically:
@@ -123,6 +121,27 @@ function simulator(parameters::Parameters)
 	stack(Z)
 end
 ```
+
+Plotting a range field alongside a realisation of the corresponding process shows the relationship the estimator has to invert: regions with a large range parameter produce visibly smoother data.
+
+```julia
+parameters = sampler(2)
+Z = simulator(parameters)
+
+fig = Figure(size = (700, 600))
+for k in 1:2
+	ax = Axis(fig[k, 1], title = "Range field θ(s)", aspect = DataAspect())
+	hidedecorations!(ax)
+	Colorbar(fig[k, 2], heatmap!(ax, parameters.θ[:, :, 1, k], colormap = :viridis))
+
+	ax = Axis(fig[k, 3], title = "Data Z", aspect = DataAspect())
+	hidedecorations!(ax)
+	Colorbar(fig[k, 4], heatmap!(ax, Z[:, :, 1, k], colormap = :balance))
+end
+fig
+```
+
+![Two range fields and the corresponding data](assets/figures/gridded_nonstationary_data.png)
 
 ## Constructing the neural network
 
@@ -268,6 +287,18 @@ K = 2500
 estimator = train(estimator, θ_train, θ_val, simulator)
 ```
 
+Training progress is reported in the terminal:
+
+![Terminal output during training](assets/figures/gridded_nonstationary_training.gif)
+
+The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref):
+
+```julia
+plotrisk()
+```
+
+![Empirical risk during training](assets/figures/gridded_nonstationary_training_risk.png)
+
 ## Assessing the estimator
 
 NB: when calling [`estimate`](@ref) with this architecture, `batchsize` must evenly divide the number of data sets (i.e., no partial batches).
@@ -287,13 +318,23 @@ k = 1
 θ_true = θ_test.θ[:, :, 1, k]
 θ_hat  = estimates[:, :, 1, k]
 
-# Plotting
+# Plotting, on a common colour scale so that the two surfaces are comparable
 grid_dim = size(Z_test, 1)
 x = y = range(0, 1, length = grid_dim)
-p1 = contour(x, y, θ_true);
-p2 = contour(x, y, θ_hat);
-plot(p1, p2)
+colorrange = extrema([θ_true; θ_hat])
+
+fig = Figure(size = (750, 350))
+for (j, (title, field)) in enumerate(["Truth" => θ_true, "Estimate" => θ_hat])
+	ax = Axis(fig[1, j], title = title, aspect = DataAspect())
+	hidedecorations!(ax)
+	hm = heatmap!(ax, x, y, field; colormap = :viridis, colorrange)
+	contour!(ax, x, y, field; color = :white, linewidth = 0.5)
+	j == 2 && Colorbar(fig[1, 3], hm)
+end
+fig
 ```
+
+![True and estimated range surfaces](assets/figures/gridded_nonstationary_assessment.png)
 
 ## Applying the estimator to observed data
 
@@ -301,5 +342,10 @@ plot(p1, p2)
 Z_obs = simulator(sampler(1))           # stand-in for observed data
 θ_hat = estimate(estimator, Z_obs)      # range field estimate
 θ_hat = dropdims(θ_hat, dims = (3, 4))  # convert to matrix
-contour(x, y, θ_hat)
+
+fig, ax, hm = heatmap(x, y, θ_hat; colormap = :viridis, axis = (; aspect = DataAspect()))
+Colorbar(fig[1, 2], hm)
+fig
 ```
+
+![Estimated range surface for the observed data](assets/figures/gridded_nonstationary_application.png)

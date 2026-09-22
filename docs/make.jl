@@ -1,15 +1,20 @@
-push!(LOAD_PATH, "../src/")
-using Documenter, DocumenterVitepress, NeuralEstimators
+# push!(LOAD_PATH, "../src/")
+# using Documenter, DocumenterVitepress, NeuralEstimators
 
-# Install the packages required by the package extensions
+# # Install the packages required by the package extensions
+# using Pkg
+# Pkg.activate(@__DIR__)
+# Pkg.develop(PackageSpec(path = joinpath(@__DIR__, "..")))
+# Pkg.add(["Makie"])
+# Pkg.instantiate()
+# using Makie
+
 using Pkg
 Pkg.activate(@__DIR__)
-Pkg.develop(PackageSpec(path = joinpath(@__DIR__, "..")))
-Pkg.add(["Makie"])
+Pkg.develop(PackageSpec(; path = joinpath(@__DIR__, "..")))
+Pkg.resolve()      # refresh NeuralEstimators' deps from ../Project.toml
 Pkg.instantiate()
-using Makie
-
-@info pwd()
+using Documenter, DocumenterVitepress, NeuralEstimators, Makie
 
 # Copy assets into subdirectories that reference them
 for subdir in ["examples"]
@@ -28,14 +33,14 @@ makedocs(
         "Examples" => [
             "examples/data_replicated.md",
             "examples/data_temporal.md",
-            "Gridded spatial data" => [
-                "Global parameters" => "examples/data_gridded.md",
-                "Spatially varying parameters" => "examples/data_gridded_nonstationary.md"
-            ],
             "examples/data_irregularspatial.md",
             "examples/data_spatiotemporal.md",
             "examples/data_expert_summaries.md",
-            "examples/data_missing_censored.md"
+            "examples/data_missing_censored.md",
+            "Gridded spatial data" => [
+                "Global parameters" => "examples/data_gridded.md",
+                "Spatially varying parameters" => "examples/data_gridded_nonstationary.md"
+            ]
         ],
         "API" => [
             "Parameters and data" => "API/parametersdata.md",
@@ -44,6 +49,7 @@ makedocs(
             "API/assessment.md",
             "API/inference.md",
             "API/architectures.md",
+            "API/summarystatistics.md",
             "API/approximatedistributions.md",
             "API/lossfunctions.md",
             "API/miscellaneous.md",

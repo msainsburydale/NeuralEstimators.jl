@@ -6,12 +6,14 @@ CollapsedDocStrings = true
 
 The following functions facilitate the use of a trained neural estimator with observed data.
 
-### PosteriorEstimators and RatioEstimators
+```@docs
+infer
+```
+
+### Posterior inference
 
 ```@docs
 sampleposterior
-
-spikeprobability
 
 logratio
 
@@ -20,9 +22,11 @@ posteriormean
 posteriormedian
 
 posteriorquantile
+
+spikeprobability
 ```
 
-### BayesEstimators
+### Point estimation
 
 ```@docs
 estimate

@@ -8,6 +8,7 @@ As a running example, we consider a Gaussian process model where the data are co
 
 ```julia
 using NeuralEstimators, Flux
+using CairoMakie
 using Distributions: Uniform
 using Distances, LinearAlgebra
 using MLUtils: flatten
@@ -89,6 +90,47 @@ function simulate(parameters::Parameters, m::Integer)
 end
 ```
 
+To improve computational efficiency, various GPU backends are supported. Once the relevant package is loaded and a compatible GPU is available, it will be used automatically:
+
+::: code-group
+
+```julia [NVIDIA GPUs]
+using CUDA, cuDNN
+```
+
+```julia [AMD ROCm GPUs]
+using AMDGPU
+```
+
+```julia [Metal M-Series GPUs]
+using Metal
+```
+
+```julia [Intel GPUs]
+using oneAPI
+```
+
+:::
+
+Below, we simulate a complete field and then remove a proportion of it at random, which is the kind of incomplete data the techniques in this section are designed for:
+
+```julia
+θ = sample(1, ξ)
+Z = simulate(θ, 1)[1][:, :, 1, 1]
+
+Z_incomplete = replace(removedata(Z, 0.25), missing => NaN)   # NaN plots as blank
+
+fig = Figure(size = (700, 300))
+for (j, (title, field)) in enumerate(["Complete data" => Z, "Incomplete data" => Z_incomplete])
+	ax = Axis(fig[1, j], title = title, aspect = DataAspect())
+	hidedecorations!(ax)
+	heatmap!(ax, field, colormap = :balance, colorrange = extrema(Z))
+end
+fig
+```
+
+![A complete field and the same field with 25% of the values removed](assets/figures/missing_censored_missing-data.png)
+
 ### The masking approach
 
 The first missing-data technique that we consider is the so-called masking approach of [Wang et al. (2024)](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1012184); see also the discussion by [Sainsbury-Dale et al. (2025, Sec. 2.2)](https://doi.org/10.48550/arXiv.2501.04330). The strategy involves completing the data by replacing missing values with zeros, and using auxiliary variables to encode the missingness pattern, which are also passed into the network.
@@ -137,8 +179,10 @@ network = DeepSet(ψ, ϕ)
 θ̂ = PointEstimator(network)
 
 # Train the masked neural Bayes estimator
-θ̂ = train(θ̂, sample, simulatemissing, simulator_args = 1, ξ = ξ, K = 1000, epochs = 10)
+θ̂ = train(θ̂, sample, simulatemissing, sampler_args = (ξ,), simulator_args = 1, K = 1000, epochs = 10)
 ```
+
+![Terminal output while training the masked estimator](assets/figures/missing_censored_the-masking-approach_training.gif)
 
 Once trained, we can apply our masked neural Bayes estimator to (incomplete) observed data. The data must be encoded in the same manner as during training. Below, we use simulated data as a surrogate for real data, with a missingness proportion of 0.25:
 
@@ -147,7 +191,7 @@ Once trained, we can apply our masked neural Bayes estimator to (incomplete) obs
 Z = simulate(θ, 1)[1]    # complete data
 Z = removedata(Z, 0.25)  # "observed" incomplete data (i.e., with missing values)
 UW = encodedata(Z)       # augmented data {U, W}
-θ̂(UW)                    # point estimate
+estimate(θ̂, UW)          # point estimate
 ```
 
 
@@ -180,8 +224,10 @@ network = DeepSet(ψ, ϕ)
 
 # Train neural Bayes estimator
 H = 50
-θ̂ = train(θ̂, sample, simulate, simulator_args = H, ξ = ξ, K = 1000, epochs = 10)
+θ̂ = train(θ̂, sample, simulate, sampler_args = (ξ,), simulator_args = H, K = 1000, epochs = 10)
 ```
+
+![Terminal output while training the MAP estimator used by the neural EM algorithm](assets/figures/missing_censored_the-em-approach_training.gif)
 
 Next, we define a function for conditional simulation (see [`EM`](@ref) for details on the required format of this function):
 
@@ -281,7 +327,6 @@ Simulation of the random scale mixture (on uniform margins) and its marginal dit
 # Libraries used throughout this example
 using NeuralEstimators, Flux
 using Folds
-using CUDA # GPU if it is available
 using LinearAlgebra: Symmetric, cholesky
 using Distributions: cdf, Uniform, Normal, quantile
 using CairoMakie   
@@ -321,6 +366,25 @@ function F(y; δ)
 end
 ```
 
+The GPU code-group given above applies here too. Simulating from the model for a few values of $\delta$ shows the dependence structure the estimator has to recover, with $\rho$ fixed:
+
+```julia
+θ = hcat([0.8, 0.1], [0.8, 0.5], [0.8, 0.9])
+Z = simulate(θ, 1000)
+
+fig = Figure(size = (900, 320))
+for k in 1:3
+	ax = Axis(fig[1, k],
+		title = "ρ = $(θ[1, k]), δ = $(θ[2, k])",
+		xlabel = "Z₁", ylabel = k == 1 ? "Z₂" : "",
+		aspect = 1
+	)
+	scatter!(ax, Z[k][1, :], Z[k][2, :], markersize = 4, color = (:black, 0.4))
+end
+fig
+```
+
+![Simulated data on uniform margins for three values of the shape parameter](assets/figures/missing_censored_censored-data.png)
 
 ### General censoring
 
@@ -409,7 +473,9 @@ plot(assessment)
 | Mild censoring | ρ       | 0.394838 |
 | Mild censoring | δ         | 0.135169 |
 
-![General censoring](assets/figures//generalcensoring.png)
+![Terminal output while training the two censored-data estimators](assets/figures/missing_censored_general-censoring_training.gif)
+
+![General censoring](assets/figures/missing_censored_general-censoring.png)
 
 Here we have trained two separate neural estimators to handle two different censoring threshold vectors. However, one could train a single neural estimator that caters for a range of censoring thresholds, `c`, by allowing it to vary with the data samples and using it as an input to the neural network. In the next section, we illustrate this in the context of peaks-over-threshold modelling, whereby a single censoring threshold is defined to be the marginal $\tau$-quantile of the data, and we amortise the estimator with respect to the probability level $\tau$. In a peaks-over-threshold setting, variation in the censoring thresholds can be created by placing a prior on $\tau$, which induces a prior on `c`.
 
@@ -450,20 +516,23 @@ UW_train = simulatecensored(θ_train, τ_train, m)
 UW_val   = simulatecensored(θ_val, τ_val, m)
 ```
 
-In this example, the probability level $\tau$ can be incorporated as an input to the neural network by treating it as an input to the outer neural network of the [`DeepSet`](@ref) architecture. To do this, we increase the input dimension of the outer network by one, and then combine the data $\{\boldsymbol{U}, \boldsymbol{W}\}$ and $\tau$ as a tuple (see [`DeepSet`](@ref) for details). 
+In this example, the probability level $\tau$ is incorporated as an extra input via [`DataAndSummaries`](@ref), which concatenates $\tau$ with the learned DeepSet summaries before they are passed to the inference network. See [Expert summary statistics](@ref).
 
 ```julia
-# Construct neural network based on DeepSet architecture
-ψ = Chain(Dense(n * 2, w, relu),Dense(w, w, relu))    
-ϕ = Chain(Dense(w + 1, w, relu), final_layer)
-network = DeepSet(ψ, ϕ)
-
-# Initialise the estimator
-estimator = PointEstimator(network)
+# Summary network (DeepSet) and inference network (MLP; input dimension increased by one to accommodate τ)
+ψ = Chain(Dense(n * 2, w, relu), Dense(w, w, relu))
+ϕ = Chain(Dense(w, w, relu))
+summary_network = DeepSet(ψ, ϕ)
+inference_network = Chain(Dense(w + 1, w, relu), final_layer)
+estimator = PointEstimator(summary_network, inference_network)
 
 # Train the estimator
-estimator = train(estimator, θ_train, θ_val, (UW_train, τ_train), (UW_val, τ_val))
+estimator = train(estimator, θ_train, θ_val,
+      DataAndSummaries(UW_train, τ_train),
+      DataAndSummaries(UW_val, τ_val))
 ```
+
+![Terminal output while training the estimator amortised with respect to τ](assets/figures/missing_censored_peaks-over-threshold-censoring_training.gif)
 
 Our trained estimator can now be used for any value of $\tau$ within the range used during training ($\tau \in [0,0.9]$). Since the estimator is amortised with respect to $\tau$, there is no need to retrain it for different degrees of censoring.
 
@@ -476,12 +545,12 @@ Below, we assess the estimator for different values of $\tau$. As expected, RMSE
 # Assessment with τ fixed to 0 (no censoring)
 τ_test1  = fill(0.0, 1000)'
 UW_test1 = simulatecensored(θ_test, τ_test1, m)
-assessment1 = assess(estimator, θ_test, (UW_test1, τ_test1), parameter_names = ["ρ", "δ"], estimator_name = "τ = 0")   
+assessment1 = assess(estimator, θ_test, DataAndSummaries(UW_test1, τ_test1), parameter_names = ["ρ", "δ"], estimator_name = "τ = 0")   
 
 # Assessment with τ fixed to 0.8
 τ_test2  = fill(0.8, 1000)'
 UW_test2 = simulatecensored(θ_test, τ_test2, m)
-assessment2 = assess(estimator, θ_test, (UW_test2, τ_test2), parameter_names = ["ρ", "δ"], estimator_name = "τ = 0.8")   
+assessment2 = assess(estimator, θ_test, DataAndSummaries(UW_test2, τ_test2), parameter_names = ["ρ", "δ"], estimator_name = "τ = 0.8")   
 
 # Compare results between the two censoring probability levels
 assessment = merge(assessment1, assessment2)
@@ -496,4 +565,4 @@ plot(assessment)
 | τ = 0.80   | ρ         | 0.476348 |
 | τ = 0.80   | δ         | 0.124913 |
 
-![Peaks-over-threshold censoring](assets/figures//potcensoring.png)
+![Peaks-over-threshold censoring](assets/figures/missing_censored_peaks-over-threshold-censoring.png)

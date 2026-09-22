@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+title: "NeuralEstimators.jl: A Julia package for efficient simulation-based inference using neural networks"
+message: "If you use this software, please cite both the software and the article listed under preferred-citation."
+type: software
+authors:
+  - family-names: Sainsbury-Dale
+    given-names: Matthew
+    email: msainsburydale@gmail.com
+version: "0.3.0"
+license: MIT
+repository-code: "https://github.com/msainsburydale/NeuralEstimators.jl"
+url: "https://msainsburydale.github.io/NeuralEstimators.jl/dev/"
+preferred-citation:
+  type: article
+  title: "Likelihood-Free Parameter Estimation with Neural Bayes Estimators"
+  authors:
+    - family-names: Sainsbury-Dale
+      given-names: Matthew
+    - family-names: Zammit-Mangion
+      given-names: Andrew
+    - family-names: Huser
+      given-names: Raphaël
+  journal: "The American Statistician"
+  year: 2024
+  volume: 78
+  start: 1
+  end: 14
+  doi: 10.1080/00031305.2023.2249522

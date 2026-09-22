@@ -22,6 +22,7 @@ using LogDensityProblems
 # The box map
 _toθ(lower, upper, u) = lower .+ (upper .- lower) ./ (1 .+ exp.(-u))
 
+#TODO concrete fields
 struct _NRELogDensity{M <: AbstractMatrix,F}
     tz::M       # cached data summaries, one column
     net_θ::Any                # estimator.summary_network_θ
@@ -56,8 +57,7 @@ function NeuralEstimators._sampleposterior_hmc(
     lo, hi = Float64.(collect(lower)), Float64.(collect(upper))
 
     samples = map(1:size(summary_stats_Z, 2)) do k
-        t = _NRELogDensity(summary_stats_Z[:, k:k], estimator.summary_network_θ,
-                           estimator.inference_network, lo, hi, logprior)
+        t = _NRELogDensity(summary_stats_Z[:, k:k], estimator.summary_network_θ, estimator.inference_network, lo, hi, logprior)
         u0 = zeros(d)                                  # box midpoint after the transform
 
         # Standard AdvancedHMC: NUTS with multinomial sampling, generalised
@@ -68,7 +68,7 @@ function NeuralEstimators._sampleposterior_hmc(
         kernel = HMCKernel(Trajectory{MultinomialTS}(integrator, GeneralisedNoUTurn()))
         adaptor = StanHMCAdaptor(MassMatrixAdaptor(metric), StepSizeAdaptor(0.8, integrator))
         draws, stats = AdvancedHMC.sample(hamiltonian, kernel, u0, N + warmup, adaptor, warmup;
-                                          verbose = false, progress = false)
+            verbose = false, progress = false)
 
         # Keep the last N regardless of whether the installed version drops warmup draws
         kept = draws[(end - N + 1):end]

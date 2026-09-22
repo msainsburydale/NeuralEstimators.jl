@@ -73,15 +73,18 @@ end
 # Wraps a bare array in a single-element vector when using a DeepSet-based network,
 # allowing users to pass a single dataset without manually wrapping it in a vector
 function _check_deepset_input(z)
-    bare_array = typeof(z) <: AbstractArray && !(typeof(z) <: AbstractVector)
-    bare_array_in_tuple = typeof(z) <: Tuple && !(typeof(z[1]) <: AbstractVector)
-    if bare_array
+    if typeof(z) <: AbstractArray && !(typeof(z) <: AbstractVector)
         z = [z]
-    elseif bare_array_in_tuple
-        z = ([z[1]], z[2])
     end
     return z
 end
+
+# Packs a batch of data into a single container before it is moved to the device, so that the
+# batch costs one device transfer rather than one per element, and so that the packing is kept
+# out of the forward pass. Methods for graph data are defined in the GraphNeuralNetworks
+# extension; every other kind of data falls through to the identity method and is unaffected.
+_packbatch(x) = x
+_packbatch(t::Tuple) = map(_packbatch, t)
 
 @inline _uses_deepset(T::DataType) = T <: DeepSet || any(p -> _uses_deepset(p), T.parameters)
 @inline _uses_deepset(T::Type) = false
@@ -297,18 +300,6 @@ end
 function numberreplicates(Z::V) where {V <: AbstractVector{T}} where {T <: Union{Number, Missing}}
     numberreplicates(reshape(Z, :, 1))
 end
-function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
-    Z = tup[1]
-    X = tup[2]
-    @assert length(Z) == length(X)
-    numberreplicates(Z)
-end
-function numberreplicates(tup::Tup) where {Tup <: Tuple{V₁, M}} where {V₁ <: AbstractVector{A}, M <: AbstractMatrix{T}} where {A, T}
-    Z = tup[1]
-    X = tup[2]
-    @assert length(Z) == size(X, 2)
-    numberreplicates(Z)
-end
 
 """
 	subsetreplicates(Z::V, i) where {V <: AbstractArray{A}} where {A <: Any}
@@ -353,13 +344,6 @@ function subsetreplicates end
 
 function subsetreplicates(Z::V, i) where {V <: AbstractVector{A}} where {A}
     subsetreplicates.(Z, Ref(i))
-end
-
-function subsetreplicates(tup::Tup, i) where {Tup <: Tuple{V₁, V₂}} where {V₁ <: AbstractVector{A}, V₂ <: AbstractVector{B}} where {A, B}
-    Z = tup[1]
-    X = tup[2]
-    @assert length(Z) == length(X)
-    (subsetreplicates(Z, i), X) # X is not subsetted because it is set-level information
 end
 
 function subsetreplicates(Z::A, i) where {A <: AbstractArray{T, N}} where {T, N}
@@ -410,16 +394,22 @@ function stackarrays(v::AbstractVector{A}; merge::Bool = true) where {A <: Abstr
     N = ndims(v[1])  # number of dimensions of the arrays
     lastdims = size.(v, N)  # get size along last dimension for each array
 
-    if length(unique(lastdims)) == 1
-        a = cat(v...; dims = N+1)  # make a new (N+1)-dimensional array
+    # NB the arrays are combined with stack() and reduce(hcat, ⋅) rather than cat(v...; dims), since
+    # splatting v is very slow when it contains many arrays (as it does when the batch size is large)
+    if allequal(lastdims)
+        a = stack(v)  # make a new (N+1)-dimensional array
         if merge
             sz = size(a)
             a = reshape(a, ntuple(i -> sz[i], N-1)..., sz[N]*sz[N + 1])  # merge last two dims
         end
     else
         if merge
-            # Direct cat along last dimension
-            a = cat(v...; dims = N)
+            # Concatenate along the last dimension, temporarily flattening the leading dimensions so
+            # that reduce(hcat, ⋅) (which allocates the output once) can be used
+            leading = size(v[1])[1:(N - 1)]
+            @assert all(x -> size(x)[1:(N - 1)] == leading, v) "Cannot concatenate arrays that differ in their first $(N - 1) dimensions"
+            a = reduce(hcat, map(x -> reshape(x, prod(leading), :), v))
+            a = reshape(a, leading..., :)
         else
             error("Cannot stack arrays with differing sizes along dimension $N without merging.")
         end

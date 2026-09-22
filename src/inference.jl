@@ -4,44 +4,63 @@ Applies `estimator` to data `Z` and returns the resulting estimates.
 """
 estimate(estimator::AbstractNeuralEstimator, z, args...; kwargs...) = _applywithdevice(estimator, z, args...; kwargs...)
 
+"""
+	infer(estimator::AbstractBayesEstimator, args...; kwargs...)
+	infer(estimator::Union{PosteriorEstimator, RatioEstimator, TelescopingRatioEstimator}, args...; kwargs...)
+Unified inference interface that dispatches to [`estimate`](@ref) for Bayes estimators
+and [`sampleposterior`](@ref) for posterior/ratio estimators.
+"""
+infer(estimator::AbstractBayesEstimator, args...; kwargs...) = estimate(estimator, args...; kwargs...)
+infer(estimator::Union{PosteriorEstimator, RatioEstimator, TelescopingRatioEstimator}, args...; kwargs...) = sampleposterior(estimator, args...; kwargs...)
+
 # ---- Point summaries from non-PointEstimators ----
 
 _doc_string = """
-based either on a ``d`` × ``N`` matrix `θ` of posterior draws, where ``d`` denotes the number of parameters to make inference on, or directly from an estimator that allows for posterior sampling via [`sampleposterior()`](@ref).
+based either on a ``d`` × ``N`` matrix or a ``d`` × ``N`` × ``K`` array `θ` of posterior draws, where ``d`` denotes the number of parameters, ``N`` the number of draws, and ``K`` the number of independent data sets, or directly from an estimator that allows for posterior sampling via [`sampleposterior()`](@ref).
 """
 
 """
-	posteriormean(θ::AbstractMatrix)	
+	posteriormean(θ::AbstractMatrix)
+	posteriormean(θ::AbstractArray{<:Any, 3})
 	posteriormean(estimator, Z; kwargs...)	
 Computes the posterior mean $_doc_string
+
+For a ``d`` × ``N`` × ``K`` array the result is a ``d`` × ``K`` matrix.
 
 See also [`posteriormedian()`](@ref), [`posteriorquantile()`](@ref).
 """
 posteriormean(θ::AbstractMatrix) = mean(θ; dims = 2)
+posteriormean(θ::AbstractArray{<:Any, 3}) = dropdims(mean(θ; dims = 2); dims = 2)
 posteriormean(θ::AbstractVector{<:AbstractMatrix}) = reduce(hcat, posteriormean.(θ))
 posteriormean(estimator, Z, args...; kwargs...) = posteriormean(sampleposterior(estimator, Z, args...; kwargs...))
 
 """
-	posteriormedian(θ::AbstractMatrix)	
+	posteriormedian(θ::AbstractMatrix)
+	posteriormedian(θ::AbstractArray{<:Any, 3})
 	posteriormedian(estimator, Z; kwargs...)	
 Computes the vector of marginal posterior medians $_doc_string
+
+For a ``d`` × ``N`` × ``K`` array the result is a ``d`` × ``K`` matrix.
 
 See also [`posteriormean()`](@ref), [`posteriorquantile()`](@ref).
 """
 posteriormedian(θ::AbstractMatrix) = median(θ; dims = 2)
+posteriormedian(θ::AbstractArray{<:Any, 3}) = dropdims(median(θ; dims = 2); dims = 2)
 posteriormedian(θ::AbstractVector{<:AbstractMatrix}) = reduce(hcat, posteriormedian.(θ))
 posteriormedian(estimator, Z, args...; kwargs...) = posteriormedian(sampleposterior(estimator, Z, args...; kwargs...))
 
 """
-	posteriorquantile(θ::AbstractMatrix, probs)	
+	posteriorquantile(θ::AbstractMatrix, probs)
+	posteriorquantile(θ::AbstractArray{<:Any, 3}, probs)
 	posteriorquantile(estimator, Z, probs; kwargs...)	
 Computes the vector of marginal posterior quantiles with (a collection of) probability levels `probs`, $_doc_string
 
-The return value is a ``d`` × `length(probs)` matrix. 
+The return value is a ``d`` × `length(probs)` matrix for a single data set, or a ``d`` × `length(probs)` × ``K`` array for ``K`` data sets.
 
-See also [`posteriormedian()`](@ref), `posteriormean()`](@ref).
+See also [`posteriormedian()`](@ref), [`posteriormean()`](@ref).
 """
 posteriorquantile(θ::AbstractMatrix, probs) = mapslices(row -> quantile(row, probs), θ, dims = 2)
+posteriorquantile(θ::AbstractArray{<:Any, 3}, probs) = stack(posteriorquantile.(eachslice(θ; dims = 3), Ref(probs)))
 posteriorquantile(θ::AbstractVector{<:AbstractMatrix}, probs) = posteriorquantile.(θ, Ref(probs))
 posteriorquantile(estimator, Z, probs, args...; kwargs...) = posteriorquantile(sampleposterior(estimator, Z, args...; kwargs...), probs)
 
@@ -53,21 +72,50 @@ posteriorquantile(estimator, Z, probs, args...; kwargs...) = posteriorquantile(s
 # ---- Posterior sampling ----
 
 @doc raw"""
-	sampleposterior(estimator::PosteriorEstimator, Z; N::Integer = 1000, kwargs...)
-	sampleposterior(estimator::RatioEstimator, Z; grid, N::Integer = 1000, logprior::Function = θ -> 0f0, kwargs...)
+	sampleposterior(estimator::PosteriorEstimator, Z; N = 1000, kwargs...)
+	sampleposterior(estimator::RatioEstimator, Z; lower = nothing, upper = nothing, grid = nothing, logprior = θ -> 0f0, warmup = 750, N = 1000, kwargs...)
+	sampleposterior(estimator::TelescopingRatioEstimator, Z; lower, upper, logpriors = nothing, chebyshev_batchsize = 1, N = 1000, kwargs...)
 Samples from the approximate posterior distribution implied by `estimator`.
 
-The positional argument `N` controls the size of the posterior sample.
+The keyword argument `N` controls the size of the posterior sample (default 1000).
 
-If `Z` represents a single data set as determined by `numobs`, returns a $d$ × `N` matrix of posterior samples, where $d$ is the dimension of the parameter vector. Otherwise, if `Z` contains multiple data sets, a vector of matrices will be returned. 
+Returns a $d$ × `N` × $K$ array of posterior samples, where $d$ is the dimension of the parameter vector and $K$ is the number of independent data sets in `Z` (so a single data set yields a $d$ × `N` × $1$ array).
 
-When using a `RatioEstimator`, the prior distribution $p(\boldsymbol{\theta})$ is controlled through the keyword argument `logprior` (by default, a uniform prior is used). The sampling algorithm is based on a fine-gridding of the
-parameter space, specified through the keyword argument `grid`. The approximate posterior density is 
-evaluated over this grid, which is then used to draw samples. This is effective when making inference with a
-small number of parameters. For models with a large number of parameters,
-other sampling algorithms (e.g., MCMC) may be needed (please contact the package maintainer).
+Remaining keyword arguments are passed onto [`summarystatistics`](@ref).
 
-Keyword arguments are passed onto [summarystatistics](@ref).
+# PosteriorEstimator
+Draws independent samples from the approximate posterior distribution associated with the estimator.
+
+# RatioEstimator
+Draw posterior samples by one of two approaches, selected by which keyword arguments are supplied:
+
+- **HMC** (supply `lower` and `upper`): NUTS (via the AdvancedHMC extension) on the continuous
+  pdf that is proportional to `exp(logratio(θ) + logprior(θ))` on the box with bounds `lower` and `upper`.
+  One chain per data set with `warmup` adaptation steps discarded.
+  Requires `using AdvancedHMC, ForwardDiff, LogDensityProblems`.
+- **Grid** (supply `grid`): discrete sampling on a fixed `grid` (a `d × G` matrix, one
+  candidate parameter configuration per column). Grid cells are drawn with replacement,
+  with weights proportional to `exp(logratio(θ) + logprior(θ))`.
+
+**Keyword arguments when sampling with RatioEstimators**: 
+
+- `logprior::Function = θ -> 0f0`: log prior density evaluated on a `d`-vector, up to a constant; the default is uniform. For HMC, it must be differentiable by `ForwardDiff.jl`.
+- `grid::AbstractMatrix`: candidate parameter configurations for grid sampling.
+- `lower::AbstractVector`, `upper::AbstractVector`: prior box bounds for HMC. 
+- `warmup::Integer = 750`: adaptation steps for HMC, discarded from the output.
+
+# TelescopingRatioEstimator
+Draw posterior samples sequentially in the coordinates of $\theta$: first generate
+$\theta_1 \mid Z$, then $\theta_2 \mid \theta_1, Z$, and so on. 
+Each one-dimensional conditional density is approximated by a
+Chebyshev polynomial of the given `degree` on `[lower[i], upper[i]]`, and then sampled by inversion sampling.
+
+**Keyword arguments when sampling with TelescopingRatioEstimators**: 
+
+- `lower::AbstractVector`, `upper::AbstractVector`: prior bounds for each of the `d` parameters.
+- `degree::Integer = 128`: degree of the Chebyshev approximation of each conditional density.
+- `logpriors = nothing`: an iterable collection of `d` functions where `logpriors[i]` is the log marginal prior density for the `i`-th parameter. This must agree with the marginal priors used during training, otherwise samples will be drawn from the wrong distribution. By default, assumes uniform marginal priors with bounds specified by `lower` and `upper`.
+- `chebyshev_batchsize::Integer = 1`: number of data sets fused together (per parameter) for efficiency.
 """
 function sampleposterior end
 
@@ -75,6 +123,7 @@ function sampleposterior end
 
 """
 	interval(θ::Matrix; probs = [0.05, 0.95], parameter_names = nothing)
+	interval(θ::AbstractArray{<:Any, 3}; probs = [0.05, 0.95], parameter_names = nothing)
 	interval(estimator::IntervalEstimator, Z; parameter_names = nothing, use_gpu = true)
 Computes a confidence/credible interval based either on a ``d`` × ``B`` matrix `θ` of
 parameters (typically containing bootstrap estimates or posterior draws),
@@ -86,7 +135,9 @@ probability levels controlled by the keyword argument `probs`.
 
 The return type is a ``d`` × 2 matrix, whose first and second columns respectively
 contain the lower and upper bounds of the interval. The rows of this matrix can
-be named by passing a vector of strings to the keyword argument `parameter_names`. 
+be named by passing a vector of strings to the keyword argument `parameter_names`.
+When `θ` is a ``d`` × ``N`` × ``K`` array, a vector of such matrices is returned
+(a single matrix when ``K = 1``).
 """
 function interval(bs; probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 1:size(bs, 1)])
     d, B = size(bs)
@@ -98,6 +149,11 @@ function interval(bs; probs = [0.05, 0.95], parameter_names = ["θ$i" for i ∈ 
     l = ci[:, 1]
     u = ci[:, 2]
     labelinterval(l, u, parameter_names)
+end
+
+function interval(θ::AbstractArray{<:Any, 3}; kwargs...)
+    intervals = [interval(s; kwargs...) for s in eachslice(θ; dims = 3)]
+    return length(intervals) == 1 ? intervals[1] : intervals
 end
 
 function interval(estimator::IntervalEstimator, Z, args...; parameter_names = nothing, use_gpu::Bool = true)
@@ -231,7 +287,6 @@ end
 # ---- Non-parametric bootstrapping ----
 
 function bootstrap(estimator, Z, args...; B::Integer = 400, use_gpu::Bool = true, blocks = nothing, trim::Bool = true)
-    @assert !(typeof(Z) <: Tuple) "bootstrap() is not currently set up for dealing with set-level information; please contact the package maintainer"
 
     # Generate B bootstrap data sets 
     if !isnothing(blocks)

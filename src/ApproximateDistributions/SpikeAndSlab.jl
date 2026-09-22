@@ -149,17 +149,12 @@ function sampleposterior(q::SpikeAndSlab, tz::AbstractMatrix, N::Integer; device
     tz = tz |> device
 
     π = sigmoid.(q.classifier(tz))                       # 1×K
-    slab_samples = sampleposterior(q.slab, tz, N; device = device) # Vector of K, each 1×N on the real line
+    slab_samples = sampleposterior(q.slab, tz, N; device = device) # 1 × N × K on the real line
 
-    K = size(tz, 2)
-    θ = map(1:K) do k
-        x = q.invtransform.(slab_samples[k])   # 1×N in parameter space
-        spike = convert(eltype(x), q.spike)
-        spike_draws = rand(N) .< π[1, k]        # draws that collapse to the spike
-        ifelse.(reshape(spike_draws, 1, N), spike, x)
-    end
-
-    return θ
+    x = q.invtransform.(slab_samples)   # 1 × N × K in parameter space
+    spike = convert(eltype(x), q.spike)
+    spike_draws = rand(1, N, size(tz, 2)) .< reshape(π, 1, 1, :)
+    return ifelse.(spike_draws, spike, x)
 end
 
 # ── Stateless (Lux) ────────────────────────────────────────────────────────────
@@ -197,13 +192,8 @@ function sampleposterior(q::SpikeAndSlab, tz::AbstractMatrix, N::Integer, ps_q, 
     π = sigmoid.(logit)                                       # 1×K
     slab_samples = sampleposterior(q.slab, tz, N, ps_q.slab, st_q.slab; device = device)
 
-    K = size(tz, 2)
-    θ = map(1:K) do k
-        x = q.invtransform.(slab_samples[k])
-        spike = convert(eltype(x), q.spike)
-        spike_draws = rand(N) .< π[1, k]
-        ifelse.(reshape(spike_draws, 1, N), spike, x)
-    end
-
-    return θ
+    x = q.invtransform.(slab_samples)
+    spike = convert(eltype(x), q.spike)
+    spike_draws = rand(1, N, size(tz, 2)) .< reshape(π, 1, 1, :)
+    return ifelse.(spike_draws, spike, x)
 end

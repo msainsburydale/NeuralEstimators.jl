@@ -73,7 +73,14 @@ NamedMatrix(μ = randn(3), σ = rand(3))
 """
 function NamedMatrix(; kwargs...)
     row_names = [string(k) for k in keys(kwargs)]
-    matrix = reduce(vcat, [v' for v in values(kwargs)])
+    vals = collect(values(kwargs))
+
+    if all(x -> x isa Number, vals)
+        matrix = reshape(vals, :, 1)
+    else
+        matrix = reduce(vcat, [v' for v in vals])
+    end
+
     NamedArray(matrix, (row_names, 1:size(matrix, 2)), (:parameter, :sample))
 end
 
@@ -126,6 +133,311 @@ joinobs(d1::DataAndSummaries, d2::DataAndSummaries) = DataAndSummaries(_mergedat
 
 numberreplicates(d::DataAndSummaries) = numberreplicates(d.Z)
 subsetreplicates(d::DataAndSummaries, idx) = DataAndSummaries(subsetreplicates(d.Z, idx), d.S)
+
+# ---- PackedReplicates ----
+
+@doc raw"""
+    PackedReplicates(Z::V; max_sample_size = nothing) where V <: AbstractVector{A} where A <: AbstractArray
+A container that concatenates a vector of data sets into a single array, storing
+the original sample sizes alongside the packed data. Intended to be used with [`DeepSet`](@ref).
+
+Each element of `Z` is one data set, with exchangeable replicates stored in the
+last dimension. By default the packed `data` has final dimension of size
+`sum(sample_sizes)`, where `sample_sizes[i]` is the number of replicates in the
+`i`th data set.
+
+When `max_sample_size` is set, each data set is padded along its last dimension
+to that length before packing, so the packed `data` has final dimension
+`max_sample_size * length(Z)`. A binary `mask` of size `(max_sample_size, length(Z))`
+records which slots are real replicates. This fixed layout is required when
+training a [`DeepSet`](@ref) with `Reactant` on data sets of varying sample size.
+
+# Examples
+```julia
+using NeuralEstimators
+
+# Original data
+n = 2 # dimension of each data replicate
+Z = [rand(Float32, n, m) for m in (3, 5, 4)]
+
+# Packed data
+P = PackedReplicates(Z)          # data size (n, 12), sample_sizes == [3, 5, 4]
+P[1:2]                           # first two data sets
+
+# Fixed shape for Reactant
+P = PackedReplicates(Z; max_sample_size = 5) 
+```
+"""
+struct PackedReplicates{A <: AbstractArray, S, Mask}
+    data::A
+    sample_sizes::S
+    mask::Mask
+    function PackedReplicates(data::A, sample_sizes::S, mask::Mask) where {A <: AbstractArray, S, Mask}
+        n_last = size(data, ndims(data))
+        K = length(sample_sizes)
+        if mask === nothing
+            n_sum = sum(sample_sizes)
+            n_last == n_sum || throw(ArgumentError("size(data, ndims) = $n_last does not match sum(sample_sizes) = $n_sum"))
+        else
+            ndims(mask) == 2 || throw(ArgumentError("mask must be a matrix of size (max_sample_size, K)"))
+            M, Km = size(mask)
+            Km == K || throw(ArgumentError("size(mask, 2) = $Km does not match number of data sets $K"))
+            n_last == M * K || throw(ArgumentError("size(data, ndims) = $n_last does not match max_sample_size * K = $(M * K)"))
+        end
+        new{A, S, Mask}(data, sample_sizes, mask)
+    end
+end
+PackedReplicates(data::AbstractArray, sample_sizes) = PackedReplicates(data, sample_sizes, nothing)
+@functor PackedReplicates (data, mask)
+
+function PackedReplicates(Z::AbstractVector{<:AbstractArray}; max_sample_size = nothing)
+    isempty(Z) && throw(ArgumentError("Z must contain at least one data set"))
+    sample_sizes = Int[size(z, ndims(z)) for z in Z]
+    if isnothing(max_sample_size)
+        return PackedReplicates(stackarrays(Z), sample_sizes, nothing)
+    end
+    M = Int(max_sample_size)
+    mmax = maximum(sample_sizes)
+    mmax <= M || throw(ArgumentError("max_sample_size = $M is smaller than the largest number of replicates ($mmax)"))
+    data, mask = @ignore_derivatives begin
+        padded = [_padlastdim(z, M) for z in Z]
+        data = stackarrays(padded)
+        data, _replicatemask(sample_sizes, M, data)
+    end
+    PackedReplicates(data, sample_sizes, mask)
+end
+
+function _padlastdim(z::AbstractArray{T, N}, M) where {T, N}
+    m = size(z, N)
+    m == M && return z
+    trailing = ntuple(_ -> Colon(), N - 1)
+    out = similar(z, size(z)[1:(N - 1)]..., M)
+    fill!(out, zero(T))
+    out[trailing..., 1:m] = z
+    return out
+end
+
+function _replicatemask(sample_sizes, M, data::AbstractArray{T}) where {T}
+    K = length(sample_sizes)
+    cpu_mask = zeros(T, M, K)
+    for (k, m) in enumerate(sample_sizes)
+        cpu_mask[1:m, k] .= one(T)
+    end
+    mask = similar(data, T, M, K)
+    copyto!(mask, cpu_mask)
+    return mask
+end
+@non_differentiable _padlastdim(::Any, ::Any)
+@non_differentiable _replicatemask(::Any, ::Any, ::Any)
+
+numobs(P::PackedReplicates) = length(P.sample_sizes)
+
+function getobs(P::PackedReplicates, idx)
+    i = idx isa Integer ? (idx:idx) : idx
+    m = collect(P.sample_sizes[i])
+    if isnothing(P.mask)
+        cs = cumsum(P.sample_sizes)
+        if _iscontiguousobs(i)
+            cols = (cs[first(i)] - P.sample_sizes[first(i)] + 1):cs[last(i)]
+            PackedReplicates(getobs(P.data, cols), m)
+        else
+            bags = [getobs(P.data, (cs[j] - P.sample_sizes[j] + 1):cs[j]) for j in i]
+            PackedReplicates(stackarrays(bags), m)
+        end
+    else
+        M = size(P.mask, 1)
+        mask = P.mask[:, i]
+        if _iscontiguousobs(i)
+            cols = ((first(i) - 1) * M + 1):(last(i) * M)
+            PackedReplicates(getobs(P.data, cols), m, mask)
+        else
+            bags = [getobs(P.data, ((j - 1) * M + 1):(j * M)) for j in i]
+            PackedReplicates(stackarrays(bags), m, mask)
+        end
+    end
+end
+
+_iscontiguousobs(::AbstractUnitRange) = true
+function _iscontiguousobs(idx)
+    length(idx) <= 1 && return true
+    prev = first(idx)
+    for j in Iterators.drop(idx, 1)
+        j == prev + 1 || return false
+        prev = j
+    end
+    return true
+end
+
+Base.getindex(P::PackedReplicates, i) = getobs(P, i)
+
+function joinobs(a::PackedReplicates, b::PackedReplicates)
+    ndims(a.data) == ndims(b.data) || throw(ArgumentError("Cannot join PackedReplicates with different numbers of dimensions"))
+    size(a.data)[1:(end - 1)] == size(b.data)[1:(end - 1)] ||
+        throw(ArgumentError("Cannot join PackedReplicates with different leading dimensions"))
+    if isnothing(a.mask) && isnothing(b.mask)
+        PackedReplicates(stackarrays([a.data, b.data]), vcat(a.sample_sizes, b.sample_sizes))
+    elseif !isnothing(a.mask) && !isnothing(b.mask)
+        size(a.mask, 1) == size(b.mask, 1) ||
+            throw(ArgumentError("Cannot join PackedReplicates with different max_sample_size"))
+        PackedReplicates(stackarrays([a.data, b.data]), vcat(a.sample_sizes, b.sample_sizes), hcat(a.mask, b.mask))
+    else
+        throw(ArgumentError("Cannot join padded and unpadded PackedReplicates"))
+    end
+end
+
+numberreplicates(P::PackedReplicates) = P.sample_sizes
+
+function subsetreplicates(P::PackedReplicates, i)
+    idx = i isa Integer ? (i:i) : i
+    if isnothing(P.mask)
+        bags = [getobs(P.data, slice) for slice in _replicateslices(P.sample_sizes)]
+        subset = [getobs(b, idx) for b in bags]
+        PackedReplicates(stackarrays(subset), Int[numberreplicates(b) for b in subset])
+    else
+        M = size(P.mask, 1)
+        bags = [getobs(P.data, ((j - 1) * M + 1):(j * M)) for j = 1:numobs(P)]
+        real_bags = [getobs(bags[j], 1:P.sample_sizes[j]) for j = 1:numobs(P)]
+        subset = [getobs(b, idx) for b in real_bags]
+        PackedReplicates(subset; max_sample_size = M)
+    end
+end
+
+function _replicateslices(sample_sizes)
+    cs = cumsum(sample_sizes)
+    [(cs[i] - sample_sizes[i] + 1):cs[i] for i in eachindex(sample_sizes)]
+end
+
+function Base.show(io::IO, P::PackedReplicates)
+    if isnothing(P.mask)
+        print(io, "PackedReplicates with $(numobs(P)) data sets packed into an array of size $(size(P.data))")
+    else
+        print(io, "PackedReplicates with $(numobs(P)) data sets packed into an array of size $(size(P.data)) (padded to max_sample_size = $(size(P.mask, 1)))")
+    end
+end
+Base.show(io::IO, ::MIME"text/plain", P::PackedReplicates) = print(io, P)
+
+# ---- PackedGraphs ----
+
+"""
+    ReplicatesInFeatures
+    ReplicatesInSubgraphs
+
+Singleton types recording how independent replicates are stored in a [`PackedGraphs`](@ref)
+object. `ReplicatesInFeatures` indicates that each data set is a single graph whose node
+features carry the replicates in their second dimension (`q × m × n`), as produced by
+`spatialgraph(S::AbstractMatrix, Z)`. `ReplicatesInSubgraphs` indicates that the replicates
+of each data set are stored as subgraphs, as produced by `spatialgraph(S::AbstractVector, Z)`.
+"""
+struct ReplicatesInFeatures end
+struct ReplicatesInSubgraphs end
+
+"""
+    PackedGraphs(graph, sample_sizes, mask, layout)
+
+An internal, batch-level container holding several graphical data sets packed into a single
+(super)graph, the graph analogue of [`PackedReplicates`](@ref).
+
+The packing is performed on the host before the data are moved to the device, so that a batch
+costs a single device transfer rather than one per graph, and so that the graph batching is
+kept out of the forward pass (and hence off the automatic-differentiation tape).
+
+- `graph`: a single supergraph, the batch of all data sets.
+- `sample_sizes`: the number of replicates in each data set.
+- `mask`: `nothing`, or an `M × K` matrix of ones and zeros indicating which of the `M`
+  padded replicate slots of each of the `K` data sets are real. Only used with
+  `ReplicatesInFeatures` and a varying number of replicates.
+- `layout`: [`ReplicatesInFeatures`](@ref) or [`ReplicatesInSubgraphs`](@ref).
+
+Constructed from a vector of graphs by the method defined in the GraphNeuralNetworks
+extension. Not part of the public API: it is created internally during training and
+inference, and it does not support `getobs`, since the batch it represents is already fixed.
+"""
+struct PackedGraphs{G, S, Mask, L}
+    graph::G
+    sample_sizes::S
+    mask::Mask
+    layout::L
+    function PackedGraphs(graph::G, sample_sizes::S, mask::Mask, layout::L) where {G, S, Mask, L}
+        if !isnothing(mask)
+            ndims(mask) == 2 || throw(ArgumentError("mask must be a matrix of size (max_sample_size, K)"))
+            K = size(mask, 2)
+            K == length(sample_sizes) || throw(ArgumentError("size(mask, 2) = $K does not match the number of data sets $(length(sample_sizes))"))
+            M = size(mask, 1)
+            mmax = maximum(sample_sizes)
+            mmax <= M || throw(ArgumentError("size(mask, 1) = $M is smaller than the largest number of replicates ($mmax)"))
+            layout isa ReplicatesInSubgraphs && throw(ArgumentError("padding is not used when the replicates are stored as subgraphs"))
+        end
+        new{G, S, Mask, L}(graph, sample_sizes, mask, layout)
+    end
+end
+PackedGraphs(graph, sample_sizes, layout) = PackedGraphs(graph, sample_sizes, nothing, layout)
+
+# Only the graph and the mask are moved to the device: sample_sizes must stay on the host,
+# since it is used for host-side arithmetic (allequal, cumsum, _bagindices)
+@functor PackedGraphs (graph, mask)
+
+numobs(P::PackedGraphs) = length(P.sample_sizes)
+numberreplicates(P::PackedGraphs) = P.sample_sizes
+
+function getobs(P::PackedGraphs, idx)
+    throw(ArgumentError("PackedGraphs is a batch-level container and cannot be subset; subset the original vector of graphs instead"))
+end
+Base.getindex(P::PackedGraphs, i) = getobs(P, i)
+
+function Base.show(io::IO, P::PackedGraphs)
+    layout = P.layout isa ReplicatesInFeatures ? "replicates in node features" : "replicates as subgraphs"
+    padding = isnothing(P.mask) ? "" : " (padded to max_sample_size = $(size(P.mask, 1)))"
+    print(io, "PackedGraphs with $(numobs(P)) data sets packed into a single graph, $layout$padding")
+end
+Base.show(io::IO, ::MIME"text/plain", P::PackedGraphs) = print(io, P)
+
+"""
+    GroupedPackedGraphs(groups, order)
+
+An internal, batch-level container holding a batch of graphical data sets as a small number
+of [`PackedGraphs`](@ref) objects, the data sets having been grouped by their number of
+replicates.
+
+When the replicates are stored in the node features and their number varies, packing a batch
+into a single supergraph pads every data set to the largest number of replicates in the
+batch, and every edge-sized intermediate in the graph layers carries that padding. Grouping
+data sets with similar numbers of replicates and packing each group separately keeps the
+padding, and hence the memory and compute spent on it, small. The whole batch is still
+processed in a single forward pass (one gradient step), one supergraph per group.
+
+- `groups`: a vector of [`PackedGraphs`](@ref) objects, one per group.
+- `order`: the permutation that restores the original order of the data sets, i.e., column
+  `order[k]` of the concatenated group outputs corresponds to data set `k`.
+
+Constructed by `_packbatch` in the GraphNeuralNetworks extension. Not part of the public API.
+"""
+struct GroupedPackedGraphs{P <: PackedGraphs}
+    groups::Vector{P}
+    order::Vector{Int}
+    function GroupedPackedGraphs(groups::Vector{P}, order::Vector{Int}) where {P <: PackedGraphs}
+        isempty(groups) && throw(ArgumentError("groups must contain at least one PackedGraphs object"))
+        K = sum(numobs, groups)
+        length(order) == K || throw(ArgumentError("length(order) = $(length(order)) does not match the number of data sets $K"))
+        isperm(order) || throw(ArgumentError("order must be a permutation"))
+        new{P}(groups, order)
+    end
+end
+
+# The order stays on the host: it indexes the columns of the concatenated group outputs
+@functor GroupedPackedGraphs (groups,)
+
+numobs(G::GroupedPackedGraphs) = length(G.order)
+numberreplicates(G::GroupedPackedGraphs) = reduce(vcat, numberreplicates.(G.groups))[G.order]
+
+function getobs(G::GroupedPackedGraphs, idx)
+    throw(ArgumentError("GroupedPackedGraphs is a batch-level container and cannot be subset; subset the original vector of graphs instead"))
+end
+Base.getindex(G::GroupedPackedGraphs, i) = getobs(G, i)
+
+function Base.show(io::IO, G::GroupedPackedGraphs)
+    print(io, "GroupedPackedGraphs with $(numobs(G)) data sets in $(length(G.groups)) groups of sizes $(numobs.(G.groups))")
+end
+Base.show(io::IO, ::MIME"text/plain", G::GroupedPackedGraphs) = print(io, G)
 
 # ---- Summaries wrapper type ----
 

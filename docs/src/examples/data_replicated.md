@@ -57,11 +57,32 @@ simulator(θ::AbstractVector, m) = simulator(θ, rand(m))
 simulator(θ::AbstractMatrix, m = 10:100) = [simulator(ϑ, m) for ϑ in eachcol(θ)]
 ```
 
+Before training, it is worth simulating a few data sets and inspecting them, both to sanity-check the simulator and to see the range of behaviour the estimator will have to cope with:
+
+```julia
+θ = sampler(3)
+Z = simulator(θ, 200)
+
+fig = Figure(size = (900, 250))
+for k in 1:3
+    ax = Axis(fig[1, k],
+        title = "μ = $(round(θ["μ", k], digits = 2)), σ = $(round(θ["σ", k], digits = 2))",
+        xlabel = "Z"
+    )
+    hist!(ax, vec(Z[k]), bins = 30, color = (:black, 0.6))
+end
+fig
+```
+
+![Simulated data sets for three draws from the prior](assets/figures/replicated_data.png)
+
 ## Constructing the neural network
 
 In this package, the neural network specified by the user is typically a summary network that transforms data into a vector of $d^*$ summary statistics for $\boldsymbol{\theta}$, where $d^*$ is user-specified. A common heuristic is to set $d^*$ to a multiple of $d$, the number of unknown parameters (e.g., $d^* = 3d$).
 
 In this example, our data are replicated, and we therefore adopt the DeepSets framework, implemented via [`DeepSet`](@ref). A `DeepSet` consists of three components: an inner network that acts directly on each data replicate; a function that aggregates the outputs of the inner network; and an outer network (typically an MLP) that maps the aggregated output to $\mathbb{R}^{d^*}$. The architecture of the inner network depends on the structure of the data; for unstructured data (i.e., without spatial or temporal correlation within each replicate), an MLP is used, with input dimension matching the dimensionality of each replicate (here, one).
+
+When the sample size $m$ varies, the posterior typically depends on $m$. This dependence can be accounted for by setting `condition_on_sample_size = true` when constructing the [`DeepSet`](@ref) (and increasing the input dimension of `ϕ` by one).
 
 ```julia
 n = 1                # dimension of each data replicate (univariate)
@@ -102,7 +123,17 @@ Next, we train the estimator using [`train`](@ref). Below, we pass our user-defi
 estimator = train(estimator, sampler, simulator)
 ```
 
-The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref). 
+Training progress is reported in the terminal:
+
+![Terminal output during training](assets/figures/replicated_training.gif)
+
+The empirical risk (average loss) over the training and validation sets can be plotted using [`plotrisk`](@ref):
+
+```julia
+plotrisk()
+```
+
+![Empirical risk during training](assets/figures/replicated_training_risk.png)
 
 One may wish to save a trained estimator and load it in a later session: see [Saving and loading estimators](@ref) for details on how this can be done.
 
@@ -127,7 +158,7 @@ risk(assessment)      # 0.055
 plot(assessment)
 ```
 
-![Univariate Gaussian example: Estimates vs. truth](assets/figures//univariate.png)
+![Univariate Gaussian example: Estimates vs. truth](assets/figures/replicated_assessment.png)
 
 ## Applying the estimator to observed data
 

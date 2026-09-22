@@ -12,7 +12,7 @@ lower-triangular Cholesky factor $\boldsymbol{L}$ of the dense covariance matrix
 
 When using a `Gaussian` distribution as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) 
 summary statistics are mapped to the distribution parameters $\boldsymbol{\kappa}$ using a multilayer 
-perceptron ([MLP](@ref "MLP")) with appropriately chosen output activation functions 
+perceptron ([`MLP`](@ref)) with appropriately chosen output activation functions 
 (`identity` for $\boldsymbol{\mu}$ and the off-diagonal entries of $\boldsymbol{L}$, [softplus](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#NNlib.softplus) for the 
 diagonal entries of $\boldsymbol{L}$).
 
@@ -36,12 +36,12 @@ function Gaussian(d::Integer, num_summaries::Integer; backend::Union{Nothing, Mo
 
     inference_network = B.Chain(
         MLP(num_summaries, latent_dim; backend = B, kwargs...).layers..., B.Parallel(vcat,
-            B.Dense(latent_dim, d, identity),    # μ ∈ ℝ     
-            B.Chain(                             # L such that Σ = LL' is pos. def.
-                B.Dense(latent_dim, num_cov_matrix_params, identity),
-                LowerCholeskyFactor(d, B)
-            )
+        B.Dense(latent_dim, d, identity),    # μ ∈ ℝ     
+        B.Chain(                             # L such that Σ = LL' is pos. def.
+            B.Dense(latent_dim, num_cov_matrix_params, identity),
+            LowerCholeskyFactor(d, B)
         )
+    )
     )
 
     # x = d:-1:1
@@ -157,9 +157,6 @@ function sampleposterior(q::Gaussian, tz::AbstractMatrix, N::Integer; device = n
     x = randn(eltype(μ), d, N, K)
     θ = unsqueeze(μ, dims = 2) .+ L ⊠ x  # d × N × K # NB equivalent to:  θ = reshape(μ, d, 1, K) .+ L ⊠ x
 
-    # Split into a vector for consistency with the output of other approximate distributions
-    θ = [θ[:, :, k] for k = 1:K]
-
     return θ
 end
 
@@ -200,9 +197,6 @@ function sampleposterior(q::Gaussian, tz::AbstractMatrix, N::Integer, ps_q, st_q
 
     x = randn(eltype(μ), d, N, K)
     θ = unsqueeze(μ, dims = 2) .+ L ⊠ x  # d × N × K # NB equivalent to:  θ = reshape(μ, d, 1, K) .+ L ⊠ x
-
-    # Split into a vector for consistency with the output of other approximate distributions
-    θ = [θ[:, :, k] for k = 1:K]
 
     return θ
 end

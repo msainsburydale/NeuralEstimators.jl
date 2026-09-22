@@ -12,9 +12,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference.
 - Ensemble methods with general estimator types (e.g., PosteriorEstimator, RatioEstimator).
 
-**Summary network architecture**
-- 🟡 By default, [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) should condition on the (log) sample size (it's easy to forget). This can be done via a convenience constructor; given keyword argument `latent_dim`, calls `MLP` to construct the outer network and automatically conditions on (a learned embedding of) the sample size.
-
 **Training**
 - Support for reading data from disk during training, to handle data sets that are too large to fit in memory.
 
@@ -23,54 +20,41 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - assess.jl/inference.jl for more general parameter shapes (currently assumes the parameters are stored as a matrix).
 
 ### Documentation
-- 🟡 Add illustrative data figures and diagnostic plots in all examples.
-- In the Examples tab, index "Global parameters" and "Spatially indexed parameters" so it is clear that these are subsections, and put a hyperlink on "Gridded spatial data" with the two subsections in it (or at least with links to them).
-- Add code groups for Lux/Flux (containing `using Lux`/`using Flux`) in the examples.
 - Example: In the time-series example, also illustrate partially-exchangeable networks using DeepSet.
 - Example: Illustrate Lévy Processes (a time-series model) using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)).
 - Add [`::: tabs`](https://luxdl.github.io/DocumenterVitepress.jl/dev/manual/markdown-examples#Tabs) in the assessment stage of the examples to show the various diagnostic plots (recovery plots for point estimates; SBC and posterior contraction for posterior samples).
+- Add code groups for Lux/Flux (containing `using Lux`/`using Flux`) in the examples that support both.
 - Document the internal functions and add them to `API/Internal` or `API/Developer docs`. This will help with maintenance/contributions, and allow us to reference the internals when documenting public functions (e.g., "`kwargs...` are passed onto `_internal_function`").
-- Add a gif to the README (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif)).
+- Add a gif to the README.
 - Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/) for inspiration).
 
 ### Performance
-- 🟡 Lux.jl + Reactant.jl currently has extra overhead during training: see the TODO in the Reactant extension.
-- 🟡 Reactant.jl in the inference stage.
-- 🟡 Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
+- Lux + Reactant support for [`SpatialGraphConv`](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
+- Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
+- Reactant.jl in the inference stage.
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
 - For some operations involving only matrices and MLPs (e.g., inference-network transformations of summary statistics), it might be faster to always use the CPU (at least for certain batchsize ranges).
+- Moving a batch of data to the GPU currently transfers each data set separately (`input |> device` in `_train_step`), which is one transfer per data set; batching the transfer would reduce the overhead for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) architectures.
 - SimpleChains.jl: are the user-friendly constructors for each estimator type correctly converted to `SimpleChainsLayers`?
 - Lux.jl: Initial risks are much larger than Flux.jl when training NPEs.
 - Add a check for NaNs in the inputs/outputs. Also, if the training risk or validation risk becomes NaN, immediately halt training.
 
 ### Backend
-- 🟡 Lux support for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules).
-- 🟡 Lux support for [SpatialGraphConv](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
-- The initial risks seem to be quite large when using Lux; use the same weight initialisation used by Flux.
+- Checkpointing with Lux + Reactant: is our use of `deepcopy` okay? Note that the [Reactant source code](https://github.com/EnzymeAD/Reactant.jl/blob/main/src/ConcreteRArray.jl) includes a comment warning against the use of `deepcopy`.
+- Lux + Reactant support for [`SpatialGraphConv`](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
+- The initial risks tend to be large when using Lux; use the same weight initialization as Flux.
 - Lux support for [CovarianceMatrix/CorrelationMatrix](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Output-layers).
 - Reactant support for [Gaussian](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) (issue is likely the triangular solve when computing the density).
 - SimpleChains.jl: enforce `CPUDevice`/`AutoZygote` during training and `CPUDevice` during inference (dispatching on `SimpleChainsLayer` within `_resolvedevice` and `_resolve_adtype`).
 - EnzymeRuntimeActivityError when using [NormalisingFlow](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) with Lux + Enzyme + CPU.
 
 ### Refactoring/API improvements
-- Improve console output during training (see, e.g., [here](https://github.com/CarloLucibello/Tsunami.jl/blob/main/docs/src/assets/readme_training.gif), which uses [this](https://github.com/CarloLucibello/Tsunami.jl/blob/main/src/ProgressMeter/ProgressMeter.jl) code based on [ProgressMeter.jl](https://github.com/timholy/ProgressMeter.jl/issues)).
-- Clean and improve the plotting code/logic.
-- Move [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures/#NeuralEstimators.DeepSet) to Flux.jl/Lux.jl.
+- Clean and improve the plotting code/logic; ideally move this to an external package within the JuliaSBI organization.
 - Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
    * This can be easily done for the common cases (Chain, DeepSet), with an `@info` given to tell the user what we inferred. For other cases, just error and tell the user to specify the number of summaries explicitly. Can also make the function used to compute the number of summaries public (and overloadable for custom structs). 
 
 ### Testing
 - Automatic type-stability testing using [JET.jl](https://github.com/aviatesk/JET.jl).
 - Automatic quality testing with [Aqua.jl](https://github.com/JuliaTesting/Aqua.jl).
-- Turn some of the docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.
-
-### General
-- The package would benefit by leveraging the SciML ecosystem, for instance, using [Neural Ordinary Differential Equations](https://docs.sciml.ai/DiffEqFlux/dev/) for fast surrogate simulators, summary networks, and approximate distributions for posterior estimation.
-
-
----
-
-## Breaking changes to decide upon before v1
-
-- Change the return type of `sampleposterior` to 3D array, with independent data sets in the final dimension. This is more conventional, and more natural for batched methods (e.g., `NormalisingFlow`).
+- Turn some docstring examples into [doctests](https://documenter.juliadocs.org/stable/man/doctests/) for automatic checking of examples and to prevent examples becoming outdated.

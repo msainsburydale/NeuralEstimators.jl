@@ -20,30 +20,6 @@ MLP
 MultiHeadMLP
 ```
 
-## User-defined summary statistics
-
-```@index
-Order = [:type, :function]
-Pages   = ["summarystatistics.md"]
-```
-
-The following functions correspond to summary statistics that are often useful
-as user-defined summaries in [`DeepSet`](@ref) objects.
-
-```@docs
-samplesize
-
-logsamplesize
-
-invsqrtsamplesize
-
-samplecorrelation
-
-samplecovariance
-
-NeighbourhoodVariogram
-```
-
 ## Layers
 
 In addition to the built-in layers provided by [Flux](https://fluxml.ai/Flux.jl/stable/reference/models/layers/) and [Lux](https://lux.csail.mit.edu/stable/api/Lux/layers), the following layers may be used when building a neural-network architecture.
@@ -56,11 +32,6 @@ SpatialGraphConv
 
 
 ## Output layers
-
-```@index
-Order = [:type, :function]
-Pages   = ["activationfunctions.md"]
-```
 
 In addition to the standard activation functions provided by [NNlib.jl](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#man-activations) (e.g., `relu`, `gelu`, `softplus`), the following layers can be used at the end of a neural network to ensure the outputs satisfy certain constraints. Note that `Parallel` ([Flux](https://fluxml.ai/Flux.jl/stable/reference/models/layers/#Flux.Parallel)/[Lux](https://lux.csail.mit.edu/stable/api/Lux/layers)) can be useful for applying several parameter constraints simultaneously.
 

@@ -1,35 +1,18 @@
 @doc raw"""
 	TelescopingRatioEstimator <: AbstractNeuralEstimator
-	TelescopingRatioEstimator(summary_network, num_parameters; num_summaries, sampler, kwargs...)
+	TelescopingRatioEstimator(num_parameters, summary_network = identity; num_summaries, sampler, kwargs...)
 A neural estimator that factorises the likelihood-to-evidence ratio sequentally accross parameter diemsnions, with
-one classifier per parameter dimensions (coordinate). The current implementation only supports priors which factorize
+one classifier MLP head per parameter coordinate. Currently, the implementation only supports the case in which
+the prior factorizes $p(\boldsymbol{\theta}) = \prod_{i=1}^d p(\theta^i)$. In this case, we have that
 ```math
- p(\boldsymbol{\theta}) = \prod_{i=1}^d p(\theta_i).
+r(\boldsymbol{Z}, \boldsymbol{\theta}) = \prod_{i=1}^{d} r_i(\boldsymbol{Z}, \theta_i \mid \theta_1, \dots, \theta_{i-1}),
 ```
-In this case, we have that
-```math
-r(\boldsymbol{Z}, \boldsymbol{\theta}) = \frac{p(\boldsymbol{Z} \mid \boldsymbol{\theta})}{p(\boldsymbol{Z})} = \prod_{i=1}^{d} \frac{p(\theta_i \mid \boldsymbol{Z}, \theta_1,\ldots,\theta_{i-1})}{p(\theta_i)} =  \prod_{i=1}^{d} r_i(\boldsymbol{Z}, \theta_1, \ldots, \theta_i).
-```
-Head $i$ discriminates between samples from the following two distributions 
-```math
-p(\boldsymbol{Z}, \theta_1, \ldots, \theta_{i-1}, \theta_i)  \qquad \text{ and } \qquad p(\boldsymbol{Z}, \theta_1, \ldots, \theta_{i-1}) p(\theta_i). 
-```
-Equavalently, conditionally on the fixed prefix $(\theta_1, \dots, \theta_{i-1})$, head $i$ discriminates between the true 
-$\theta_i$ and a fresh, independent draw from the corresponding marginal prior. 
-
-Summing the per-head log-ratios recovers the joint log-ratio estimated by [`RatioEstimator`](@ref). The
-factorisation also exposes each of the one-dimensional conditional densities
-```math
-p(\theta_i \mid \theta_1, \dots, \theta_{i-1}, \boldsymbol{Z}),
-```
-which allows efficient posterior sampling, by inversion. Specifically, we construct approximations of the learnt one-dimensional conditional 
-densities in the basis of Chebyshev polynomials; these approximations have excellent convergence properties and allow for fast analytic manipulations.
-
-Indeed, [`sampleposterior`](@ref) draws $\theta_1 \mid \boldsymbol{Z}$, then $\theta_2 \mid \theta_1, \boldsymbol{Z}$, and so on. 
-As opposed to MCMC, the computational cost grows linearly in $d$.
+and head $i$ discriminates the true $\theta_i$ from a fresh prior draw, holding $\theta_1, \dots, \theta_{i-1}$ fixed and conditioning on it. 
+This factorization exposes each one-dimensional conditional $p(\theta_i \mid \theta_1, \dots, \theta_{i-1}, \boldsymbol{Z})$, which allows for efficient posterior sampling by inversion sampling; see [`sampleposterior`](@ref).
 
 The data are summarised by `summary_network`; the heads are a `MultiHeadMLP` with growing
 inputs, head $i$ taking the summaries together with $\theta_1, \dots, \theta_i$.
+If `summary_network` is omitted, it defaults to the identity function, for use with expert summary statistics provided as a matrix. See [Expert summary statistics](@ref).
 
 # Keyword arguments
 - `num_summaries::Integer`: the number of summaries output by `summary_network`. Must match the output dimension of `summary_network`.
@@ -51,7 +34,7 @@ num_summaries = 3d
 summary_network = Chain(Dense(m, 32, gelu), Dense(32, 16, gelu), Dense(16, num_summaries))
 
 # Initialise the estimator
-estimator = TelescopingRatioEstimator(summary_network, d; num_summaries = num_summaries, sampler = sampler)
+estimator = TelescopingRatioEstimator(d, summary_network; num_summaries = num_summaries, sampler = sampler)
 
 # Train the estimator
 estimator = train(estimator, sampler, simulator, K = 10000)
@@ -77,7 +60,8 @@ end
  
 # Constructor: one classifier head per parameter coordinate, with inputs size growing accross coordinates.
 function TelescopingRatioEstimator(
-    summary_network, num_parameters::Integer, num_summaries::Integer;
+    num_parameters::Integer, summary_network = identity;
+    num_summaries::Integer,
     sampler::Function,
     kwargs...
 )
@@ -90,9 +74,9 @@ function TelescopingRatioEstimator(
     TelescopingRatioEstimator(summary_network, heads, sampler)
 end
  
-# Constructor: keyword num_summaries
-TelescopingRatioEstimator(summary_network, num_parameters::Integer; num_summaries::Integer, kwargs...) = TelescopingRatioEstimator(summary_network, num_parameters, num_summaries; kwargs...)
- 
+# Constructor: consistent argument ordering
+TelescopingRatioEstimator(summary_network, num_parameters::Integer; kwargs...) = TelescopingRatioEstimator(num_parameters, summary_network; kwargs...)
+
 # Number of heads, equivalently the number of parameters.  
 _numheads(estimator::TelescopingRatioEstimator) = length(estimator.heads.layers)
  
@@ -195,7 +179,7 @@ function logratio(estimator::TelescopingRatioEstimator, Z; grid, kwargs...)
     summary_stats_Z = summarystatistics(estimator, Z; kwargs...)
     _gridlogratio(estimator, summary_stats_Z, grid)
 end
- 
+
 function _gridlogratio(estimator::TelescopingRatioEstimator, summary_stats_Z, grid::AbstractMatrix)
     K = size(summary_stats_Z, 2)    # number of data sets
     G = size(grid, 2)               # number of grid points
@@ -208,7 +192,7 @@ function _gridlogratio(estimator::TelescopingRatioEstimator, summary_stats_Z, gr
 end
  
 @doc raw"""
-	sampleposterior(estimator::TelescopingRatioEstimator, Z; lower, upper, N = 1000, cheb_batchsize = 1, kwargs...)
+	sampleposterior(estimator::TelescopingRatioEstimator, Z; lower, upper, N = 1000, chebyshev_batchsize = 1, kwargs...)
 Draw posterior samples sequentially in the coordinate of theta: first generate 
 $\theta_1 \mid Z$ from head 1, then $\theta_2 \mid \theta_1, Z$ from head 2, and so on
 up to head number d. 
@@ -226,7 +210,7 @@ We processed in batches for efficiency.
 - `N::Integer = 1000`: number of posterior samples (per dataset).
 - `degree::Integer = 128`: degree of the Chebyshev approximation of each conditional density.
 - `logpriors = nothing`: marginal log-prior densities. Supply a vector of `d` functions, where `logpriors[i]` gives the marginal prior log-density of $\theta_i$. The default `nothing` assumes the prior is uniform over the box. The logpriors must match the ones used during training.
-- `cheb_batchsize::Integer = 1`: number of data sets $(\boldsymbol{Z}, \boldsymbol{\theta})$ processed jointly by the posterior Chebyshev sampler. Increasing cheb_batchsize substantially improves computational efficiency, particularly on GPU, and also requires more memory. For N = 1000 posterior samples and degree = 128, cheb_batch = 50 is safe on most GPUs.
+- `chebyshev_batchsize::Integer = 1`: number of data sets $(\boldsymbol{Z}, \boldsymbol{\theta})$ processed jointly by the posterior Chebyshev sampler. Increasing chebyshev_batchsize substantially improves computational efficiency, particularly on GPU, and also requires more memory. For N = 1000 posterior samples and degree = 128, cheb_batch = 50 is safe on most GPUs.
 """
 function sampleposterior(
     estimator::TelescopingRatioEstimator, Z;
@@ -235,19 +219,19 @@ function sampleposterior(
     N::Integer = 1000,
     degree::Integer = 128,
     logpriors::Union{Nothing, AbstractVector} = nothing,
-    cheb_batchsize::Integer = 1,
+    chebyshev_batchsize::Integer = 1,
     kwargs...
 )
     summary_stats_Z = summarystatistics(estimator, Z; kwargs...)
     headfun = (i, X) -> _head(estimator, i, X)
-    _sampleposterior_blocks(estimator, headfun, summary_stats_Z, lower, upper, N, degree, logpriors, cheb_batchsize)
+    _sampleposterior_blocks(estimator, headfun, summary_stats_Z, lower, upper, N, degree, logpriors, chebyshev_batchsize)
 end
 
-# Process data sets in blocks of cheb_batchsize.
-function _sampleposterior_blocks(estimator::TelescopingRatioEstimator, headfun, summary_stats_Z, lower, upper, N::Integer, degree::Integer, logpriors, cheb_batchsize::Integer)
+# Process data sets in blocks of chebyshev_batchsize.
+function _sampleposterior_blocks(estimator::TelescopingRatioEstimator, headfun, summary_stats_Z, lower, upper, N::Integer, degree::Integer, logpriors, chebyshev_batchsize::Integer)
     K = size(summary_stats_Z, 2)
     samples = Vector{Matrix{eltype(summary_stats_Z)}}(undef, K)
-    for block in Iterators.partition(1:K, cheb_batchsize)
+    for block in Iterators.partition(1:K, chebyshev_batchsize)
         θdrawn, _, _ = _sequential_core(estimator, headfun, summary_stats_Z[:, block], lower, upper, N, nothing, degree, logpriors)
         for (j, k) in enumerate(block)
             samples[k] = θdrawn[:, ((j - 1) * N + 1):(j * N)]
@@ -474,14 +458,14 @@ function sampleposterior(estimator::TelescopingRatioEstimator, Z, ps, st;
     N::Integer = 1000,
     degree::Integer = 128,
     logpriors::Union{Nothing, AbstractVector} = nothing,
-    cheb_batchsize::Integer = 1,
+    chebyshev_batchsize::Integer = 1,
     kwargs...
 )
     summary_stats_Z = summarystatistics(estimator, Z, ps, st; kwargs...)
     headfun = (i, X) -> _head(estimator, i, X, ps, st)
-    _sampleposterior_blocks(estimator, headfun, summary_stats_Z, lower, upper, N, degree, logpriors, cheb_batchsize)
+    _sampleposterior_blocks(estimator, headfun, summary_stats_Z, lower, upper, N, degree, logpriors, chebyshev_batchsize)
 end
- 
+
 function logposterior(estimator::TelescopingRatioEstimator, θpoints::AbstractMatrix, Z, ps, st;
     lower::AbstractVector,
     upper::AbstractVector,

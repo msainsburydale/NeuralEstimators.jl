@@ -10,6 +10,15 @@ An abstract supertype for neural Bayes estimators.
 """
 abstract type AbstractBayesEstimator <: AbstractNeuralEstimator end
 
+# ---- Identity layer ----
+
+_identity_layer(backend::Module) = _identity_layer(Val(nameof(backend)))
+_identity_layer(::Val{:Flux}) = identity  # plain Julia function, valid as a Flux layer
+_is_identity(f) = f === identity || f isa typeof(identity) || (hasproperty(f, :func) && f.func === identity)
+
+_resolvesummarynetwork(ψ; backend = nothing, kwargs...) = _is_identity(ψ) ? _identity_layer(_resolvebackend(backend)) : ψ
+_dropbackend(kwargs) = Base.structdiff(NamedTuple(kwargs), (; backend = nothing))
+
 # ---- Summary network helper functions ----
 
 _has_summary_network(e) = hasfield(typeof(e), :summary_network)
@@ -55,6 +64,15 @@ function summarystatistics(estimator::AbstractNeuralEstimator, d::DataAndSummari
     t = _applywithdevice(estimator.summary_network, d.Z; kwargs...)
     isnothing(d.S) ? t : vcat(t, d.S)
 end
+
+#TODO Perhaps the cleanest approach is to also define a Summaries type, which is always passed through the .expert_network. Expect users to always provide expert summaries as Summaries(T) or DataAndSummaries(T), and the expert_network is then always applied consistently. Users can provide their own expert_network (allows structured statistics, like fields, I guess).
+#TODO Might also be clearer to write "embedding_network" rather than "summary_network"
+# function summarystatistics(estimator::AbstractNeuralEstimator, d::DataAndSummaries; kwargs...)
+#     t = _applywithdevice(estimator.summary_network, d.Z; kwargs...)
+#     s = _applywithdevice(estimator.expert_network, d.S; kwargs...)
+#     # isnothing(d.S) ? t : vcat(t, d.S) # #TODO Don't think it makes sense to allow DataAndSummaries to have an empty field
+#     vcat(t, d.S)
+# end
 
 # Stateless (Lux)
 # NB these public functions assume that ps/st have not been subsetted

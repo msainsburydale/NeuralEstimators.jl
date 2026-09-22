@@ -1,7 +1,7 @@
 module NeuralEstimatorsLuxExt
 
 using NeuralEstimators
-using NeuralEstimators: @set, _uses_deepset, numobs, _resolvedevice, _DataLoader, cpu
+using NeuralEstimators: @set, _uses_deepset, _check_deepset_input, numobs, _resolvedevice, _DataLoader, cpu, _TrainDisplay, _bar!, _SILENT_DISPLAY
 import NeuralEstimators: estimate
 import NeuralEstimators: summarystatistics, _summarystatistics, _applywithdevice
 
@@ -14,9 +14,11 @@ using Random
 
 import LuxCore: initialparameters, initialstates, parameterlength, statelength
 
-# Tell Lux how to traverse estimator structs 
-# NB These reuels imply that all neural networks must be full Lux models (can't use DeepSet directly, would need a Lux version)
-const LuxTraversable = Union{LuxCore.AbstractLuxLayer, AbstractApproximateDistribution}
+# Tell Lux how to traverse estimator structs
+# Nested networks must be AbstractLuxLayer, AbstractApproximateDistribution, or DeepSet
+const LuxTraversable = Union{LuxCore.AbstractLuxLayer, AbstractApproximateDistribution, DeepSet}
+
+include(joinpath(@__DIR__, "..", "src", "Architectures", "DeepSet_Lux.jl"))
 
 function LuxCore.initialparameters(rng::AbstractRNG, estimator::AbstractNeuralEstimator)
     NamedTuple(f => LuxCore.initialparameters(rng, getfield(estimator, f))
@@ -60,11 +62,11 @@ end
 # (itself an AbstractApproximateDistribution). Handle classifier and slab explicitly.
 function LuxCore.initialparameters(rng::AbstractRNG, q::SpikeAndSlab)
     (classifier = LuxCore.initialparameters(rng, q.classifier),
-     slab       = LuxCore.initialparameters(rng, q.slab))
+        slab = LuxCore.initialparameters(rng, q.slab))
 end
 function LuxCore.initialstates(rng::AbstractRNG, q::SpikeAndSlab)
     (classifier = LuxCore.initialstates(rng, q.classifier),
-     slab       = LuxCore.initialstates(rng, q.slab))
+        slab = LuxCore.initialstates(rng, q.slab))
 end
 function LuxCore.parameterlength(q::SpikeAndSlab)
     LuxCore.parameterlength(q.classifier) + LuxCore.parameterlength(q.slab)
@@ -178,7 +180,7 @@ LuxEstimator(trainstate::TrainState) = LuxEstimator(trainstate.model, trainstate
 getestimator(trainstate::TrainState) = LuxEstimator(trainstate)
 _construct_train_state(estimator::LuxEstimator, optimiser::Optimisers.AbstractRule) = TrainState(estimator, optimiser)
 
-function _risk(trainstate::TrainState, loss, data, device, adtype = nothing) # TODO remove adtype argument once compute_gradients has been replaced in Reactant ext
+function _risk(trainstate::TrainState, loss, data, device)
     st = Lux.testmode(trainstate.states) #|> device
     ps = trainstate.parameters #|> device
     sum_loss = 0.0f0
@@ -193,8 +195,10 @@ function _risk(trainstate::TrainState, loss, data, device, adtype = nothing) # T
     return cpu(sum_loss / K), trainstate
 end
 
-function _train_step(trainstate::Lux.Training.TrainState, loss, data, device, adtype)
+_train_step(trainstate::Lux.Training.TrainState, loss, data, device, adtype) =
+    _train_step(trainstate, loss, data, device, adtype, _SILENT_DISPLAY, 0, 1)
 
+function _train_step(trainstate::Lux.Training.TrainState, loss, data, device, adtype, progress::_TrainDisplay, epoch::Integer, epochs::Integer)
     # Wrap the 2-argument loss into the 4-argument form required by single_train_step!
     function lux_loss(model, ps, st, (input, output))
         ŷ, st_new = model(input, ps, st)
@@ -203,11 +207,15 @@ function _train_step(trainstate::Lux.Training.TrainState, loss, data, device, ad
 
     sum_loss = 0.0f0
     K = 0
+    n = length(data)
+    i = 0
     for (input, output) in data
+        i += 1
         input, output = input |> device, output |> device
         _, loss_val, _, trainstate = Lux.Training.single_train_step!(adtype, lux_loss, (input, output), trainstate)
         sum_loss += loss_val * numobs(input)
         K += numobs(input)
+        _bar!(progress, epoch, epochs, i, n)
     end
     return cpu(sum_loss / K), trainstate
 end
