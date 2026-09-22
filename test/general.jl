@@ -367,7 +367,7 @@ end
         # distance matrix (the neighbours of location i are stored in the column A[:, i])
         D = pairwise(Euclidean(), S, S, dims = 1)
         for i ∈ 1:n
-            @test sort(nbrs(A₁, i)) == sort(partialsortperm(D[i, :], 2:(k+1)))
+            @test sort(nbrs(A₁, i)) == sort(partialsortperm(D[i, :], 2:(k + 1)))
             @test sort(nbrs(A₂, i)) == sort(setdiff(findall(<(r), D[i, :]), i))
         end
 
@@ -1177,8 +1177,9 @@ end
     end
 
     @testset "equivalence: $layout, a = $(nameof(a)), cond = $cond" for layout ∈ (:features, :subgraphs),
-                                                                        a ∈ (mean, sum, maximum, minimum, logsumexp),
-                                                                        cond ∈ (false, true)
+        a ∈ (mean, sum, maximum, minimum, logsumexp),
+        cond ∈ (false, true)
+
         ms = (3, 4, 1, 7)
         Z = layout === :features ? mkfeatures(ms) : mksubgraphs(ms)
         ϕ = Chain(Dense(dₜ + Int(cond), w, relu), Dense(w, d))
@@ -1434,7 +1435,10 @@ end
     # End-to-end training on graph data with a varying number of replicates, through the code
     # paths that wrap the batch differently: a tuple input (PosteriorEstimator, guarding the
     # _packbatch(::Tuple) method) and DataAndSummaries
-    d = 2; dₜ = 8; w = 16; K = 12
+    d = 2
+    dₜ = 8
+    w = 16
+    K = 12
     ψ = GNNSummary(Chain(SpatialGraphConv(1 => 16), SpatialGraphConv(16 => dₜ)), GlobalPool(mean))
     mknet() = DeepSet(deepcopy(ψ), Chain(Dense(dₜ, w, relu), Dense(w, dₜ)))
     Z = [spatialgraph(rand(40, 2), rand(40, mᵢ)) for mᵢ ∈ rand(1:6, K)]
