@@ -10,7 +10,7 @@ using Statistics, Random, LinearAlgebra
 import NeuralEstimators: subsetreplicates, numberreplicates, _deepsetsummaries, spatialgraph
 import NeuralEstimators: GNNSummary, SpatialGraphConv, IndicatorWeights, KernelWeights, NeighbourhoodVariogram
 import NeuralEstimators: PackedGraphs, _packbatch
-using NeuralEstimators: ReplicatesInFeatures, ReplicatesInSubgraphs, DataAndSummaries
+using NeuralEstimators: ReplicatesInFeatures, ReplicatesInSubgraphs, GroupedPackedGraphs, DataAndSummaries
 using NeuralEstimators: _aggregatemiddle, _aggregatereplicates, _rowofsummaries, numobs
 
 function subsetreplicates(Z::G, i) where {G <: GNNGraph}
@@ -64,13 +64,40 @@ Two storage layouts are supported, and may not be mixed within a batch:
 - `ReplicatesInSubgraphs`: the replicates of each data set are stored as subgraphs, as
   produced by `spatialgraph(S::AbstractVector, Z)`. No padding is needed, since the subgraphs
   are concatenated along the node dimension.
+
+Peak memory in the graph layers scales as the number of replicate slots times the number of
+edges in the batch (padded slots included), so with many replicates, large graphs or a large
+batch, reduce the batchsize. During training and inference, batches with a varying number of
+replicates are split into a few groups of similar size (see `GroupedPackedGraphs`),
+which keeps the padding small.
 """
 function PackedGraphs(Z::AbstractVector{<:GNNGraph})
+    layout, m = _replicatelayout(Z)
+
+    # NB Flux.batch() mutates arrays, so it must not appear on the automatic-differentiation
+    # tape. Packing is data marshalling only: gradients reach the parameters of ψ through
+    # ψ(⋅), and the gradient with respect to the data is never needed
+    if layout isa ReplicatesInSubgraphs || allequal(m)
+        return PackedGraphs(Flux.batch(Z), m, layout)
+    else
+        # Flux.batch() concatenates three-dimensional node features along their final
+        # (node) dimension, which requires the leading dimensions to be identical, so pad
+        # the replicate dimension to a common length and mask the padded entries
+        M = maximum(m)
+        padded = map(Z) do z
+            GNNGraph(z; ndata = (z.ndata..., Z = _padreplicates(z.ndata.Z, M)))
+        end
+        return PackedGraphs(Flux.batch(padded), m, _replicatemask(m, M), layout)
+    end
+end
+
+# Determines how the replicates of a batch of graphs are stored, and how many each data set
+# has, checking that the batch can be packed
+function _replicatelayout(Z::AbstractVector{<:GNNGraph})
     isempty(Z) && throw(ArgumentError("Z must contain at least one data set"))
     ks = keys(first(Z).ndata)
     all(z -> keys(z.ndata) == ks, Z) || throw(ArgumentError("all graphs in a batch must carry the same node-feature keys, found $(unique([keys(z.ndata) for z in Z]))"))
 
-    # Determine the storage layout
     num_subgraphs = [z.num_graphs for z in Z]
     feature_replicates = map(Z) do z
         x = :Z ∈ keys(z.ndata) ? z.ndata.Z : first(values(z.ndata))
@@ -83,25 +110,52 @@ function PackedGraphs(Z::AbstractVector{<:GNNGraph})
     end
 
     m = numberreplicates.(Z)
-
-    # NB Flux.batch() mutates arrays, so it must not appear on the automatic-differentiation
-    # tape. Packing is data marshalling only: gradients reach the parameters of ψ through
-    # ψ(⋅), and the gradient with respect to the data is never needed
-    if in_subgraphs
-        return PackedGraphs(Flux.batch(Z), m, ReplicatesInSubgraphs())
-    elseif allequal(m)
-        return PackedGraphs(Flux.batch(Z), m, ReplicatesInFeatures())
-    else
-        # Flux.batch() concatenates three-dimensional node features along their final
-        # (node) dimension, which requires the leading dimensions to be identical, so pad
-        # the replicate dimension to a common length and mask the padded entries
+    layout = in_subgraphs ? ReplicatesInSubgraphs() : ReplicatesInFeatures()
+    if layout isa ReplicatesInFeatures && !allequal(m)
         :Z ∈ ks || throw(ArgumentError("padding the replicate dimension requires the node features holding the data to be named Z, found $(ks)"))
-        M = maximum(m)
-        padded = map(Z) do z
-            GNNGraph(z; ndata = (z.ndata..., Z = _padreplicates(z.ndata.Z, M)))
-        end
-        return PackedGraphs(Flux.batch(padded), m, _replicatemask(m, M), ReplicatesInFeatures())
     end
+    return layout, m
+end
+
+# Splits a batch whose data sets have m[k] replicates and size s[k] (nodes plus edges) into at
+# most maxgroups groups, so as to minimise the padded work Σ_g max(m in g) × Σ(s in g). The
+# optimal groups are contiguous runs of the data sets sorted by m, so this is a small dynamic
+# program over the sorted order. Of the optimal splits into 1, …, maxgroups groups, the one
+# with the fewest groups whose cost is within rtol of the best is returned (fewer groups means
+# fewer forward passes). Returns a vector of index vectors into the original batch
+function _replicategroups(m::AbstractVector{<:Integer}, s::AbstractVector{<:Integer}; maxgroups::Integer = 4, rtol::Real = 0.05)
+    K = length(m)
+    length(s) == K || throw(ArgumentError("m and s must have the same length"))
+    p = sortperm(m)
+    mₛ = m[p]
+    cs = [0; cumsum(s[p])]
+    cost(i, j) = mₛ[j] * (cs[j + 1] - cs[i]) # group formed by sorted data sets i, …, j
+
+    G = min(maxgroups, K)
+    best = fill(typemax(Int), G, K)  # best[g, j]: cheapest split of the first j into g groups
+    start = zeros(Int, G, K)         # first data set of the final group in that split
+    for j ∈ 1:K
+        best[1, j] = cost(1, j)
+        start[1, j] = 1
+    end
+    for g ∈ 2:G, j ∈ g:K, i ∈ g:j
+        c = best[g - 1, i - 1] + cost(i, j)
+        if c < best[g, j]
+            best[g, j] = c
+            start[g, j] = i
+        end
+    end
+
+    total = best[:, K]
+    g = findfirst(≤((1 + rtol) * minimum(total)), total)
+    groups = Vector{Vector{Int}}(undef, g)
+    j = K
+    for h ∈ g:-1:1
+        i = start[h, j]
+        groups[h] = p[i:j]
+        j = i - 1
+    end
+    return groups
 end
 
 # Pads the replicate dimension by repeating the first replicate.
@@ -129,16 +183,34 @@ function _replicatemask(m, M)
     return mask
 end
 
-# Pack a batch of graphs before it is moved to the device (see _packbatch in src/utility.jl)
-_packbatch(Z::AbstractVector{<:GNNGraph}) = PackedGraphs(Z)
+# Pack a batch of graphs before it is moved to the device (see _packbatch in src/utility.jl).
+# When the replicates are stored in the node features and their number varies, the batch is
+# grouped by the number of replicates so that little of it is padding
+function _packbatch(Z::AbstractVector{<:GNNGraph})
+    layout, m = _replicatelayout(Z)
+    if layout isa ReplicatesInFeatures && !allequal(m)
+        groups = _replicategroups(m, [z.num_nodes + z.num_edges for z in Z])
+        if length(groups) > 1
+            return GroupedPackedGraphs([PackedGraphs(Z[idx]) for idx in groups], invperm(reduce(vcat, groups)))
+        end
+    end
+    return PackedGraphs(Z)
+end
 _packbatch(d::DataAndSummaries{<:AbstractVector{<:GNNGraph}}) = DataAndSummaries(_packbatch(d.Z), d.S)
 
 # ---- Summary statistics for packed graphs ----
 
 # Multiple data sets: optimised version for graph data
 function _deepsetsummaries(d::DeepSet, Z::V) where {V <: AbstractVector{G}} where {G <: GNNGraph}
-    P = @ignore_derivatives PackedGraphs(Z)
+    P = @ignore_derivatives _packbatch(Z)
     return _deepsetsummaries(d, P)
+end
+
+# Groups of data sets with similar numbers of replicates: each group is a separate supergraph,
+# and the columns of the concatenated summaries are put back into the original order
+function _deepsetsummaries(d::DeepSet, G::GroupedPackedGraphs)
+    t = reduce(hcat, map(P -> _deepsetsummaries(d, P), G.groups))
+    return t[:, G.order]
 end
 
 # Replicates in the node features: the readout gives an array of size (nf, M, K), and the

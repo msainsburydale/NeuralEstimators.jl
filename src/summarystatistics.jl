@@ -85,6 +85,7 @@ Note that this function is a wrapper around [`numberreplicates`](@ref) with retu
 samplesize(Z) = eltype(Z)(numberreplicates(Z))
 samplesize(P::PackedReplicates) = isnothing(P.mask) ? eltype(P.data).(P.sample_sizes) : vec(sum(P.mask; dims = 1))
 samplesize(P::PackedGraphs) = isnothing(P.mask) ? Float32.(P.sample_sizes) : vec(sum(P.mask; dims = 1))
+samplesize(G::GroupedPackedGraphs) = Float32.(numberreplicates(G))
 
 """
 	logsamplesize(Z)

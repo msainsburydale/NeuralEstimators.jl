@@ -117,6 +117,9 @@ end
 function (d::DeepSet)(P::PackedGraphs)
     d.ϕ(_deepsetsummaries(d, P))
 end
+function (d::DeepSet)(G::GroupedPackedGraphs)
+    d.ϕ(_deepsetsummaries(d, G))
+end
 
 # The summaries are returned as a single array (array data), or as one array per data set (graph data and the broadcasting fallback)
 _stacksummaries(t::AbstractArray) = t

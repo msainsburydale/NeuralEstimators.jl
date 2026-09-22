@@ -391,6 +391,54 @@ function Base.show(io::IO, P::PackedGraphs)
 end
 Base.show(io::IO, ::MIME"text/plain", P::PackedGraphs) = print(io, P)
 
+"""
+    GroupedPackedGraphs(groups, order)
+
+An internal, batch-level container holding a batch of graphical data sets as a small number
+of [`PackedGraphs`](@ref) objects, the data sets having been grouped by their number of
+replicates.
+
+When the replicates are stored in the node features and their number varies, packing a batch
+into a single supergraph pads every data set to the largest number of replicates in the
+batch, and every edge-sized intermediate in the graph layers carries that padding. Grouping
+data sets with similar numbers of replicates and packing each group separately keeps the
+padding, and hence the memory and compute spent on it, small. The whole batch is still
+processed in a single forward pass (one gradient step), one supergraph per group.
+
+- `groups`: a vector of [`PackedGraphs`](@ref) objects, one per group.
+- `order`: the permutation that restores the original order of the data sets, i.e., column
+  `order[k]` of the concatenated group outputs corresponds to data set `k`.
+
+Constructed by `_packbatch` in the GraphNeuralNetworks extension. Not part of the public API.
+"""
+struct GroupedPackedGraphs{P <: PackedGraphs}
+    groups::Vector{P}
+    order::Vector{Int}
+    function GroupedPackedGraphs(groups::Vector{P}, order::Vector{Int}) where {P <: PackedGraphs}
+        isempty(groups) && throw(ArgumentError("groups must contain at least one PackedGraphs object"))
+        K = sum(numobs, groups)
+        length(order) == K || throw(ArgumentError("length(order) = $(length(order)) does not match the number of data sets $K"))
+        isperm(order) || throw(ArgumentError("order must be a permutation"))
+        new{P}(groups, order)
+    end
+end
+
+# The order stays on the host: it indexes the columns of the concatenated group outputs
+@functor GroupedPackedGraphs (groups,)
+
+numobs(G::GroupedPackedGraphs) = length(G.order)
+numberreplicates(G::GroupedPackedGraphs) = reduce(vcat, numberreplicates.(G.groups))[G.order]
+
+function getobs(G::GroupedPackedGraphs, idx)
+    throw(ArgumentError("GroupedPackedGraphs is a batch-level container and cannot be subset; subset the original vector of graphs instead"))
+end
+Base.getindex(G::GroupedPackedGraphs, i) = getobs(G, i)
+
+function Base.show(io::IO, G::GroupedPackedGraphs)
+    print(io, "GroupedPackedGraphs with $(numobs(G)) data sets in $(length(G.groups)) groups of sizes $(numobs.(G.groups))")
+end
+Base.show(io::IO, ::MIME"text/plain", G::GroupedPackedGraphs) = print(io, G)
+
 # ---- Summaries wrapper type ----
 
 """

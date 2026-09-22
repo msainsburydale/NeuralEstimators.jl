@@ -1212,8 +1212,61 @@ end
 
     @testset "aggregation restricted on the padded path" begin
         ds = DeepSet(mkψ(), Chain(Dense(dₜ, w, relu), Dense(w, d)), median)
-        @test_throws ArgumentError ds(mkfeatures((2, 5)))     # padded
+        @test_throws ArgumentError ds(NeuralEstimators.PackedGraphs(mkfeatures((2, 5)))) # padded
         @test ds(mkfeatures((4, 4))) isa AbstractMatrix       # equal replicates, no mask
+    end
+
+    @testset "_replicategroups" begin
+        rg = Base.get_extension(NeuralEstimators, :NeuralEstimatorsGNNExt)._replicategroups
+        padded(m, s, groups) = sum(maximum(m[g]) * sum(s[g]) for g ∈ groups)
+        @test rg([3, 3, 3], [10, 10, 10]) == [[1, 2, 3]]     # equal m: a single group
+        @test rg([1, 1, 50, 50], fill(10, 4)) == [[1, 2], [3, 4]]
+        @test rg([7], [10]) == [[1]]
+        for _ ∈ 1:20
+            K = rand(1:40)
+            m = rand(1:100, K)
+            s = rand(100:1000, K)
+            groups = rg(m, s)
+            @test 1 ≤ length(groups) ≤ 4
+            @test sort(reduce(vcat, groups)) == 1:K           # a partition of the batch
+            @test padded(m, s, groups) ≤ padded(m, s, [1:K])  # never worse than a single group
+        end
+    end
+
+    @testset "grouping by the number of replicates" begin
+        ms = (3, 40, 1, 38, 2, 41)
+        Z = mkfeatures(ms)
+        G = NeuralEstimators._packbatch(Z)
+        @test G isa NeuralEstimators.GroupedPackedGraphs
+        @test length(G.groups) > 1
+        @test numobs(G) == length(ms)
+        @test numberreplicates(G) == collect(ms)
+        @test samplesize(G) == Float32.(collect(ms))
+        @test_throws ArgumentError getobs(G, 1)
+        show(devnull, G)
+        # equal replicates and replicates as subgraphs are packed as before
+        @test NeuralEstimators._packbatch(mkfeatures((3, 3))) isa NeuralEstimators.PackedGraphs
+        @test NeuralEstimators._packbatch(mksubgraphs((1, 5))) isa NeuralEstimators.PackedGraphs
+        # the order must stay on the host when the object is moved to the device
+        @test (G |> dvc).order isa Vector{Int}
+
+        # grouped, single padded supergraph, and one data set at a time must all agree,
+        # in value and in gradient (including the expert statistic from conditioning on m)
+        for cond ∈ (false, true)
+            ϕ = Chain(Dense(dₜ + Int(cond), w, relu), Dense(w, d))
+            ds = DeepSet(mkψ(), ϕ; condition_on_sample_size = cond)
+            P = NeuralEstimators.PackedGraphs(Z)
+            y = ds(G)
+            @test size(y) == (d, length(ms))
+            @test y ≈ ds(P) rtol = 1e-4
+            @test y ≈ ds(Z) rtol = 1e-4
+            @test y ≈ reduce(hcat, [ds([z]) for z ∈ Z]) rtol = 1e-4
+            tgt = randn(Float32, d, length(ms))
+            g1 = trainables(Flux.gradient(m -> mae(m(G), tgt), ds)[1])
+            g2 = trainables(Flux.gradient(m -> mae(m(P), tgt), ds)[1])
+            @test all(isapprox.(g1, g2; rtol = 1e-3, atol = 1e-6))
+            testbackprop(ds, G, dvc)
+        end
     end
 
     @testset "mixed storage layouts are rejected" begin
