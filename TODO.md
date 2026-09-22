@@ -20,17 +20,17 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - assess.jl/inference.jl for more general parameter shapes (currently assumes the parameters are stored as a matrix).
 
 ### Documentation
-- Add code groups for Lux/Flux (containing `using Lux`/`using Flux`) in the examples that support both.
 - Example: In the time-series example, also illustrate partially-exchangeable networks using DeepSet.
 - Example: Illustrate Lévy Processes (a time-series model) using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)).
 - Add [`::: tabs`](https://luxdl.github.io/DocumenterVitepress.jl/dev/manual/markdown-examples#Tabs) in the assessment stage of the examples to show the various diagnostic plots (recovery plots for point estimates; SBC and posterior contraction for posterior samples).
+- Add code groups for Lux/Flux (containing `using Lux`/`using Flux`) in the examples that support both.
 - Document the internal functions and add them to `API/Internal` or `API/Developer docs`. This will help with maintenance/contributions, and allow us to reference the internals when documenting public functions (e.g., "`kwargs...` are passed onto `_internal_function`").
 - Add a gif to the README.
 - Improve the [landing page](https://msainsburydale.github.io/NeuralEstimators.jl/dev/) (see, e.g., [here](https://beautiful.makie.org/dev/) for inspiration).
 
 ### Performance
-- 🟡 Lux + Reactant support for [SpatialGraphConv](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
+- Lux + Reactant support for [`SpatialGraphConv`](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
 - Precompilation to reduce time-to-first-X (see, e.g., [here](https://github.com/SciML/DiffEqFlux.jl/blob/master/src/precompilation.jl)).
 - Reactant.jl in the inference stage.
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
@@ -39,10 +39,10 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - SimpleChains.jl: are the user-friendly constructors for each estimator type correctly converted to `SimpleChainsLayers`?
 - Lux.jl: Initial risks are much larger than Flux.jl when training NPEs.
 - Add a check for NaNs in the inputs/outputs. Also, if the training risk or validation risk becomes NaN, immediately halt training.
-- Optimize [`spatialgraph`](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/miscellaneous#Utility-functions).
 
 ### Backend
-- Checkpointing with Lux + Reactant: is our use of `deepcopy` okay? Note that the [Reactant source code](https://github.com/EnzymeAD/Reactant.jl/blob/main/src/ConcreteRArray.jl) includes a comment warning against the use of `deepcopy`. 
+- Checkpointing with Lux + Reactant: is our use of `deepcopy` okay? Note that the [Reactant source code](https://github.com/EnzymeAD/Reactant.jl/blob/main/src/ConcreteRArray.jl) includes a comment warning against the use of `deepcopy`.
+- Lux + Reactant support for [`SpatialGraphConv`](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
 - The initial risks tend to be large when using Lux; use the same weight initialization as Flux.
 - Lux support for [CovarianceMatrix/CorrelationMatrix](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Output-layers).
 - Reactant support for [Gaussian](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) (issue is likely the triangular solve when computing the density).

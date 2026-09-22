@@ -144,7 +144,10 @@ end
 PowerDifference() = PowerDifference([0.0f0], [1.55f0]) # default initial values chosen such that ã = 0.5 and b̃ ≈ 2
 PowerDifference(a::Number, b::AbstractArray) = PowerDifference([a], b)
 PowerDifference(a::AbstractArray, b::Number) = PowerDifference(a, [b])
-(f::PowerDifference)(x, y) = (abs.(sigmoid.(f.a) .* x - (1 .- sigmoid.(f.a)) .* y)) .^ softplus.(f.b)
+# Kept as a single fused broadcast: with a non-dotted `-`, the two products and their
+# difference each materialise, which costs three extra arrays the size of the (possibly
+# very large) edge-feature tensor, plus their Zygote Dual copies.
+(f::PowerDifference)(x, y) = abs.(sigmoid.(f.a) .* x .- (1 .- sigmoid.(f.a)) .* y) .^ softplus.(f.b)
 (f::PowerDifference)(tup::Tuple) = f(tup[1], tup[2])
 
 @doc raw"""
@@ -185,7 +188,10 @@ function (l::IndicatorWeights)(h::M) where {M <: AbstractMatrix{T}} where {T}
     bins_lower = h_cutoffs[1:(end - 1)] # lower bounds of the distance bins 
     N = [bins_lower[i:i] .< h .<= bins_upper[i:i] for i in eachindex(bins_upper)] # NB avoid scalar indexing by i:i
     N = reduce(vcat, N)
-    f32(N)
+    # NB Float32.() rather than f32(): the comparisons above give a Bool array, and f32()
+    # leaves a non-floating-point array untouched, so the result would be a BitMatrix that
+    # cannot hold the normalised weights computed by SpatialGraphConv
+    Float32.(N)
 end
 Optimisers.trainable(l::IndicatorWeights) = NamedTuple()
 

@@ -79,6 +79,13 @@ function _check_deepset_input(z)
     return z
 end
 
+# Packs a batch of data into a single container before it is moved to the device, so that the
+# batch costs one device transfer rather than one per element, and so that the packing is kept
+# out of the forward pass. Methods for graph data are defined in the GraphNeuralNetworks
+# extension; every other kind of data falls through to the identity method and is unaffected.
+_packbatch(x) = x
+_packbatch(t::Tuple) = map(_packbatch, t)
+
 @inline _uses_deepset(T::DataType) = T <: DeepSet || any(p -> _uses_deepset(p), T.parameters)
 @inline _uses_deepset(T::Type) = false
 @inline _uses_deepset(x) = _uses_deepset(typeof(x))

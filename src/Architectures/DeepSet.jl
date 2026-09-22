@@ -1,12 +1,3 @@
-# ---- DeepSet ----
-
-#TODO Remove ElementwiseAggregator?
-
-@concrete struct ElementwiseAggregator
-    a
-end
-(e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
-
 @doc raw"""
     DeepSet(ψ, ϕ, a = mean; condition_on_sample_size = false)
     DeepSet(ψ; latent_dim, output_dim, a = mean, condition_on_sample_size = false, kwargs...)
@@ -51,6 +42,13 @@ In this case, the input dimension of `ϕ` must be one greater than the dimension
 
 !!! note "Graph data"
     Graph data via [`GNNSummary`](@ref) is currently supported only with the `Flux` backend.
+    Data sets with differing numbers of replicates are supported: a batch of graphs is packed
+    into a single supergraph on the host, padding the replicate dimension to a common length
+    and masking the padded entries when needed. Padding assumes that no layer of the summary
+    network mixes information across the replicate dimension, so normalisation layers (e.g.,
+    `BatchNorm`) in the propagation module are not supported with a varying number of
+    replicates. As with padded [`PackedReplicates`](@ref), the padded path supports only
+    `mean`, `sum`, `maximum`, `minimum`, and `logsumexp` aggregation.
 
 # Examples
 ```julia
@@ -99,6 +97,11 @@ function DeepSet(ψ; a::Function = mean, latent_dim::Integer, output_dim::Intege
 end
 Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nConditioning on log sample size: $(!isnothing(D.S))\nOuter network:  $(D.ϕ)")
 
+@concrete struct ElementwiseAggregator
+    a
+end
+(e::ElementwiseAggregator)(x::A) where {A <: AbstractArray{T, N}} where {T, N} = e.a(x, dims = N)
+
 # Single data set
 function (d::DeepSet)(Z::A) where {A}
     d.ϕ(_deepsetsummaries(d, Z))
@@ -109,6 +112,9 @@ function (d::DeepSet)(Z::V) where {V <: AbstractVector{A}} where {A}
     d.ϕ(_stacksummaries(_deepsetsummaries(d, Z)))
 end
 function (d::DeepSet)(P::PackedReplicates)
+    d.ϕ(_deepsetsummaries(d, P))
+end
+function (d::DeepSet)(P::PackedGraphs)
     d.ϕ(_deepsetsummaries(d, P))
 end
 
@@ -163,7 +169,7 @@ function _rowofsummaries(S, Z, t::AbstractArray{T}) where {T}
     copyto!(s, T[S(z) for z ∈ Z])
     return s
 end
-function _rowofsummaries(S, P::PackedReplicates, t::AbstractArray{T}) where {T}
+function _rowofsummaries(S, P::Union{PackedReplicates, PackedGraphs}, t::AbstractArray{T}) where {T}
     if isnothing(P.mask)
         s = similar(t, T, 1, numobs(P))
         copyto!(s, T.(S(P)))
@@ -269,6 +275,30 @@ end
 function _maskedaggregate_op(::typeof(logsumexp), x, w, dims)
     T = eltype(x)
     dropdims(logsumexp(ifelse.(w .> 0, x, T(-Inf)); dims = dims); dims = dims)
+end
+
+"""
+    _aggregatemiddle(a, R, mask)
+
+Aggregates the replicates of each data set when they are stored in the *middle* dimension of
+`R`, which is of size `(nf, M, K)`: `nf` summary statistics, `M` replicate slots and `K` data
+sets. This is the layout produced by a graph readout applied to a batch of graphs whose node
+features carry the replicates (`ReplicatesInFeatures`).
+
+A `mask` of size `(M, K)` marks the real replicates when the data have been padded to a
+common `M`; pass `nothing` when every data set has the same number of replicates.
+
+Returns an `(nf, K)` matrix. As with `_aggregatereplicates`, the aggregation is a single
+vectorised call rather than one call per data set.
+"""
+function _aggregatemiddle(a::ElementwiseAggregator, R::AbstractArray{T, 3}, mask) where {T}
+    isnothing(mask) && return dropdims(a.a(R, dims = 2); dims = 2)
+    _segmentable(a.a) || throw(ArgumentError("Padded graph replicates support only mean, sum, maximum, minimum, and logsumexp aggregation"))
+    M, K = size(mask)
+    size(R, 2) == M || throw(ArgumentError("size(R, 2) = $(size(R, 2)) does not match the number of padded replicate slots $M"))
+    size(R, 3) == K || throw(ArgumentError("size(R, 3) = $(size(R, 3)) does not match the number of data sets $K"))
+    w = reshape(mask, 1, M, K)
+    return _maskedaggregate_op(a.a, R, w, 2)
 end
 
 function _first_N_minus_1_dims_identical(arrays::Vector{<:AbstractArray})

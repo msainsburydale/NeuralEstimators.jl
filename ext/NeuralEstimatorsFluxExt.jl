@@ -8,7 +8,7 @@ using BSON: @save
 # ---------------------- Utility functions ---------------------
 
 import NeuralEstimators: _applywithdevice
-using NeuralEstimators: _uses_deepset, _check_deepset_input, _resolvedevice, _DataLoader, cpu, numobs, _TrainDisplay, _bar!, _SILENT_DISPLAY
+using NeuralEstimators: _uses_deepset, _check_deepset_input, _packbatch, _resolvedevice, _DataLoader, cpu, numobs, _TrainDisplay, _bar!, _SILENT_DISPLAY
 using Flux: testmode!
 
 function _applywithdevice(network, z; batchsize::Integer = 32, kwargs...)
@@ -21,7 +21,7 @@ function _applywithdevice(network, z; batchsize::Integer = 32, kwargs...)
     data_loader = _DataLoader(z, batchsize, shuffle = false, partial = true)
     try
         y = map(data_loader) do zᵢ
-            cpu(network(zᵢ |> device))
+            cpu(network(_packbatch(zᵢ) |> device))
         end
         return reduce(hcat, y)
     finally
@@ -65,7 +65,7 @@ function _risk(trainstate::FluxTrainState, loss, data, device)
     sum_loss = 0.0f0
     K = 0
     for (input, output) in data
-        input, output = input |> device, output |> device
+        input, output = _packbatch(input) |> device, output |> device
         ls = loss(trainstate.model(input), output)
         num_obs = numobs(input)
         sum_loss += ls * num_obs
@@ -74,8 +74,7 @@ function _risk(trainstate::FluxTrainState, loss, data, device)
     return cpu(sum_loss / K), trainstate
 end
 
-_train_step(trainstate::FluxTrainState, loss, data, device, adtype = nothing) =
-    _train_step(trainstate, loss, data, device, adtype, _SILENT_DISPLAY, 0, 1)
+_train_step(trainstate::FluxTrainState, loss, data, device, adtype = nothing) = _train_step(trainstate, loss, data, device, adtype, _SILENT_DISPLAY, 0, 1)
 
 function _train_step(trainstate::FluxTrainState, loss, data, device, adtype, progress::_TrainDisplay, epoch::Integer, epochs::Integer)
     sum_loss = 0.0f0
@@ -84,7 +83,7 @@ function _train_step(trainstate::FluxTrainState, loss, data, device, adtype, pro
     i = 0
     for (input, output) in data
         i += 1
-        input, output = input |> device, output |> device
+        input, output = _packbatch(input) |> device, output |> device
         ls, ∇ = Flux.withgradient(model -> loss(model(input), output), adtype, trainstate.model)
         Optimisers.update!(trainstate.optimizer_state, trainstate.model, ∇[1])
         num_obs = numobs(input)

@@ -22,6 +22,7 @@ using MLUtils: DataLoader, flatten, zeros_like, unsqueeze
 import MLUtils: numobs, joinobs, getobs
 using NamedArrays
 import NamedArrays: NamedMatrix
+using NearestNeighbors: KDTree, BallTree, BruteTree, knn, inrange, MinkowskiMetric # NB used for adjacencymatrix()
 using NNlib: logσ, softplus, softmax, relu, ⊠, batched_transpose, logsumexp, sigmoid, scatter, gather
 using Optimisers
 using ParameterSchedulers
@@ -31,10 +32,6 @@ using SparseArrays
 using Statistics: mean, median, sum, quantile
 using StatsBase
 using StatsBase: wsample, sample
-
-function __init__()
-    ENV["MLDATADEVICES_SILENCE_WARN_NO_GPU"] = "1"
-end
 
 export tanhloss, kpowerloss, intervalscore, quantileloss
 include("losses.jl")
@@ -52,7 +49,6 @@ for file in sort(readdir(joinpath(@__DIR__, "Architectures")))
     include(joinpath("Architectures", file))
 end
 
-
 export AbstractApproximateDistribution, Gaussian, GaussianMixture, NormalisingFlow, SpikeAndSlab, numdistributionalparams
 export CouplingLayer, AffineCouplingBlock, ActNorm, Permutation
 include(joinpath("ApproximateDistributions", "AbstractApproximateDistribution.jl"))
@@ -68,7 +64,7 @@ include("Chebyshev1d.jl")
 
 export AbstractNeuralEstimator, AbstractBayesEstimator
 export PosteriorEstimator, RatioEstimator, TelescopingRatioEstimator, PointEstimator, IntervalEstimator, QuantileEstimator
-export Ensemble, PiecewiseEstimator
+export Ensemble
 export LuxEstimator
 export summarynetwork, setsummarynetwork, summarystatistics
 include(joinpath("Estimators", "Estimators.jl"))

@@ -14,7 +14,7 @@ using LinearAlgebra
 using MLUtils
 using Optimisers
 using Random: seed!
-using SparseArrays: nnz
+using SparseArrays: nnz, rowvals, nzrange, nonzeros
 using SpecialFunctions: gamma
 using Statistics
 using Statistics: mean, sum
@@ -347,38 +347,39 @@ end
     end
 
     @testset "adjacencymatrix" begin
+        # NB the STORED neighbours of node i. findall(!iszero, A[:, i]) must not be used: a
+        # zero-distance edge between coincident locations is stored explicitly, and would be
+        # silently skipped
+        nbrs(A, i) = rowvals(A)[nzrange(A, i)]
         n = 100
         d = 2
         S = rand(Float32, n, d)
         k = 5
         r = 0.3
 
-        # Memory efficient constructors (avoids constructing the full distance matrix D)
         A = A₁ = adjacencymatrix(S, k)
         A₂ = adjacencymatrix(S, r)
         @test eltype(A₁) == Float32
         @test eltype(A₂) == Float32
         @test eltype(A) == Float32
 
-        # Construct from full distance matrix D
+        # Check the neighbourhoods against a brute-force reference built from the full
+        # distance matrix (the neighbours of location i are stored in the column A[:, i])
         D = pairwise(Euclidean(), S, S, dims = 1)
-        Ã₁ = adjacencymatrix(D, k)
-        Ã₂ = adjacencymatrix(D, r)
-        @test eltype(Ã₁) == Float32
-        @test eltype(Ã₂) == Float32
-
-        # Test that the matrices are the same irrespective of which method was used
-        @test Ã₁ ≈ A₁
-        @test Ã₂ ≈ A₂
+        for i ∈ 1:n
+            @test sort(nbrs(A₁, i)) == sort(partialsortperm(D[i, :], 2:(k+1)))
+            @test sort(nbrs(A₂, i)) == sort(setdiff(findall(<(r), D[i, :]), i))
+        end
 
         # Randomly selecting k nodes within a node's neighbourhood disc
         seed!(1)
         A₃ = adjacencymatrix(S, k, r)
         @test A₃.n == A₃.m == n
         @test length(adjacencymatrix(S, k, 0.02).nzval) < k*n
-        seed!(1)
-        Ã₃ = adjacencymatrix(D, k, r)
-        @test Ã₃ ≈ A₃
+        # the selected neighbours must be a subset of the full r-disc neighbourhood
+        for i ∈ 1:n
+            @test issubset(nbrs(A₃, i), findall(<=(r), D[i, :]))
+        end
 
         # Test that the number of neighbours is correct
         f(A) = collect(mapslices(nnz, A; dims = 1))
@@ -401,11 +402,68 @@ end
         n = 3
         d = 2
         S = rand(n, d)
-        adjacencymatrix(S, k)
-        adjacencymatrix(S, r, k)
-        D = pairwise(Euclidean(), S, S, dims = 1)
-        adjacencymatrix(D, k)
-        adjacencymatrix(D, r, k)
+        @test size(adjacencymatrix(S, k)) == (n, n)
+        @test all(f(adjacencymatrix(S, k)) .== n - 1)   # every other location, and no more
+        @test size(adjacencymatrix(S, r, k)) == (n, n)
+        @test size(adjacencymatrix(S, r, k; random = false)) == (n, n)
+
+        # Coincident locations must be treated as neighbours of one another, rather than being
+        # discarded along with the self loops. Previously the zero distance between two
+        # distinct but co-located points was removed by dropzeros!, which left them with too
+        # few neighbours and, in the r method, left them completely isolated
+        @testset "coincident locations" begin
+            S = [0.0 0.0; 0.0 0.0; 1.0 0.0; 0.5 0.5; 0.2 0.9; 0.7 0.3]
+            k = 3
+            A = adjacencymatrix(S, k)
+            @test all(f(A) .== k)                       # still exactly k neighbours
+            @test 2 ∈ nbrs(A, 1)                        # node 2 is co-located with node 1 ...
+            @test 1 ∈ nbrs(A, 2)                        # ... and the relation is mutual
+            @test nnz(A) == size(S, 1) * k              # the zero-distance edges are retained
+            Ar = adjacencymatrix(S, 0.6)
+            @test all(f(Ar) .>= 1)                      # no isolated nodes
+            @test 2 ∈ nbrs(Ar, 1)
+
+            # more than k+1 coincident locations: the self match is not necessarily returned
+            # by the neighbour search at all, so filtering it out by index is what keeps the
+            # neighbour count correct
+            S = zeros(10, 2)
+            S[:, 1] .= 0.0
+            @test all(f(adjacencymatrix(S, 3)) .== 3)
+            @test all(f(adjacencymatrix(S, 8)) .== 8)
+        end
+
+        # A non-Euclidean metric, e.g. great-circle distance for longitude-latitude data
+        @testset "metric keyword" begin
+            seed!(1)
+            n = 60
+            S = hcat(360 * rand(n) .- 180, 180 * rand(n) .- 90)
+            hav = Haversine(6371.0)
+            A = adjacencymatrix(S, 5; metric = hav)
+            @test all(f(A) .== 5)
+            # values are great-circle distances, and match a brute-force reference
+            D = pairwise(hav, permutedims(S))
+            for i ∈ 1:n
+                @test sort(nbrs(A, i)) == sort(partialsortperm(D[i, :], 2:6))
+            end
+            @test maximum(A.nzval) > 100                # kilometres, not degrees
+            Ar = adjacencymatrix(S, 2000.0; metric = hav)
+            for i ∈ 1:n
+                @test sort(nbrs(Ar, i)) == sort(setdiff(findall(<(2000.0), D[i, :]), i))
+            end
+            # the index must be chosen to suit the metric: a ball tree is only valid for a
+            # true metric, so a semimetric has to fall back to an exhaustive search
+            treename(m) = nameof(typeof(NeuralEstimators._spatialindex(permutedims(S), m)))
+            @test treename(Euclidean()) == :KDTree
+            @test treename(hav) == :BallTree
+            @test treename(SqEuclidean()) == :BruteTree
+        end
+
+        # A precomputed distance matrix is no longer accepted, and should say so rather than
+        # being silently misread as n locations in n dimensions
+        seed!(1)
+        S = rand(Float32, 20, 2)
+        @test_throws ArgumentError adjacencymatrix(pairwise(Euclidean(), S, S, dims = 1), 5)
+        @test_throws ArgumentError adjacencymatrix(pairwise(Euclidean(), S, S, dims = 1), 0.3)
     end
 
     @testset "spatialgraph" begin
@@ -998,7 +1056,7 @@ end
                 Z = [rand32(10, 10, 1, m) for m ∈ M]
                 ψ = Chain(Conv((5, 5), 1 => dₜ), GlobalMeanPool(), MLUtils.flatten)
             elseif data == "graph"
-                Z = [spatialgraph(rand(100, 2), rand(100, m)) for m ∈ (4, 4)] #TODO doesn't work for variable number of replicates i.e., m ∈ M; also, this can break when n is taken to be small like n=5 (run it many times and you will eventually see ERROR: AssertionError: DataStore: data[e] has 1 observations, but n = 0)
+                Z = [spatialgraph(rand(100, 2), rand(100, m)) for m ∈ M] #NB this can break when n is taken to be small like n=5 (run it many times and you will eventually see ERROR: AssertionError: DataStore: data[e] has 1 observations, but n = 0)
                 propagation = Chain(SpatialGraphConv(1 => 16), SpatialGraphConv(16 => dₜ))
                 readout = GlobalPool(mean)
                 ψ = GNNSummary(propagation, readout)
@@ -1009,7 +1067,11 @@ end
             # Forward evaluation
             y = ds(Z)
             @test size(y) == (d, length(M))
-            if data != "graph"
+            if data == "graph"
+                P = NeuralEstimators.PackedGraphs(Z)
+                @test ds(P) ≈ y
+                testbackprop(ds, P, dvc)
+            else
                 P = PackedReplicates(Z)
                 @test ds(P) ≈ y
                 testbackprop(ds, P, dvc)
@@ -1062,6 +1124,286 @@ end
             end
         end
     end
+end
+
+@testset "DeepSet graph aggregation: $dvc" for dvc ∈ devices
+    # A batch of graphs is packed into a single supergraph before being moved to the device,
+    # padding the replicate dimension where necessary. Check that the packed path agrees with
+    # applying the DeepSet to each data set separately, in both value and gradient
+    dₜ = 8     # dimension of neural summary statistic
+    w = 32     # width of each hidden layer
+    d = 3      # output dimension
+    logsumexp = Flux.NNlib.logsumexp
+
+    mkψ() = GNNSummary(Chain(SpatialGraphConv(1 => 16), SpatialGraphConv(16 => dₜ)), GlobalPool(mean))
+    # Replicates stored in the node features (spatial locations fixed over replicates)
+    mkfeatures(ms) = [spatialgraph(rand(60, 2), rand(60, m)) for m ∈ ms]
+    # Replicates stored as subgraphs (spatial locations varying between replicates)
+    function mksubgraphs(ms)
+        map(collect(ms)) do m
+            n = rand(50:60, m)
+            spatialgraph([rand(nᵢ, 2) for nᵢ ∈ n], [rand(nᵢ) for nᵢ ∈ n])
+        end
+    end
+
+    @testset "numberreplicates" begin
+        # NB a singleton replicate dimension in the node features is not the replicate axis:
+        # when the replicates are stored as subgraphs, the count comes from the subgraphs
+        @test collect(numberreplicates.(mkfeatures((1, 4)))) == [1, 4]
+        @test collect(numberreplicates.(mksubgraphs((1, 5)))) == [1, 5]
+    end
+
+    @testset "PackedGraphs" begin
+        P = NeuralEstimators.PackedGraphs(mkfeatures((3, 3)))
+        @test P.layout isa NeuralEstimators.ReplicatesInFeatures
+        @test isnothing(P.mask)                      # equal replicates need no padding
+        @test numobs(P) == 2
+        @test numberreplicates(P) == [3, 3]
+        show(devnull, P)
+
+        P = NeuralEstimators.PackedGraphs(mkfeatures((3, 5)))
+        @test size(P.mask) == (5, 2)
+        @test vec(sum(P.mask, dims = 1)) == Float32[3, 5]
+        @test samplesize(P) == Float32[3, 5]
+        @test logsamplesize(P) ≈ log.(Float32[3, 5])
+        @test_throws ArgumentError getobs(P, 1)
+
+        @test NeuralEstimators.PackedGraphs(mksubgraphs((3, 5))).layout isa NeuralEstimators.ReplicatesInSubgraphs
+        @test isnothing(NeuralEstimators.PackedGraphs(mksubgraphs((3, 5))).mask)
+
+        # sample_sizes must stay on the host when the object is moved to the device
+        P = NeuralEstimators.PackedGraphs(mkfeatures((3, 5))) |> dvc
+        @test P.sample_sizes isa Vector{Int}
+    end
+
+    @testset "equivalence: $layout, a = $(nameof(a)), cond = $cond" for layout ∈ (:features, :subgraphs),
+                                                                        a ∈ (mean, sum, maximum, minimum, logsumexp),
+                                                                        cond ∈ (false, true)
+        ms = (3, 4, 1, 7)
+        Z = layout === :features ? mkfeatures(ms) : mksubgraphs(ms)
+        ϕ = Chain(Dense(dₜ + Int(cond), w, relu), Dense(w, d))
+        ds = DeepSet(mkψ(), ϕ, a; condition_on_sample_size = cond)
+        y = ds(Z)
+        @test size(y) == (d, length(ms))
+        @test y ≈ reduce(hcat, [ds([z]) for z ∈ Z]) rtol = 1e-4
+        # the gradients must agree too
+        tgt = randn(Float32, d, length(ms))
+        g1 = trainables(Flux.gradient(m -> mae(m(Z), tgt), ds)[1])
+        g2 = trainables(Flux.gradient(m -> mae(reduce(hcat, [m([z]) for z ∈ Z]), tgt), ds)[1])
+        @test all(isapprox.(g1, g2; rtol = 1e-3, atol = 1e-6))
+    end
+
+    @testset "padded gradients are finite" begin
+        Z = mkfeatures((2, 9))   # unequal replicates, so the batch is padded
+        ds = DeepSet(mkψ(), Chain(Dense(dₜ, w, relu), Dense(w, d)))
+        tgt = randn(Float32, d, 2)
+        grads = trainables(Flux.gradient(m -> mae(m(Z), tgt), ds)[1])
+        @test !isempty(grads)
+        @test all(x -> all(isfinite, x), grads)
+    end
+
+    @testset "padding invariance" begin
+        # the result for a data set must not depend on how much the batch was padded
+        Z = mkfeatures((2, 3))
+        ds = DeepSet(mkψ(), Chain(Dense(dₜ, w, relu), Dense(w, d)))
+        y = ds(Z)
+        @test ds(vcat(Z, mkfeatures((12,))))[:, 1:2] ≈ y rtol = 1e-4
+    end
+
+    @testset "aggregation restricted on the padded path" begin
+        ds = DeepSet(mkψ(), Chain(Dense(dₜ, w, relu), Dense(w, d)), median)
+        @test_throws ArgumentError ds(mkfeatures((2, 5)))     # padded
+        @test ds(mkfeatures((4, 4))) isa AbstractMatrix       # equal replicates, no mask
+    end
+
+    @testset "mixed storage layouts are rejected" begin
+        Z = vcat(mkfeatures((3,)), mksubgraphs((4,)))
+        @test_throws ArgumentError NeuralEstimators.PackedGraphs(Z)
+    end
+
+    @testset "_packbatch is inert away from graph data" begin
+        Z = [rand32(5, m) for m ∈ (2, 3)]
+        @test NeuralEstimators._packbatch(Z) === Z
+        @test NeuralEstimators._packbatch(rand32(3, 4)) isa Matrix
+        @test NeuralEstimators._packbatch(PackedReplicates(Z)) isa PackedReplicates
+        @test NeuralEstimators._packbatch((Z, rand32(2, 2)))[1] === Z
+        # graph batches are packed, including inside DataAndSummaries
+        @test NeuralEstimators._packbatch(mkfeatures((2, 2))) isa NeuralEstimators.PackedGraphs
+        dS = DataAndSummaries(mkfeatures((2, 2)), rand32(1, 2))
+        @test NeuralEstimators._packbatch(dS).Z isa NeuralEstimators.PackedGraphs
+    end
+
+    @testset "_aggregatemiddle" begin
+        # unit tests with plain arrays, independent of any graph machinery
+        R = rand32(4, 3, 5)
+        a = NeuralEstimators.ElementwiseAggregator(mean)
+        @test NeuralEstimators._aggregatemiddle(a, R, nothing) ≈ dropdims(mean(R, dims = 2); dims = 2)
+        mask = Float32[1 1 1 1 1; 1 1 1 1 1; 0 1 0 1 0]   # third replicate missing for sets 1, 3, 5
+        got = NeuralEstimators._aggregatemiddle(a, R, mask)
+        want = reduce(hcat, [mean(R[:, findall(!iszero, mask[:, k]), k], dims = 2) for k ∈ 1:5])
+        @test got ≈ want
+        @test_throws ArgumentError NeuralEstimators._aggregatemiddle(NeuralEstimators.ElementwiseAggregator(median), R, mask)
+    end
+
+    @testset "SpatialGraphConv: equivalence with the unoptimised formulation, in = $inch, m = $m" for inch ∈ (1, 6), m ∈ (1, 4)
+        # Γ is applied as a single matrix multiplication over the flattened replicate and node
+        # dimensions rather than with batched_mul over the nodes, and the edge weights are
+        # broadcast over the replicates rather than repeated. Both are meant to be exactly
+        # equivalent to the straightforward formulation, which is reproduced here
+        batched_mul = Flux.NNlib.batched_mul
+        normalise = Base.get_extension(NeuralEstimators, :NeuralEstimatorsGNNExt).normalise_edge_neighbors
+        function unoptimised(l, g, x)
+            mᵢ = size(x, 2)
+            e = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3])
+            isa(e, AbstractVector) && (e = permutedims(e))
+            w̃ = normalise(g, l.w(e))
+            isa(w̃, AbstractVector) && (w̃ = permutedims(w̃))
+            isa(w̃, AbstractMatrix) && (w̃ = reshape(w̃, size(w̃, 1), 1, size(w̃, 2)))
+            w̃ = repeat(w̃, 1, mᵢ, 1)
+            msg = apply_edges((xi, xj, ww) -> ww .* l.f(xi, xj), g, x, x, w̃)
+            h̄ = aggregate_neighbors(g, +, msg)
+            return l.g.(batched_mul(l.Γ1, x) .+ batched_mul(l.Γ2, h̄) .+ l.b)
+        end
+
+        n = 40
+        Z = inch == 1 ? rand(n, m) : rand(inch, n, m)
+        g = spatialgraph(rand(n, 2), Z)
+        l = SpatialGraphConv(inch => 5)
+        x = g.ndata.Z
+        @test size(l(g).ndata.Z) == (5, m, n)
+        @test l(g, x) ≈ unoptimised(l, g, x) rtol = 1e-5
+        tgt = randn(Float32, size(l(g, x))...)
+        g1 = trainables(Flux.gradient(ll -> mae(ll(g, x), tgt), l)[1])
+        g2 = trainables(Flux.gradient(ll -> mae(unoptimised(ll, g, x), tgt), l)[1])
+        @test all(isapprox.(g1, g2; rtol = 1e-4, atol = 1e-7))
+    end
+
+    @testset "PowerDifference: fused broadcast matches the materialised form" begin
+        # The subtraction is dotted so that the whole expression is a single fused broadcast
+        # rather than three edge-sized temporaries; the arithmetic must be untouched
+        materialised(f, x, y) = (abs.(sigmoid.(f.a) .* x - (1 .- sigmoid.(f.a)) .* y)) .^ softplus.(f.b)
+        X = rand(Float32, 5, 100)
+        Y = rand(Float32, 5, 100)
+        for f ∈ (PowerDifference(), PowerDifference([0.5f0], [2.0f0]), PowerDifference(randn(Float32, 5), [0.75f0]))
+            @test f(X, Y) ≈ materialised(f, X, Y)
+            @test f((X, Y)) ≈ f(X, Y)
+            tgt = randn(Float32, size(f(X, Y))...)
+            g1 = trainables(Flux.gradient(ff -> mae(ff(X, Y), tgt), f)[1])
+            g2 = trainables(Flux.gradient(ff -> mae(materialised(ff, X, Y), tgt), f)[1])
+            @test all(isapprox.(g1, g2; rtol = 1e-5, atol = 1e-7))
+        end
+    end
+
+    @testset "SpatialGraphConv: untraced non-trainable w, $(nameof(Weights)), m = $m" for Weights ∈ (KernelWeights, IndicatorWeights), m ∈ (1, 4)
+        # The spatial weight function depends only on the fixed spatial information, so when
+        # it holds no trainable parameters its evaluation is kept off the AD tape. That must
+        # not change the forward value, and must not perturb any gradient that does exist
+        GNNExt = Base.get_extension(NeuralEstimators, :NeuralEstimatorsGNNExt)
+        normalise = GNNExt.normalise_edge_neighbors
+        q = 10
+        w = Weights(1.0, q)   # h_max covers the neighbour distances, so no empty neighbourhood
+        @test GNNExt._wtrainable(w) == false
+        @test isempty(trainables(w))
+
+        n = 40
+        g = spatialgraph(rand(n, 2), rand(n, m))
+        l = SpatialGraphConv(1 => 5, w = w, w_out = q)
+        x = g.ndata.Z
+
+        # reference that differentiates through w, i.e. the behaviour before the change
+        function traced(l, g, x)
+            e = :e ∈ keys(g.edata) ? g.edata.e : permutedims(g.graph[3])
+            isa(e, AbstractVector) && (e = permutedims(e))
+            w̃ = GNNExt.coerce3Darray(normalise(g, l.w(e)))
+            msg = apply_edges((xi, xj, ww) -> ww .* l.f(xi, xj), g, x, x, w̃)
+            h̄ = aggregate_neighbors(g, +, msg)
+            return l.g.(GNNExt._densemul(l.Γ1, x) .+ GNNExt._densemul(l.Γ2, h̄) .+ l.b)
+        end
+
+        @test l(g, x) ≈ traced(l, g, x)
+        @test all(isfinite, l(g, x))
+        tgt = randn(Float32, size(l(g, x))...)
+        ∇1 = Flux.gradient(ll -> mae(ll(g, x), tgt), l)[1]
+        ∇2 = Flux.gradient(ll -> mae(traced(ll, g, x), tgt), l)[1]
+        # Compare the genuinely trainable parameters one by one. NB trainables() must not be
+        # used on the gradient objects themselves: the traced version additionally carries
+        # tangents for w's own fields, which Optimisers.trainable(::typeof(w)) == NamedTuple()
+        # discards on the model but which are still present on the tangent
+        for get ∈ (∇ -> ∇.Γ1, ∇ -> ∇.Γ2, ∇ -> ∇.b, ∇ -> ∇.f.a, ∇ -> ∇.f.b)
+            @test get(∇1) ≈ get(∇2) rtol = 1e-5
+            @test any(!iszero, get(∇1))   # ignoring w must not zero the gradients that matter
+        end
+        # the weight function itself receives no tangent, which is the point of the change
+        @test isnothing(∇1.w) || all(isnothing, values(∇1.w))
+    end
+
+    @testset "SpatialGraphConv: a trainable w is still differentiated" begin
+        # The gate is dispatch-based, so the default Chain weight function must fall through
+        # to the differentiated branch and produce non-zero gradients for its parameters
+        GNNExt = Base.get_extension(NeuralEstimators, :NeuralEstimatorsGNNExt)
+        l = SpatialGraphConv(1 => 5)
+        @test GNNExt._wtrainable(l.w) == true
+        g = spatialgraph(rand(40, 2), rand(40, 3))
+        x = g.ndata.Z
+        tgt = randn(Float32, size(l(g, x))...)
+        ∇ = Flux.gradient(ll -> mae(ll(g, x), tgt), l)[1]
+        @test !isnothing(∇.w)   # a tangent is built for w, i.e. it was differentiated
+
+        # The default w must never return an identically zero weight for every edge: that
+        # would zero h̄ and hence the whole Γ2 h̄ term, and with a relu output (which was the
+        # default before) relu's zero gradient means it could never recover. Its output layer
+        # therefore uses softplus. Several seeds, since the failure was initialisation-dependent
+        for seed ∈ 1:6
+            seed!(seed)
+            lᵢ = SpatialGraphConv(1 => 5)
+            gᵢ = spatialgraph(rand(40, 2), rand(40, 3))
+            @test all(>(0), lᵢ.w(permutedims(gᵢ.graph[3])))
+            tgtᵢ = randn(Float32, size(lᵢ(gᵢ, gᵢ.ndata.Z))...)
+            ∇ᵢ = Flux.gradient(ll -> mae(ll(gᵢ, gᵢ.ndata.Z), tgtᵢ), lᵢ)[1]
+            @test any(gⱼ -> any(!iszero, gⱼ), trainables(∇ᵢ.w))
+        end
+
+        # A non-degenerate trainable w, to assert the gradient is actually non-zero. NB the
+        # default w cannot be used for this: its output layer inherits the activation g
+        # (relu by default), which for many initialisations clamps every edge weight to
+        # exactly zero, leaving w with an identically zero gradient
+        wt = Chain(Dense(1 => 8, tanh), Dense(8 => 1, softplus))
+        @test GNNExt._wtrainable(wt) == true
+        lt = SpatialGraphConv(1 => 5, w = wt, w_out = 1)
+        @test all(!iszero, lt.w(permutedims(g.graph[3])))
+        tgt2 = randn(Float32, size(lt(g, x))...)
+        ∇t = Flux.gradient(ll -> mae(ll(g, x), tgt2), lt)[1]
+        @test any(gᵢ -> any(!iszero, gᵢ), trainables(∇t.w))
+    end
+end
+
+@testset "Graph data: estimator integration (variable m)" begin
+    # End-to-end training on graph data with a varying number of replicates, through the code
+    # paths that wrap the batch differently: a tuple input (PosteriorEstimator, guarding the
+    # _packbatch(::Tuple) method) and DataAndSummaries
+    d = 2; dₜ = 8; w = 16; K = 12
+    ψ = GNNSummary(Chain(SpatialGraphConv(1 => 16), SpatialGraphConv(16 => dₜ)), GlobalPool(mean))
+    mknet() = DeepSet(deepcopy(ψ), Chain(Dense(dₜ, w, relu), Dense(w, dₜ)))
+    Z = [spatialgraph(rand(40, 2), rand(40, mᵢ)) for mᵢ ∈ rand(1:6, K)]
+    θ = rand32(d, K)
+    kw = (epochs = 2, batchsize = 4, verbose = false, use_gpu = false)
+
+    est = PointEstimator(mknet(), d; num_summaries = dₜ)
+    est = train(est, θ, θ, Z, Z; kw...)
+    @test size(estimate(est, Z; use_gpu = false)) == (d, K)
+    @test assess(est, θ, Z; use_gpu = false) isa Assessment
+    @test size(bootstrap(est, spatialgraph(rand(40, 2), rand(40, 8)); B = 5, use_gpu = false), 1) == d
+
+    # expert summaries are concatenated to the summary network's output, so num_summaries = dₜ + 1
+    dat = DataAndSummaries(Z, rand32(1, K))
+    est = PointEstimator(mknet(), d; num_summaries = dₜ + 1)
+    est = train(est, θ, θ, dat, dat; kw...)
+    @test size(estimate(est, dat; use_gpu = false)) == (d, K)
+
+    # tuple input
+    post = PosteriorEstimator(mknet(), NormalisingFlow(d, dₜ))
+    post = train(post, θ, θ, Z, Z; kw...)
+    @test size(sampleposterior(post, Z; N = 10, use_gpu = false)) == (d, 10, K)
 end
 
 @testset "DeepSet convenience constructor: $dvc" for dvc ∈ devices
@@ -1472,30 +1814,6 @@ end
 
     # Apply to data
     estimate(ensemble, Z)
-end
-
-@testset "PiecewiseEstimator" begin
-    n = 2    # bivariate data
-    d = 3    # dimension of parameter vector
-    w = 128  # width of each hidden layer
-    ψ₁ = Chain(Dense(n, w, relu), Dense(w, w, relu))
-    ϕ₁ = Chain(Dense(w, w, relu), Dense(w, d))
-    θ̂₁ = PointEstimator(DeepSet(ψ₁, ϕ₁))
-    ψ₂ = Chain(Dense(n, w, relu), Dense(w, w, relu))
-    ϕ₂ = Chain(Dense(w, w, relu), Dense(w, d))
-    θ̂₂ = PointEstimator(DeepSet(ψ₂, ϕ₂))
-    θ̂ = PiecewiseEstimator([θ̂₁, θ̂₂], 30)
-    Z = [rand32(n, m) for m ∈ (10, 50)]
-    θ̂(Z)
-    #estimate(θ̂, Z) #NB last time I checked, breaks on the GPU
-
-    @test_throws Exception PiecewiseEstimator((θ̂₁, θ̂₂), (30, 50))
-    @test_throws Exception PiecewiseEstimator((θ̂₁, θ̂₂, θ̂₁), (50, 30))
-    θ̂_piecewise = PiecewiseEstimator((θ̂₁, θ̂₂), (30))
-    show(devnull, θ̂_piecewise)
-    est1 = hcat(θ̂₁(Z[[1]]), θ̂₂(Z[[2]]))
-    est2 = θ̂_piecewise(Z)
-    @test est1 ≈ est2
 end
 
 @testset "EM" begin

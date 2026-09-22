@@ -90,8 +90,28 @@ The input to $\boldsymbol{w}^{(l)}(\cdot)$ is a $1 \times n$ matrix (i.e., a row
 The output of $\boldsymbol{w}^{(l)}(\cdot)$ must be either a scalar; a vector of the same dimension as the feature vectors of the previous layer; 
 or, if the features vectors of the previous layer are scalars, a vector of arbitrary dimension. 
 To promote identifiability, the weights are normalised to sum to one (row-wise) within each neighbourhood set. 
-By default, $\boldsymbol{w}^{(l)}(\cdot)$ is taken to be a multilayer perceptron with a single hidden layer, 
-although a custom choice for this function can be provided using the keyword argument `w`. 
+By default, $\boldsymbol{w}^{(l)}(\cdot)$ is taken to be a multilayer perceptron with a single hidden layer,
+although a custom choice for this function can be provided using the keyword argument `w`.
+The hidden layer of the default $\boldsymbol{w}^{(l)}(\cdot)$ uses the activation `g`, while its output layer
+uses `softplus`, so that the weights are strictly positive. A custom `w` should likewise return non-negative
+weights; note that an output activation which can return exactly zero for every edge (e.g., `relu`) risks
+$\bar{\boldsymbol{h}}^{(l)}_{j}$ being identically zero with no gradient available to recover from it.
+
+!!! note "GPU memory and the choice of batch size"
+    The messages $f^{(l)}(\cdot, \cdot)$ are formed on the *edges* of the batched graph, so
+    every intermediate array in the layer is of size `(w_out, m, E)`, where `m` is the number
+    of independent replicates and `E` is the total number of edges in the batch, that is, the
+    batch size multiplied by the number of edges per data set. Peak memory during training
+    therefore grows in proportion to `m` × (batch size), and it is the peak that matters:
+    the total volume of memory allocated over an epoch is independent of the batch size.
+
+    The practical consequence is that, with many replicates, *increasing* the batch size can
+    make training slower rather than faster, because memory pressure causes the CUDA.jl
+    allocator to run the garbage collector inside the allocation path. The transition is
+    abrupt rather than gradual, and once it is crossed the run time is dominated by garbage
+    collection rather than by computation. If throughput degrades as the batch size is
+    raised, reduce the batch size; if a large effective batch is needed for optimisation
+    reasons, accumulate gradients over several smaller sub-batches instead.
 
 # Arguments
 - `in`: dimension of input features.
@@ -102,7 +122,7 @@ although a custom choice for this function can be provided using the keyword arg
 - `f = nothing`
 - `w = nothing` 
 - `w_width = 128` (applicable only if `w = nothing`): the width of the hidden layer in the MLP used to model $\boldsymbol{w}^{(l)}(\cdot, \cdot)$. 
-- `w_out = in` (applicable only if `w = nothing`): the output dimension of $\boldsymbol{w}^{(l)}(\cdot, \cdot)$.  
+- `w_out = in` (applicable only if `w = nothing`): the output dimension of $\boldsymbol{w}^{(l)}(\cdot, \cdot)$.
 
 # Examples
 ```julia
@@ -247,20 +267,27 @@ NeighbourhoodVariogram(args...; kwargs...) = error("NeighbourhoodVariogram requi
 # ---- Adjacency matrices ----
 
 @doc raw"""
-	adjacencymatrix(S::Matrix, k::Integer)
-	adjacencymatrix(S::Matrix, r::AbstractFloat)
-	adjacencymatrix(S::Matrix, r::AbstractFloat, k::Integer; random = true)
-	adjacencymatrix(M::Matrix; k, r, kwargs...)
+	adjacencymatrix(S::Matrix, k::Integer; metric = Euclidean())
+	adjacencymatrix(S::Matrix, r::AbstractFloat; metric = Euclidean())
+	adjacencymatrix(S::Matrix, r::AbstractFloat, k::Integer; random = true, metric = Euclidean())
+	adjacencymatrix(S::Matrix; k, r, kwargs...)
 
-Computes a spatially weighted adjacency matrix from spatial locations `S` based 
+Computes a spatially weighted adjacency matrix from spatial locations `S` based
 on either the `k`-nearest neighbours of each location; all nodes within a disc of fixed radius `r`;
 or, if both `r` and `k` are provided, a subset of `k` neighbours within a disc
 of fixed radius `r`.
 
-If `S` is a square matrix, it is treated as a distance matrix; otherwise, it
-should be an $n$ x $d$ matrix, where $n$ is the number of spatial locations
-and $d$ is the spatial dimension (typically $d$ = 2). In the latter case,
-the distance metric is taken to be the Euclidean distance.
+`S` should be an $n$ x $d$ matrix, where $n$ is the number of spatial locations
+and $d$ is the spatial dimension (typically $d$ = 2).
+
+The distance metric defaults to the Euclidean distance, and may be changed using the keyword
+argument `metric`, which accepts any metric from
+[Distances.jl](https://github.com/JuliaStats/Distances.jl). For instance, for locations given
+as longitude–latitude pairs, `metric = Haversine(6371.0)` gives great-circle distances in
+kilometres, in which case `r` is also interpreted in kilometres. The neighbour search is
+performed using a spatial index from
+[NearestNeighbors.jl](https://github.com/KristofferC/NearestNeighbors.jl), selected
+automatically to suit the given metric.
 
 Two subsampling strategies are implemented when choosing a subset of `k` neighbours within 
 a disc of fixed radius `r`. If `random=true` (default), the neighbours are randomly selected from 
@@ -277,7 +304,15 @@ returned adjacency matrix. Therefore, the number of neighbours for each location
 given by `collect(mapslices(nnz, A; dims = 1))`, and the number of times each node is 
 a neighbour of another node is given by `collect(mapslices(nnz, A; dims = 2))`.
 
-By convention, we do not consider a location to neighbour itself (i.e., the diagonal elements of the adjacency matrix are zero). 
+By convention, we do not consider a location to neighbour itself (i.e., the diagonal elements of the adjacency matrix are zero).
+Distinct locations that happen to coincide are, however, treated as neighbours of one another,
+and are stored with an edge weight of zero.
+
+!!! note "Precomputed dissimilarity matrices"
+    Earlier versions accepted a square matrix, which was interpreted as a precomputed distance
+    matrix. This is no longer supported: it was slower and required $O(n^2)$ memory, and the
+    `metric` keyword argument covers the same ground (for example, great-circle distances)
+    while remaining $O(n \log n)$.
 
 # Examples
 ```julia
@@ -289,201 +324,221 @@ S = rand(Float32, n, d)
 k = 10
 r = 0.10
 
-# Memory efficient constructors
 adjacencymatrix(S, k)
 adjacencymatrix(S, r)
 adjacencymatrix(S, r, k)
 adjacencymatrix(S, r, k; random = false)
 
-# Construct from full distance matrix D
-D = pairwise(Euclidean(), S, dims = 1)
-adjacencymatrix(D, k)
-adjacencymatrix(D, r)
-adjacencymatrix(D, r, k)
-adjacencymatrix(D, r, k; random = false)
+# Great-circle distance (in km) for longitude–latitude data
+S = hcat(360 * rand(n) .- 180, 180 * rand(n) .- 90)
+adjacencymatrix(S, 10; metric = Haversine(6371.0))
+adjacencymatrix(S, 500.0; metric = Haversine(6371.0))
 ```
 """
-function adjacencymatrix(M::Matrix; k::Union{Integer, Nothing} = nothing, r::Union{F, Nothing} = nothing, kwargs...) where {F <: AbstractFloat}
+function adjacencymatrix(S::Matrix; k::Union{Integer, Nothing} = nothing, r::Union{F, Nothing} = nothing, metric = Euclidean(), kwargs...) where {F <: AbstractFloat}
     # convenience keyword-argument function, used internally by spatialgraph()
     if isnothing(r) & isnothing(k)
         error("One of k or r must be set")
     elseif isnothing(r)
-        adjacencymatrix(M, k; kwargs...)
+        adjacencymatrix(S, k; metric = metric)
     elseif isnothing(k)
-        adjacencymatrix(M, r)
+        adjacencymatrix(S, r; metric = metric)
     else
-        adjacencymatrix(M, r, k; kwargs...)
+        adjacencymatrix(S, r, k; metric = metric, kwargs...)
     end
 end
 
-function adjacencymatrix(M::Mat, r::F, k::Integer; random::Bool = true) where {Mat <: AbstractMatrix{T}} where {T, F <: AbstractFloat}
+# The type of spatial index is chosen by dispatch on the metric. This is a correctness
+# requirement rather than a performance preference: a ball tree relies on the triangle
+# inequality, so it returns wrong neighbours for a dissimilarity that violates it, and a
+# KD-tree additionally requires a Minkowski metric. Anything weaker falls back to an
+# exhaustive search, which is valid for any pre-metric
+_spatialindex(Sᵀ, metric::MinkowskiMetric) = KDTree(Sᵀ, metric)
+_spatialindex(Sᵀ, metric::Metric) = BallTree(Sᵀ, metric)
+_spatialindex(Sᵀ, metric::PreMetric) = BruteTree(Sᵀ, metric)
+
+# Guards against the most likely error when migrating from a version that accepted a
+# precomputed distance matrix: silently treating one as n locations in n dimensions would give
+# meaningless neighbourhoods rather than an error
+function _checklocations(S::AbstractMatrix)
+    n, d = size(S)
+    if n == d && n > 2 && all(iszero, diag(S)) && issymmetric(S)
+        throw(ArgumentError(
+            "S appears to be a distance matrix (square, symmetric, with a zero diagonal), but " *
+            "adjacencymatrix() expects an n × d matrix of spatial locations. Pass the locations " *
+            "instead, together with a metric if the distances are not Euclidean (e.g. " *
+            "metric = Haversine(6371.0)). If you only have a precomputed dissimilarity matrix, " *
+            "construct the adjacency matrix yourself and pass it to spatialgraph()."
+        ))
+    end
+    return nothing
+end
+
+function adjacencymatrix(S::Mat, r::F, k::Integer; random::Bool = true, metric = Euclidean()) where {Mat <: AbstractMatrix{T}} where {T, F <: AbstractFloat}
     @assert k > 0
     @assert r > 0
+    _checklocations(S)
 
     if !random
-        A = adjacencymatrix(M, r)
-        A = subsetneighbours(A, k)
-        A = dropzeros!(A) # remove self loops
-        return A
+        A = adjacencymatrix(S, r; metric = metric)
+        return subsetneighbours(A, k)
     end
+
+    n = size(S, 1)
+    Sᵀ = permutedims(S)
+    tree = _spatialindex(Sᵀ, metric)
+    candidates = inrange(tree, Sᵀ, r)
 
     I = Int64[]
     J = Int64[]
     V = T[]
-    n = size(M, 1)
-    m = size(M, 2)
-
+    nbrs = Int64[]
+    dists = T[]
     for i ∈ 1:n
-        sᵢ = M[i, :]
-        kᵢ = 0
-        iter = shuffle(collect(1:n)) # shuffle to prevent weighting observations based on their ordering in M
-        for j ∈ iter
-            if i != j # add self loops after construction, to ensure consistent number of neighbours
-                if m == n # square matrix, so assume M is a distance matrix
-                    dᵢⱼ = M[i, j]
-                else  # rectangular matrix, so assume S is a matrix of spatial locations
-                    sⱼ = M[j, :]
-                    dᵢⱼ = norm(sᵢ - sⱼ)
-                end
-                if dᵢⱼ <= r
-                    push!(I, i)
-                    push!(J, j)
-                    push!(V, dᵢⱼ)
-                    kᵢ += 1
-                end
-            end
-            if kᵢ == k
-                break
+        empty!(nbrs)
+        empty!(dists)
+        sᵢ = view(Sᵀ, :, i)
+        for j ∈ sort(candidates[i]) # NB inrange() returns the indices in no particular order
+            j == i && continue # we do not consider a location to neighbour itself
+            dᵢⱼ = T(metric(sᵢ, view(Sᵀ, :, j)))
+            if dᵢⱼ <= r
+                push!(nbrs, j)
+                push!(dists, dᵢⱼ)
             end
         end
+        # Uniform random subset of size min(k, mᵢ), by partial Fisher–Yates. NB this is
+        # equivalent in distribution to scanning all locations in a random order and stopping
+        # at k (the previous formulation), but costs O(mᵢ) rather than O(n) per location
+        mᵢ = length(nbrs)
+        for t ∈ 1:min(k, mᵢ)
+            s = rand(t:mᵢ)
+            nbrs[t], nbrs[s] = nbrs[s], nbrs[t]
+            dists[t], dists[s] = dists[s], dists[t]
+            push!(I, i)
+            push!(J, nbrs[t])
+            push!(V, dists[t])
+        end
     end
-    A = sparse(J, I, V, n, n)
-    A = dropzeros!(A) # remove self loops 
-    return A
+    return sparse(J, I, V, n, n) # NB the neighbours of location i are stored in the column A[:, i]
 end
-adjacencymatrix(M::Mat, k::Integer, r::F) where {Mat <: AbstractMatrix{T}} where {T, F <: AbstractFloat} = adjacencymatrix(M, r, k)
+adjacencymatrix(S::Mat, k::Integer, r::F; kwargs...) where {Mat <: AbstractMatrix{T}} where {T, F <: AbstractFloat} = adjacencymatrix(S, r, k; kwargs...)
 
-function adjacencymatrix(M::Mat, k::Integer) where {Mat <: AbstractMatrix{T}} where {T}
+function adjacencymatrix(S::Mat, k::Integer; metric = Euclidean()) where {Mat <: AbstractMatrix{T}} where {T}
     @assert k > 0
+    _checklocations(S)
 
-    I = Int64[]
-    J = Int64[]
-    V = T[]
-    n = size(M, 1)
-    m = size(M, 2)
+    n = size(S, 1)
+    Sᵀ = permutedims(S)
+    tree = _spatialindex(Sᵀ, metric)
 
-    if m == n # square matrix, so assume M is a distance matrix
-        D = M
-    else      # otherwise, M is a matrix of spatial locations
-        S = M
-    end
+    # Request one extra neighbour, since a location is always among its own nearest
+    # neighbours, and no more than there are locations, since knn() errors if asked for more
+    idx, dist = knn(tree, Sᵀ, min(k + 1, n), true)
 
-    if k >= n # more neighbours than observations: return a dense adjacency matrix
-        if m != n
-            D = pairwise(Euclidean(), S')
+    kₙ = min(k, n - 1) # the number of neighbours actually attainable
+    I = Vector{Int64}(undef, 0)
+    J = Vector{Int64}(undef, 0)
+    V = Vector{T}(undef, 0)
+    sizehint!(I, n * kₙ); sizehint!(J, n * kₙ); sizehint!(V, n * kₙ)
+    for i ∈ 1:n
+        idxᵢ = idx[i]
+        distᵢ = dist[i]
+        kᵢ = 0
+        for t ∈ eachindex(idxᵢ)
+            # NB the location itself is discarded by index rather than by discarding a zero
+            # distance: locations that coincide are also at distance zero from one another, and
+            # they are legitimate neighbours. For the same reason the location itself is not
+            # necessarily listed first, so every candidate must be checked
+            idxᵢ[t] == i && continue
+            kᵢ == kₙ && break
+            push!(I, i)
+            push!(J, idxᵢ[t])
+            push!(V, T(distᵢ[t]))
+            kᵢ += 1
         end
-        A = sparse(D)
-    else
-        k += 1 # each location neighbours itself, so increase k by 1
-        for i ∈ 1:n
-            if m == n
-                d = D[i, :]
-            else
-                # Compute distances between sᵢ and all other locations
-                d = colwise(Euclidean(), S', S[i, :])
-            end
-
-            # Find the neighbours of s
-            j, v = findneighbours(d, k)
-
-            push!(I, repeat([i], inner = k)...)
-            push!(J, j...)
-            push!(V, v...)
-        end
-        A = sparse(J, I, V, n, n) # NB the neighbours of location i are stored in the column A[:, i]
     end
-    A = dropzeros!(A) # remove self loops 
-    return A
+    return sparse(J, I, V, n, n) # NB the neighbours of location i are stored in the column A[:, i]
 end
 
 ## helper functions
-deletecol!(A, cind) = SparseArrays.fkeep!((i, j, v) -> j != cind, A)
-findnearest(A::AbstractArray, x) = argmin(abs.(A .- x))
-findnearest(V::SparseVector, q) = V.nzind[findnearest(V.nzval, q)] # efficient version for SparseVector that doesn't materialise a dense array
-function subsetneighbours(A, k)
+# Reduces each neighbourhood to at most k+1 members, chosen so that their distances to the
+# central location fall closest to the {0, 1/k, …, 1} quantiles of the distances within that
+# neighbourhood, thereby approximately preserving the distribution of distances.
+# NB builds a new matrix rather than modifying A in place: deleting a column of a
+# SparseMatrixCSC scans the entire matrix and inserting a single entry shifts its internal
+# arrays, which together made the in-place formulation O(n × nnz)
+function subsetneighbours(A::SparseMatrixCSC{T}, k::Integer) where {T}
     τ = [i/k for i ∈ 0:k] # probability levels (k+1 values)
     n = size(A, 1)
+    rows = rowvals(A)
+    vals = nonzeros(A)
 
-    # drop self loops 
-    dropzeros!(A)
+    I = Int64[]
+    J = Int64[]
+    V = T[]
+    selected = Int64[]
     for j ∈ 1:n
-        Aⱼ = A[:, j] # neighbours of node j 
-        if nnz(Aⱼ) > k+1 # if there are fewer than k+1 neighbours already, we don't need to do anything 
-            # compute the empirical τ-quantiles of the nonzero entries in Aⱼ
-            quantiles = quantile(nonzeros(Aⱼ), τ)
-            # zero-out previous neighbours in Aⱼ
-            deletecol!(A, j)
-            # find the entries in Aⱼ that are closest to the empirical quantiles 
+        nzⱼ = nzrange(A, j) # the stored entries of column j, i.e. the neighbours of node j
+        if length(nzⱼ) <= k+1
+            # if there are fewer than k+1 neighbours already, we don't need to do anything
+            for p ∈ nzⱼ
+                push!(I, rows[p]); push!(J, j); push!(V, vals[p])
+            end
+        else
+            # compute the empirical τ-quantiles of the distances within the neighbourhood
+            quantiles = quantile(view(vals, nzⱼ), τ)
+            empty!(selected)
             for q ∈ quantiles
-                i = findnearest(Aⱼ, q)
-                v = Aⱼ[i]
-                A[i, j] = v
+                # Find the entry closest to the empirical quantile, scanning in storage order
+                # so that ties are broken towards the first such entry.
+                # NB repeats are collapsed: two quantiles may select the same neighbour, and
+                # sparse() sums duplicated indices rather than retaining one of them
+                p★ = first(nzⱼ)
+                δ★ = abs(vals[p★] - q)
+                for p ∈ nzⱼ
+                    δ = abs(vals[p] - q)
+                    if δ < δ★
+                        δ★ = δ
+                        p★ = p
+                    end
+                end
+                p★ ∈ selected || push!(selected, p★)
+            end
+            for p ∈ selected
+                push!(I, rows[p]); push!(J, j); push!(V, vals[p])
             end
         end
     end
-    A = dropzeros!(A) # remove self loops 
-    return A
+    return sparse(I, J, V, n, n) # NB preserves the orientation of the input
 end
 
-function adjacencymatrix(M::Mat, r::F) where {Mat <: AbstractMatrix{T}} where {T, F <: AbstractFloat}
+function adjacencymatrix(S::Mat, r::F; metric = Euclidean()) where {Mat <: AbstractMatrix{T}} where {T, F <: AbstractFloat}
     @assert r > 0
+    _checklocations(S)
 
-    n = size(M, 1)
-    m = size(M, 2)
+    n = size(S, 1)
+    Sᵀ = permutedims(S)
+    tree = _spatialindex(Sᵀ, metric)
+    candidates = inrange(tree, Sᵀ, r)
 
-    if m == n # square matrix, so assume M is a distance matrix, D:
-        D = M
-        A = D .< r # bit-matrix specifying which locations are within a disc or r
-
-        # replace non-zero elements of A with the corresponding distance in D
-        indices = copy(A)
-        A = convert(Matrix{T}, A)
-        A[indices] = D[indices]
-
-        # convert to sparse matrix
-        A = sparse(A)
-    else
-        S = M
-        I = Int64[]
-        J = Int64[]
-        V = T[]
-        for i ∈ 1:n
-            # Compute distances between s and all other locations
-            s = S[i, :]
-            d = colwise(Euclidean(), S', s)
-
-            # Find the r-neighbours of s
-            j = d .< r
-            j = findall(j)
-            push!(I, repeat([i], inner = length(j))...)
-            push!(J, j...)
-            push!(V, d[j]...)
+    I = Int64[]
+    J = Int64[]
+    V = T[]
+    for i ∈ 1:n
+        sᵢ = view(Sᵀ, :, i)
+        for j ∈ sort(candidates[i]) # NB inrange() returns the indices in no particular order
+            j == i && continue # we do not consider a location to neighbour itself
+            dᵢⱼ = T(metric(sᵢ, view(Sᵀ, :, j)))
+            # NB inrange() is inclusive of r, whereas this method has always used a strict
+            # inequality, so the candidates are filtered rather than taken as they are
+            if dᵢⱼ < r
+                push!(I, j)
+                push!(J, i)
+                push!(V, dᵢⱼ)
+            end
         end
-        A = sparse(I, J, V, n, n)
     end
-
-    A = dropzeros!(A) # remove self loops
-
-    return A
-end
-
-function findneighbours(d, k::Integer)
-    V = partialsort(d, 1:k)
-    J = [findall(v .== d) for v ∈ V]
-    J = reduce(vcat, J)
-    J = unique(J)
-    J = J[1:k] # in the event of ties, there can be too many elements in J, so use only the first 1:k
-    return J, V
+    return sparse(I, J, V, n, n) # NB the neighbours of location i are stored in the column A[:, i]
 end
 
 # To remove dependence on Distributions, here we define a sampler from 

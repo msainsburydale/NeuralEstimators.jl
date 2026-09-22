@@ -316,6 +316,81 @@ function Base.show(io::IO, P::PackedReplicates)
 end
 Base.show(io::IO, ::MIME"text/plain", P::PackedReplicates) = print(io, P)
 
+# ---- PackedGraphs ----
+
+"""
+    ReplicatesInFeatures
+    ReplicatesInSubgraphs
+
+Singleton types recording how independent replicates are stored in a [`PackedGraphs`](@ref)
+object. `ReplicatesInFeatures` indicates that each data set is a single graph whose node
+features carry the replicates in their second dimension (`q × m × n`), as produced by
+`spatialgraph(S::AbstractMatrix, Z)`. `ReplicatesInSubgraphs` indicates that the replicates
+of each data set are stored as subgraphs, as produced by `spatialgraph(S::AbstractVector, Z)`.
+"""
+struct ReplicatesInFeatures end
+struct ReplicatesInSubgraphs end
+
+"""
+    PackedGraphs(graph, sample_sizes, mask, layout)
+
+An internal, batch-level container holding several graphical data sets packed into a single
+(super)graph, the graph analogue of [`PackedReplicates`](@ref).
+
+The packing is performed on the host before the data are moved to the device, so that a batch
+costs a single device transfer rather than one per graph, and so that the graph batching is
+kept out of the forward pass (and hence off the automatic-differentiation tape).
+
+- `graph`: a single supergraph, the batch of all data sets.
+- `sample_sizes`: the number of replicates in each data set.
+- `mask`: `nothing`, or an `M × K` matrix of ones and zeros indicating which of the `M`
+  padded replicate slots of each of the `K` data sets are real. Only used with
+  `ReplicatesInFeatures` and a varying number of replicates.
+- `layout`: [`ReplicatesInFeatures`](@ref) or [`ReplicatesInSubgraphs`](@ref).
+
+Constructed from a vector of graphs by the method defined in the GraphNeuralNetworks
+extension. Not part of the public API: it is created internally during training and
+inference, and it does not support `getobs`, since the batch it represents is already fixed.
+"""
+struct PackedGraphs{G, S, Mask, L}
+    graph::G
+    sample_sizes::S
+    mask::Mask
+    layout::L
+    function PackedGraphs(graph::G, sample_sizes::S, mask::Mask, layout::L) where {G, S, Mask, L}
+        if !isnothing(mask)
+            ndims(mask) == 2 || throw(ArgumentError("mask must be a matrix of size (max_sample_size, K)"))
+            K = size(mask, 2)
+            K == length(sample_sizes) || throw(ArgumentError("size(mask, 2) = $K does not match the number of data sets $(length(sample_sizes))"))
+            M = size(mask, 1)
+            mmax = maximum(sample_sizes)
+            mmax <= M || throw(ArgumentError("size(mask, 1) = $M is smaller than the largest number of replicates ($mmax)"))
+            layout isa ReplicatesInSubgraphs && throw(ArgumentError("padding is not used when the replicates are stored as subgraphs"))
+        end
+        new{G, S, Mask, L}(graph, sample_sizes, mask, layout)
+    end
+end
+PackedGraphs(graph, sample_sizes, layout) = PackedGraphs(graph, sample_sizes, nothing, layout)
+
+# Only the graph and the mask are moved to the device: sample_sizes must stay on the host,
+# since it is used for host-side arithmetic (allequal, cumsum, _bagindices)
+@functor PackedGraphs (graph, mask)
+
+numobs(P::PackedGraphs) = length(P.sample_sizes)
+numberreplicates(P::PackedGraphs) = P.sample_sizes
+
+function getobs(P::PackedGraphs, idx)
+    throw(ArgumentError("PackedGraphs is a batch-level container and cannot be subset; subset the original vector of graphs instead"))
+end
+Base.getindex(P::PackedGraphs, i) = getobs(P, i)
+
+function Base.show(io::IO, P::PackedGraphs)
+    layout = P.layout isa ReplicatesInFeatures ? "replicates in node features" : "replicates as subgraphs"
+    padding = isnothing(P.mask) ? "" : " (padded to max_sample_size = $(size(P.mask, 1)))"
+    print(io, "PackedGraphs with $(numobs(P)) data sets packed into a single graph, $layout$padding")
+end
+Base.show(io::IO, ::MIME"text/plain", P::PackedGraphs) = print(io, P)
+
 # ---- Summaries wrapper type ----
 
 """

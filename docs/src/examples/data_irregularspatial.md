@@ -107,6 +107,16 @@ end
 simulator(parameters::Parameters, m::Integer = 1) = simulator(parameters, range(m, m))
 ```
 
+!!! tip "Varying the number of replicates"
+	The simulator above draws `m` independently for each data set, so the data sets in a batch
+	may hold different numbers of replicates (e.g., `simulator(parameters, 1:10)`). This is
+	handled efficiently: a batch of graphs is packed into a single supergraph on the host, with
+	the replicate dimension padded to a common length and the padded entries masked, so it
+	costs one graph neural network forward pass rather than one per data set. The only
+	restriction is that no layer of the propagation module may mix information across the
+	replicate dimension, which rules out normalisation layers such as `BatchNorm`.
+
+
 Plotting a few simulated data sets shows both the irregular spatial configurations sampled from the cluster process and the effect of the range parameter:
 
 ```julia
