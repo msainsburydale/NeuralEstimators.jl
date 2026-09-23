@@ -227,7 +227,7 @@ function sampleposterior(
     _sampleposterior_blocks(estimator, headfun, summary_stats_Z, lower, upper, N, degree, logpriors, chebyshev_batchsize)
 end
 
-# Process data sets in blocks of chebyshev_batchsize.
+# Process data sets in blocks of chebyshev_batchsize
 function _sampleposterior_blocks(estimator::TelescopingRatioEstimator, headfun, summary_stats_Z, lower, upper, N::Integer, degree::Integer, logpriors, chebyshev_batchsize::Integer)
     K = size(summary_stats_Z, 2)
     samples = Vector{Matrix{eltype(summary_stats_Z)}}(undef, K)
@@ -237,7 +237,7 @@ function _sampleposterior_blocks(estimator::TelescopingRatioEstimator, headfun, 
             samples[k] = θdrawn[:, ((j - 1) * N + 1):(j * N)]
         end
     end
-    return K == 1 ? samples[1] : samples
+    return stack(samples) # TODO do samples need to be stored as a vector of matrices in the first place? Would a reshape() on θdrawn be better?
 end
 
 
