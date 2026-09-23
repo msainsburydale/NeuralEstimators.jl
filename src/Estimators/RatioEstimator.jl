@@ -45,10 +45,7 @@ num_summaries = 3d
 summary_network = Chain(Dense(m, 64, gelu), Dense(64, 64, gelu), Dense(64, num_summaries))
 
 # Initialise the estimator
-
 estimator = RatioEstimator(d, summary_network; num_summaries = num_summaries, sampler = sampler)
-# backwards compatibility version
-# estimator = RatioEstimator(d, summary_network; num_summaries = num_summaries)
 
 # Train the estimator
 estimator = train(estimator, sampler, simulator, K = 1000)
