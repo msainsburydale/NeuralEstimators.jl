@@ -23,7 +23,7 @@ using LogDensityProblems
 _toθ(lower, upper, u) = lower .+ (upper .- lower) ./ (1 .+ exp.(-u))
 
 #TODO concrete fields
-struct _NRELogDensity{M <: AbstractMatrix,F}
+struct _NRELogDensity{M <: AbstractMatrix, F}
     tz::M       # cached data summaries, one column
     net_θ::Any                # estimator.summary_network_θ
     net_inf::Any              # estimator.inference_network
