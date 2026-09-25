@@ -10,7 +10,9 @@ applied immediately to observed data. Alternatively, the ensemble can be
 initialised with a collection of untrained `estimators`
 (or a function defining the architecture of each estimator, and the number of estimators in the ensemble),
 trained with `train()`, and then applied to observed data. In the latter case, where the ensemble is trained directly,
-if `savepath` is specified both the ensemble and component estimators will be saved.
+if `savepath` is specified both the ensemble and component estimators will be saved: the parameters of the ensemble are
+saved to `best_estimator.bson` in `savepath`, and can be loaded with [`loadestimator`](@ref) (only the best checkpoint is
+saved at the ensemble level, since each component estimator is the best-performing one from its own training run).
 
 Note that `train()` currently acts sequentially on the component estimators, using the `Adam` optimiser.
 
@@ -123,8 +125,12 @@ function _train_ensemble(ensemble::Ensemble, args...; kwargs...)
         if !ispath(savepath)
             mkpath(savepath)
         end
+        # NB each component estimator is the best-performing one from its own training run, so
+        # this is the ensemble's "best" checkpoint; there is no "final" counterpart. Saved with
+        # the same file name and key as for a single estimator, so that it can be loaded with
+        # loadestimator(ensemble, savepath).
         model_state = _state(ensemble)
-        @save joinpath(savepath, "ensemble.bson") model_state
+        @save joinpath(savepath, "best_estimator.bson") model_state
     end
 
     return ensemble

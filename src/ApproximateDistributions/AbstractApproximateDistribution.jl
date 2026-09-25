@@ -21,9 +21,6 @@ The number of distributional parameters (i.e., the dimension of the space ``\mat
 """
 function numdistributionalparams end
 
-# Catch the case that t is a vector
-sampleposterior(q::AbstractApproximateDistribution, t::AbstractVector, N::Integer; kwargs...) = sampleposterior(q, reshape(t, :, 1), N; kwargs...)
-
 # Generic keyword constructor for all AbstractApproximateDistribution subtypes;
 # allows num_summaries to be passed as either a positional or keyword argument
 (::Type{T})(num_parameters::Integer; num_summaries::Integer, kwargs...) where {T <: AbstractApproximateDistribution} =

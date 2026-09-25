@@ -104,7 +104,20 @@ using oneAPI
 
 ## Saving and loading estimators
 
-Neural estimators can be saved and loaded in the same way as regular Flux/Lux models (see the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/saving/)). For example, to save and load the model state of a Flux-based neural estimator:
+The recommended approach is to let [`train`](@ref) save the neural network for you, by providing a `savepath`, and then to load it with [`loadestimator`](@ref). Since the saved files store the parameters (and states) of the neural networks and not their architecture, loading involves constructing an estimator with the same architecture and then loading the saved parameters into it:
+```julia
+# Training: saves best_estimator.bson (and final_estimator.bson) to the given savepath
+estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, savepath = "path/to/folder")
+
+# Loading (possibly in a later session): construct the same architecture, then load
+estimator = PointEstimator(...) # same architecture as above
+estimator = loadestimator(estimator, "path/to/folder")
+```
+By default, the parameters corresponding to the best validation risk are loaded, that is, those of the estimator that was returned by `train()`; pass `best = false` to load the parameters from the final epoch instead.
+
+Note that the same deep-learning backend must be loaded as when training. Note also that, when the estimator contains Lux networks, `loadestimator()` returns a [`LuxEstimator`](@ref) (which stores the neural-network parameters and states) irrespective of whether the estimator passed to it was wrapped in one, so the returned value should always be assigned, as above.
+
+Alternatively, neural estimators can be saved and loaded manually, in the same way as regular Flux/Lux models (see the [Flux documentation](https://fluxml.ai/Flux.jl/stable/guide/saving/)). For example, to save and load the model state of a Flux-based neural estimator:
 ```julia
 using Flux
 using BSON: @save, @load
@@ -128,12 +141,10 @@ using BSON: @save, @load
 
 # Load (initialise an estimator with the same architecture, then load the parameters/states)
 @load "estimator.bson" parameters states
-estimator = Lux.setparam(estimator, parameters)
+estimator = LuxEstimator(estimator.estimator, parameters, states)
 ```
 
 It is also straightforward to save the entire estimator including its architecture (see [here](https://fluxml.ai/Flux.jl/stable/guide/saving/#Saving-Models-as-Julia-Structs) for Flux), though saving the model state as above is recommended for long-term storage.
-
-For convenience, [`train`](@ref) supports automatic saving of the model state during training via the `savepath` argument.
 
 ## On-the-fly and just-in-time simulation
 

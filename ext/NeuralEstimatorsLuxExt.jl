@@ -153,26 +153,35 @@ LuxEstimator(estimator::AbstractNeuralEstimator; rng::AbstractRNG = Random.defau
 # ---- Training ----
 
 import NeuralEstimators: getestimator
-import NeuralEstimators: _construct_train_state, _risk, _train_step, _save_trainstate
+import NeuralEstimators: _construct_train_state, _risk, _train_step, _save_estimator, _loadestimator
 import Lux.Training: TrainState
 
-using NeuralEstimators: @save
-function _save_trainstate(trainstate::TrainState, savepath; best::Bool = true)
-    isnothing(savepath) && return
-    prefix = best ? "best" : "final"
+using BSON
+using BSON: @save
+using Functors: fmapstructure
+
+function _save_estimator(trainstate::TrainState, savepath, prefix)
     parameters = cpu_device()(trainstate.parameters)
     states = cpu_device()(trainstate.states)
-    optimizer = cpu_device()(trainstate.optimizer)
-    optimizer_state = cpu_device()(trainstate.optimizer_state)
-    # Always save optimiser and optimiser state to both savepath and tempdir
-    for path in unique([savepath, tempdir()])
-        !ispath(path) && mkpath(path)
-        @save joinpath(path, "$(prefix)_optimizer.bson") optimizer optimizer_state
+    !ispath(savepath) && mkpath(savepath)
+    @save joinpath(savepath, "$(prefix)_estimator.bson") parameters states
+    return nothing
+end
+
+# Structural fingerprint of a tree of parameters/states, used to give an informative error when
+# the saved parameters do not match the architecture of the given estimator
+_pstructure(x) = fmapstructure(y -> y isa AbstractArray ? size(y) : nothing, x)
+
+function _loadestimator(estimator::LuxEstimator, path::String)
+    saved = BSON.load(path, @__MODULE__)
+    if !(haskey(saved, :parameters) && haskey(saved, :states))
+        throw(ArgumentError("$(path) does not contain the parameters and states of Lux neural networks (found keys $(collect(keys(saved)))). If the estimator contains Flux networks, do not wrap it in a LuxEstimator."))
     end
-    # Save full checkpoint only to explicit savepath
-    if savepath != tempdir()
-        @save joinpath(savepath, "$(prefix)_trainstate.bson") parameters states optimizer optimizer_state
+    parameters, states = saved[:parameters], saved[:states]
+    if _pstructure(parameters) != _pstructure(estimator.ps)
+        throw(ArgumentError("The parameters stored in $(path) do not match the architecture of the given estimator (saved parameterlength $(Lux.parameterlength(parameters)), estimator parameterlength $(Lux.parameterlength(estimator.ps))); please ensure that the same architecture is used when loading."))
     end
+    return LuxEstimator(estimator.estimator, parameters, states)
 end
 
 TrainState(e::LuxEstimator, optimiser::Optimisers.AbstractRule) = Lux.Training.TrainState(e.estimator, e.ps, e.st, optimiser)

@@ -65,7 +65,7 @@ end
 
 # ---- Training primitives ----
 
-import NeuralEstimators: _risk, _train_step, _trainstate_to_device, getestimator, _save_trainstate
+import NeuralEstimators: _risk, _train_step, _trainstate_to_device, getestimator, _save_estimator, _serialisable_optimizer
 
 function _risk(r::ReactantTrainState, loss, data, device::ReactantDevice)
     ts = r.trainstate
@@ -99,8 +99,16 @@ function _train_step(r::ReactantTrainState, loss, data, device, adtype, progress
 end
 
 getestimator(r::ReactantTrainState) = getestimator(r.trainstate)
-_save_trainstate(r::ReactantTrainState, savepath; best::Bool = true) =
-    _save_trainstate(r.trainstate, savepath; best = best)
+
+# NB no _save_optimizer method is needed here, since ReactantTrainState forwards
+# .optimizer/.optimizer_state to the inner TrainState (see Base.getproperty above)
+_save_estimator(r::ReactantTrainState, savepath, prefix) = _save_estimator(r.trainstate, savepath, prefix)
+
+# cpu_device() unwraps the ConcreteRNumbers held by the rule; also strip Lux's Reactant
+# wrapper, so that loadoptimiser() returns a plain Optimisers.jl rule that can be reused on
+# any device
+_serialisable_optimizer(rule::Lux.ReactantCompatibleOptimisers.ReactantOptimiser) =
+    _serialisable_optimizer(rule.opt)
 
 function Optimisers.adjust!(r::ReactantTrainState, eta::Real)
     r.trainstate = Optimisers.adjust!(r.trainstate, eta)

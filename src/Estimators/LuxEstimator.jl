@@ -8,6 +8,10 @@ networks together with their parameters `ps` and states `st`.
 The convenience constructor automatically calls `Lux.setup(rng, estimator)` to 
 initialise `ps` and `st`.
 
+Since this type stores the neural-network parameters and states, [`loadestimator`](@ref) 
+returns a `LuxEstimator` whenever the estimator contains Lux networks, irrespective of whether 
+the estimator passed to it was wrapped in one.
+
 # Examples
 ```julia
 using NeuralEstimators, Lux

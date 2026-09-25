@@ -1,6 +1,3 @@
-#TODO clean up saving/loading... think we want to save the best parameters and optimisers separately:
-# optimizer.bson: optimizer rule + optimizer state (continued training)
-# parameters.bson: neural-network parameters (and states) (continued training + loading in different session)
 """
     train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...) where {P, T}
     train(estimator, θ_train::P, θ_val::P, simulator; ...) where P
@@ -31,14 +28,16 @@ The trained estimator is always returned on the CPU.
 - `use_gpu::Bool = true`: flag indicating whether to use a GPU if one is available. Ignored if `device` is provided.
 - `adtype::AbstractADType`: the automatic differentiation backend used to compute gradients during training. By default `AutoReactant()` is used when `device isa ReactantDevice`, and `AutoZygote()` is used otherwise. If you encounter `EnzymeRuntimeActivityError` when using `AutoEnzyme()`, try `AutoEnzyme(mode = set_runtime_activity(Enzyme.Reverse))`.
 - `savepath::Union{Nothing, String} = tempdir()`: path to save information generated during training. Saving is disabled if `savepath = nothing`. Otherwise, the following files are always saved to both `savepath` and `tempdir()`:
-  - `loss_per_epoch.csv`: training and validation risk at each epoch, in the first and second columns respectively.
-  - `best_optimizer.bson`: optimiser and optimiser state corresponding to the best validation risk.
+  - `loss_per_epoch.csv`: training and validation risk at each epoch, in the first and second columns respectively (see [`loadrisk`](@ref)).
+  - `best_optimizer.bson`: optimiser and optimiser state corresponding to the best validation risk (see [`loadoptimiser`](@ref)).
   - `final_optimizer.bson`: optimiser and optimiser state at the final epoch.
 
   If additionally `savepath != tempdir()`, the following files are also saved to `savepath`:
-  - `best_trainstate.bson`: neural-network parameters, optimiser, and optimiser state corresponding to the best validation risk.
-  - `final_trainstate.bson`: neural-network parameters, optimiser, and optimiser state at the final epoch.
+  - `best_estimator.bson`: neural-network parameters (and states) corresponding to the best validation risk, that is, those of the estimator returned by `train()` (see [`loadestimator`](@ref)).
+  - `final_estimator.bson`: neural-network parameters (and states) at the final epoch.
   - `train_time.csv`: total training time in seconds.
+
+  Note that the `*_estimator.bson` files store only the parameters (and states) of the neural networks, not their architecture: to load them, one must first construct an estimator with the same architecture (see [`loadestimator`](@ref)).
 - `risk_history::Union{Nothing, Matrix} = nothing`: a matrix with two columns containing the training and validation risk from a previous call to `train()`, used to initialise the risk history when continuing training. Can be loaded from a previous call to `train` using [`loadrisk`](@ref).
 - `verbose = true`: flag indicating whether information, including empirical risk values and timings, should be printed to the console during training.
 
@@ -89,8 +88,15 @@ estimator = train(estimator, θ_train, θ_val, simulator, optimiser = loadoptimi
 # Training: fixed parameters and fixed data
 Z_train   = simulator(θ_train)
 Z_val     = simulator(θ_val)
-estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, optimiser = loadoptimiser(), risk_history = loadrisk(), freeze_summary_network = true)
+estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, savepath = "path/to/folder", optimiser = loadoptimiser(), risk_history = loadrisk(), freeze_summary_network = true)
+
+# In a new session: construct an estimator with the same architecture, then load the trained
+# neural-network parameters (and states) saved above
+estimator = PointEstimator(summary_network, d; num_summaries = num_summaries)
+estimator = loadestimator(estimator, "path/to/folder")
 ```
+
+See also [`loadestimator`](@ref), [`loadoptimiser`](@ref), and [`loadrisk`](@ref).
 """
 function train end
 
@@ -472,6 +478,11 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     !isnothing(lr_schedule) && (lr_schedule = ParameterSchedulers.Stateful(lr_schedule))
 
     trainstate_best = deepcopy(trainstate)
+    # Save the initial state as the current best, so that the best_* files always correspond
+    # to the estimator returned by this call to train(), even if the validation risk never
+    # improves (and so that best_* files left in tempdir() by an earlier call cannot be
+    # mistaken for this run's)
+    _save_trainstate(trainstate, savepath; best = true)
     early_stopping_counter = 0
     stopped_early = false
 
@@ -516,6 +527,7 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     end
 
     _thaw!(trainstate)
+    _thaw!(trainstate_best) # NB trainstate_best is a deepcopy, so the line above does not reach it
     _save_trainstate(trainstate, savepath; best = false)
 
     !stopped_early && verbose && _finishline!(progress)
@@ -623,6 +635,11 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     !isnothing(lr_schedule) && (lr_schedule = ParameterSchedulers.Stateful(lr_schedule))
 
     trainstate_best = deepcopy(trainstate)
+    # Save the initial state as the current best, so that the best_* files always correspond
+    # to the estimator returned by this call to train(), even if the validation risk never
+    # improves (and so that best_* files left in tempdir() by an earlier call cannot be
+    # mistaken for this run's)
+    _save_trainstate(trainstate, savepath; best = true)
     early_stopping_counter = 0
     stopped_early = false
 
@@ -706,6 +723,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     end
 
     _thaw!(trainstate)
+    _thaw!(trainstate_best) # NB trainstate_best is a deepcopy, so the line above does not reach it
     _save_trainstate(trainstate, savepath; best = false)
 
     !stopped_early && verbose && _finishline!(progress)
@@ -829,6 +847,11 @@ function train(trainstate, sampler, simulator;
     !isnothing(lr_schedule) && (lr_schedule = ParameterSchedulers.Stateful(lr_schedule))
 
     trainstate_best = deepcopy(trainstate)
+    # Save the initial state as the current best, so that the best_* files always correspond
+    # to the estimator returned by this call to train(), even if the validation risk never
+    # improves (and so that best_* files left in tempdir() by an earlier call cannot be
+    # mistaken for this run's)
+    _save_trainstate(trainstate, savepath; best = true)
     early_stopping_counter = 0
     stopped_early = false
 
@@ -930,6 +953,7 @@ function train(trainstate, sampler, simulator;
     end
 
     _thaw!(trainstate)
+    _thaw!(trainstate_best) # NB trainstate_best is a deepcopy, so the line above does not reach it
     _save_trainstate(trainstate, savepath; best = false)
 
     !stopped_early && verbose && _finishline!(progress)
@@ -945,9 +969,65 @@ end
 """
     _save_trainstate(trainstate, savepath; best::Bool = true)
 
-Saves the training state to disk. The model parameters, states, optimizer, and optimiser state are saved separately as a BSON file. 
+Saves a training-state checkpoint to disk as two separate BSON files, where the prefix is
+`"best"` or `"final"` according to `best`:
+
+  - `<prefix>_optimizer.bson`: optimiser rule and optimiser state, used for continued
+    training; see [`loadoptimiser`](@ref). Written to both `savepath` and `tempdir()`, so
+    that it can be loaded without arguments during the current session.
+  - `<prefix>_estimator.bson`: neural-network parameters (and states), used for continued
+    training and for loading the estimator in a different session; see
+    [`loadestimator`](@ref). Written only to an explicit `savepath`.
+
+The optimiser file is backend-agnostic and written here; the estimator file is written by
+`_save_estimator`, whose methods are defined in the Flux, Lux, and Reactant extensions.
 """
-function _save_trainstate end
+function _save_trainstate(trainstate, savepath; best::Bool = true)
+    isnothing(savepath) && return nothing
+    prefix = best ? "best" : "final"
+    _save_optimizer(trainstate, savepath, prefix)
+    # NB the estimator is saved only to an explicit savepath; tempdir() is used for
+    # within-session inspection of the risk history and optimiser
+    savepath != tempdir() && _save_estimator(trainstate, savepath, prefix)
+    return nothing
+end
+
+# Directories that receive output generated during training: always the user-specified
+# savepath and the session temporary directory (the latter allows the loaders to be called
+# without arguments during the current session). Creates the directories if needed.
+function _savepaths(savepath)
+    paths = unique([savepath, tempdir()])
+    for path in paths
+        !ispath(path) && mkpath(path)
+    end
+    return paths
+end
+
+# Hook allowing extensions to strip backend-specific wrappers from the optimiser rule
+# before serialisation (e.g., Lux's ReactantOptimiser)
+_serialisable_optimizer(rule) = rule
+
+function _save_optimizer(trainstate, savepath, prefix)
+    optimizer = _serialisable_optimizer(cpu_device()(trainstate.optimizer))
+    # A checkpoint should not carry the freeze flags set by `freeze_summary_network = true`,
+    # which is an option of a single call to train() rather than a property of the
+    # optimiser. The deepcopy ensures that we never thaw the live optimiser state.
+    optimizer_state = deepcopy(cpu_device()(trainstate.optimizer_state))
+    Optimisers.thaw!(optimizer_state) # NB thaw! mutates and returns nothing
+    for path in _savepaths(savepath)
+        @save joinpath(path, "$(prefix)_optimizer.bson") optimizer optimizer_state
+    end
+    return nothing
+end
+
+"""
+    _save_estimator(trainstate, savepath, prefix)
+
+Saves the neural-network parameters (and states) held by `trainstate` to
+`<prefix>_estimator.bson` in `savepath`. Methods are defined in the Flux, Lux, and Reactant
+extensions.
+"""
+function _save_estimator end
 
 # For generic estimators, use the user-specified loss function
 _loss(estimator, loss) = loss
@@ -992,8 +1072,7 @@ end
 
 function _saveloss(loss_per_epoch, savepath)
     isnothing(savepath) && return
-    for path in unique([savepath, tempdir()])
-        !ispath(path) && mkpath(path)
+    for path in _savepaths(savepath)
         CSV.write(joinpath(path, "loss_per_epoch.csv"), Tables.table(loss_per_epoch), header = false)
     end
 end
@@ -1019,6 +1098,14 @@ epoch instead, which can be useful for resuming training from exactly where it
 left off.
 
 The returned optimizer can be passed directly to `train()` via the keyword argument `optimiser`.
+
+Note that only the optimiser rule is returned: the optimiser state stored alongside it (e.g.,
+the moment estimates of `Adam`) is not currently used, since `train()` initialises the
+optimiser state afresh. Note also that the learning rate of the returned rule is the value
+scheduled for the epoch *after* the one that was saved, since the learning rate is updated at
+the end of each epoch (see the `lr_schedule` keyword argument of [`train`](@ref)).
+
+See also [`loadestimator`](@ref) and [`loadrisk`](@ref).
 """
 function loadoptimiser(savepath::String = tempdir(); best::Bool = true)
     prefix = best ? "best" : "final"
@@ -1027,6 +1114,57 @@ function loadoptimiser(savepath::String = tempdir(); best::Bool = true)
     @assert isfile(path) "No optimiser state found at $(path). Please ensure that `train()` has been called or check that the correct `savepath` has been provided."
     return load(path, @__MODULE__)[:optimizer]
 end
+
+"""
+    loadestimator(estimator, savepath::String = tempdir(); best::Bool = true)
+Loads the neural-network parameters (and states) saved during a call to `train()`, returning a
+copy of `estimator` in which these parameters have been loaded.
+
+The given `estimator` provides the architecture only, which must match the architecture that
+was trained: the saved files store the parameters (and states) of the neural networks, not
+their architecture. The given `estimator` is not modified.
+
+Note that the parameters are saved only when `train()` is given a `savepath` other than
+`tempdir()`, and that the same deep-learning backend must be loaded as when training. When the
+estimator contains [Lux.jl](https://lux.csail.mit.edu/stable/) networks, the returned estimator
+is a [`LuxEstimator`](@ref) (which stores the parameters and states) irrespective of whether
+the given `estimator` was wrapped in one, so the returned value should always be assigned.
+
+By default, loads the parameters corresponding to the best network (as measured by the
+validation risk), that is, those of the estimator returned by `train()`. Set `best = false` to
+load the parameters from the final epoch instead.
+
+# Examples
+```julia
+using NeuralEstimators, Flux
+
+# ... construct `estimator` and train it, saving to an explicit savepath
+estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, savepath = "path/to/folder")
+
+# In a new session: construct an estimator with the same architecture, then load the parameters
+estimator = loadestimator(estimator, "path/to/folder")
+```
+
+See also [`train`](@ref), [`loadoptimiser`](@ref), and [`loadrisk`](@ref).
+"""
+function loadestimator(estimator::AbstractNeuralEstimator, savepath::String = tempdir(); best::Bool = true)
+    prefix = best ? "best" : "final"
+    path = joinpath(savepath, "$(prefix)_estimator.bson")
+    @assert isfile(path) "No saved estimator found at $(path). Note that the estimator is saved only when `train()` is given a `savepath` other than `tempdir()`; please ensure that `train()` has been called with such a `savepath`, and that the correct `savepath` has been provided here."
+    # Estimators containing Lux networks need not be wrapped in a LuxEstimator by the user
+    # (train() wraps them too; see _construct_train_state), so route them to the Lux method
+    # rather than relying on dispatch alone
+    lux = get(Base.loaded_modules, _LUX_UUID, nothing)
+    if !isnothing(lux) && !(estimator isa LuxEstimator) && _is_lux_network(estimator, lux)
+        estimator = LuxEstimator(estimator) # NB the ps/st initialised here are immediately replaced
+    end
+    return _loadestimator(estimator, path)
+end
+
+# NB methods are defined in the Flux extension (dispatching on AbstractNeuralEstimator) and
+# the Lux extension (dispatching on LuxEstimator); since LuxEstimator <: AbstractNeuralEstimator,
+# the Lux method is strictly more specific and the two are never ambiguous
+_loadestimator(estimator, path) = error("loadestimator() requires the deep-learning backend of the estimator to be loaded. Please load the backend that was used during training (e.g., `using Flux` or `using Lux`) and try again.")
 
 """
 	loadrisk(savepath::String = tempdir())

@@ -40,24 +40,30 @@ _state(ensemble) = Flux.state(Flux.cpu(ensemble))
 #     FluxTrainState(estimator, optimiser, Optimisers.setup(optimiser, estimator))
 # end
 
-import NeuralEstimators: getestimator, _save_trainstate, _train_step, _risk
+import NeuralEstimators: getestimator, _save_estimator, _loadestimator, _train_step, _risk
 
 getestimator(trainstate::FluxTrainState) = trainstate.model
 
-function _save_trainstate(trainstate::FluxTrainState, savepath; best::Bool = true)
-    isnothing(savepath) && return
-    prefix = best ? "best" : "final"
-    optimizer = cpu_device()(trainstate.optimizer)
-    optimizer_state = cpu_device()(trainstate.optimizer_state)
-    # Always save optimiser and optimiser state to both savepath and tempdir
-    for path in unique([savepath, tempdir()])
-        !ispath(path) && mkpath(path)
-        @save joinpath(path, "$(prefix)_optimizer.bson") optimizer optimizer_state
+function _save_estimator(trainstate::FluxTrainState, savepath, prefix)
+    model_state = Flux.state(cpu_device()(trainstate.model))
+    !ispath(savepath) && mkpath(savepath)
+    @save joinpath(savepath, "$(prefix)_estimator.bson") model_state
+    return nothing
+end
+
+function _loadestimator(estimator::AbstractNeuralEstimator, path::String)
+    saved = BSON.load(path, @__MODULE__)
+    if !haskey(saved, :model_state)
+        throw(ArgumentError("$(path) does not contain the parameters of a Flux neural network (found keys $(collect(keys(saved)))). If the estimator contains Lux networks, load Lux (`using Lux`) before calling loadestimator(), or pass the corresponding LuxEstimator."))
     end
-    # Save full checkpoint only to explicit savepath
-    if savepath != tempdir()
-        model_state = Flux.state(cpu_device()(trainstate.model))
-        @save joinpath(savepath, "$(prefix)_trainstate.bson") model_state optimizer optimizer_state
+    # NB Flux.loadmodel! mutates its first argument, so we load into a copy: loadestimator()
+    # returns a new estimator and never modifies the estimator it is given
+    estimator = deepcopy(cpu_device()(estimator))
+    try
+        return Flux.loadmodel!(estimator, saved[:model_state])
+    catch e
+        (e isa ArgumentError || e isa DimensionMismatch) || rethrow()
+        throw(ArgumentError("The parameters stored in $(path) do not match the architecture of the given estimator; please ensure that the same architecture is used when loading. Original error: $(e)"))
     end
 end
 

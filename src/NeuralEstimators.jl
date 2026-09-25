@@ -84,7 +84,7 @@ for T in (:PointEstimator, :PosteriorEstimator, :IntervalEstimator, :QuantileEst
 end
 
 export train
-export plotrisk, loadrisk, loadoptimiser
+export plotrisk, loadrisk, loadoptimiser, loadestimator
 include("train.jl")
 
 export FluxTrainState
