@@ -1712,14 +1712,13 @@ end
     # Assessment (grid-based)
     assessment = assess(estimator, θ, Z; grid = grid)
 
-    # NUTS sampling (AdvancedHMC extension): a matrix for a single data set, a vector of matrices otherwise
+    # NUTS sampling (AdvancedHMC extension)
     lower, upper = [-3.0f0, 0.0f0], [3.0f0, 1.0f0]
     samples = sampleposterior(estimator, z; lower = lower, upper = upper, N = 30, warmup = 30)
-    @test size(samples) == (d, 30)
-    @test all(lower .<= minimum(samples; dims = 2)) && all(maximum(samples; dims = 2) .<= upper)
+    @test size(samples) == (d, 30, 1)
+    @test all(lower .<= minimum(samples; dims = (2, 3))) && all(maximum(samples; dims = (2, 3)) .<= upper)
     samples = sampleposterior(estimator, getobs(Z, 1:2); lower = lower, upper = upper, N = 30, warmup = 30, logprior = θ -> -sum(abs2, θ))
-    @test length(samples) == 2
-    @test all(size.(samples) .== Ref((d, 30)))
+    @test size(samples) == (d, 30, 2)
     @test_throws AssertionError sampleposterior(estimator, z; grid = grid, lower = lower, upper = upper)
     @test_throws AssertionError sampleposterior(estimator, z; lower = upper, upper = lower)
 end

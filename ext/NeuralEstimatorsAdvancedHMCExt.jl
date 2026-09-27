@@ -86,7 +86,7 @@ function _nuts(summary_stats_Z, net_θ, net_inf, N::Integer, lower::AbstractVect
         Float32.(_toθ(lo, hi, reduce(hcat, kept)))     # d × N, back on the box
     end
 
-    return length(samples) == 1 ? samples[1] : samples
+    return stack(samples) # d × N × K
 end
 
 end

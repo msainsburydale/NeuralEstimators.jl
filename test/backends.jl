@@ -453,10 +453,10 @@ end
     est = make_estimator(Lux, :ratio)
     lower, upper = [0.0f0, 0.0f0], [1.0f0, 1.0f0]
     samples = sampleposterior(est, Z_single; lower = lower, upper = upper, N = 30, warmup = 30)
-    @test size(samples) == (d, 30)
-    @test all(lower .<= minimum(samples; dims = 2)) && all(maximum(samples; dims = 2) .<= upper)
+    @test size(samples) == (d, 30, 1)
+    @test all(lower .<= minimum(samples; dims = (2, 3))) && all(maximum(samples; dims = (2, 3)) .<= upper)
     samples = sampleposterior(est, Z_test[:, 1:2]; lower = lower, upper = upper, N = 30, warmup = 30)
-    @test length(samples) == 2
+    @test size(samples) == (d, 30, 2)
 end
 
 @testset "Lux early stopping" begin
