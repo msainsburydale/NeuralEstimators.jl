@@ -14,6 +14,9 @@ The data are summarised by `summary_network`; the heads are a `MultiHeadMLP` wit
 inputs, head $i$ taking the summaries together with $\theta_1, \dots, \theta_i$.
 If `summary_network` is omitted, it defaults to the identity function, for use with expert summary statistics provided as a matrix. See [Expert summary statistics](@ref).
 
+!!! note
+    To use `TelescopingRatioEstimator` with `Enzyme.jl`, set `adtype = AutoEnzyme(mode = set_runtime_activity(Enzyme.Reverse))` in [`train`](@ref).
+
 # Keyword arguments
 - `num_summaries::Integer`: the number of summaries output by `summary_network`. Must match the output dimension of `summary_network`.
 - `sampler::Function`: a function returning `K` independent draws from the prior as a `d × K` matrix, the same function passed as `sampler` to [`train`](@ref). During training, this is used to generate independent samples for the $d$ classes with label 0.

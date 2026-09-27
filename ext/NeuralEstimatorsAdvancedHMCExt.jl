@@ -25,8 +25,8 @@ _toθ(lower, upper, u) = lower .+ (upper .- lower) ./ (1 .+ exp.(-u))
 #TODO concrete fields
 struct _NRELogDensity{M <: AbstractMatrix, F}
     tz::M       # cached data summaries, one column
-    net_θ::Any                # estimator.summary_network_θ
-    net_inf::Any              # estimator.inference_network
+    net_θ::Any                # estimator.summary_network_θ (a closure over ps/st for Lux)
+    net_inf::Any              # estimator.inference_network (a closure over ps/st for Lux)
     lower::Vector{Float64}
     upper::Vector{Float64}
     logprior::F
@@ -43,21 +43,26 @@ function LogDensityProblems.logdensity(t::_NRELogDensity, u)
     return only(t.net_inf(vcat(t.tz, tθ))) + t.logprior(θ) + logJ
 end
 
-function NeuralEstimators._sampleposterior_hmc(
-    estimator::RatioEstimator, Z;
-    N::Integer,
-    lower::AbstractVector,
-    upper::AbstractVector,
-    logprior::Function,
-    warmup::Integer,
-    kwargs...
-)
+# Stateful (Flux)
+function NeuralEstimators._sampleposterior_hmc(estimator::RatioEstimator, Z; N::Integer, lower::AbstractVector, upper::AbstractVector, logprior::Function, warmup::Integer, kwargs...)
     summary_stats_Z = summarystatistics(estimator, Z; kwargs...)
+    return _nuts(summary_stats_Z, estimator.summary_network_θ, estimator.inference_network, N, lower, upper, logprior, warmup)
+end
+
+# Stateless (Lux): close over the parameters and states so that the log density sees plain functions
+function NeuralEstimators._sampleposterior_hmc(estimator::RatioEstimator, Z, ps, st; N::Integer, lower::AbstractVector, upper::AbstractVector, logprior::Function, warmup::Integer, kwargs...)
+    summary_stats_Z = summarystatistics(estimator, Z, ps, st; kwargs...)
+    net_θ = x -> first(estimator.summary_network_θ(x, ps.summary_network_θ, st.summary_network_θ))
+    net_inf = x -> first(estimator.inference_network(x, ps.inference_network, st.inference_network))
+    return _nuts(summary_stats_Z, net_θ, net_inf, N, lower, upper, logprior, warmup)
+end
+
+function _nuts(summary_stats_Z, net_θ, net_inf, N::Integer, lower::AbstractVector, upper::AbstractVector, logprior::Function, warmup::Integer)
     d = length(lower)
     lo, hi = Float64.(collect(lower)), Float64.(collect(upper))
 
     samples = map(1:size(summary_stats_Z, 2)) do k
-        t = _NRELogDensity(summary_stats_Z[:, k:k], estimator.summary_network_θ, estimator.inference_network, lo, hi, logprior)
+        t = _NRELogDensity(summary_stats_Z[:, k:k], net_θ, net_inf, lo, hi, logprior)
         u0 = zeros(d)                                  # box midpoint after the transform
 
         # Standard AdvancedHMC: NUTS with multinomial sampling, generalised

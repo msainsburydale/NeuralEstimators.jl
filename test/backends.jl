@@ -5,6 +5,7 @@ using Optimisers
 using Lux
 using Flux
 using SimpleChains
+using AdvancedHMC, ForwardDiff, LogDensityProblems # loads the AdvancedHMC extension (NUTS sampling for RatioEstimator)
 using Random
 using Statistics: mean
 
@@ -337,6 +338,135 @@ end
         out = estimate(est, S; use_gpu = false)
         @test size(out) == (d, 8)
     end
+end
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Lux versions of estimators and distributions not covered by make_estimator()
+# ──────────────────────────────────────────────────────────────────────────────
+
+make_network(backend) = MLP(n, d; depth = 1, width = 16, backend = backend)
+
+# NormalisingFlow and TelescopingRatioEstimator require runtime activity with Enzyme
+const ADTYPES_RUNTIME_ACTIVITY = [AutoZygote(), AutoEnzyme(mode = Enzyme.set_runtime_activity(Enzyme.Reverse))]
+
+# Train on the CPU with each AD type supported by Lux
+function train_lux_adtypes(est, θ_tr, θ_va, Z_tr, Z_va; adtypes = last(backend_config(Lux)))
+    for adtype in adtypes
+        @testset "$(nameof(typeof(adtype)))" begin
+            est = train(est, θ_tr, θ_va, Z_tr, Z_va; adtype = adtype, device = cpu_device(), epochs = 1, verbose = false)
+            @test est isa LuxEstimator
+        end
+    end
+    return est
+end
+
+@testset "Lux NormalisingFlow" begin
+    num_summaries = 3
+    rng = Random.default_rng()
+    flow = NormalisingFlow(d, num_summaries; backend = Lux)
+    ps, st = Lux.setup(rng, flow)
+    θ = randn(Float32, d, 16)
+    tz = randn(Float32, num_summaries, 16)
+
+    U, log_det_J, _ = NeuralEstimators.forward(flow, θ, tz, ps, st)
+    @test size(U) == (d, 16)
+    @test size(log_det_J) == (1, 16)
+    # Invertibility is checked in Float64: with Lux's default initialisation the latent values can
+    # be large across the coupling layers, and the Float32 round trip then loses precision
+    θ64, tz64 = Float64.(θ), Float64.(tz)
+    for use_act_norm in (true, false)
+        f = NormalisingFlow(d, num_summaries; backend = Lux, use_act_norm = use_act_norm)
+        ps64, st64 = Lux.setup(rng, f)
+        ps64 = Lux.f64(ps64)
+        U64, _, _ = NeuralEstimators.forward(f, θ64, tz64, ps64, st64)
+        X, _ = NeuralEstimators.inverse(f, U64, tz64, ps64, st64)
+        @test maximum(abs.(X - θ64)) < 1e-6
+    end
+    dens, _ = NeuralEstimators._logdensity(flow, θ, tz, ps, st)
+    @test size(dens) == (1, 16)
+    @test all(isfinite, dens)
+    @test size(sampleposterior(flow, tz, 10, ps, st)) == (d, 10, 16)
+
+    est = LuxEstimator(PosteriorEstimator(make_network(Lux), d; num_summaries = d, q = NormalisingFlow, depth = 1))
+    est = train_lux_adtypes(est, θ_train, θ_val, Z_train, Z_val; adtypes = ADTYPES_RUNTIME_ACTIVITY)
+    @test size(sampleposterior(est, Z_single; N = 50)) == (d, 50, 1)
+    @test size(posteriormean(est, Z_single)) == (d, 1)
+    @test assess(est, θ_test, Z_test; N = 50) isa Assessment
+end
+
+@testset "Lux SpikeAndSlab" begin
+    num_summaries = 4
+    sampler1(K) = NamedMatrix(θ = Float32.(rand(K) .< 0.5) .* randn(Float32, K))
+    simulator1(θ::AbstractMatrix) = reduce(hcat, [θₖ[1] .+ sort(randn(Float32, n)) for θₖ in eachcol(θ)])
+    θ1_train, θ1_val = sampler1(K), sampler1(K)
+    Z1_train, Z1_val = simulator1(θ1_train), simulator1(θ1_val)
+    Z1 = simulator1(sampler1(5))
+    network() = MLP(n, num_summaries; depth = 1, width = 16, backend = Lux)
+
+    q = SpikeAndSlab(1, num_summaries; backend = Lux)
+    ps, st = Lux.setup(Random.default_rng(), q)
+    θ_plain = reshape(Float32[0, 0.5, -0.3, 0, 1.2], 1, :) # spike (θ = 0) and slab entries
+    tz = randn(Float32, num_summaries, 5)
+    dens, _ = NeuralEstimators._logdensity(q, θ_plain, tz, ps, st)
+    @test size(dens) == (1, 5)
+    @test all(isfinite, dens)
+
+    @test SpikeAndSlab(q.classifier, q.slab; spike = 1) isa SpikeAndSlab # constructor from a pre-built classifier and slab
+
+    est = LuxEstimator(PosteriorEstimator(network(), q))
+    est = train_lux_adtypes(est, θ1_train, θ1_val, Z1_train, Z1_val)
+    @test size(sampleposterior(est, Z1; N = 50)) == (1, 50, 5)
+    sp = spikeprobability(est, Z1)
+    @test length(sp) == 5
+    @test all(0 .<= sp .<= 1)
+
+    # Positive-support slab via a NormalisingFlow with non-identity transform/invtransform
+    q2 = SpikeAndSlab(1, num_summaries; slab = NormalisingFlow, transform = log, invtransform = exp, backend = Lux)
+    est2 = LuxEstimator(PosteriorEstimator(network(), q2))
+    θ2 = abs.(θ1_train)
+    est2 = train(est2, θ2, θ2, simulator1(θ2), simulator1(θ2); epochs = 1, verbose = false)
+    samples = sampleposterior(est2, Z1; N = 50)
+    @test size(samples) == (1, 50, 5)
+    @test all(samples .>= 0) # spike (0) or positive slab draws
+end
+
+@testset "Lux TelescopingRatioEstimator" begin
+    lower, upper = [0.0f0, 0.0f0], [1.0f0, 1.0f0]
+    grid = expandgrid(0:0.1:1, 0:0.1:1)'
+    est = LuxEstimator(TelescopingRatioEstimator(make_network(Lux), d; num_summaries = d, sampler = sampler, depth = 1, width = 16))
+    @test size(est(Z_test, θ_test)) == (d, size(θ_test, 2))
+    est = train_lux_adtypes(est, θ_train, θ_val, Z_train, Z_val; adtypes = ADTYPES_RUNTIME_ACTIVITY)
+
+    @test size(logratio(est, Z_single; grid = grid)) == (1, size(grid, 2))
+    samples = sampleposterior(est, Z_single; lower = lower, upper = upper, N = 50)
+    @test size(samples) == (d, 50, 1)
+    @test all(lower .<= minimum(samples; dims = (2, 3))) && all(maximum(samples; dims = (2, 3)) .<= upper)
+    @test size(logposterior(est, grid, Z_single; lower = lower, upper = upper)) == (size(grid, 2),)
+    lp = logposterior(est, grid, Z_single; lower = lower, upper = upper, method = :chebyshev, degree = 16)
+    @test size(lp) == (size(grid, 2),)
+    @test all(isfinite, lp)
+    @test_throws AssertionError logposterior(est, grid, Z_single; lower = lower, upper = upper, method = :other)
+    @test assess(est, θ_test[:, 1:10], Z_test[:, 1:10]; lower = lower, upper = upper, N = 50) isa Assessment
+end
+
+@testset "Lux RatioEstimator: NUTS sampling" begin
+    est = make_estimator(Lux, :ratio)
+    lower, upper = [0.0f0, 0.0f0], [1.0f0, 1.0f0]
+    samples = sampleposterior(est, Z_single; lower = lower, upper = upper, N = 30, warmup = 30)
+    @test size(samples) == (d, 30)
+    @test all(lower .<= minimum(samples; dims = 2)) && all(maximum(samples; dims = 2) .<= upper)
+    samples = sampleposterior(est, Z_test[:, 1:2]; lower = lower, upper = upper, N = 30, warmup = 30)
+    @test length(samples) == 2
+end
+
+@testset "Lux early stopping" begin
+    # Gradient ascent makes the validation risk increase (see the Flux test in general.jl)
+    savepath = mktempdir()
+    epochs = 20
+    train(make_estimator(Lux, :point), θ_train, θ_val, Z_train, Z_val;
+        optimiser = Descent(-1.0f-1), lr_schedule = nothing,
+        epochs = epochs, stopping_epochs = 2, savepath = savepath, verbose = false)
+    @test size(loadrisk(savepath), 1) < epochs + 1
 end
 
 # ──────────────────────────────────────────────────────────────────────────────

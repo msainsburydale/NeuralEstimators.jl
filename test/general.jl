@@ -2,6 +2,9 @@ using NeuralEstimators
 using NeuralEstimators: _check_sizes, _extractθ, rowwisenorm, triangularnumber, forward, inverse, _logdensity
 using NeuralEstimators: _TrainDisplay, _status!, _finishline!, _epoch_status, _bar!, _refresh_status!, _clear_refresh!, _fit_line
 using NeuralEstimators: ActNorm, Permutation, AffineCouplingBlock, CouplingLayer
+using NeuralEstimators: ChebPlan, ChebPlan_on, chebnodes, chebfit, chebintegrate, chebintegral, chebdefinite, chebint_ab, chebintmatrix
+using NeuralEstimators: chebval_ab, chebval_ab_batched, cheblogq, invert_cdf_batched, chebsample, default_bisection_iters
+using AdvancedHMC, ForwardDiff, LogDensityProblems # loads the AdvancedHMC extension (NUTS sampling for RatioEstimator)
 using CairoMakie
 using CUDA
 using DataFrames
@@ -37,14 +40,18 @@ function testbackprop(l, z, dvc)
     z = z |> dvc
     y = l(z)
 
+    # NB the target must be well defined: similar(y) is uninitialised memory, which on the GPU can
+    # be a recycled buffer equal to the output, in which case the gradient of the MAE is zero
+    target = randn(Float32, size(y)) |> dvc
+
     pars = deepcopy(trainables(l))
     optimiser = Optimisers.setup(Optimisers.Adam(), l)
-    ∇ = Flux.gradient(l -> mae(l(z), similar(y)), l)
+    ∇ = Flux.gradient(l -> mae(l(z), target), l)
     Optimisers.update!(optimiser, l, ∇[1])
     @test trainables(l) != pars
 
     pars = deepcopy(trainables(l))
-    ls, ∇ = Flux.withgradient(l -> mae(l(z), similar(y)), l)
+    ls, ∇ = Flux.withgradient(l -> mae(l(z), target), l)
     Optimisers.update!(optimiser, l, ∇[1])
     @test trainables(l) != pars
 end
@@ -925,7 +932,8 @@ end
         # Back propagation
         pars = deepcopy(trainables(l))
         optimiser = Optimisers.setup(Optimisers.Adam(), l)
-        ∇ = Flux.gradient(l -> mae(l(g).ndata.Z, similar(y.ndata.Z)), l)
+        target = randn(Float32, size(y.ndata.Z)) |> dvc # NB not similar(), see testbackprop()
+        ∇ = Flux.gradient(l -> mae(l(g).ndata.Z, target), l)
         Optimisers.update!(optimiser, l, ∇[1])
         @test trainables(l) != pars
 
@@ -1655,6 +1663,28 @@ end
     quantiles(q₁, (z, θ₋ᵢ))
 end
 
+@testset "Early stopping" begin
+    # Gradient ascent (a negative learning rate) makes the validation risk increase, so training
+    # must stop early. NB lr_schedule = nothing since learning-rate schedules reject negative learning rates.
+    epochs, stopping_epochs = 20, 2
+    Z_train = Z_val = simulator(θ, m)
+    scenarios = (
+        (args = (θ, θ, Z_train, Z_val), kwargs = (;)),
+        (args = (θ, θ, simulator), kwargs = (simulator_args = m,)),
+        (args = (sampler, simulator), kwargs = (simulator_args = m, K = K))
+    )
+    for scenario in scenarios, v in (false, true)
+        savepath = mktempdir()
+        estimator = PointEstimator(Chain(Dense(m, 16, gelu), Dense(16, d)))
+        redirect_stdio(stdout = devnull, stderr = devnull) do
+            train(estimator, scenario.args...; scenario.kwargs...,
+                optimiser = Descent(-1.0f-1), lr_schedule = nothing,
+                epochs = epochs, stopping_epochs = stopping_epochs, savepath = savepath, verbose = v)
+        end
+        @test size(loadrisk(savepath), 1) < epochs + 1 # initial risk + one row per completed epoch
+    end
+end
+
 @testset "RatioEstimator" begin
     num_summaries = 3d
     summary_network = Chain(Dense(m, 16, gelu), Dense(16, num_summaries))
@@ -1681,6 +1711,17 @@ end
 
     # Assessment (grid-based)
     assessment = assess(estimator, θ, Z; grid = grid)
+
+    # NUTS sampling (AdvancedHMC extension): a matrix for a single data set, a vector of matrices otherwise
+    lower, upper = [-3.0f0, 0.0f0], [3.0f0, 1.0f0]
+    samples = sampleposterior(estimator, z; lower = lower, upper = upper, N = 30, warmup = 30)
+    @test size(samples) == (d, 30)
+    @test all(lower .<= minimum(samples; dims = 2)) && all(maximum(samples; dims = 2) .<= upper)
+    samples = sampleposterior(estimator, getobs(Z, 1:2); lower = lower, upper = upper, N = 30, warmup = 30, logprior = θ -> -sum(abs2, θ))
+    @test length(samples) == 2
+    @test all(size.(samples) .== Ref((d, 30)))
+    @test_throws AssertionError sampleposterior(estimator, z; grid = grid, lower = lower, upper = upper)
+    @test_throws AssertionError sampleposterior(estimator, z; lower = upper, upper = lower)
 end
 
 @testset "TelescopingRatioEstimator" begin
@@ -1719,7 +1760,76 @@ end
     lp = logposterior(estimator, grid, z; lower = lower, upper = upper)  # default :raw
     @test size(lp) == (size(grid, 2),)
 
+    # Normalised log-density of the sequential Chebyshev approximation, including points outside the box
+    θpoints = hcat(grid[:, 1:10], [2.0f0, 0.5f0])
+    lp = logposterior(estimator, θpoints, z; lower = lower, upper = upper, method = :chebyshev, degree = 16)
+    @test size(lp) == (11,)
+    @test all(isfinite, lp[1:10])
+    @test lp[11] == -Inf
+    logpriors = [x -> -x^2, x -> zero(x)]
+    lp = logposterior(estimator, θpoints, getobs(Z, 1:2); lower = lower, upper = upper, method = :chebyshev, degree = 16, logpriors = logpriors)
+    @test length(lp) == 2
+    lp = logposterior(estimator, θpoints, getobs(Z, 1:2); lower = lower, upper = upper, logpriors = logpriors)
+    @test length(lp) == 2 && lp[1][11] == -Inf
+    @test_throws AssertionError logposterior(estimator, θpoints, z; lower = lower, upper = upper, method = :other)
+
     assessment = assess(estimator, θ, Z; lower = lower, upper = upper)
+end
+
+@testset "Chebyshev approximation" begin
+    a, b = -1.0, 2.0
+    plan = ChebPlan(a, b; degree = 32)
+    @test plan.nodes == chebnodes(32, a, b)
+    @test first(plan.nodes) ≈ b && last(plan.nodes) ≈ a
+    @test default_bisection_iters(Float64) == 53
+    @test default_bisection_iters(Float32) == 24
+
+    # Two test densities on [a, b] with closed-form integrals and inverse CDFs: exp(x) and the uniform density
+    F = hcat(exp.(plan.nodes), ones(length(plan.nodes)))
+    masses = [exp(b) - exp(a), b - a]
+    invcdfs = (u -> log(exp(a) + u * masses[1]), u -> a + u * masses[2])
+
+    # Fitting and evaluation
+    c = chebfit(plan, F[:, 1])
+    x = collect(range(a, b; length = 25))
+    @test chebval_ab(x, c, a, b) ≈ exp.(x)
+    C = chebfit(plan, F)
+    @test chebval_ab_batched([0.5, 0.5], C, a, b) ≈ [exp(0.5), 1.0]
+    X = hcat(x, x)
+    @test chebval_ab_batched(X, C, a, b) ≈ hcat(exp.(x), ones(length(x)))
+    @test_throws DimensionMismatch chebval_ab_batched(hcat(X, x), C, a, b)
+
+    # Integration
+    @test chebint_ab(c, a, b) ≈ chebintegrate(plan, c)
+    @test chebintmatrix(32, a, b) ≈ plan.Mint
+    @test chebintegral(plan, c) ≈ masses[1]
+    @test chebintegral(plan, C) ≈ masses
+    CI = chebintegrate(plan, C)
+    @test chebdefinite(CI, a, b) ≈ masses
+
+    # Normalised log-density: one point per density (vector) and several points per density (matrix)
+    @test cheblogq([0.5, 0.5], C, masses, a, b) ≈ [0.5 - log(masses[1]), -log(masses[2])]
+    @test cheblogq(X, C, masses, a, b) ≈ hcat(x .- log(masses[1]), fill(-log(masses[2]), length(x)))
+
+    # Inverse-CDF sampling: two uniforms per density, then one per density
+    u = [0.1, 0.8, 0.3, 0.6]
+    @test invert_cdf_batched(CI, a, b, u) ≈ [invcdfs[1](0.1), invcdfs[1](0.8), invcdfs[2](0.3), invcdfs[2](0.6)]
+    @test_throws DimensionMismatch invert_cdf_batched(CI, a, b, u[1:3])
+    @test chebsample(plan, F, [0.25, 0.75]) ≈ [invcdfs[1](0.25), invcdfs[2](0.75)]
+    @test_throws DimensionMismatch chebsample(plan, F, [0.25, 0.5, 0.75])
+    U = [0.1 0.3; 0.8 0.6]
+    @test chebsample(plan, F, U) ≈ [invcdfs[1](0.1) invcdfs[2](0.3); invcdfs[1](0.8) invcdfs[2](0.6)]
+    @test_throws DimensionMismatch chebsample(plan, F, [U U])
+
+    # Moving the plan to another array type
+    plan32 = ChebPlan(a, b; degree = 32, T = Float32)
+    @test ChebPlan_on(Array, plan32).D == plan32.D
+    if CUDA.functional()
+        gpu_plan = ChebPlan_on(CuArray, plan32)
+        @test gpu_plan.D isa CuArray
+        samples = Array(chebsample(gpu_plan, CuArray(Float32.(F)), CuArray(Float32[0.25, 0.75])))
+        @test samples ≈ Float32[invcdfs[1](0.25), invcdfs[2](0.75)] rtol = 1e-4
+    end
 end
 
 @testset "PosteriorEstimator" begin

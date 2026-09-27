@@ -10,3 +10,7 @@ devel/
 .DS_Store
 .Rhistory
 Rplots.pdf
+
+# Local coverage reports
+lcov.info
+coverage/

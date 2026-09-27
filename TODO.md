@@ -20,6 +20,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - assess.jl/inference.jl for more general parameter shapes (currently assumes the parameters are stored as a matrix).
 
 ### Documentation
+- Example: Unconditional density estimation (see #99).
 - Example: In the time-series example, also illustrate partially-exchangeable networks using DeepSet.
 - Example: Illustrate Lévy Processes (a time-series model) using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)).
@@ -38,6 +39,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Moving a batch of data to the GPU currently transfers each data set separately (`input |> device` in `_train_step`), which is one transfer per data set; batching the transfer would reduce the overhead for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) architectures.
 - SimpleChains.jl: are the user-friendly constructors for each estimator type correctly converted to `SimpleChainsLayers`?
 - Lux.jl: Initial risks are much larger than Flux.jl when training NPEs.
+- 🟡 Lux.jl: [NormalisingFlow](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) is poorly conditioned at initialisation. Lux's default (PyTorch-style) `Dense` initialisation, which uses non-zero biases, means the scale/translate networks of each `AffineCouplingBlock` start far from the identity. With the default 6 coupling layers, the latent values at initialisation reach ~10²–10⁴ (vs. ~2.5 with Flux), and the Float32 round trip `inverse(forward(θ))` has errors up to ~0.3 (exact in Float64). A standard fix is to zero-initialise the final layer of the scale and translate networks, so that each block (and hence the flow) is the identity at initialisation (as in Glow; [Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685)); this could be applied to both backends.
 - Add a check for NaNs in the inputs/outputs. Also, if the training risk or validation risk becomes NaN, immediately halt training.
 
 ### Backend
