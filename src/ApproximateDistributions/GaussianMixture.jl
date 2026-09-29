@@ -33,8 +33,8 @@ function GaussianMixture(d::Integer, num_summaries::Integer; num_components::Int
     # would add parameters without adding expressive power, since that layer and the
     # heads are both affine and would compose to a single affine map.
     hidden = depth == 0 ? () :
-        (B.Dense(num_summaries, width, activation; kwargs...),
-            (B.Dense(width, width, activation; kwargs...) for _ ∈ 2:depth)...)
+             (B.Dense(num_summaries, width, activation; kwargs...),
+        (B.Dense(width, width, activation; kwargs...) for _ ∈ 2:depth)...)
     head_in = depth == 0 ? num_summaries : width
 
     inference_network = B.Chain(
