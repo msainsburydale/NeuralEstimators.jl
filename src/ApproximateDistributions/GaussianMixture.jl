@@ -9,11 +9,14 @@ q(\boldsymbol{\theta}; \boldsymbol{\kappa}) = \sum_{j=1}^{J} \pi_j \cdot \mathca
 ```
 where the parameters $\boldsymbol{\kappa}$ comprise the mixture weights $\pi_j \in [0, 1]$ subject to $\sum_{j=1}^{J} \pi_j = 1$, the mean vector $\boldsymbol{\mu}_j$ of each component, and the variance parameters of the diagonal covariance matrix $\boldsymbol{\Sigma}_j$.
 
-When using a `GaussianMixture` as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) summary statistics are mapped to the mixture parameters using a multilayer perceptron ([`MLP`](@ref)) with approporiately chosen output activation functions (e.g., [softmax](https://fluxml.ai/Flux.jl/stable/reference/models/nnlib/#NNlib.softmax) for the mixture weights, [softplus](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#NNlib.softplus) for the variance parameters).
+When using a `GaussianMixture` as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) summary statistics are mapped to the mixture parameters by `depth` hidden layers of `width` units, each followed by `activation`, and then by three output heads with appropriately chosen activation functions ([softmax](https://fluxml.ai/Flux.jl/stable/reference/models/nnlib/#NNlib.softmax) for the mixture weights, identity for the means, and [softplus](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#NNlib.softplus) for the standard deviations).
 
 # Keyword arguments
-- `num_components::Integer = 10`: number of components in the mixture. 
-- `kwargs`: additional keyword arguments passed to [`MLP`](@ref). 
+- `num_components::Integer = 10`: number of components in the mixture.
+- `depth::Integer = 2`: the number of hidden layers preceding the output heads.
+- `width::Integer = 128`: the width of each hidden layer.
+- `activation = relu`: the activation function used in each hidden layer.
+- `kwargs`: additional keyword arguments passed to each layer (e.g., `init_weight`, `init_bias`).
 """
 struct GaussianMixture{D, M} <: AbstractApproximateDistribution
     d::D
@@ -21,16 +24,25 @@ struct GaussianMixture{D, M} <: AbstractApproximateDistribution
     num_components::D
     inference_network::M
 end
-function GaussianMixture(d::Integer, num_summaries::Integer; num_components::Integer = 10, backend::Union{Nothing, Module} = nothing, kwargs...)
+function GaussianMixture(d::Integer, num_summaries::Integer; num_components::Integer = 10, depth::Integer = 2, width::Integer = 128, activation = relu, backend::Union{Nothing, Module} = nothing, kwargs...)
+    @assert depth >= 0
     B = _resolvebackend(backend)
-    out = (2d + 1) * num_components
+
+    # Hidden layers, each followed by `activation`. The output heads below read from
+    # the final hidden layer; feeding them from a layer of width (2d+1)*num_components
+    # would add parameters without adding expressive power, since that layer and the
+    # heads are both affine and would compose to a single affine map.
+    hidden = depth == 0 ? () :
+        (B.Dense(num_summaries, width, activation; kwargs...),
+            (B.Dense(width, width, activation; kwargs...) for _ ∈ 2:depth)...)
+    head_in = depth == 0 ? num_summaries : width
 
     inference_network = B.Chain(
-        MLP(num_summaries, out; backend = B, kwargs...).layers...,
+        hidden...,
         B.Parallel(vcat,
-            B.Chain(B.Dense(out, num_components), softmax),   # ∑wⱼ = 1
-            B.Dense(out, d * num_components, identity),       # μ ∈ ℝ
-            B.Dense(out, d * num_components, softplus)        # σ > 0
+            B.Chain(B.Dense(head_in, num_components; kwargs...), softmax),   # ∑wⱼ = 1
+            B.Dense(head_in, d * num_components, identity; kwargs...),       # μ ∈ ℝ
+            B.Dense(head_in, d * num_components, softplus; kwargs...)        # σ > 0
         )
     )
     GaussianMixture(d, num_summaries, num_components, inference_network)

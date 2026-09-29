@@ -11,13 +11,16 @@ where the parameters $\boldsymbol{\kappa}$ comprise the mean vector $\boldsymbol
 lower-triangular Cholesky factor $\boldsymbol{L}$ of the dense covariance matrix $\boldsymbol{\Sigma} = \boldsymbol{L}\boldsymbol{L}'$.
 
 When using a `Gaussian` distribution as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) 
-summary statistics are mapped to the distribution parameters $\boldsymbol{\kappa}$ using a multilayer 
-perceptron ([`MLP`](@ref)) with appropriately chosen output activation functions 
-(`identity` for $\boldsymbol{\mu}$ and the off-diagonal entries of $\boldsymbol{L}$, [softplus](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#NNlib.softplus) for the 
+summary statistics are mapped to the distribution parameters $\boldsymbol{\kappa}$ by `depth` hidden layers 
+of `width` units, each followed by `activation`, and then by output heads with appropriately chosen 
+activation functions (`identity` for $\boldsymbol{\mu}$ and the off-diagonal entries of $\boldsymbol{L}$, [softplus](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#NNlib.softplus) for the 
 diagonal entries of $\boldsymbol{L}$).
 
 # Keyword arguments
-- `kwargs`: additional keyword arguments passed to [`MLP`](@ref).
+- `depth::Integer = 2`: the number of hidden layers preceding the output heads.
+- `width::Integer = 128`: the width of each hidden layer.
+- `activation = relu`: the activation function used in each hidden layer.
+- `kwargs`: additional keyword arguments passed to each layer (e.g., `init_weight`, `init_bias`).
 """
 @concrete struct Gaussian <: AbstractApproximateDistribution
     d
@@ -29,16 +32,25 @@ diagonal entries of $\boldsymbol{L}$).
 end
 Optimisers.trainable(dist::Gaussian) = (inference_network = dist.inference_network,)
 
-function Gaussian(d::Integer, num_summaries::Integer; backend::Union{Nothing, Module} = nothing, kwargs...)
+function Gaussian(d::Integer, num_summaries::Integer; depth::Integer = 2, width::Integer = 128, activation = relu, backend::Union{Nothing, Module} = nothing, kwargs...)
+    @assert depth >= 0
     B = _resolvebackend(backend)
     num_cov_matrix_params = d*(d+1)÷2
-    latent_dim = 3*(d + num_cov_matrix_params)
+
+    # Hidden layers, each followed by `activation`. The output heads below read from
+    # the final hidden layer; feeding them from a wider latent layer would add
+    # parameters without adding expressive power, since that layer and the heads are
+    # both affine and would compose to a single affine map.
+    hidden = depth == 0 ? () :
+        (B.Dense(num_summaries, width, activation; kwargs...),
+            (B.Dense(width, width, activation; kwargs...) for _ ∈ 2:depth)...)
+    head_in = depth == 0 ? num_summaries : width
 
     inference_network = B.Chain(
-        MLP(num_summaries, latent_dim; backend = B, kwargs...).layers..., B.Parallel(vcat,
-        B.Dense(latent_dim, d, identity),    # μ ∈ ℝ     
-        B.Chain(                             # L such that Σ = LL' is pos. def.
-            B.Dense(latent_dim, num_cov_matrix_params, identity),
+        hidden..., B.Parallel(vcat,
+        B.Dense(head_in, d, identity; kwargs...),    # μ ∈ ℝ     
+        B.Chain(                                     # L such that Σ = LL' is pos. def.
+            B.Dense(head_in, num_cov_matrix_params, identity; kwargs...),
             LowerCholeskyFactor(d, B)
         )
     )

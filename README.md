@@ -94,7 +94,7 @@ estimator = train(estimator, sampler, simulator)
 
 # Apply to observed data
 Z = simulator(sampler(1))  # stand-in for real observations
-estimate(estimator, Z)     # point estimate
+infer(estimator, Z)     # point estimate
 ```
 
 
