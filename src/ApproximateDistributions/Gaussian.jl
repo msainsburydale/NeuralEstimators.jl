@@ -130,7 +130,9 @@ function (l::LowerCholeskyFactor)(v)
 
     # mask = @ignore_derivatives adapt(typeof(v), l.diag_mask)
     mask = @ignore_derivatives convert(typeof(v), l.diag_mask)
-    v .+ (softplus.(v) .- v) .* mask
+    # MIN_SCALE floors the diagonal entries, which are softplus-parameterised and can
+    # otherwise underflow to zero, making the log-determinant -Inf.
+    v .+ (softplus.(v) .+ eltype(v)(MIN_SCALE) .- v) .* mask
 end
 
 # ── Stateful (Flux) ────────────────────────────────────────────────────────────

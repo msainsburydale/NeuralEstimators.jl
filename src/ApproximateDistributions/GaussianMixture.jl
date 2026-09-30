@@ -56,7 +56,7 @@ function distributionparameters(q::GaussianMixture, κ::AbstractMatrix)
 
     w = κ[1:end1, :]
     μ = κ[(end1 + 1):end2, :]
-    σ = κ[(end2 + 1):end, :]
+    σ = κ[(end2 + 1):end, :] .+ eltype(κ)(MIN_SCALE)
 
     return w, μ, σ
 end

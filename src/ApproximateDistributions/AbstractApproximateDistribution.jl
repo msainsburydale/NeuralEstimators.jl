@@ -25,3 +25,13 @@ function numdistributionalparams end
 # allows num_summaries to be passed as either a positional or keyword argument
 (::Type{T})(num_parameters::Integer; num_summaries::Integer, kwargs...) where {T <: AbstractApproximateDistribution} =
     T(num_parameters, num_summaries; kwargs...)
+
+"""Lower bound on scale parameters (standard deviations, Cholesky diagonals).
+
+Scale parameters are parameterised by a softplus, which can underflow to zero during
+training. A log-density involving log(σ²) = -Inf together with a quadratic form
+(θ - μ)² / σ² = +Inf then evaluates to NaN, from which training cannot recover. This
+floor is far below the scale of any parameter of practical interest, so it does not
+constrain the fitted model.
+"""
+const MIN_SCALE = 1.0f-6
