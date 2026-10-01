@@ -96,6 +96,8 @@ function RatioEstimator(
     nt = _dropbackend(kwargs)
     summary_network_θ = MLP(num_parameters, num_summaries_θ; backend = backend, output_activation = identity, summary_network_θ_kwargs...)
     inference_network = MLP(num_summaries + num_summaries_θ, 1; backend = backend, output_activation = identity, nt...)
+    summary_network_θ = _matchsimplechains(summary_network_θ, num_parameters, summary_network)
+    inference_network = _matchsimplechains(inference_network, num_summaries + num_summaries_θ, summary_network, summary_network_θ)
     @info "RatioEstimator: num_summaries = $num_summaries."
     RatioEstimator(summary_network, summary_network_θ, inference_network, sampler)
 end

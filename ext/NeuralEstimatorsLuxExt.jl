@@ -140,6 +140,22 @@ _identity_layer(::Val{:Lux}) = Lux.WrappedFunction(identity)
 import NeuralEstimators: LowerCholeskyFactor
 LowerCholeskyFactor(d::Integer, ::Val{:Lux}) = Lux.WrappedFunction(LowerCholeskyFactor(d))
 
+# SimpleChains.jl is untested and not officially supported; this only keeps the backends consistent, so that
+# the networks constructed internally are SimpleChainsLayers whenever the summary network is one.
+# NB SimpleChains allocates its working memory per chain *type*, so two chains of the same type used in one
+#    forward/backward pass silently corrupt each other's gradients. Hence, `network` is left as a Lux network
+#    if its converted type coincides with that of the summary network or any of `others`. For the same reason,
+#    this hook should not be applied to constructors that build several identical networks (e.g., QuantileEstimator).
+# NB SimpleChains returns the gradient of the parameters as a static array (SArray), so the time taken to compile
+#    the optimiser update (Lux.Training.apply_gradients!) grows steeply with the number of parameters: the first
+#    call to train() takes seconds with width = 16, but more than 10 minutes with the default width = 128.
+import NeuralEstimators: _matchsimplechains
+function _matchsimplechains(network, in::Integer, summary_network::Lux.SimpleChainsLayer, others...)
+    converted = ToSimpleChainsAdaptor(in, true)(network) # true: return an Array rather than a view of the working memory
+    clash = any(o -> o isa Lux.SimpleChainsLayer && typeof(o.layer) === typeof(converted.layer), (summary_network, others...))
+    return clash ? network : converted
+end
+
 # ---- LuxEstimator ----
 
 import NeuralEstimators: LuxEstimator

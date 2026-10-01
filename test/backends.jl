@@ -4,7 +4,6 @@ using NeuralEstimators, ADTypes, Enzyme, Zygote, Reactant
 using Optimisers
 using Lux
 using Flux
-using SimpleChains
 using AdvancedHMC, ForwardDiff, LogDensityProblems # loads the AdvancedHMC extension (NUTS sampling for RatioEstimator)
 using Random
 using Statistics: mean
@@ -54,8 +53,6 @@ function backend_config(backend)
         # adtypes = push!(adtypes, AutoEnzyme())
         CUDA.functional() && push!(devices, gpu_device())
         return devices, adtypes
-    elseif backend === SimpleChains
-        return devices, adtypes
     else
         error("Unknown backend: $backend")
     end
@@ -63,12 +60,7 @@ end
 
 """Build a fresh estimator for the given backend and estimator type."""
 function make_estimator(backend, estimator_type::Symbol)
-    mod = backend === SimpleChains ? Lux : backend
-    network = MLP(n, d; depth = 1, width = 16, backend = mod)
-
-    if backend === SimpleChains
-        network = ToSimpleChainsAdaptor(n)(network)
-    end
+    network = MLP(n, d; depth = 1, width = 16, backend = backend)
 
     est = if estimator_type === :point
         PointEstimator(network, d; num_summaries = d, depth = 1)
@@ -82,7 +74,7 @@ function make_estimator(backend, estimator_type::Symbol)
         error("Unknown estimator type: $estimator_type")
     end
 
-    mod === Lux ? (est |> LuxEstimator) : est
+    backend === Lux ? (est |> LuxEstimator) : est
 end
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -215,7 +207,7 @@ TRAINING_SCENARIOS = [
 # ──────────────────────────────────────────────────────────────────────────────
 
 @testset "Backends, devices, and AD types" begin
-    for backend in (Flux, Lux, SimpleChains)
+    for backend in (Flux, Lux)
         backend_name = string(backend)
         devices, adtypes = backend_config(backend)
 

@@ -10,7 +10,7 @@ or
 julia --project=. -e "using Pkg; Pkg.test()"
 ```
 
-The suite consists of `general.jl` (utilities, data containers, components) and `backends.jl` (estimators across the Flux, Lux and SimpleChains backends, devices and AD types). To run only one of them, pass its name as a test argument:
+The suite consists of `general.jl` (utilities, data containers, components) and `backends.jl` (estimators across the Flux and Lux backends, devices and AD types). To run only one of them, pass its name as a test argument:
 
 ```bash
 julia --project=. -e 'using Pkg; Pkg.test(test_args = ["general"])'

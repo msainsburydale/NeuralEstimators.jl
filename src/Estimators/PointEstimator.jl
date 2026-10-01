@@ -55,6 +55,7 @@ function PointEstimator(num_parameters::Integer, summary_network = identity; num
     summary_network = _resolvesummarynetwork(summary_network; kwargs...)
     backend = _backendof(summary_network)
     inference_network = MLP(num_summaries, num_parameters; backend = backend, _dropbackend(kwargs)...)
+    inference_network = _matchsimplechains(inference_network, num_summaries, summary_network)
     @info "PointEstimator: num_summaries = $num_summaries."
     PointEstimator(summary_network, inference_network)
 end

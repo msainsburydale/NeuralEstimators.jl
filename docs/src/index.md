@@ -23,7 +23,7 @@ features:
 
   - icon: 🔧
     title: Multi-Backend Support
-    details: Works seamlessly with neural networks defined with Flux.jl, Lux.jl, and SimpleChains.jl.
+    details: Works seamlessly with neural networks defined with Flux.jl and Lux.jl.
     link: /advancedusage
 
   - icon: 🔗

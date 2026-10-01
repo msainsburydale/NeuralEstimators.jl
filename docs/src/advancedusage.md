@@ -4,8 +4,6 @@
 
 [Flux.jl](https://fluxml.ai/Flux.jl/stable/) and [Lux.jl](https://lux.csail.mit.edu/stable/) are the primarily supported backends. These frameworks differ in a key way: Flux stores trainable parameters and states inside the network object, while Lux represents them explicitly as separate objects. Flux's stateful, object-oriented style will feel familiar to PyTorch users, while Lux's explicit, functional style will feel familiar to JAX/Flax users.
 
-[SimpleChains.jl](https://github.com/PumasAI/SimpleChains.jl), which is optimised for small networks on the CPU, is also supported via [Lux.jl](https://lux.csail.mit.edu/stable/api/Lux/interop#Lux-Models-to-Simple-Chains).
-
 Despite these differences, the high-level API of NeuralEstimators.jl is largely consistent across backends. The typical workflows are as follows:
 
 ::: code-group
@@ -17,7 +15,7 @@ network   = Flux.Chain(...)
 estimator = PointEstimator(network)
 estimator = train(estimator, sampler, simulator)
 assess(estimator, θ_test, Z_test)
-estimate(estimator, Z)
+infer(estimator, Z)
 ```
 
 ```julia [Lux.jl (implicit)]
@@ -27,7 +25,7 @@ network   = Lux.Chain(...)
 estimator = PointEstimator(network)
 estimator = train(estimator, sampler, simulator)          
 assess(estimator, θ_test, Z_test)
-estimate(estimator, Z)
+infer(estimator, Z)
 ```
 
 ```julia [Lux.jl (idiomatic)]
@@ -48,23 +46,12 @@ ps         = trainstate.parameters
 st         = trainstate.states
 
 assess(estimator, θ_test, Z_test, ps, st)
-estimate(estimator, Z, ps, st)
-```
-
-```julia [SimpleChains.jl]
-using NeuralEstimators, Lux, SimpleChains
-
-# Define Lux network and convert it to SimpleChains
-network  = Lux.Chain(...)
-adaptor  = ToSimpleChainsAdaptor(...) # declare input size
-network  = adaptor(network)
-
-# Then proceed with Lux workflow... 
+infer(estimator, Z, ps, st)
 ```
 
 :::
 
-### Performance tips with Lux.jl
+## Performance tips with Lux.jl
  
 Consider loading the [optional dependencies](https://lux.csail.mit.edu/stable/manual/performance_pitfalls#Optional-Dependencies-for-Performance) for improved performance on CPUs. 
  

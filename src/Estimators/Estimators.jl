@@ -19,6 +19,10 @@ _is_identity(f) = f === identity || f isa typeof(identity) || (hasproperty(f, :f
 _resolvesummarynetwork(ψ; backend = nothing, kwargs...) = _is_identity(ψ) ? _identity_layer(_resolvebackend(backend)) : ψ
 _dropbackend(kwargs) = Base.structdiff(NamedTuple(kwargs), (; backend = nothing))
 
+# Hook for keeping an internally constructed `network` (with input dimension `in`) consistent with the
+# summary network: identity here, with a method for Lux.SimpleChainsLayer summary networks in the Lux extension
+_matchsimplechains(network, in::Integer, summary_network, others...) = network
+
 # ---- Summary network helper functions ----
 
 _has_summary_network(e) = hasfield(typeof(e), :summary_network)
