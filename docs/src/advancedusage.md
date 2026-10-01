@@ -4,49 +4,109 @@
 
 [Flux.jl](https://fluxml.ai/Flux.jl/stable/) and [Lux.jl](https://lux.csail.mit.edu/stable/) are the primarily supported backends. These frameworks differ in a key way: Flux stores trainable parameters and states inside the network object, while Lux represents them explicitly as separate objects. Flux's stateful, object-oriented style will feel familiar to PyTorch users, while Lux's explicit, functional style will feel familiar to JAX/Flax users.
 
-Despite these differences, the high-level API of NeuralEstimators.jl is largely consistent across backends. The typical workflows are as follows:
+Despite these differences, the high-level API of NeuralEstimators.jl is largely consistent across backends. A minimal working example illustrating the typical workflows:
 
 ::: code-group
 
 ```julia [Flux.jl]
 using NeuralEstimators, Flux
 
-network   = Flux.Chain(...)
-estimator = PointEstimator(network)
+# Functions to sample from the model
+d, n = 2, 100  # dimension of θ and number of replicates
+sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(n))
+simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
+
+# Neural network mapping n inputs into d outputs
+network = Flux.Chain(Flux.Dense(n, 64, gelu), Flux.Dense(64, 64, gelu), Flux.Dense(64, d))
+
+# Initialise a neural estimator
+estimator = PointEstimator(network, d; num_summaries = d)
+
+# Train the estimator
 estimator = train(estimator, sampler, simulator)
-assess(estimator, θ_test, Z_test)
-infer(estimator, Z)
+
+# Assess the estimator
+θ_test = sampler(250)
+Z_test = simulator(θ_test);
+assessment = assess(estimator, θ_test, Z_test)
+bias(assessment)
+rmse(assessment)
+
+# Apply to observed data
+θ = sampler(1)                   # ground truth (not known in practice)
+Z = simulator(θ);                # stand-in for real observations
+infer(estimator, Z)              # point estimate
 ```
 
 ```julia [Lux.jl (implicit)]
-using NeuralEstimators, Lux
+using NeuralEstimators, Lux, Zygote
 
-network   = Lux.Chain(...)
-estimator = PointEstimator(network)
-estimator = train(estimator, sampler, simulator)          
-assess(estimator, θ_test, Z_test)
-infer(estimator, Z)
+# Functions to sample from the model
+d, n = 2, 100  # dimension of θ and number of replicates
+sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(n))
+simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
+
+# Neural network mapping n inputs into d outputs
+network = Lux.Chain(Lux.Dense(n, 64, gelu), Lux.Dense(64, 64, gelu), Lux.Dense(64, d))
+
+# Initialise a neural estimator
+estimator = PointEstimator(network, d; num_summaries = d)
+
+# Train the estimator
+estimator = train(estimator, sampler, simulator)
+
+# Assess the estimator
+θ_test = sampler(250)
+Z_test = simulator(θ_test);
+assessment = assess(estimator, θ_test, Z_test)
+bias(assessment)
+rmse(assessment)
+
+# Apply to observed data
+θ = sampler(1)                   # ground truth (not known in practice)
+Z = simulator(θ);                # stand-in for real observations
+infer(estimator, Z)              # point estimate
 ```
 
 ```julia [Lux.jl (idiomatic)]
-using NeuralEstimators, Lux, Random, Optimisers
+using NeuralEstimators, Lux, Zygote, Random, Optimisers
 
-network    = Lux.Chain(...)
-estimator  = PointEstimator(network)
+# Functions to sample from the model
+d, n = 2, 100  # dimension of θ and number of replicates
+sampler(K) = NamedMatrix(μ = randn(K), σ = rand(K))
+simulator(θ::AbstractVector) = θ["μ"] .+ θ["σ"] .* sort(randn(n))
+simulator(θ::AbstractMatrix) = reduce(hcat, map(simulator, eachcol(θ)))
 
-# Initialize the parameters/states
-rng        = Random.default_rng()
-ps, st     = Lux.setup(rng, estimator)
+# Neural network mapping n inputs into d outputs
+network = Lux.Chain(Lux.Dense(n, 64, gelu), Lux.Dense(64, 64, gelu), Lux.Dense(64, d))
 
-# Training
+# Initialise a neural estimator
+estimator = PointEstimator(network, d; num_summaries = d)
+
+# Initialise the parameters and states
+rng    = Random.default_rng()
+ps, st = Lux.setup(rng, estimator)
+
+# Train the estimator
 optimiser  = Adam(5e-4)
 trainstate = Lux.Training.TrainState(estimator, ps, st, optimiser)
 trainstate = train(trainstate, sampler, simulator)
 ps         = trainstate.parameters
 st         = trainstate.states
 
-assess(estimator, θ_test, Z_test, ps, st)
-infer(estimator, Z, ps, st)
+# Assess the estimator
+θ_test = sampler(250)
+Z_test = simulator(θ_test);
+assessment = assess(estimator, θ_test, Z_test, ps, st)
+bias(assessment)
+rmse(assessment)
+
+# Apply to observed data
+θ = sampler(1)                   # ground truth (not known in practice)
+Z = simulator(θ);                # stand-in for real observations
+infer(estimator, Z, ps, st)      # point estimate
 ```
 
 :::
