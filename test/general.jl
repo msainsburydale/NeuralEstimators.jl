@@ -870,7 +870,7 @@ end
             # the first branch of the Parallel block at the end of the inference network.
             weights_head = q.inference_network.layers[end].layers[1]
             copyto!(weights_head.bias,
-                    eltype(weights_head.bias).(collect(range(0, -200; length = J))))
+                eltype(weights_head.bias).(collect(range(0, -200; length = J))))
 
             # The log-density stayed finite even with the bug, so the gradient is the
             # assertion that matters. Differentiating with respect to the summary
