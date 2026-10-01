@@ -23,7 +23,7 @@ import MLUtils: numobs, joinobs, getobs
 using NamedArrays
 import NamedArrays: NamedMatrix
 using NearestNeighbors: KDTree, BallTree, BruteTree, knn, inrange, MinkowskiMetric # NB used for adjacencymatrix()
-using NNlib: logσ, softplus, softmax, relu, ⊠, batched_transpose, logsumexp, sigmoid, scatter, gather
+using NNlib: logσ, softplus, softmax, logsoftmax, relu, ⊠, batched_transpose, logsumexp, sigmoid, scatter, gather
 using Optimisers
 using ParameterSchedulers
 using Printf: @sprintf

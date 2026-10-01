@@ -382,30 +382,38 @@ end
 """ 
     ActNorm(d::Integer)
 Activation normalisation layer [Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685) for an input of dimension `d`.
+
+The scale is parameterised on the log scale, so that it is strictly positive and the
+log-Jacobian is read off directly rather than obtained by taking a logarithm. Storing the
+scale itself and computing `log(abs(scale))` would give `-Inf`, and a NaN gradient, if any
+element of the scale reached zero; it would also make the inverse divide by zero. This
+matches the parameterisation used by [`AffineCouplingBlock`](@ref), which applies
+`exp(S)` and uses `sum(S)` as its log-Jacobian.
 """
 @concrete struct ActNorm
-    scale
+    log_scale
     bias
 end
-# NB `scale` and `bias` stored in the struct serve double duty:
+# NB `log_scale` and `bias` stored in the struct serve double duty:
 # - Flux: they are the trainable parameters (collected by Flux.params).
 # - Lux:  they seed `initialparameters`; the live values come from `ps` at runtime.
 
-ActNorm(d::Integer) = ActNorm(ones(Float32, d, 1), zeros(Float32, d, 1))
+# log_scale = 0 corresponds to unit scale
+ActNorm(d::Integer) = ActNorm(zeros(Float32, d, 1), zeros(Float32, d, 1))
 
 # Flux (stateful)
 function forward(an::ActNorm, θ::AbstractMatrix)
-    U = an.scale .* θ .+ an.bias
-    return U, sum(log.(abs.(an.scale)))
+    U = exp.(an.log_scale) .* θ .+ an.bias
+    return U, sum(an.log_scale)
 end
-inverse(an::ActNorm, U::AbstractMatrix) = (U .- an.bias) ./ an.scale
+inverse(an::ActNorm, U::AbstractMatrix) = (U .- an.bias) .* exp.(.-an.log_scale)
 
-# Lux (stateless) — ps carries scale/bias; struct fields are ignored at runtime
+# Lux (stateless) — ps carries log_scale/bias; struct fields are ignored at runtime
 function forward(::ActNorm, θ::AbstractMatrix, ps, st::NamedTuple)
-    U = ps.scale .* θ .+ ps.bias
-    return U, sum(log.(abs.(ps.scale))), st
+    U = exp.(ps.log_scale) .* θ .+ ps.bias
+    return U, sum(ps.log_scale), st
 end
-inverse(::ActNorm, U::AbstractMatrix, ps, st::NamedTuple) = ((U .- ps.bias) ./ ps.scale, st)
+inverse(::ActNorm, U::AbstractMatrix, ps, st::NamedTuple) = ((U .- ps.bias) .* exp.(.-ps.log_scale), st)
 
 # --------------------------------------------------------------------------
 # Permutation

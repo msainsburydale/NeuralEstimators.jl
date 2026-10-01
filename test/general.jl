@@ -835,12 +835,13 @@ end
         θ = rand32(d, K) |> dvc
         TZ = rand32(dstar, K) |> dvc
 
+        # NB the two-argument constructor takes (log_scale, bias)
         @testset "ActNorm: $args" for args in (d, (3.0 * ones(d), 2.0 * ones(d)))
             an = ActNorm(args...) |> dvc
             U, log_det_J = forward(an, θ)
             @test size(U) == (d, K)
             @test length(log_det_J) == 1
-            @test log_det_J == sum(log.(abs.(an.scale)))
+            @test log_det_J == sum(an.log_scale)
             X = inverse(an, U)
             @test size(X) == (d, K)
             @test θ ≈ X
@@ -853,6 +854,30 @@ end
             X = inverse(perm, U)
             @test size(X) == (d, K)
             @test θ == X
+        end
+
+        # Regression test for the NaN-gradient bug fixed in v0.4.0. With well-separated
+        # mixture logits, a softmax weight underflows to zero in Float32; forming the log
+        # weights as log(softmax(logits)) then gives -Inf and a NaN gradient, while the
+        # log-density itself stays finite. The log-density must therefore be finite AND
+        # differentiable here.
+        @testset "GaussianMixture: separated logits" begin
+            J = 10
+            q = GaussianMixture(d, dstar; num_components = J, backend = Flux) |> dvc
+            @test all(isfinite, NeuralEstimators._logdensity(q, θ, TZ))
+
+            # Push the mixture logits far apart, as training does. The weights head is
+            # the first branch of the Parallel block at the end of the inference network.
+            weights_head = q.inference_network.layers[end].layers[1]
+            copyto!(weights_head.bias,
+                    eltype(weights_head.bias).(collect(range(0, -200; length = J))))
+
+            # The log-density stayed finite even with the bug, so the gradient is the
+            # assertion that matters. Differentiating with respect to the summary
+            # statistics exercises the whole inference network, log weights included.
+            @test all(isfinite, NeuralEstimators._logdensity(q, θ, TZ))
+            g = Flux.gradient(z -> sum(NeuralEstimators._logdensity(q, θ, z)), TZ)[1]
+            @test all(isfinite, g)
         end
 
         @testset "AffineCouplingBlock" begin

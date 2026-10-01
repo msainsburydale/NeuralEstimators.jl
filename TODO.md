@@ -20,7 +20,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - assess.jl/inference.jl for more general parameter shapes (currently assumes the parameters are stored as a matrix).
 
 ### Documentation
-- Example: Unconditional density estimation (see #99).
+- Example: Unconditional density estimation (see [#99](https://github.com/msainsburydale/NeuralEstimators.jl/issues/99)).
 - Example: In the time-series example, also illustrate partially-exchangeable networks using DeepSet.
 - Example: Illustrate Lévy Processes (a time-series model) using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)).

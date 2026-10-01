@@ -9,7 +9,7 @@ q(\boldsymbol{\theta}; \boldsymbol{\kappa}) = \sum_{j=1}^{J} \pi_j \cdot \mathca
 ```
 where the parameters $\boldsymbol{\kappa}$ comprise the mixture weights $\pi_j \in [0, 1]$ subject to $\sum_{j=1}^{J} \pi_j = 1$, the mean vector $\boldsymbol{\mu}_j$ of each component, and the variance parameters of the diagonal covariance matrix $\boldsymbol{\Sigma}_j$.
 
-When using a `GaussianMixture` as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) summary statistics are mapped to the mixture parameters by `depth` hidden layers of `width` units, each followed by `activation`, and then by three output heads with appropriately chosen activation functions ([softmax](https://fluxml.ai/Flux.jl/stable/reference/models/nnlib/#NNlib.softmax) for the mixture weights, identity for the means, and [softplus](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#NNlib.softplus) for the standard deviations).
+When using a `GaussianMixture` as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) summary statistics are mapped to the mixture parameters by `depth` hidden layers of `width` units, each followed by `activation`, and then by three output heads: unconstrained logits for the mixture weights, identity for the means, and [softplus](https://fluxml.ai/Flux.jl/stable/reference/models/activation/#NNlib.softplus) for the standard deviations. The mixture weights are represented by logits rather than probabilities so that the log-density can use a numerically stable log-softmax.
 
 # Keyword arguments
 - `num_components::Integer = 10`: number of components in the mixture.
@@ -40,7 +40,7 @@ function GaussianMixture(d::Integer, num_summaries::Integer; num_components::Int
     inference_network = B.Chain(
         hidden...,
         B.Parallel(vcat,
-            B.Chain(B.Dense(head_in, num_components; kwargs...), softmax),   # ∑wⱼ = 1
+            B.Dense(head_in, num_components; kwargs...),                     # mixture logits
             B.Dense(head_in, d * num_components, identity; kwargs...),       # μ ∈ ℝ
             B.Dense(head_in, d * num_components, softplus; kwargs...)        # σ > 0
         )
@@ -54,11 +54,38 @@ function distributionparameters(q::GaussianMixture, κ::AbstractMatrix)
     end1 = q.num_components
     end2 = end1 + q.d * q.num_components
 
-    w = κ[1:end1, :]
+    logits = κ[1:end1, :]
     μ = κ[(end1 + 1):end2, :]
     σ = κ[(end2 + 1):end, :] .+ eltype(κ)(MIN_SCALE)
 
-    return w, μ, σ
+    return logits, μ, σ
+end
+
+"""Log-density of each mixture component, plus the stable log mixture weights.
+
+The mixture weights are kept in log space throughout. Computing `log.(softmax(logits))`
+instead would return -Inf once a weight underflows to zero, which leaves the log-density
+finite but makes its gradient NaN, destroying the network on the next optimiser step.
+"""
+function _logcomponents(q::GaussianMixture, κ::AbstractMatrix, θ::AbstractMatrix)
+    d, K = size(θ)
+    J = q.num_components
+    logits, μ, σ = distributionparameters(q, κ)
+
+    θ = reshape(θ, d, 1, K)
+    μ = reshape(μ, d, J, K)
+    σ = reshape(σ, d, J, K)
+    T = eltype(σ)
+
+    # Squared Mahalanobis term, formed as ((θ - μ)/σ)^2 so that σ is never squared
+    mahal = sum(((θ .- μ) ./ σ) .^ 2, dims = 1)                      # (1, J, K)
+
+    # log|Σ| = 2 Σᵢ log σᵢ, avoiding the overflow of σ² for large σ
+    log_det = T(2) .* sum(log.(σ), dims = 1) .+ T(d) * T(log(2π))    # (1, J, K)
+
+    log_normal = reshape(-T(0.5) .* (log_det .+ mahal), J, K)
+    log_w = logsoftmax(logits; dims = 1)                             # stable log-softmax
+    return log_w .+ log_normal
 end
 
 # Stateful (Flux)
@@ -67,35 +94,9 @@ function _logdensity(q::GaussianMixture, θ::AbstractMatrix, tz::AbstractMatrix)
     @assert d == q.d
     @assert K == size(tz, 2)
 
-    # Get the approximate-distribution parameters
     κ = q.inference_network(tz)
-    w, μ, σ = distributionparameters(q, κ)
-
-    # Reshape ready for broadcasting 
-    J = q.num_components
-    θ = reshape(θ, d, 1, K)
-    μ = reshape(μ, d, J, K)
-    σ = reshape(σ, d, J, K)
-
-    # Compute squared Mahalanobis term: (θ - μ)^2 / σ^2
-    diff2 = @. (θ - μ)^2 / (σ^2)   # (d, J, K)
-    mahal = sum(diff2, dims = 1)     # (1, J, K)
-
-    # Compute log determinant: sum over log(2πσ²)
-    log_det = sum(log.(2π .* σ .^ 2), dims = 1) # (1, J, K)
-
-    # Log-likelihood of each component
-    log_normal = @. -0.5f0 * (log_det + mahal)
-    log_normal = reshape(log_normal, J, K)
-
-    # Combine with log mixture weights
-    log_components = log.(w) .+ log_normal       # (J, K)
-
-    # Log-sum-exp along components
-    max_log = maximum(log_components, dims = 1)   # (1, K)
-    log_densities = max_log + logsumexp(log_components .- max_log; dims = 1)  # (1, K)
-
-    return log_densities # 1xK matrix 
+    log_components = _logcomponents(q, κ, θ)                  # (J, K)
+    return logsumexp(log_components; dims = 1)                # 1xK matrix
 end
 
 function sampleposterior(q::GaussianMixture, tz::AbstractMatrix, N::Integer; device = nothing)
@@ -113,7 +114,8 @@ function sampleposterior(q::GaussianMixture, tz::AbstractMatrix, N::Integer; dev
 
         # Get the approximate-distribution parameters
         κ = reshape(κ, :, 1)
-        w, μ, σ = distributionparameters(q, κ)
+        logits, μ, σ = distributionparameters(q, κ)
+        w = softmax(logits; dims = 1)   # the network emits logits; sampling needs weights
         μ = reshape(μ, d, J)
         σ = reshape(σ, d, J)
 
@@ -131,33 +133,9 @@ function _logdensity(q::GaussianMixture, θ::AbstractMatrix, tz::AbstractMatrix,
     @assert d == q.d
     @assert K == size(tz, 2)
 
-    # Get the approximate-distribution parameters
     κ, st_net = q.inference_network(tz, ps_q.inference_network, st_q.inference_network)
-    w, μ, σ = distributionparameters(q, κ)
-
-    # Reshape ready for broadcasting 
-    J = q.num_components
-    θ = reshape(θ, d, 1, K)
-    μ = reshape(μ, d, J, K)
-    σ = reshape(σ, d, J, K)
-
-    # Compute squared Mahalanobis term: (θ - μ)^2 / σ^2
-    diff2 = @. (θ - μ)^2 / (σ^2)   # (d, J, K)
-    mahal = sum(diff2, dims = 1)     # (1, J, K)
-
-    # Compute log determinant: sum over log(2πσ²)
-    log_det = sum(log.(2π .* σ .^ 2), dims = 1) # (1, J, K)
-
-    # Log-likelihood of each component
-    log_normal = @. -0.5f0 * (log_det + mahal)
-    log_normal = reshape(log_normal, J, K)
-
-    # Combine with log mixture weights
-    log_components = log.(w) .+ log_normal       # (J, K)
-
-    # Log-sum-exp along components
-    max_log = maximum(log_components, dims = 1)   # (1, K)
-    log_densities = max_log + logsumexp(log_components .- max_log; dims = 1)  # (1, K)
+    log_components = _logcomponents(q, κ, θ)                  # (J, K)
+    log_densities = logsumexp(log_components; dims = 1)       # 1xK matrix
 
     st_q = merge(st_q, (inference_network = st_net,))
     return log_densities, st_q
@@ -179,7 +157,8 @@ function sampleposterior(q::GaussianMixture, tz::AbstractMatrix, N::Integer, ps_
 
         # Get the approximate-distribution parameters
         κ = reshape(κ, :, 1)
-        w, μ, σ = distributionparameters(q, κ)
+        logits, μ, σ = distributionparameters(q, κ)
+        w = softmax(logits; dims = 1)   # the network emits logits; sampling needs weights
         μ = reshape(μ, d, J)
         σ = reshape(σ, d, J)
 

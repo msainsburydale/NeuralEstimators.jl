@@ -110,7 +110,7 @@ function LuxCore.initialstates(rng::AbstractRNG, block::AffineCouplingBlock)
 end
 
 # Seed from the struct's initial values
-LuxCore.initialparameters(::AbstractRNG, l::ActNorm) = (scale = copy(l.scale), bias = copy(l.bias))
+LuxCore.initialparameters(::AbstractRNG, l::ActNorm) = (log_scale = copy(l.log_scale), bias = copy(l.bias))
 LuxCore.initialstates(::AbstractRNG, ::ActNorm) = NamedTuple()
 
 LuxCore.initialparameters(::AbstractRNG, ::Permutation) = NamedTuple()
