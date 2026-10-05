@@ -28,7 +28,7 @@ cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
 [compat]
 ADTypes = "1"
 AdvancedHMC = "0.8"
-CUDA = "4, 5"
+CUDA = "4, 5, 6"
 DataFrames = "1"
 Distances = "0.10, 0.11"
 Enzyme = "0.13"
