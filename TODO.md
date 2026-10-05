@@ -11,6 +11,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
 - Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference.
 - Ensemble methods with general estimator types (e.g., PosteriorEstimator, RatioEstimator).
+- Generalize `GaussianMixture` to allow for dense covariance matrices of each mixture component (default `diagonal = true` for backwards compatibility). Then, if no loss of computational efficiency, make `Gaussian` simply a wrapper around `GaussianMixture` (with `diagonal = false` by default, and `num_components` fixed to 1).
 
 **Training**
 - Support for reading data from disk during training, to handle data sets that are too large to fit in memory.
@@ -42,7 +43,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Add a check for NaNs in the inputs/outputs. Also, if the training risk or validation risk becomes NaN, immediately halt training.
 
 ### Backend
-- Checkpointing with Lux + Reactant: is our use of `deepcopy` okay? Note that the [Reactant source code](https://github.com/EnzymeAD/Reactant.jl/blob/main/src/ConcreteRArray.jl) includes a comment warning against the use of `deepcopy`.
 - Lux + Reactant support for [`SpatialGraphConv`](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
 - The initial risks tend to be large when using Lux; use the same weight initialization as Flux.
 - Lux support for [CovarianceMatrix/CorrelationMatrix](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Output-layers).

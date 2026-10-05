@@ -619,3 +619,100 @@ _saveload_risk(estimator, Z, θ) = mean(abs.(estimate(estimator, Z; device = cpu
         @test_throws AssertionError loadestimator(make_estimator(Lux, :point), mktempdir())
     end
 end
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Pooled CNN: the risk recorded during training must match the risk at inference
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Regression test for a Reactant GPU miscompilation (present at Reactant 0.2.262, fixed in
+# 0.2.290, which is now the compat floor). A `GlobalMeanPool` feeding a `Dense` layer was
+# computed incorrectly -- 40-125% relative error -- whenever the layer's width equalled the
+# batch size, i.e. whenever that layer's GEMM output was square, and the intermediate
+# activation was not also returned as an output of the compiled graph. The effect was exact
+# in the width/batchsize pairs tried: width 64 failed only at batchsize 64, width 128 only at
+# 128, width 256 only at 256; batchsize 127 and 129 were both fine. CPU XLA was exact
+# throughout. Hence `Dense(8, 128)` with `batchsize = 128` below -- change either and the test
+# stops exercising the bug.
+#
+# Nothing in loss_per_epoch.csv gave this away, because `_risk` evaluates the same compiled
+# graph that training used, whereas `estimate` and `sampleposterior` use the eager path. The
+# only symptom was that the trained estimator scored far worse on the test set than its
+# recorded validation risk implied.
+#
+# The MLP cases above cannot catch this: the architecture needs a pooling layer. On a CPU-only
+# runner this test guards against regressions rather than reproducing the original failure.
+@testset "pooled CNN: recorded risk matches the risk at inference" begin
+    g = 16                 # grid side length
+    K_cnn = 256            # divisible by the batchsize, so `partial = false` drops nothing
+    batchsize = 128        # must equal the Dense width below; see the comment above
+    epochs = 3
+
+    # XLA uses TF32 for GEMMs on Ampere and later, while eager cuDNN does not, so a compiled
+    # risk and an eager risk of the same weights differ by ~1e-3 in relative terms even when
+    # everything is correct. The miscompilation this test guards against moved them apart by
+    # ~1e-2, so the tolerances below sit between the two scales. Seeding keeps the TF32 noise
+    # reproducible rather than redrawing it on every run.
+    Random.seed!(2024)
+    rtol_forward = 5.0f-3
+
+    # NB rows of θ.array are (μ, σ), matching sampler() above
+    function cnn_simulator(θ)
+        A = θ.array
+        Z = Array{Float32}(undef, g, g, 1, size(A, 2))
+        for k in axes(A, 2)
+            Z[:, :, 1, k] .= A[1, k] .+ A[2, k] .* randn(Float32, g, g)
+        end
+        return Z
+    end
+
+    make_cnn_estimator() = LuxEstimator(PointEstimator(
+        Lux.Chain(
+            Lux.Conv((3, 3), 1 => 8, Lux.relu, pad = 1),
+            Lux.Conv((3, 3), 8 => 8, Lux.relu, pad = 1, stride = 2),
+            Lux.GlobalMeanPool(),
+            Lux.FlattenLayer(),
+            Lux.Dense(8, 128, Lux.relu),
+            Lux.Dense(128, d)
+        ), d; num_summaries = d, depth = 1))
+
+    θ_tr, θ_va = sampler(K_cnn), sampler(K_cnn)
+    Z_tr, Z_va = cnn_simulator(θ_tr), cnn_simulator(θ_va)
+
+    devices = Any[cpu_device()]
+    CUDA.functional() && push!(devices, gpu_device())
+    try
+        Reactant.set_default_backend(CUDA.functional() ? "gpu" : "cpu")
+        push!(devices, reactant_device())
+    catch err
+        @warn "Reactant backend unavailable, skipping the Reactant pooled-CNN case" err
+    end
+
+    for device in devices
+        @testset "$(nameof(typeof(device)))" begin
+            savepath = mktempdir()
+            # The initial risk is the sharpest check available: loss_per_epoch.csv row 1 is the
+            # validation risk of exactly these starting weights, computed by _risk on `device`,
+            # so comparing it against the eager risk of the same estimator isolates the forward
+            # pass with no training noise in the way. NB train() does not mutate Lux estimators.
+            est0 = make_cnn_estimator()
+            risk_initial_eager = _saveload_risk(est0, Z_va, θ_va)
+            trained = train(
+                est0, θ_tr, θ_va, Z_tr, Z_va;
+                device = device, epochs = epochs, stopping_epochs = epochs + 1,
+                batchsize = batchsize, savepath = savepath, verbose = false
+            )
+            history = loadrisk(savepath)
+
+            @test risk_initial_eager ≈ history[1, 2] rtol = rtol_forward
+
+            # The invariant: the estimator train() returns, evaluated eagerly, attains the best
+            # validation risk that training recorded. Under the miscompilation the recorded risk
+            # was far lower than the eager risk of the very same weights.
+            @test _saveload_risk(trained, Z_va, θ_va) ≈ minimum(history[:, 2]) rtol = rtol_forward
+
+            # ... and so does the checkpoint written for that epoch
+            loaded = loadestimator(make_cnn_estimator(), savepath)
+            @test _saveload_risk(loaded, Z_va, θ_va) ≈ minimum(history[:, 2]) rtol = rtol_forward
+        end
+    end
+end
