@@ -426,10 +426,6 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     trainstate = _trainstate_to_device(trainstate, device)
     estimator = getestimator(trainstate)
 
-    if estimator isa PosteriorEstimator && estimator.q isa Gaussian && nameof(typeof(device)) === :ReactantDevice
-        throw(ArgumentError("Gaussian approximate distribution is not supported with ReactantDevice. If this affects your use case, please contact the package maintainer."))
-    end
-
     train_time = 0.0
 
     # Precompute summary statistics when the summary network is frozen
@@ -585,10 +581,6 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     # Move trainstate to device and extract the current estimator
     trainstate = _trainstate_to_device(trainstate, device)
     estimator = getestimator(trainstate)
-
-    if estimator isa PosteriorEstimator && estimator.q isa Gaussian && nameof(typeof(device)) === :ReactantDevice
-        throw(ArgumentError("Gaussian approximate distribution is not supported with ReactantDevice. If this affects your use case, please contact the package maintainer."))
-    end
 
     verbose && _status!(progress, "Simulating validation data..."; transient = true)
     train_time = @elapsed Z_val = simulator(θ_val, simulator_args...; simulator_kwargs...)
@@ -797,10 +789,6 @@ function train(trainstate, sampler, simulator;
     # Move trainstate to device and extract the current estimator
     trainstate = _trainstate_to_device(trainstate, device)
     estimator = getestimator(trainstate)
-
-    if estimator isa PosteriorEstimator && estimator.q isa Gaussian && nameof(typeof(device)) === :ReactantDevice
-        throw(ArgumentError("Gaussian approximate distribution is not supported with ReactantDevice. If this affects your use case, please contact the package maintainer."))
-    end
 
     verbose && _status!(progress, "Sampling validation parameters..."; transient = true)
     train_time = @elapsed θ_val = sampler(K_val, sampler_args...; sampler_kwargs...)

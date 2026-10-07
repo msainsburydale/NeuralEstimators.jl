@@ -828,6 +828,20 @@ end
     end
 end
 
+# Precision matrix Σ⁻¹ = T'D⁻²T of each component of a GaussianMixture, constructed explicitly from
+# the distributional parameters κ; a J × K matrix of d × d matrices
+function mixtureprecisions(q::GaussianMixture, κ::AbstractMatrix)
+    d, J, K = q.d, q.num_components, size(κ, 2)
+    _, _, σ, t = NeuralEstimators.distributionparameters(q, κ)
+    σ = reshape(σ, d, J, K)
+    subdiagonal = [CartesianIndex(i, j) for i = 2:d for j = 1:(i - 1)] # row by row
+    map(Iterators.product(1:J, 1:K)) do (j, k)
+        T = Matrix{Float64}(I, d, d)
+        isnothing(t) || (T[subdiagonal] = reshape(t, :, J, K)[:, j, k])
+        T' * Diagonal(σ[:, j, k] .^ -2) * T
+    end
+end
+
 @testset "Approximate distributions: $dvc" for dvc ∈ devices
     for d = 1:5
         dstar = 2d
@@ -880,6 +894,69 @@ end
             @test all(isfinite, g)
         end
 
+        # With diagonal = false, the covariance matrix of each component is dense, and it is
+        # parameterised through its inverse, Σ⁻¹ = T'D⁻²T, where T is unit lower triangular.
+        # NB when d = 1 there are no sub-diagonal elements, and the mixture is the diagonal one
+        @testset "GaussianMixture: dense covariance matrices" begin
+            # Give T sizeable sub-diagonal elements, so that the tests below can detect errors in
+            # how T is applied. The corresponding head is the last branch of the Parallel block.
+            function dense_mixture(J)
+                q = GaussianMixture(d, dstar; num_components = J, diagonal = false, backend = Flux)
+                d > 1 && fill!(q.inference_network.layers[end].layers[4].bias, 1)
+                return q
+            end
+
+            J = 3
+            q_cpu = dense_mixture(J)
+            @test numdistributionalparams(q_cpu) == (1 + 2d + d * (d - 1) ÷ 2) * J
+            κ = Float64.(q_cpu.inference_network(cpu(TZ)))
+            @test size(κ, 1) == numdistributionalparams(q_cpu)
+
+            # The log-density agrees with a reference computed from the precision matrices
+            logits, μ = NeuralEstimators.distributionparameters(q_cpu, κ)
+            Λ = mixtureprecisions(q_cpu, κ)
+            reference = map(1:K) do k
+                log_w = Flux.NNlib.logsoftmax(logits[:, k])
+                Flux.NNlib.logsumexp(map(1:J) do j
+                    Δ = Float64.(cpu(θ)[:, k]) - reshape(μ, d, J, K)[:, j, k]
+                    log_w[j] + (logdet(Λ[j, k]) - d * log(2π) - Δ' * Λ[j, k] * Δ) / 2
+                end)
+            end
+            q = q_cpu |> dvc
+            dens = NeuralEstimators._logdensity(q, θ, TZ)
+            @test size(dens) == (1, K)
+            @test vec(cpu(dens)) ≈ reference rtol = 1e-4
+
+            # The log-density is differentiable, and the head for the sub-diagonal elements is trained
+            g = Flux.gradient(z -> sum(NeuralEstimators._logdensity(q, θ, z)), TZ)[1]
+            @test all(isfinite, g)
+            if d > 1
+                ∇ = Flux.gradient(m -> sum(NeuralEstimators._logdensity(m, θ, TZ)), q)[1]
+                ∇t = cpu(∇.inference_network.layers[end].layers[4].weight)
+                @test all(isfinite, ∇t)
+                @test !iszero(∇t)
+            end
+
+            # The sampler is consistent with the density: the samples have the mean and covariance
+            # matrix of the mixture, m = Σⱼ wⱼμⱼ and Σⱼ wⱼ(Σⱼ + μⱼμⱼ') - mm', where Σⱼ = (Tⱼ'Dⱼ⁻²Tⱼ)⁻¹
+            # NB a mixture with a single component is the distribution constructed by Gaussian()
+            @testset "sampling: $num_components component(s)" for num_components in (1, 3)
+                qs = dense_mixture(num_components)
+                κs = Float64.(qs.inference_network(cpu(TZ)[:, 1:1]))
+                logits_s, μs = NeuralEstimators.distributionparameters(qs, κs)
+                w = Flux.NNlib.softmax(vec(logits_s))
+                μs = reshape(μs, d, num_components)
+                Σs = inv.(vec(mixtureprecisions(qs, κs)))
+                m = sum(w[j] * μs[:, j] for j = 1:num_components)
+                V = sum(w[j] * (Σs[j] + μs[:, j] * μs[:, j]') for j = 1:num_components) - m * m'
+                N = 200_000
+                samples = sampleposterior(qs |> dvc, TZ[:, 1:1], N)
+                @test size(samples) == (d, N, 1)
+                @test all(abs.(vec(mean(samples, dims = 2)) .- m) .< 6 .* sqrt.(diag(V) ./ N))
+                @test cov(samples[:, :, 1], dims = 2) ≈ V rtol = 0.05
+            end
+        end
+
         @testset "AffineCouplingBlock" begin
             d₁ = div(d, 2)
             d₂ = div(d, 2) + (d % 2 != 0 ? 1 : 0)
@@ -927,6 +1004,23 @@ end
             @test size(samples) == (d, N, K)
         end
     end
+end
+
+# Gaussian is a convenience constructor for a GaussianMixture with a single component and, by default,
+# a dense covariance matrix, so its density and sampler are tested with those of GaussianMixture above
+@testset "Gaussian" begin
+    d, dstar = 3, 6
+    num_dense = numdistributionalparams(GaussianMixture(d, dstar; num_components = 1, diagonal = false, backend = Flux))
+    num_diagonal = numdistributionalparams(GaussianMixture(d, dstar; num_components = 1, backend = Flux))
+    @test num_dense > num_diagonal
+
+    q = Gaussian(d, dstar; backend = Flux)
+    @test q isa GaussianMixture
+    @test q.num_components == 1
+    @test numdistributionalparams(q) == num_dense # dense covariance matrix by default
+    @test numdistributionalparams(Gaussian(d, dstar; diagonal = true, backend = Flux)) == num_diagonal
+    @test Gaussian(d, dstar; num_components = 5, backend = Flux).num_components == 1 # fixed to one
+    @test numdistributionalparams(Gaussian(d; num_summaries = dstar, backend = Flux)) == num_dense # keyword num_summaries
 end
 
 @testset "Layers: $dvc" for dvc ∈ devices

@@ -137,9 +137,6 @@ end
 import NeuralEstimators: _identity_layer
 _identity_layer(::Val{:Lux}) = Lux.WrappedFunction(identity)
 
-import NeuralEstimators: LowerCholeskyFactor
-LowerCholeskyFactor(d::Integer, ::Val{:Lux}) = Lux.WrappedFunction(LowerCholeskyFactor(d))
-
 # SimpleChains.jl is untested and not officially supported; this only keeps the backends consistent, so that
 # the networks constructed internally are SimpleChainsLayers whenever the summary network is one.
 # NB SimpleChains allocates its working memory per chain *type*, so two chains of the same type used in one

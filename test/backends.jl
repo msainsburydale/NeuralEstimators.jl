@@ -68,6 +68,8 @@ function make_estimator(backend, estimator_type::Symbol)
         RatioEstimator(network, d; num_summaries = d, depth = 1)
     elseif estimator_type === :posterior_mixture
         PosteriorEstimator(network, d; num_summaries = d, depth = 1, q = GaussianMixture)
+    elseif estimator_type === :posterior_mixture_dense
+        PosteriorEstimator(network, d; num_summaries = d, depth = 1, q = GaussianMixture, diagonal = false)
     elseif estimator_type === :posterior_gaussian
         PosteriorEstimator(network, d; num_summaries = d, depth = 1, q = Gaussian)
     else
@@ -212,7 +214,7 @@ TRAINING_SCENARIOS = [
         devices, adtypes = backend_config(backend)
 
         @testset "$backend_name backend" begin
-            for estimator_type in (:point, :ratio, :posterior_mixture, :posterior_gaussian)
+            for estimator_type in (:point, :ratio, :posterior_mixture, :posterior_mixture_dense, :posterior_gaussian)
                 est_label = string(estimator_type)
 
                 @testset "$est_label estimator" begin
@@ -229,11 +231,6 @@ TRAINING_SCENARIOS = [
                             device_name = nameof(typeof(device))
                             for adtype in adtypes
                                 adtype_name = nameof(typeof(adtype))
-
-                                # Skip Reactant for posterior_gaussian (triangular solve causing issues with XLA)
-                                if estimator_type === :posterior_gaussian && nameof(typeof(device)) === :ReactantDevice
-                                    continue
-                                end
 
                                 for scenario in TRAINING_SCENARIOS
                                     for freeze in (true, false)
@@ -274,7 +271,7 @@ TRAINING_SCENARIOS = [
                                 @test result !== nothing
                             end
 
-                        elseif estimator_type === :posterior_gaussian || estimator_type === :posterior_mixture
+                        elseif estimator_type in (:posterior_gaussian, :posterior_mixture, :posterior_mixture_dense)
                             @testset "sampleposterior" begin
                                 samples = sampleposterior(est, Z_single; device = first(devices))
                                 @test samples isa AbstractArray
@@ -420,6 +417,46 @@ end
     samples = sampleposterior(est2, Z1; N = 50)
     @test size(samples) == (1, 50, 5)
     @test all(samples .>= 0) # spike (0) or positive slab draws
+end
+
+# The test matrix above includes a ReactantDevice only when CUDA is functional. Here, Reactant falls
+# back to the XLA CPU backend, so that the approximate distributions with dense covariance matrices
+# (GaussianMixture with diagonal = false, and Gaussian) are also tested with Reactant on CPU-only
+# machines (e.g., the CI runners).
+@testset "Lux $estimator_type: Reactant" for estimator_type in (:posterior_mixture_dense, :posterior_gaussian)
+    device = try
+        Reactant.set_default_backend(CUDA.functional() ? "gpu" : "cpu")
+        reactant_device()
+    catch err
+        @warn "Reactant backend unavailable, skipping the Reactant test of $estimator_type" err
+        nothing
+    end
+    if !isnothing(device)
+        # NB K divisible by the batchsize, so that `partial = false` (the default under a
+        # ReactantDevice) does not drop validation samples
+        K_r = 128
+        θ_tr, θ_va = sampler(K_r), sampler(K_r)
+        Z_tr, Z_va = simulator(θ_tr), simulator(θ_va)
+        savepath = mktempdir()
+        est0 = make_estimator(Lux, estimator_type)
+        est = train(est0, θ_tr, θ_va, Z_tr, Z_va; device = device, epochs = 2, stopping_epochs = 3, savepath = savepath, verbose = false)
+        @test est isa LuxEstimator
+        history = loadrisk(savepath)
+        @test all(isfinite, history)
+
+        # The initial validation risk is computed by the compiled graph from the starting weights,
+        # so it should match the risk of the same weights computed eagerly on the CPU
+        # NB train() does not mutate Lux estimators
+        # NB on the XLA GPU backend, single-precision results differ from the eager ones even when
+        # everything is correct (see the pooled CNN test below; in double precision, the compiled
+        # and eager log-densities agree to machine precision). Over 600 random initialisations of
+        # the Gaussian estimator, the two risks differed by up to 2e-2 in relative terms on the XLA
+        # GPU backend (99% quantile 9e-3), against 5e-7 on the XLA CPU backend. Hence, the check is
+        # strict on the CPU, and only guards against gross errors on the GPU.
+        rtol = CUDA.functional() ? 1.0f-1 : 1.0f-4
+        @test -mean(est0((Z_va, θ_va.array))) ≈ history[1, 2] rtol = rtol
+        @test size(sampleposterior(est, Z_single; N = 50)) == (d, 50, 1)
+    end
 end
 
 @testset "Lux TelescopingRatioEstimator" begin

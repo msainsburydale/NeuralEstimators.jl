@@ -11,7 +11,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
 - Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference.
 - Ensemble methods with general estimator types (e.g., PosteriorEstimator, RatioEstimator).
-- Generalize `GaussianMixture` to allow for dense covariance matrices of each mixture component (default `diagonal = true` for backwards compatibility). Then, if no loss of computational efficiency, make `Gaussian` simply a wrapper around `GaussianMixture` (with `diagonal = false` by default, and `num_components` fixed to 1).
 
 **Training**
 - Support for reading data from disk during training, to handle data sets that are too large to fit in memory.
@@ -46,7 +45,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Lux + Reactant support for [`SpatialGraphConv`](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).
 - The initial risks tend to be large when using Lux; use the same weight initialization as Flux.
 - Lux support for [CovarianceMatrix/CorrelationMatrix](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Output-layers).
-- Reactant support for [Gaussian](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) (issue is likely the triangular solve when computing the density).
 - EnzymeRuntimeActivityError when using [NormalisingFlow](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) with Lux + Enzyme + CPU.
 - Support for [SimpleChains.jl](https://github.com/PumasAI/SimpleChains.jl) (optimised for small networks on the CPU) via Lux's [`ToSimpleChainsAdaptor`](https://lux.csail.mit.edu/stable/api/Lux/interop#Lux-Models-to-Simple-Chains). Currently untested and unsupported; the only code in place is the `_matchsimplechains` hook in the Lux extension, which makes the `PointEstimator` and `RatioEstimator` convenience constructors build `SimpleChainsLayer` networks when the summary network is one.
 
