@@ -1,6 +1,6 @@
 @doc raw"""
     GaussianMixture <: AbstractApproximateDistribution
-    GaussianMixture(d::Integer, num_summaries::Integer; num_components::Integer = 10, diagonal::Bool = true, kwargs...)
+    GaussianMixture(d::Integer, num_summaries::Integer; num_components::Integer = 10, diagonal::Bool = false, kwargs...)
 A mixture of Gaussian distributions for amortised inference with a [`PosteriorEstimator`](@ref), where `d` is the dimension of the parameter vector. 
 
 The density of the distribution is: 
@@ -9,17 +9,17 @@ q(\boldsymbol{\theta}; \boldsymbol{\kappa}) = \sum_{j=1}^{J} \pi_j \cdot \mathca
 ```
 where the parameters $\boldsymbol{\kappa}$ comprise the mixture weights $\pi_j \in [0, 1]$ subject to $\sum_{j=1}^{J} \pi_j = 1$, the mean vector $\boldsymbol{\mu}_j$ of each component, and the parameters of the covariance matrix $\boldsymbol{\Sigma}_j$ of each component.
 
-By default (`diagonal = true`), each covariance matrix is diagonal, $\boldsymbol{\Sigma}_j = \boldsymbol{D}_j^2$ with $\boldsymbol{D}_j = \mathrm{diag}(\boldsymbol{\sigma}_j)$, and it is parameterised by the standard deviations $\boldsymbol{\sigma}_j$. If `diagonal = false`, each covariance matrix is dense, and it is parameterised through the modified Cholesky decomposition of its inverse,
+By default (`diagonal = false`), each covariance matrix is dense, and it is parameterised through the modified Cholesky decomposition of its inverse,
 ```math
 \boldsymbol{\Sigma}_j^{-1} = \boldsymbol{T}_j' \boldsymbol{D}_j^{-2} \boldsymbol{T}_j,
 ```
-where $\boldsymbol{T}_j$ is a unit lower-triangular matrix. Since $|\boldsymbol{\Sigma}_j| = |\boldsymbol{D}_j|^2$, the density can then be evaluated using matrix multiplication only (i.e., without matrix inversion or triangular solves), and the diagonal case is recovered when $\boldsymbol{T}_j = \boldsymbol{I}$.
+where $\boldsymbol{T}_j$ is a unit lower-triangular matrix and $\boldsymbol{D}_j = \mathrm{diag}(\boldsymbol{\sigma}_j)$ is a diagonal matrix with positive diagonal elements $\boldsymbol{\sigma}_j$. Since $|\boldsymbol{\Sigma}_j| = |\boldsymbol{D}_j|^2$, the density can then be evaluated using matrix multiplication only (i.e., without matrix inversion or triangular solves). If `diagonal = true`, each covariance matrix is instead diagonal, $\boldsymbol{\Sigma}_j = \boldsymbol{D}_j^2$ (i.e., $\boldsymbol{T}_j = \boldsymbol{I}$), and it is parameterised by the standard deviations $\boldsymbol{\sigma}_j$ only.
 
 When using a `GaussianMixture` as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) summary statistics are mapped to the mixture parameters by `depth` hidden layers of `width` units, each followed by `activation`, and then by output heads that use output activations that guarantee valid mixture parameters.
 
 # Keyword arguments
 - `num_components::Integer = 10`: number of components in the mixture.
-- `diagonal::Bool = true`: whether the covariance matrix of each component is diagonal (`true`) or dense (`false`). Dense covariance matrices allow each component to capture dependence between the parameters, at the cost of $d(d-1)/2$ additional distributional parameters per component.
+- `diagonal::Bool = false`: whether the covariance matrix of each component is diagonal (`true`) or dense (`false`). Dense covariance matrices allow each component to capture dependence between the parameters, at the cost of $d(d-1)/2$ additional distributional parameters per component.
 - `depth::Integer = 2`: the number of hidden layers preceding the output heads.
 - `width::Integer = 128`: the width of each hidden layer.
 - `activation = relu`: the activation function used in each hidden layer.
@@ -34,7 +34,7 @@ struct GaussianMixture{D, M, B} <: AbstractApproximateDistribution
 end
 GaussianMixture(d, num_summaries, num_components, inference_network) = GaussianMixture(d, num_summaries, num_components, inference_network, nothing)
 
-function GaussianMixture(d::Integer, num_summaries::Integer; num_components::Integer = 10, diagonal::Bool = true, depth::Integer = 2, width::Integer = 128, activation = relu, backend::Union{Nothing, Module} = nothing, kwargs...)
+function GaussianMixture(d::Integer, num_summaries::Integer; num_components::Integer = 10, diagonal::Bool = false, depth::Integer = 2, width::Integer = 128, activation = relu, backend::Union{Nothing, Module} = nothing, kwargs...)
     @assert depth >= 0
     B = _resolvebackend(backend)
     diagonal = diagonal || d == 1 # a 1×1 covariance matrix has no off-diagonal elements

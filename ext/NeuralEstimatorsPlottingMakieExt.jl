@@ -39,457 +39,408 @@ end
 # ===========================================================================
 
 using DataFrames
-using Statistics: mean, var, std, quantile
-
-# Thin wrappers around StatsFuns
-using StatsFuns: binompdf, binominvcdf, hyperinvcdf
-_binom_quantile(q::Float64, n::Int, p::Float64)::Int = Int(binominvcdf(n, p, q))
-_binom_pdf(k::Int, n::Int, p::Float64)::Float64 = binompdf(n, p, k)
-_hyper_quantile(q::Float64, ns::Int, nf::Int, n::Int)::Int = Int(hyperinvcdf(ns, nf, n, q))
+using Random: Xoshiro
+using Statistics: mean, std, var, quantile
+using StatsFuns: binominvcdf, poisinvcdf, poispdf
 
 """
-    plot(assessment::Assessment; prob = 0.99)
+    plot(assessment::Assessment; plots = nothing, ...)
 
-Visualise the performance of a neural estimator. Accepts the `Assessment`
-object returned by [`assess`](@ref).
+Visualise the performance of a neural estimator, given the [`Assessment`](@ref)
+object returned by [`assess`](@ref). Returns a Makie `Figure` with one panel
+for each parameter.
 
 !!! note "Extension"
     This function is defined in the `NeuralEstimatorsPlottingMakieExt` extension and
     requires `CairoMakie` (or another Makie backend) to be loaded.
 
-The plot produced depends on the type of estimator being assessed:
+The plots that are available depend on the type of estimator that was assessed.
+By default all of them are drawn; use the keyword argument `plots` to select a subset.
 
-[`PointEstimator`](@ref): produces a scatter plot of estimates vs. true values,
-faceted by parameter.
+**Point and interval estimates** ([`PointEstimator`](@ref), [`IntervalEstimator`](@ref)):
 
-[`IntervalEstimator`](@ref): produces a plot of estimated credible intervals
-vs. true values, faceted by parameter. Each interval is drawn as a vertical
-line segment from lower to upper bound, with tick marks at the endpoints.
+- `:recovery`: estimates against the true values, with intervals (when the
+  assessment contains them) drawn as vertical line segments. Accurate estimates
+  lie close to the dashed identity line.
 
-[`QuantileEstimator`](@ref): produces a calibration plot of the empirical
-coverage probability vs. the nominal probability level τ, faceted by
-parameter. A well-calibrated estimator will follow the red diagonal line.
-Specifically, the diagnostic is constructed as follows:
+**Quantile estimates** ([`QuantileEstimator`](@ref)):
 
-1. For k = 1,…,K, sample pairs (θᵏ, Zᵏ) with θᵏ ∼ p(θ), Zᵏ ∼ p(Z ∣ θᵏ).
-   This gives K "posterior draws", θᵏ ∼ p(θ ∣ Zᵏ).
-2. For each k and each τ ∈ {τⱼ : j = 1,…,J}, estimate the posterior quantile
-   Q(Zᵏ, τ).
-3. For each τ, compute the proportion of quantiles Q(Zᵏ, τ) exceeding the
-   corresponding θᵏ, and plot this proportion against τ.
+- `:calibration`: the proportion of estimated quantiles that are greater than the
+  true value, against the nominal probability level τ. Specifically, for
+  k = 1,…,K, sample pairs (θᵏ, Zᵏ) with θᵏ ∼ p(θ) and Zᵏ ∼ p(Z ∣ θᵏ), so that θᵏ
+  is a draw from the posterior p(θ ∣ Zᵏ); then, for each τ, plot the proportion of
+  the estimated quantiles Q(Zᵏ, τ) that are greater than θᵏ. A well-calibrated
+  estimator follows the dashed identity line.
 
-[`PosteriorEstimator`](@ref): produces a three-row figure:
+**Posterior samples** ([`PosteriorEstimator`](@ref), [`RatioEstimator`](@ref), [`TelescopingRatioEstimator`](@ref)):
 
-1. **Recovery plot**: posterior mean vs. true value (scatter), with vertical
-   line segments showing the 95% posterior credible interval, faceted by
-   parameter.
-2. **ECDF plot**: for each parameter, the empirical CDF of the fractional rank
-   of the true value within the posterior samples, together with a simultaneous
-   `prob`-level confidence band. A well-calibrated posterior yields an ECDF
-   that stays within the band.
-3. **Z-score / contraction plot**: posterior z-score
-   (posterior mean − truth) / posterior SD vs. posterior contraction
-   1 − Var(posterior) / Var(prior), faceted by parameter. Ideally z-scores
-   are centred near zero and contractions are near one.
+- `:recovery`: point estimates (the `pointsummary` given to [`assess`](@ref), by
+  default the posterior mean) against the true values, with central 95% credible
+  intervals drawn as vertical line segments.
+- `:ecdf`: simulation-based calibration. For each parameter, the empirical
+  distribution function of the fractional rank of the true value among the
+  posterior draws, together with a simultaneous `prob`-level confidence band
+  ([Säilynoja et al., 2022](https://doi.org/10.1007/s11222-022-10090-6)). A
+  well-calibrated posterior gives a curve that stays within the band.
+- `:zscore`: the posterior z-score, (posterior mean − true value) / posterior
+  standard deviation, against the posterior contraction, 1 − posterior variance /
+  prior variance. Ideally the z-scores are centred on zero and the contractions
+  are close to one.
 
 # Keyword arguments
+- `plots = nothing`: the plots to draw, given as a `Symbol` or a collection of
+  `Symbol`s from those listed above, in the order in which they should appear
+  (e.g., `plots = (:recovery, :ecdf)`). By default, all available plots are drawn.
+- `prob = 0.99`: simultaneous coverage of the confidence band in the `:ecdf` plot.
+- `difference = true`: if `true`, the `:ecdf` plot shows the difference between the
+  empirical distribution function and that of the uniform distribution, which
+  makes departures from calibration easier to see; if `false`, it shows the
+  empirical distribution function itself.
+- `grid = false`: when the assessment contains several estimators (see `merge()`),
+  they are by default drawn in the same panels in different colours. If
+  `grid = true`, each estimator is instead given its own row of panels, which is
+  easier to read with more than three estimators.
+- `ncols = nothing`: the number of panels in each row, after which the parameters
+  wrap onto a new row. By default, at most four, balanced across rows.
+- `figure = (;)`, `axis = (;)`: attributes passed to the `Figure` and to every
+  `Axis`, respectively. By default the panels are of a fixed size and the figure
+  is sized to fit them; give `figure = (; size = (w, h))` to fix the size of the
+  figure instead. Colours and fonts are taken from the current Makie theme.
 
-- `prob = 0.99`: nominal simultaneous coverage level for the SBC
-  confidence band. Only used when `assessment` contains posterior samples.
+# Examples
+```julia
+using NeuralEstimators, CairoMakie
+
+# Given an estimator and test parameters and data (see `assess`)
+assessment = assess(estimator, θ_test, Z_test)
+
+plot(assessment)                               # all available plots
+plot(assessment; plots = :recovery)            # a single plot
+plot(assessment; plots = (:recovery, :ecdf))   # a subset (posterior samples)
+```
 """
-function plot(assessment::Assessment; grid::Bool = false, prob = 0.99)
-    df = assessment.estimates
+function plot(assessment::Assessment;
+    plots = nothing,
+    prob::Real = 0.99,
+    difference::Bool = true,
+    grid::Bool = false,
+    ncols::Union{Integer, Nothing} = nothing,
+    figure = (;),
+    axis = (;)
+)
+    0 < prob < 1 || throw(ArgumentError("`prob` must lie strictly between 0 and 1"))
+    kinds = _resolveplots(assessment, plots)
+    data = _plotdata(assessment, kinds, prob, difference)
+    parameters = unique(assessment.estimates.parameter)
+    estimators = "estimator" ∈ names(assessment.estimates) ? unique(assessment.estimates.estimator) : [""]
+    colors, ink = _themecolors(estimators)
 
-    # ---- PosteriorEstimator path ----
-    if hasproperty(assessment, :samples) && !isnothing(assessment.samples)
-        sbc = _sbc_data(assessment, prob)
-        d = length(sbc.params)
-        fig = Figure(size = (200 * d, 750))
-        _plot_recovery_row!(fig, 1, assessment, d)
-        _plot_ecdf_row!(fig, 3, sbc, d)
-        _plot_zscore_row!(fig, 5, sbc, d)
-        return fig
-    end
+    # The figure is made of blocks of panels, one block for each plot and, if `grid = true`, for each estimator.
+    # A block has one panel per parameter, wrapped over `nc` columns, with its axis labels in a column to its
+    # left and in a row beneath it. The blocks are stacked, except that with a single parameter (when a block
+    # is a single panel) the plots are placed side by side, with one row for each group of estimators.
+    groups = grid && length(estimators) > 1 ? [[estimator] for estimator in estimators] : [estimators]
+    d = length(parameters)
+    single = d == 1
+    nc = isnothing(ncols) ? cld(d, cld(d, 4)) : clamp(ncols, 1, d)
+    nr = cld(d, nc)
+    blockcols = single ? length(kinds) : 1
 
-    params = unique(df.parameter)
-    d = length(params)
-    num_estimators = "estimator" ∉ names(df) ? 1 : length(unique(df.estimator))
+    # Panels have a fixed size, and the figure is resized to fit them, unless the size of the figure is given
+    fixed = !haskey(figure, :size)
+    side = (300, 260, 230, 200)[min(nc * blockcols, 4)]
+    fig = Figure(; figure...)
+    layout = GridLayout(fig[1, 1])
 
-    # ---- QuantileEstimator path ----
-    if "prob" ∈ names(df)
-        df_emp = empiricalprob(assessment)
-        fig = Figure()
-        for (pi, param) in enumerate(params)
-            ax = Axis(fig[1, pi];
-                title = param,
-                xlabel = pi == ceil(Int, d / 2) ? "Probability level, τ" : "",
-                ylabel = pi == 1 ? "Pr(Q(Z, τ) ≥ θ)" : ""
-            )
-            sub = filter(r -> r.parameter == param, df_emp)
-            sort!(sub, :prob)
-            lines!(ax, sub.prob, sub.empirical_prob; color = :black, linewidth = 1.5)
-            lines!(ax, [0.0, 1.0], [0.0, 1.0]; color = :red, linestyle = :dash, linewidth = 1.2)
-            xlims!(ax, 0.0, 1.0)
-            ylims!(ax, 0.0, 1.0)
-        end
-        return fig
-    end
+    for (ki, kind) in enumerate(kinds)
+        xlabel, ylabel = _axislabels(kind, assessment, difference)
+        limits = _limits(kind, data[kind], difference)
+        panels = groupby(data[kind], [:estimator, :parameter])
+        shared = kind !== :recovery   # the panels have a common scale, so only the outer ones need tick labels
 
-    # ---- IntervalEstimator path ----
-    if all(["lower", "upper"] .∈ Ref(names(df)))
-        fig = Figure()
-        for (pi, param) in enumerate(params)
-            ax = Axis(fig[1, pi];
-                title = param,
-                xlabel = pi == ceil(Int, d / 2) ? "True value" : "",
-                ylabel = pi == 1 ? "Interval" : ""
-            )
-            sub = filter(r -> r.parameter == param, df)
-            for row in eachrow(sub)
-                lines!(ax, [row.truth, row.truth], [row.lower, row.upper];
-                    color = (:black, 0.4), linewidth = 0.8)
-            end
-            scatter!(ax, sub.truth, sub.lower; color = :black, marker = '⎯', markersize = 8)
-            scatter!(ax, sub.truth, sub.upper; color = :black, marker = '⎯', markersize = 8)
-            all_vals = vcat(sub.truth, sub.lower, sub.upper)
-            vmin, vmax = extrema(sub.truth)
-            lines!(ax, [vmin, vmax], [vmin, vmax]; color = :red, linestyle = :dash, linewidth = 1.2)
-        end
-        return fig
-    end
+        for (gi, group) in enumerate(groups)
+            # position of the block in the grid of blocks, and the rows above it and columns to its left
+            R, C = single ? (gi, ki) : ((ki - 1) * length(groups) + gi, 1)
+            top, left = (R - 1) * (nr + 1), (C - 1) * (nc + 1)
 
-    # ---- PointEstimator path ----
-    if "estimate" ∈ names(df)
-        # Determine layout: grid mode gives estimators as columns, params as rows;
-        # otherwise params as columns with estimators overlaid by colour.
-        estimators = num_estimators > 1 ? unique(df.estimator) : [nothing]
-        palette = Makie.wong_colors()
-
-        if grid && num_estimators > 1
-            fig = Figure()
-            for (ei, est) in enumerate(estimators)
-                for (pi, param) in enumerate(params)
-                    ax = Axis(fig[pi, ei];
-                        title = ei == 1 ? string(param) : "",
-                        xlabel = pi == length(params) ? string(est) : "",
-                        ylabel = (pi == 1 && ei == 1) ? "Estimate" : ""
-                    )
-                    sub = filter(r -> r.parameter == param && r.estimator == est, df)
-                    vmin, vmax = minimum(sub.truth), maximum(sub.truth)
-                    scatter!(ax, sub.truth, sub.estimate; color = (palette[ei], 0.75), markersize = 5)
-                    lines!(ax, [vmin, vmax], [vmin, vmax]; color = :red, linestyle = :dash, linewidth = 1.2)
-                end
-            end
-        else
-            fig = Figure()
-            for (pi, param) in enumerate(params)
-                ax = Axis(fig[1, pi];
-                    title = string(param),
-                    xlabel = pi == ceil(Int, d / 2) ? "True value" : "",
-                    ylabel = pi == 1 ? "Estimate" : ""
+            for (i, parameter) in enumerate(parameters)
+                row, col = cld(i, nc), mod1(i, nc)
+                ax = Axis(layout[top + row, left + 1 + col];
+                    title = _typeset(parameter),
+                    limits = limits(parameter),
+                    xticklabelsvisible = !shared || i + nc > d,
+                    yticklabelsvisible = !shared || col == 1,
+                    (fixed ? (; width = side, height = shared && !single ? 0.75 * side : side) : (;))...,
+                    axis...
                 )
-                if num_estimators > 1
-                    for (ei, est) in enumerate(estimators)
-                        sub = filter(r -> r.parameter == param && r.estimator == est, df)
-                        scatter!(ax, sub.truth, sub.estimate;
-                            color = (palette[ei], 0.75), markersize = 5, label = string(est))
-                    end
-                    pi == d && Legend(fig[1, d + 1], ax)
-                else
-                    sub = filter(r -> r.parameter == param, df)
-                    scatter!(ax, sub.truth, sub.estimate; color = (:black, 0.75), markersize = 5)
-                end
-                vmin = minimum(df[df.parameter .== param, :truth])
-                vmax = maximum(df[df.parameter .== param, :truth])
-                lines!(ax, [vmin, vmax], [vmin, vmax]; color = :red, linestyle = :dash, linewidth = 1.2)
+                _draw!(ax, kind, panels, parameter, group, colors, ink)
+            end
+
+            Label(layout[top .+ (1:nr), left + 1], ylabel; rotation = π / 2, tellheight = false)
+            Label(layout[top + nr + 1, left .+ (2:(nc + 1))], xlabel; tellwidth = false)
+            rowgap!(layout, top + nr, 8)
+            colgap!(layout, left + 1, 8)
+            if length(groups) > 1 && C == blockcols   # name the estimator at the end of its row of panels
+                Label(layout[top .+ (1:nr), blockcols * (nc + 1) + 1], only(group); rotation = -π / 2, font = :bold, tellheight = false)
             end
         end
-        return fig
     end
 
-    error("Unrecognised assessment format: expected columns 'estimate', 'lower'/'upper', or 'prob'.")
-end
-
-# ===========================================================================
-#  Row-drawing helpers
-# ===========================================================================
-
-"""
-Draw a recovery row into `fig` starting at grid row `row_start`.
-Plots posterior mean ± 95% CI vs. true value, one panel per parameter.
-Occupies grid rows `row_start` (axes) and `row_start+1` (x-axis label).
-"""
-function _plot_recovery_row!(fig::Figure, row_start::Int,
-    assessment::Assessment, d::Int)
-    samples_df = assessment.samples
-    params = unique(samples_df.parameter)
-    K = maximum(samples_df.k)
-
-    for (pi, param) in enumerate(params)
-        sub = filter(r -> r.parameter == param, samples_df)
-
-        truths = Float64[]
-        means = Float64[]
-        lowers = Float64[]
-        uppers = Float64[]
-        for k = 1:K
-            sub_k = filter(r -> r.k == k, sub)
-            isempty(sub_k) && continue
-            vals = sub_k.value
-            push!(truths, sub_k[1, :truth])
-            push!(means, mean(vals))
-            push!(lowers, quantile(vals, 0.025))
-            push!(uppers, quantile(vals, 0.975))
-        end
-
-        all_vals = vcat(truths, lowers, uppers)
-        vmin, vmax = minimum(all_vals), maximum(all_vals)
-
-        ax = Axis(fig[row_start, pi],
-            title = param,
-            ylabel = pi == 1 ? "Posterior mean" : "",
-            limits = (vmin, vmax, vmin, vmax)
+    if length(groups) == 1 && length(estimators) > 1
+        markers = [MarkerElement(; color = colors[estimator], marker = :circle, markersize = 12) for estimator in estimators]
+        Legend(fig[2, 1], markers, estimators;
+            orientation = :horizontal, nbanks = cld(length(estimators), nc * blockcols + 1),
+            framevisible = false, padding = 0, tellwidth = fixed
         )
-
-        for i in eachindex(truths)
-            lines!(ax, [truths[i], truths[i]], [lowers[i], uppers[i]];
-                color = (:black, 0.3), linewidth = 0.8)
-        end
-
-        scatter!(ax, truths, means;
-            color = (:black, 0.6), markersize = 4)
-
-        lines!(ax, [vmin, vmax], [vmin, vmax];
-            color = :red, linestyle = :dash, linewidth = 1.2)
+        rowgap!(fig.layout, 1, 12)
     end
+    fixed && resize_to_layout!(fig)
 
-    Label(fig[row_start + 1, 1:d], "True value"; tellwidth = false)
+    return fig
 end
 
-"""
-Draw an ECDF row into `fig` starting at grid row `row_start`.
-Occupies grid rows `row_start` (axes) and `row_start+1` (x-axis label).
-"""
-function _plot_ecdf_row!(fig::Figure, row_start::Int, sbc::NamedTuple, d::Int)
-    for (pi, param) in enumerate(sbc.params)
-        ax = Axis(fig[row_start, pi],
-            ylabel = pi == 1 ? "ECDF" : "",
-            xticks = [0.0, 0.5, 1.0],
-            yticks = [0.0, 0.5, 1.0],
-            limits = (0.0, 1.0, 0.0, 1.0)
-        )
+# ---- Which plots to draw, and the data behind them ----
 
-        band!(ax, sbc.band_df.x, sbc.band_df.lower, sbc.band_df.upper;
-            color = (:skyblue, 0.4))
-        lines!(ax, [0.0, 1.0], [0.0, 1.0];
-            color = :skyblue, linewidth = 1.0)
-
-        sub = filter(r -> r.parameter == param, sbc.ecdf_plot_df)
-        sort!(sub, :z)
-        stairs!(ax, sub.z, sub.ecdf;
-            color = :black, linewidth = 1.2, step = :post)
-    end
-
-    Label(fig[row_start + 1, 1:d], "Fractional rank statistic"; tellwidth = false)
+function _availableplots(assessment::Assessment)
+    columns = names(assessment.estimates)
+    isnothing(assessment.samples) || return (:recovery, :ecdf, :zscore)
+    "prob" ∈ columns && return (:calibration,)
+    ("estimate" ∈ columns || ["lower", "upper"] ⊆ columns) && return (:recovery,)
+    throw(ArgumentError("unrecognised assessment format: expected the columns `estimate`, `lower` and `upper`, or `prob`"))
 end
 
-"""
-Draw a z-score/contraction row into `fig` starting at grid row `row_start`.
-Occupies grid rows `row_start` (axes) and `row_start+1` (x-axis label).
-"""
-function _plot_zscore_row!(fig::Figure, row_start::Int, sbc::NamedTuple, d::Int)
-    contraction_xmin = min(0.0, minimum(sbc.zscore_df.contraction))
-
-    for (pi, param) in enumerate(sbc.params)
-        ax = Axis(fig[row_start, pi],
-            ylabel = pi == 1 ? "Posterior z-score" : "",
-            limits = (contraction_xmin, 1.0, nothing, nothing)
-        )
-
-        sub = filter(r -> r.parameter == param, sbc.zscore_df)
-        scatter!(ax, sub.contraction, sub.z_score;
-            color = (:black, 0.6), markersize = 5)
+function _resolveplots(assessment::Assessment, plots)
+    available = _availableplots(assessment)
+    isnothing(plots) && return collect(available)
+    kinds = plots isa Union{Symbol, AbstractString} ? [Symbol(plots)] : unique(Symbol.(collect(plots)))
+    if isempty(kinds) || !(kinds ⊆ available)
+        throw(ArgumentError("`plots` should contain one or more of $(join(repr.(available), ", ")) for this assessment; received $(repr(plots))"))
     end
-
-    Label(fig[row_start + 1, 1:d], "Posterior contraction"; tellwidth = false)
+    return kinds
 end
 
-# ===========================================================================
-#  SBC data preparation
-# ===========================================================================
-
-"""
-Compute all data needed for SBC plots from an `Assessment` with posterior
-samples. Returns a `NamedTuple` with fields:
-- `params`:       vector of parameter names
-- `band_df`:      confidence-band DataFrame (columns `x`, `lower`, `upper`)
-- `ecdf_plot_df`: long-form ECDF DataFrame (columns `z`, `parameter`, `ecdf`)
-- `zscore_df`:    long-form DataFrame (columns `parameter`, `k`, `z_score`, `contraction`)
-"""
-function _sbc_data(assessment::Assessment, prob::Float64)
-    samples_df = assessment.samples
-    params = unique(samples_df.parameter)
-    d = length(params)
-    K = maximum(samples_df.k)
-
-    # ---- ranks ----
-    rank_rows = NamedTuple{(:parameter, :k, :rank), Tuple{String, Int, Int}}[]
-    for param in params
-        sub = filter(r -> r.parameter == param, samples_df)
-        for k = 1:K
-            sub_k = filter(r -> r.k == k, sub)
-            isempty(sub_k) && continue
-            truth_val = sub_k[1, :truth]
-            push!(rank_rows, (parameter = param, k = k, rank = sum(sub_k.value .< truth_val)))
-        end
-    end
-    ranks_df = DataFrame(rank_rows)
-
-    ranks_matrix = Matrix{Int}(undef, K, d)
-    for (pi, param) in enumerate(params)
-        sub = filter(r -> r.parameter == param, ranks_df)
-        for k = 1:K
-            row = filter(r -> r.k == k, sub)
-            ranks_matrix[k, pi] = isempty(row) ? 0 : row[1, :rank]
-        end
-    end
-
-    max_rank = maximum(ranks_matrix)
-    N = K
-    grid_size = min(max_rank + 1, N)
-
-    # ---- confidence band ----
-    gamma = _adjust_gamma_optimize(N, grid_size, prob)
-    z_grid = range(0, 1; length = grid_size + 1)
-    z_twice = vcat(0.0, repeat(collect(z_grid[2:end]), inner = 2))
-
-    lower_counts, upper_counts = _ecdf_intervals(N, 1, grid_size, gamma)
-    band_df = DataFrame(
-        x = z_twice,
-        lower = lower_counts ./ N,
-        upper = upper_counts ./ N
-    )
-
-    # ---- ECDF values ----
-    base_vals = floor.(Int, (0:grid_size) .* ((max_rank + 1) / grid_size))
-    ecdf_vals = Matrix{Float64}(undef, grid_size + 1, d)
-    for i = 1:(grid_size + 1)
-        for (pi, _) in enumerate(params)
-            ecdf_vals[i, pi] = mean(ranks_matrix[:, pi] .< base_vals[i])
-        end
-    end
-
-    ecdf_rows = NamedTuple{(:z, :parameter, :ecdf), Tuple{Float64, String, Float64}}[]
-    for (pi, param) in enumerate(params)
-        for i = 1:(grid_size + 1)
-            push!(ecdf_rows, (z = z_grid[i], parameter = param, ecdf = ecdf_vals[i, pi]))
-        end
-    end
-    ecdf_plot_df = DataFrame(ecdf_rows)
-
-    # ---- z-scores and contraction ----
-    prior_var = Dict{String, Float64}()
-    for param in params
-        truths = unique(filter(r -> r.parameter == param, samples_df)[!, [:k, :truth]])
-        prior_var[param] = var(truths.truth)
-    end
-
-    zscore_rows = NamedTuple{(:parameter, :k, :z_score, :contraction), Tuple{String, Int, Float64, Float64}}[]
-    for param in params
-        sub = filter(r -> r.parameter == param, samples_df)
-        for k = 1:K
-            sub_k = filter(r -> r.k == k, sub)
-            isempty(sub_k) && continue
-            truth_val = sub_k[1, :truth]
-            mu_post = mean(sub_k.value)
-            sd_post = std(sub_k.value)
-            push!(zscore_rows, (
-                parameter = param,
-                k = k,
-                z_score = (mu_post - truth_val) / sd_post,
-                contraction = 1.0 - sd_post^2 / prior_var[param]
-            ))
-        end
-    end
-    zscore_df = DataFrame(zscore_rows)
-
-    return (; params, band_df, ecdf_plot_df, zscore_df)
-end
-
-# ===========================================================================
-#  Internal distribution / band helpers
-# ===========================================================================
-
-function _ecdf_intervals(N::Int, L::Int, K::Int, gamma::Float64)
-    z = range(0, 1; length = K + 1)
-
-    if L == 1
-        lower = [_binom_quantile(gamma / 2, N, Float64(zi)) for zi in z]
-        upper = [_binom_quantile(1 - gamma / 2, N, Float64(zi)) for zi in z]
-    else
-        n_fail = N * (L - 1)
-        n_draw = N * L
-        k_vec = floor.(Int, collect(z) .* n_draw)
-        lower = [_hyper_quantile(gamma / 2, N, n_fail, kk) for kk in k_vec]
-        upper = [_hyper_quantile(1 - gamma / 2, N, n_fail, kk) for kk in k_vec]
-    end
-
-    lower_step = vcat(repeat(lower[1:K], inner = 2), lower[K + 1])
-    upper_step = vcat(repeat(upper[1:K], inner = 2), upper[K + 1])
-    return lower_step, upper_step
-end
-
-function _adjust_gamma_optimize(N::Int, K::Int, conf_level::Float64)
-    function target(gamma)
-        z = collect(range(0, 1; length = K))
-        z1 = vcat(0.0, z[1:(end - 1)])
-        z2 = z
-
-        x2_lower = [_binom_quantile(gamma / 2, N, Float64(zi)) for zi in z2]
-        rev_lower = reverse(x2_lower)
-        x2_upper = vcat(N .- rev_lower[2:K], N)
-
-        x1_vec = [0]
-        p_int = [1.0]
-        for i in eachindex(z1)
-            x1_vec, p_int = _p_interior(p_int, x1_vec, x2_lower[i]:x2_upper[i], z1[i], z2[i], N)
-        end
-        abs(conf_level - sum(p_int))
-    end
-
-    φ = (√5 - 1) / 2
-    a, b = 0.0, 1.0 - conf_level
-    c, d_pt = b - φ * (b - a), a + φ * (b - a)
-    fc, fd = target(c), target(d_pt)
-    while (b - a) > 1e-8
-        if fc < fd
-            b, d_pt, fd = d_pt, c, fc
-            c = b - φ * (b - a)
-            fc = target(c)
+# Long-form data behind each plot, with one row per mark and the columns `estimator` and `parameter` in every case
+function _plotdata(assessment::Assessment, kinds, prob, difference)
+    estimates = assessment.estimates
+    posteriors = isnothing(assessment.samples) ? nothing : _posteriorsummaries(assessment.samples)
+    data = Dict{Symbol, DataFrame}()
+    for kind in kinds
+        df = if kind === :calibration
+            empiricalprob(assessment)
+        elseif kind === :ecdf
+            _ecdf(posteriors, prob, difference)
+        elseif kind === :zscore
+            filter([:zscore, :contraction] => (z, c) -> isfinite(z) && isfinite(c), posteriors)
+        elseif isnothing(posteriors)
+            estimates
         else
-            a, c, fc = c, d_pt, fd
-            d_pt = a + φ * (b - a)
-            fd = target(d_pt)
+            # the point estimates honour the `pointsummary` given to assess(); the intervals come from the samples
+            by = intersect(["estimator", "parameter", "k", "j"], names(estimates))
+            innerjoin(select(estimates, by, :estimate, :truth), select(posteriors, by, :lower, :upper); on = by)
         end
+        data[kind] = "estimator" ∈ names(df) ? df : insertcols(df, :estimator => "")
     end
-    return (a + b) / 2
+    return data
 end
 
-function _p_interior(p_int::Vector{Float64}, x1::Vector{Int},
-    x2_range::AbstractRange{Int},
-    z1::Float64, z2::Float64, N::Int)
-    z_tilde = (z2 - z1) / (1 - z1)
-    x2_vec = collect(x2_range)
-    p_x2_int = zeros(length(x2_vec), length(x1))
-    for (j, x1j) in enumerate(x1)
-        N_tilde = N - x1j
-        for (i, x2i) in enumerate(x2_vec)
-            diff = x2i - x1j
-            (diff < 0 || diff > N_tilde) && continue
-            p_x2_int[i, j] = p_int[j] * _binom_pdf(diff, N_tilde, z_tilde)
+# One row for each posterior distribution: its summaries, and those of the true value relative to it
+function _posteriorsummaries(samples::DataFrame)
+    rng = Xoshiro(1)
+    by = intersect(["estimator", "parameter", "k", "j"], names(samples))
+    df = combine(groupby(samples, by),
+        :truth => first => :truth,
+        :value => mean => :mean,
+        :value => std => :sd,
+        :value => (v -> quantile(v, 0.025)) => :lower,
+        :value => (v -> quantile(v, 0.975)) => :upper,
+        [:value, :truth] => ((v, t) -> _rank(rng, v, first(t))) => :rank,
+        nrow => :draws;
+        threads = false   # the groups share `rng`
+    )
+    "estimator" ∈ by || insertcols!(df, 1, :estimator => "")
+
+    # the prior variance is estimated from the true values, which are draws from the prior
+    transform!(groupby(df, [:estimator, :parameter]), :truth => var => :prior_variance)
+    df.zscore = (df.mean .- df.truth) ./ df.sd
+    df.contraction = 1 .- df.sd .^ 2 ./ df.prior_variance
+
+    return df
+end
+
+# Number of posterior draws below the true value. Ties are broken at random, so that the rank is uniformly
+# distributed under a calibrated posterior even if it has point masses (e.g., SpikeAndSlab)
+function _rank(rng, draws, truth)
+    ties = count(==(truth), draws)
+    return count(<(truth), draws) + (ties > 0 ? rand(rng, 0:ties) : 0)
+end
+
+# Empirical distribution function of the ranks and its simultaneous confidence band, for each estimator and parameter
+function _ecdf(posteriors::DataFrame, prob, difference)
+    posteriors = filter(:j => ==(1), posteriors)   # the band assumes that the (θ, Z) pairs are independent
+    bands = Dict{NTuple{2, Int}, NTuple{2, Vector{Int}}}()   # the band depends only on the numbers of ranks and draws
+    combine(groupby(posteriors, [:estimator, :parameter]); threads = false) do df
+        n, L = nrow(df), first(df.draws)
+        # Evaluate at G thresholds on the rank scale; under calibration the rank is uniform on 0:L, so that
+        # P(rank < threshold) = threshold / (L + 1) exactly
+        G = min(L + 1, n, 1000)
+        thresholds = [fld(i * (L + 1), G) for i in 0:G]
+        x = thresholds ./ (L + 1)
+        ranks = sort(df.rank)
+        y = [searchsortedfirst(ranks, threshold) - 1 for threshold in thresholds] ./ n
+        lower, upper = get!(() -> _ecdfband(n, x[2:end], prob), bands, (n, L))
+        shift = difference ? x : zero(x)
+        (; x, y = y .- shift, lower = [0; lower] ./ n .- shift, upper = [0; upper] ./ n .- shift, reference = x .- shift)
+    end
+end
+
+"""
+    _ecdfband(n, p, prob)
+
+Simultaneous confidence band for the empirical distribution function of `n` independent
+uniform variates evaluated at the increasing probabilities `p`, the last of which is 1
+(Säilynoja et al., 2022). The band consists of pointwise binomial intervals whose level γ is
+chosen as large as possible subject to the empirical distribution function lying within all
+of them with probability at least `prob`. Returns the lower and upper limits as counts.
+"""
+function _ecdfband(n::Integer, p::AbstractVector, prob::Real)
+    limits(γ) = (Int.(binominvcdf.(n, p, γ / 2)), Int.(binominvcdf.(n, p, 1 - γ / 2)))
+    lo, hi = 0.0, 1 - prob
+    _coverage(n, p, limits(hi)...) >= prob && return limits(hi)
+    for _ in 1:25   # the coverage is non-increasing in γ, and the limits are integers
+        γ = (lo + hi) / 2
+        _coverage(n, p, limits(γ)...) >= prob ? (lo = γ) : (hi = γ)
+    end
+    return limits(lo)
+end
+
+# Probability that the number of the n variates below p[i] lies in lower[i]:upper[i] for every i. These counts are
+# distributed as a Poisson process of rate n conditioned on its total being n, and the probability that the
+# process is within the limits so far with a given current count follows from one truncated convolution per step.
+function _coverage(n::Integer, p::AbstractVector, lower::Vector{Int}, upper::Vector{Int})
+    inside, from, to = [1.0], 0, 0   # inside[x - from + 1] = P(within the limits so far, current count = x)
+    previous = 0.0
+    for i in eachindex(p)
+        λ = n * (p[i] - previous)
+        previous = p[i]
+        increment = poispdf.(λ, 0:Int(poisinvcdf(λ, 1 - 1e-12)))
+        updated = zeros(upper[i] - lower[i] + 1)
+        for x in lower[i]:upper[i], x₀ in max(from, x - length(increment) + 1):min(to, x)
+            updated[x - lower[i] + 1] += inside[x₀ - from + 1] * increment[x - x₀ + 1]
+        end
+        inside, from, to = updated, lower[i], upper[i]
+    end
+    return sum(inside) / poispdf(n, n)   # both limits equal n at the final probability of 1
+end
+
+# ---- Drawing ----
+
+# Colours from the current theme: a palette colour for each estimator, and the text colour for reference marks
+function _themecolors(estimators)
+    palette = Makie.to_color.(Makie.to_value(Makie.theme(:palette).color))
+    colors = Dict(estimator => palette[mod1(i, length(palette))] for (i, estimator) in enumerate(estimators))
+    ink = Makie.to_color(Makie.to_value(Makie.theme(:textcolor)))
+    return colors, ink
+end
+
+# Marker size and opacity for a scatter of n points, so that dense panels remain legible
+_markersize(n) = n <= 100 ? 8 : n <= 500 ? 6 : 5
+_opacity(n) = n <= 100 ? 0.9 : n <= 500 ? 0.7 : 0.5
+
+function _axislabels(kind, assessment, difference)
+    kind === :ecdf && return ("Fractional rank statistic", difference ? "ECDF difference" : "ECDF")
+    kind === :zscore && return ("Posterior contraction", "Posterior z-score")
+    kind === :calibration && return ("Probability level, τ", "Pr(Q(Z, τ) ≥ θ)")
+    estimates = assessment.estimates
+    interval = if !isnothing(assessment.samples)
+        "95% credible interval"
+    elseif "α" ∈ names(estimates)
+        "$(round(Int, 100 * (1 - first(estimates.α))))% interval"
+    elseif "lower" ∈ names(estimates)
+        "interval"
+    end
+    ylabel = isnothing(interval) ? "Estimate" : "estimate" ∈ names(estimates) ? "Estimate ($interval)" : uppercasefirst(interval)
+    return ("True value", ylabel)
+end
+
+# Axis limits (xmin, xmax, ymin, ymax) as a function of the parameter. Recovery panels each have their own scale,
+# with common x and y limits so that the identity line is the diagonal; the panels of the other plots share a scale.
+function _limits(kind, df, difference)
+    if kind === :recovery
+        columns = intersect(["truth", "estimate", "lower", "upper"], names(df))
+        spans = Dict(key.parameter => _span(reduce(vcat, eachcol(sub[!, columns]))) for (key, sub) in pairs(groupby(df, :parameter)))
+        return parameter -> (spans[parameter]..., spans[parameter]...)
+    end
+    unit = _span([0, 1], 0.03)
+    limits = if kind === :zscore
+        (_span([0; 1; df.contraction])..., (-1, 1) .* 1.05 .* max(3, maximum(abs, df.zscore; init = 0))...)
+    elseif kind === :ecdf && difference
+        extent = maximum(abs, [df.y; df.lower; df.upper])
+        (unit..., _span([-extent, extent], 0.05)...)
+    else
+        (unit..., unit...)
+    end
+    return parameter -> limits
+end
+
+# Range of the finite values, padded on both sides
+function _span(values, padding = 0.04)
+    values = filter(isfinite, values)
+    isempty(values) && return (0.0, 1.0)
+    lo, hi = Float64.(extrema(values))
+    lo == hi && return (lo - 1, hi + 1)
+    return (lo - padding * (hi - lo), hi + padding * (hi - lo))
+end
+
+function _draw!(ax, kind, panels, parameter, estimators, colors, ink)
+    subsets = [(estimator, get(panels, (; estimator, parameter), nothing)) for estimator in estimators]
+    filter!(subset -> !isnothing(last(subset)), subsets)
+    isempty(subsets) && return ax
+    reference = (; color = (ink, 0.7), linewidth = 1, linestyle = :dash)
+
+    if kind === :recovery
+        # intervals beneath the points, and the identity line on top so that it is visible in dense panels
+        for (estimator, df) in subsets
+            hasproperty(df, :lower) || continue
+            opacity = (hasproperty(df, :estimate) ? 0.5 : 1) * _opacity(nrow(df))
+            rangebars!(ax, df.truth, df.lower, df.upper; color = (colors[estimator], opacity), linewidth = 1)
+        end
+        for (estimator, df) in subsets
+            hasproperty(df, :estimate) || continue
+            scatter!(ax, df.truth, df.estimate; color = (colors[estimator], _opacity(nrow(df))), markersize = _markersize(nrow(df)))
+        end
+        ablines!(ax, 0, 1; reference...)
+    elseif kind === :ecdf
+        bounds = last(first(subsets))
+        if !all(df -> df.lower == bounds.lower && df.upper == bounds.upper, last.(subsets))
+            throw(ArgumentError("the estimators were assessed with different numbers of data sets or posterior draws, so that their confidence bands differ; use `grid = true` to draw them separately"))
+        end
+        band!(ax, bounds.x, bounds.lower, bounds.upper; color = (ink, 0.12))
+        lines!(ax, bounds.x, bounds.reference; reference...)
+        for (estimator, df) in subsets
+            lines!(ax, df.x, df.y; color = colors[estimator], linewidth = 2)
+        end
+    elseif kind === :zscore
+        hlines!(ax, 0; reference...)
+        for (estimator, df) in subsets
+            scatter!(ax, df.contraction, df.zscore; color = (colors[estimator], _opacity(nrow(df))), markersize = _markersize(nrow(df)))
+        end
+    elseif kind === :calibration
+        ablines!(ax, 0, 1; reference...)
+        for (estimator, df) in subsets
+            df = sort(df, :prob)
+            scatterlines!(ax, df.prob, df.empirical_prob; color = colors[estimator], linewidth = 2, markersize = 9)
         end
     end
-    return x2_vec, vec(sum(p_x2_int; dims = 2))
+
+    return ax
+end
+
+# Parameter names are often written with Unicode subscripts (e.g., θ₁), which many fonts lack; typeset them instead
+function _typeset(name)
+    name = string(name)
+    i = findfirst(in('₀':'₉'), name)
+    (isnothing(i) || i == firstindex(name) || !all(in('₀':'₉'), name[i:end])) && return name
+    return rich(name[1:prevind(name, i)], subscript(map(c -> '0' + (c - '₀'), name[i:end])))
 end
 
 end  # module

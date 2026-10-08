@@ -875,9 +875,10 @@ end
         # weights as log(softmax(logits)) then gives -Inf and a NaN gradient, while the
         # log-density itself stays finite. The log-density must therefore be finite AND
         # differentiable here.
-        @testset "GaussianMixture: separated logits" begin
+        # NB the log weights are formed separately for diagonal and dense covariance matrices
+        @testset "GaussianMixture: separated logits (diagonal = $diagonal)" for diagonal in (true, false)
             J = 10
-            q = GaussianMixture(d, dstar; num_components = J, backend = Flux) |> dvc
+            q = GaussianMixture(d, dstar; num_components = J, diagonal = diagonal, backend = Flux) |> dvc
             @test all(isfinite, NeuralEstimators._logdensity(q, θ, TZ))
 
             # Push the mixture logits far apart, as training does. The weights head is
@@ -909,6 +910,7 @@ end
             J = 3
             q_cpu = dense_mixture(J)
             @test numdistributionalparams(q_cpu) == (1 + 2d + d * (d - 1) ÷ 2) * J
+            @test numdistributionalparams(GaussianMixture(d, dstar; num_components = J, backend = Flux)) == numdistributionalparams(q_cpu) # dense by default
             κ = Float64.(q_cpu.inference_network(cpu(TZ)))
             @test size(κ, 1) == numdistributionalparams(q_cpu)
 
@@ -1011,7 +1013,7 @@ end
 @testset "Gaussian" begin
     d, dstar = 3, 6
     num_dense = numdistributionalparams(GaussianMixture(d, dstar; num_components = 1, diagonal = false, backend = Flux))
-    num_diagonal = numdistributionalparams(GaussianMixture(d, dstar; num_components = 1, backend = Flux))
+    num_diagonal = numdistributionalparams(GaussianMixture(d, dstar; num_components = 1, diagonal = true, backend = Flux))
     @test num_dense > num_diagonal
 
     q = Gaussian(d, dstar; backend = Flux)
@@ -1687,7 +1689,7 @@ Z = simulator(θ, m)
             rmse(assessment; average_over_sample_sizes = false)
             rmse(assessment; average_over_parameters = false, average_over_sample_sizes = false)
 
-            p = plot(assessment)
+            @test plot(assessment) isa Figure
         end
 
         @testset "bootstrap" begin
@@ -1726,7 +1728,7 @@ end
     coverage(assessment; average_over_parameters = true)
     coverage(assessment; average_over_sample_sizes = false)
     coverage(assessment; average_over_parameters = true, average_over_sample_sizes = false)
-    p = plot(assessment)
+    @test plot(assessment) isa Figure
 
     intervalscore(assessment)
     intervalscore(assessment; average_over_parameters = true)
@@ -1749,7 +1751,7 @@ end
 
     # Assessment
     assessment = assess(estimator, θ, Z)
-    p = plot(assessment)
+    @test plot(assessment) isa Figure
 
     # Inference
     z = simulator(sampler(1), m)
@@ -1970,8 +1972,46 @@ end
         posteriormedian(estimator, Z) # point estimate
         posteriorquantile(estimator, Z, [0.1, 0.5]) # quantiles
         assessment = assess(estimator, θ, Z)
-        p = plot(assessment)
+        @test plot(assessment) isa Figure
     end
+end
+
+@testset "plot(assessment)" begin
+    # Point estimates: one estimator, then several estimators in the same panels or in rows of their own
+    point = PointEstimator(Chain(Dense(m, 16, gelu), Dense(16, d)))
+    assessment = assess(point, θ, Z; use_gpu = false)
+    @test plot(assessment; plots = :recovery, ncols = 1, figure = (; size = (400, 600)), axis = (; xgridvisible = false)) isa Figure
+    @test_throws ArgumentError plot(assessment; plots = :ecdf)
+    merged = assess([point, point], θ, Z; estimator_names = ["A", "B"], use_gpu = false, verbose = false)
+    @test plot(merged) isa Figure
+    @test plot(merged; grid = true) isa Figure
+
+    # Posterior samples: a subset of the plots, and several estimators
+    posterior = PosteriorEstimator(Chain(Dense(m, 16, gelu), Dense(16, 3d)), d; num_summaries = 3d, q = Gaussian)
+    assessment = assess(posterior, θ, Z; N = 100, use_gpu = false)
+    @test plot(assessment; plots = (:ecdf, :recovery), difference = false, prob = 0.9) isa Figure
+    @test plot(assessment; plots = "zscore") isa Figure
+    @test_throws ArgumentError plot(assessment; plots = :calibration)
+    @test_throws ArgumentError plot(assessment; plots = Symbol[])
+    merged = assess([posterior, posterior], θ, Z; estimator_names = ["A", "B"], N = 100, use_gpu = false, verbose = false)
+    @test plot(merged) isa Figure
+    @test plot(merged; grid = true) isa Figure
+
+    # Simultaneous confidence band for the ECDF: its coverage probability against an enumeration of all outcomes,
+    # and the band attaining the nominal coverage without exceeding it by much
+    ext = Base.get_extension(NeuralEstimators, :NeuralEstimatorsPlottingMakieExt)
+    n, p = 5, [0.1, 0.4, 0.75, 1.0]
+    lower, upper = [0, 0, 2, n], [1, 4, 4, n]
+    cells = diff([0; p])
+    enumerated = sum(Iterators.product(ntuple(_ -> eachindex(p), n)...)) do assignment
+        counts = cumsum([count(==(i), assignment) for i in eachindex(p)])
+        all(lower .<= counts .<= upper) ? prod(cells[collect(assignment)]) : 0.0
+    end
+    @test ext._coverage(n, p, lower, upper) ≈ enumerated
+    n, p = 100, (1:100) ./ 100
+    lower, upper = ext._ecdfband(n, p, 0.95)
+    @test all(lower .<= upper) && lower[end] == upper[end] == n
+    @test 0.95 <= ext._coverage(n, p, lower, upper) < 0.96
 end
 
 @testset "PosteriorEstimator: SpikeAndSlab" begin

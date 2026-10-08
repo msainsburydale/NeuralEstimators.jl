@@ -68,8 +68,8 @@ function make_estimator(backend, estimator_type::Symbol)
         RatioEstimator(network, d; num_summaries = d, depth = 1)
     elseif estimator_type === :posterior_mixture
         PosteriorEstimator(network, d; num_summaries = d, depth = 1, q = GaussianMixture)
-    elseif estimator_type === :posterior_mixture_dense
-        PosteriorEstimator(network, d; num_summaries = d, depth = 1, q = GaussianMixture, diagonal = false)
+    elseif estimator_type === :posterior_mixture_diagonal
+        PosteriorEstimator(network, d; num_summaries = d, depth = 1, q = GaussianMixture, diagonal = true)
     elseif estimator_type === :posterior_gaussian
         PosteriorEstimator(network, d; num_summaries = d, depth = 1, q = Gaussian)
     else
@@ -214,7 +214,7 @@ TRAINING_SCENARIOS = [
         devices, adtypes = backend_config(backend)
 
         @testset "$backend_name backend" begin
-            for estimator_type in (:point, :ratio, :posterior_mixture, :posterior_mixture_dense, :posterior_gaussian)
+            for estimator_type in (:point, :ratio, :posterior_mixture, :posterior_mixture_diagonal, :posterior_gaussian)
                 est_label = string(estimator_type)
 
                 @testset "$est_label estimator" begin
@@ -271,7 +271,7 @@ TRAINING_SCENARIOS = [
                                 @test result !== nothing
                             end
 
-                        elseif estimator_type in (:posterior_gaussian, :posterior_mixture, :posterior_mixture_dense)
+                        elseif estimator_type in (:posterior_gaussian, :posterior_mixture, :posterior_mixture_diagonal)
                             @testset "sampleposterior" begin
                                 samples = sampleposterior(est, Z_single; device = first(devices))
                                 @test samples isa AbstractArray
@@ -421,9 +421,9 @@ end
 
 # The test matrix above includes a ReactantDevice only when CUDA is functional. Here, Reactant falls
 # back to the XLA CPU backend, so that the approximate distributions with dense covariance matrices
-# (GaussianMixture with diagonal = false, and Gaussian) are also tested with Reactant on CPU-only
-# machines (e.g., the CI runners).
-@testset "Lux $estimator_type: Reactant" for estimator_type in (:posterior_mixture_dense, :posterior_gaussian)
+# (GaussianMixture and Gaussian, by default) are also tested with Reactant on CPU-only machines
+# (e.g., the CI runners).
+@testset "Lux $estimator_type: Reactant" for estimator_type in (:posterior_mixture, :posterior_gaussian)
     device = try
         Reactant.set_default_backend(CUDA.functional() ? "gpu" : "cpu")
         reactant_device()

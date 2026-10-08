@@ -37,7 +37,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
 - For some operations involving only matrices and MLPs (e.g., inference-network transformations of summary statistics), it might be faster to always use the CPU (at least for certain batchsize ranges).
 - Moving a batch of data to the GPU currently transfers each data set separately (`input |> device` in `_train_step`), which is one transfer per data set; batching the transfer would reduce the overhead for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) architectures.
-- Lux.jl: Initial risks are much larger than Flux.jl when training NPEs.
 - 🟡 Lux.jl: [NormalisingFlow](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions#Distributions) is poorly conditioned at initialisation. Lux's default (PyTorch-style) `Dense` initialisation, which uses non-zero biases, means the scale/translate networks of each `AffineCouplingBlock` start far from the identity. With the default 6 coupling layers, the latent values at initialisation reach ~10²–10⁴ (vs. ~2.5 with Flux), and the Float32 round trip `inverse(forward(θ))` has errors up to ~0.3 (exact in Float64). A standard fix is to zero-initialise the final layer of the scale and translate networks, so that each block (and hence the flow) is the identity at initialisation (as in Glow; [Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685)); this could be applied to both backends.
 - Add a check for NaNs in the inputs/outputs. Also, if the training risk or validation risk becomes NaN, immediately halt training.
 
@@ -49,7 +48,7 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Support for [SimpleChains.jl](https://github.com/PumasAI/SimpleChains.jl) (optimised for small networks on the CPU) via Lux's [`ToSimpleChainsAdaptor`](https://lux.csail.mit.edu/stable/api/Lux/interop#Lux-Models-to-Simple-Chains). Currently untested and unsupported; the only code in place is the `_matchsimplechains` hook in the Lux extension, which makes the `PointEstimator` and `RatioEstimator` convenience constructors build `SimpleChainsLayer` networks when the summary network is one.
 
 ### Refactoring/API improvements
-- Clean and improve the plotting code/logic; ideally move this to an external package within the JuliaSBI organization.
+- Move the plotting code to an external package within the JuliaSBI organization.
 - Automatically and reliably infer the number of summaries from an arbitrary `summary_network`, so that the user need not specify it when constructing an estimator.
    * This can be easily done for the common cases (Chain, DeepSet), with an `@info` given to tell the user what we inferred. For other cases, just error and tell the user to specify the number of summaries explicitly. Can also make the function used to compute the number of summaries public (and overloadable for custom structs). 
 
