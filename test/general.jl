@@ -2010,6 +2010,12 @@ end
     @test plot(assessment; transpose = false) isa Figure
     @test plot(merged; transpose = true, grid = true) isa Figure
 
+    # Intervals are drawn behind the point estimates of the recovery plot only on request
+    rangebars(fig) = sum(count(p -> p isa Rangebars, block.scene.plots) for block in fig.content if block isa Axis)
+    @test rangebars(plot(assessment; plots = :recovery)) == 0
+    @test rangebars(plot(assessment; plots = :recovery, intervals = true)) == d
+    @test plot(merged; intervals = true) isa Figure
+
     # Simultaneous confidence band for the ECDF: its coverage probability against an enumeration of all outcomes,
     # and the band attaining the nominal coverage without exceeding it by much
     ext = Base.get_extension(NeuralEstimators, :NeuralEstimatorsPlottingMakieExt)

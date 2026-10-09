@@ -59,9 +59,10 @@ By default all of them are drawn; use the keyword argument `plots` to select a s
 
 **Point and interval estimates** ([`PointEstimator`](@ref), [`IntervalEstimator`](@ref)):
 
-- `:recovery`: estimates against the true values, with intervals (when the
-  assessment contains them) drawn as vertical line segments. Accurate estimates
-  lie close to the dashed identity line.
+- `:recovery`: estimates against the true values. Accurate estimates lie close to
+  the dashed identity line. For an [`IntervalEstimator`](@ref), the intervals are
+  drawn as vertical line segments; when the assessment contains both point
+  estimates and intervals, the intervals are drawn only if `intervals = true`.
 
 **Quantile estimates** ([`QuantileEstimator`](@ref)):
 
@@ -75,8 +76,8 @@ By default all of them are drawn; use the keyword argument `plots` to select a s
 **Posterior samples** ([`PosteriorEstimator`](@ref), [`RatioEstimator`](@ref), [`TelescopingRatioEstimator`](@ref)):
 
 - `:recovery`: point estimates (the `pointsummary` given to [`assess`](@ref), by
-  default the posterior mean) against the true values, with central 95% credible
-  intervals drawn as vertical line segments.
+  default the posterior mean) against the true values. If `intervals = true`,
+  central 95% credible intervals are drawn as vertical line segments.
 - `:ecdf`: simulation-based calibration. For each parameter, the empirical
   distribution function of the fractional rank of the true value among the
   posterior draws, together with a simultaneous `prob`-level confidence band
@@ -91,6 +92,9 @@ By default all of them are drawn; use the keyword argument `plots` to select a s
 - `plots = nothing`: the plots to draw, given as a `Symbol` or a collection of
   `Symbol`s from those listed above, in the order in which they should appear
   (e.g., `plots = (:recovery, :ecdf)`). By default, all available plots are drawn.
+- `intervals = false`: whether to draw intervals behind the point estimates in the
+  `:recovery` plot. They are not drawn by default, since they tend to hide the
+  points when there are many test data sets.
 - `prob = 0.99`: simultaneous coverage of the confidence band in the `:ecdf` plot.
 - `difference = true`: if `true`, the `:ecdf` plot shows the difference between the
   empirical distribution function and that of the uniform distribution, which
@@ -127,6 +131,7 @@ plot(assessment; transpose = true)             # one row per parameter, one colu
 """
 function plot(assessment::Assessment;
     plots = nothing,
+    intervals::Bool = false,
     prob::Real = 0.99,
     difference::Bool = true,
     grid::Bool = false,
@@ -137,7 +142,7 @@ function plot(assessment::Assessment;
 )
     0 < prob < 1 || throw(ArgumentError("`prob` must lie strictly between 0 and 1"))
     kinds = _resolveplots(assessment, plots)
-    data = _plotdata(assessment, kinds, prob, difference)
+    data = _plotdata(assessment, kinds, prob, difference, intervals)
     parameters = unique(assessment.estimates.parameter)
     estimators = "estimator" ∈ names(assessment.estimates) ? unique(assessment.estimates.estimator) : [""]
     colors, ink = _themecolors(estimators)
@@ -161,7 +166,7 @@ function plot(assessment::Assessment;
     layout = GridLayout(fig[1, 1])
 
     for (ki, kind) in enumerate(kinds)
-        xlabel, ylabel = _axislabels(kind, assessment, difference)
+        xlabel, ylabel = _axislabels(kind, assessment, difference, intervals)
         limits = _limits(kind, data[kind], difference)
         panels = groupby(data[kind], [:estimator, :parameter])
         shared = kind !== :recovery   # the panels have a common scale, so only the outer ones need tick labels
@@ -228,9 +233,17 @@ function _resolveplots(assessment::Assessment, plots)
 end
 
 # Long-form data behind each plot, with one row per mark and the columns `estimator` and `parameter` in every case
-function _plotdata(assessment::Assessment, kinds, prob, difference)
+function _plotdata(assessment::Assessment, kinds, prob, difference, intervals)
     estimates = assessment.estimates
-    posteriors = isnothing(assessment.samples) ? nothing : _posteriorsummaries(assessment.samples)
+    if !intervals && "estimate" ∈ names(estimates)
+        # only the point estimates are drawn, so drop any intervals that accompany them
+        limits = intersect(["lower", "upper"], names(estimates))
+        isempty(limits) || (estimates = select(estimates, Not(limits)))
+    end
+    # posterior summaries are needed by every plot of posterior samples except a recovery plot without intervals
+    posteriors = if !isnothing(assessment.samples) && (intervals || kinds != [:recovery])
+        _posteriorsummaries(assessment.samples, intervals && :recovery ∈ kinds)
+    end
     data = Dict{Symbol, DataFrame}()
     for kind in kinds
         df = if kind === :calibration
@@ -239,12 +252,12 @@ function _plotdata(assessment::Assessment, kinds, prob, difference)
             _ecdf(posteriors, prob, difference)
         elseif kind === :zscore
             filter([:zscore, :contraction] => (z, c) -> isfinite(z) && isfinite(c), posteriors)
-        elseif isnothing(posteriors)
-            estimates
-        else
+        elseif intervals && !isnothing(posteriors)
             # the point estimates honour the `pointsummary` given to assess(); the intervals come from the samples
             by = intersect(["estimator", "parameter", "k", "j"], names(estimates))
             innerjoin(select(estimates, by, :estimate, :truth), select(posteriors, by, :lower, :upper); on = by)
+        else
+            estimates
         end
         data[kind] = "estimator" ∈ names(df) ? df : insertcols(df, :estimator => "")
     end
@@ -252,19 +265,20 @@ function _plotdata(assessment::Assessment, kinds, prob, difference)
 end
 
 # One row for each posterior distribution: its summaries, and those of the true value relative to it
-function _posteriorsummaries(samples::DataFrame)
+function _posteriorsummaries(samples::DataFrame, intervals::Bool)
     rng = Xoshiro(1)
     by = intersect(["estimator", "parameter", "k", "j"], names(samples))
-    df = combine(groupby(samples, by),
+    summaries = Any[
         :truth => first => :truth,
         :value => mean => :mean,
         :value => std => :sd,
-        :value => (v -> quantile(v, 0.025)) => :lower,
-        :value => (v -> quantile(v, 0.975)) => :upper,
         [:value, :truth] => ((v, t) -> _rank(rng, v, first(t))) => :rank,
-        nrow => :draws;
-        threads = false   # the groups share `rng`
-    )
+        nrow => :draws
+    ]
+    if intervals   # central 95% credible intervals, which need a sort of each posterior sample
+        push!(summaries, :value => (v -> quantile(v, 0.025)) => :lower, :value => (v -> quantile(v, 0.975)) => :upper)
+    end
+    df = combine(groupby(samples, by), summaries...; threads = false)   # the groups share `rng`
     "estimator" ∈ by || insertcols!(df, 1, :estimator => "")
 
     # the prior variance is estimated from the true values, which are draws from the prior
@@ -354,19 +368,22 @@ end
 _markersize(n) = n <= 100 ? 8 : n <= 500 ? 6 : 5
 _opacity(n) = n <= 100 ? 0.9 : n <= 500 ? 0.7 : 0.5
 
-function _axislabels(kind, assessment, difference)
+function _axislabels(kind, assessment, difference, intervals)
     kind === :ecdf && return ("Fractional rank statistic", difference ? "ECDF difference" : "ECDF")
     kind === :zscore && return ("Posterior contraction", "Posterior z-score")
     kind === :calibration && return ("Probability level, τ", "Pr(Q(Z, τ) ≥ θ)")
     estimates = assessment.estimates
-    interval = if !isnothing(assessment.samples)
+    points = "estimate" ∈ names(estimates)
+    interval = if points && !intervals
+        nothing   # only the point estimates are drawn
+    elseif !isnothing(assessment.samples)
         "95% credible interval"
     elseif "α" ∈ names(estimates)
         "$(round(Int, 100 * (1 - first(estimates.α))))% interval"
     elseif "lower" ∈ names(estimates)
         "interval"
     end
-    ylabel = isnothing(interval) ? "Estimate" : "estimate" ∈ names(estimates) ? "Estimate ($interval)" : uppercasefirst(interval)
+    ylabel = isnothing(interval) ? "Estimate" : points ? "Estimate ($interval)" : uppercasefirst(interval)
     return ("True value", ylabel)
 end
 
