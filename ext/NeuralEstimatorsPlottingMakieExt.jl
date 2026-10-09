@@ -305,7 +305,7 @@ function _ecdf(posteriors::DataFrame, prob, difference)
         # Evaluate at G thresholds on the rank scale; under calibration the rank is uniform on 0:L, so that
         # P(rank < threshold) = threshold / (L + 1) exactly
         G = min(L + 1, n, 1000)
-        thresholds = [fld(i * (L + 1), G) for i in 0:G]
+        thresholds = [fld(i * (L + 1), G) for i = 0:G]
         x = thresholds ./ (L + 1)
         ranks = sort(df.rank)
         y = [searchsortedfirst(ranks, threshold) - 1 for threshold in thresholds] ./ n
@@ -328,7 +328,7 @@ function _ecdfband(n::Integer, p::AbstractVector, prob::Real)
     limits(γ) = (Int.(binominvcdf.(n, p, γ / 2)), Int.(binominvcdf.(n, p, 1 - γ / 2)))
     lo, hi = 0.0, 1 - prob
     _coverage(n, p, limits(hi)...) >= prob && return limits(hi)
-    for _ in 1:25   # the coverage is non-increasing in γ, and the limits are integers
+    for _ = 1:25   # the coverage is non-increasing in γ, and the limits are integers
         γ = (lo + hi) / 2
         _coverage(n, p, limits(γ)...) >= prob ? (lo = γ) : (hi = γ)
     end
@@ -346,7 +346,7 @@ function _coverage(n::Integer, p::AbstractVector, lower::Vector{Int}, upper::Vec
         previous = p[i]
         increment = poispdf.(λ, 0:Int(poisinvcdf(λ, 1 - 1e-12)))
         updated = zeros(upper[i] - lower[i] + 1)
-        for x in lower[i]:upper[i], x₀ in max(from, x - length(increment) + 1):min(to, x)
+        for x = lower[i]:upper[i], x₀ = max(from, x - length(increment) + 1):min(to, x)
             updated[x - lower[i] + 1] += inside[x₀ - from + 1] * increment[x - x₀ + 1]
         end
         inside, from, to = updated, lower[i], upper[i]
