@@ -1985,6 +1985,7 @@ end
     merged = assess([point, point], θ, Z; estimator_names = ["A", "B"], use_gpu = false, verbose = false)
     @test plot(merged) isa Figure
     @test plot(merged; grid = true) isa Figure
+    @test plot(assessment; transpose = true) isa Figure
 
     # Posterior samples: a subset of the plots, and several estimators
     posterior = PosteriorEstimator(Chain(Dense(m, 16, gelu), Dense(16, 3d)), d; num_summaries = 3d, q = Gaussian)
@@ -1996,6 +1997,18 @@ end
     merged = assess([posterior, posterior], θ, Z; estimator_names = ["A", "B"], N = 100, use_gpu = false, verbose = false)
     @test plot(merged) isa Figure
     @test plot(merged; grid = true) isa Figure
+
+    # Layout: by default one row of panels per plot (3 × d); transposed, one row per parameter (d × 3)
+    fig = plot(assessment)
+    width, height = size(fig.scene)
+    @test count(block -> block isa Axis, fig.content) == 3d
+    @test width < height
+    fig = plot(assessment; transpose = true)
+    width, height = size(fig.scene)
+    @test count(block -> block isa Axis, fig.content) == 3d
+    @test width > height
+    @test plot(assessment; transpose = false) isa Figure
+    @test plot(merged; transpose = true, grid = true) isa Figure
 
     # Simultaneous confidence band for the ECDF: its coverage probability against an enumeration of all outcomes,
     # and the band attaining the nominal coverage without exceeding it by much

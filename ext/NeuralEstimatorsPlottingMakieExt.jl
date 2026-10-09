@@ -102,6 +102,11 @@ By default all of them are drawn; use the keyword argument `plots` to select a s
   easier to read with more than three estimators.
 - `ncols = nothing`: the number of panels in each row, after which the parameters
   wrap onto a new row. By default, at most four, balanced across rows.
+- `transpose = nothing`: by default, the figure has one row of panels for each plot
+  and one column for each parameter. If `transpose = true`, it instead has one row
+  for each parameter and one column for each plot (e.g., 2 × 3 for two parameters
+  and three plots), and `ncols` has no effect. With a single parameter, the figure
+  is transposed unless `transpose = false`.
 - `figure = (;)`, `axis = (;)`: attributes passed to the `Figure` and to every
   `Axis`, respectively. By default the panels are of a fixed size and the figure
   is sized to fit them; give `figure = (; size = (w, h))` to fix the size of the
@@ -117,6 +122,7 @@ assessment = assess(estimator, θ_test, Z_test)
 plot(assessment)                               # all available plots
 plot(assessment; plots = :recovery)            # a single plot
 plot(assessment; plots = (:recovery, :ecdf))   # a subset (posterior samples)
+plot(assessment; transpose = true)             # one row per parameter, one column per plot
 ```
 """
 function plot(assessment::Assessment;
@@ -125,6 +131,7 @@ function plot(assessment::Assessment;
     difference::Bool = true,
     grid::Bool = false,
     ncols::Union{Integer, Nothing} = nothing,
+    transpose::Union{Bool, Nothing} = nothing,
     figure = (;),
     axis = (;)
 )
@@ -137,14 +144,15 @@ function plot(assessment::Assessment;
 
     # The figure is made of blocks of panels, one block for each plot and, if `grid = true`, for each estimator.
     # A block has one panel per parameter, wrapped over `nc` columns, with its axis labels in a column to its
-    # left and in a row beneath it. The blocks are stacked, except that with a single parameter (when a block
-    # is a single panel) the plots are placed side by side, with one row for each group of estimators.
+    # left and in a row beneath it. The blocks are stacked, so that each row of panels belongs to one plot.
+    # If the figure is transposed (the default with a single parameter), a block is instead a single column of
+    # panels and the plots are placed side by side, with one row of blocks for each group of estimators.
     groups = grid && length(estimators) > 1 ? [[estimator] for estimator in estimators] : [estimators]
     d = length(parameters)
-    single = d == 1
-    nc = isnothing(ncols) ? cld(d, cld(d, 4)) : clamp(ncols, 1, d)
+    transposed = something(transpose, d == 1)
+    nc = transposed ? 1 : isnothing(ncols) ? cld(d, cld(d, 4)) : clamp(ncols, 1, d)
     nr = cld(d, nc)
-    blockcols = single ? length(kinds) : 1
+    blockcols = transposed ? length(kinds) : 1
 
     # Panels have a fixed size, and the figure is resized to fit them, unless the size of the figure is given
     fixed = !haskey(figure, :size)
@@ -160,7 +168,7 @@ function plot(assessment::Assessment;
 
         for (gi, group) in enumerate(groups)
             # position of the block in the grid of blocks, and the rows above it and columns to its left
-            R, C = single ? (gi, ki) : ((ki - 1) * length(groups) + gi, 1)
+            R, C = transposed ? (gi, ki) : ((ki - 1) * length(groups) + gi, 1)
             top, left = (R - 1) * (nr + 1), (C - 1) * (nc + 1)
 
             for (i, parameter) in enumerate(parameters)
@@ -170,7 +178,7 @@ function plot(assessment::Assessment;
                     limits = limits(parameter),
                     xticklabelsvisible = !shared || i + nc > d,
                     yticklabelsvisible = !shared || col == 1,
-                    (fixed ? (; width = side, height = shared && !single ? 0.75 * side : side) : (;))...,
+                    (fixed ? (; width = side, height = shared && !transposed ? 0.75 * side : side) : (;))...,
                     axis...
                 )
                 _draw!(ax, kind, panels, parameter, group, colors, ink)
