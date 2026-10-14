@@ -4,13 +4,15 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 
 ---
 
-### Functionality
+### Features
 
 **Estimator types & methods**
 - Model selection/comparison: see [here](https://bayesflow.org/main/api/bayesflow.approximators.ModelComparisonApproximator.html#bayesflow.approximators.ModelComparisonApproximator), [this paper](https://arxiv.org/abs/2004.10629), and [this paper](https://arxiv.org/pdf/2503.23156).
 - Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
 - Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference.
 - Ensemble methods with general estimator types (e.g., PosteriorEstimator, RatioEstimator).
+- `PriorEstimator` based on unconditional density estimation (see [#99](https://github.com/msainsburydale/NeuralEstimators.jl/issues/99)).
+- More architectures for `NormalisingFlow`.
 
 **Training**
 - Support for reading data from disk during training, to handle data sets that are too large to fit in memory.
@@ -19,8 +21,12 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Straightforward way to incorporate box parameter constraints and ensure that posterior samples are in the prior support.
 - assess.jl/inference.jl for more general parameter shapes (currently assumes the parameters are stored as a matrix).
 
+### User-friendliness
+
+- Integrated standardization/normalization layers: standardizing the data/parameters is often very important, but currently users have to do this manually.
+
 ### Documentation
-- Example: Unconditional density estimation (see [#99](https://github.com/msainsburydale/NeuralEstimators.jl/issues/99)).
+- Example: Prior estimation based on unconditional density estimation (see [#99](https://github.com/msainsburydale/NeuralEstimators.jl/issues/99)).
 - Example: In the time-series example, also illustrate partially-exchangeable networks using DeepSet.
 - Example: Illustrate Lévy Processes (a time-series model) using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)).
