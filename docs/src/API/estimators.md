@@ -42,6 +42,14 @@ IntervalEstimator
 QuantileEstimator
 ```
 
+## Prior estimators
+
+[`PriorEstimator`](@ref) approximates a distribution from samples alone, without conditioning on data (e.g., to learn a prior distribution from existing parameter estimates). The functions used with a trained `PriorEstimator` are listed under [Learned prior distributions](@ref).
+
+```@docs
+PriorEstimator
+```
+
 ## Ensembles
 
 [`Ensemble`](@ref) combines multiple estimators, aggregating their individual estimates to improve accuracy.
@@ -52,7 +60,7 @@ Ensemble
 
 ## Helper functions
 
-The following helper functions operate on an estimator to inspect its components or apply parts of it to data. For the main inference functions used post-training, see [Inference with observed data](@ref).
+The following helper functions operate on an estimator to inspect its components or apply parts of it to data. For the main inference functions used post-training, see [Inference](@ref).
 
 ```@docs
 summarynetwork

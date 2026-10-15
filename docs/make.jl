@@ -37,6 +37,7 @@ makedocs(
             "examples/data_spatiotemporal.md",
             "examples/data_expert_summaries.md",
             "examples/data_missing_censored.md",
+            "examples/data_prior.md",
             "Gridded spatial data" => [
                 "Global parameters" => "examples/data_gridded.md",
                 "Spatially varying parameters" => "examples/data_gridded_nonstationary.md"

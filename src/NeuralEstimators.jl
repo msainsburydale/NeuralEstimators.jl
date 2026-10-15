@@ -31,7 +31,8 @@ using Random: randexp, shuffle, randperm, AbstractRNG
 using SparseArrays
 using Statistics: mean, median, sum, quantile
 using StatsBase
-using StatsBase: wsample, sample
+using StatsBase: wsample
+import StatsBase: sample # extended for PriorEstimator, so that it remains the function exported by StatsBase, Distributions, etc.
 
 export tanhloss, kpowerloss, intervalscore, quantileloss
 include("losses.jl")
@@ -63,7 +64,7 @@ end
 include("Chebyshev1d.jl")
 
 export AbstractNeuralEstimator, AbstractBayesEstimator
-export PosteriorEstimator, RatioEstimator, TelescopingRatioEstimator, PointEstimator, IntervalEstimator, QuantileEstimator
+export PosteriorEstimator, PriorEstimator, RatioEstimator, TelescopingRatioEstimator, PointEstimator, IntervalEstimator, QuantileEstimator
 export Ensemble
 export LuxEstimator
 export summarynetwork, setsummarynetwork, summarystatistics
@@ -94,6 +95,7 @@ export assess, Assessment, merge, join, risk, bias, rmse, coverage, intervalscor
 include("assess.jl")
 
 export estimate, infer, sampleposterior, logposterior, spikeprobability, logratio, posteriormean, posteriormedian, posteriorquantile, bootstrap, interval, quantiles
+export sample, logdensity, forward, inverse
 include("inference.jl")
 
 export stackarrays, expandgrid, numberreplicates, samplesize, drop, containertype, rowwisenorm, subsetreplicates

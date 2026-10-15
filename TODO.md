@@ -11,7 +11,6 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Hierarchical models: see [this paper](https://arxiv.org/abs/2408.13230) and [this paper](https://arxiv.org/abs/2505.14429).
 - Additional [approximate distributions](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/approximatedistributions/) for full posterior inference.
 - Ensemble methods with general estimator types (e.g., PosteriorEstimator, RatioEstimator).
-- `PriorEstimator` based on unconditional density estimation (see [#99](https://github.com/msainsburydale/NeuralEstimators.jl/issues/99)).
 - More architectures for `NormalisingFlow`.
 
 **Training**
@@ -24,9 +23,9 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 ### User-friendliness
 
 - Integrated standardization/normalization layers: standardizing the data/parameters is often very important, but currently users have to do this manually.
+- Allow saving and loading trained networks with [ONNX](https://onnx.ai/).
 
 ### Documentation
-- Example: Prior estimation based on unconditional density estimation (see [#99](https://github.com/msainsburydale/NeuralEstimators.jl/issues/99)).
 - Example: In the time-series example, also illustrate partially-exchangeable networks using DeepSet.
 - Example: Illustrate Lévy Processes (a time-series model) using DeepSet (see [here](https://arxiv.org/abs/2505.01639)).
 - Example: Discrete parameters (e.g., [Chan et al., 2018](https://pubmed.ncbi.nlm.nih.gov/33244210/)).

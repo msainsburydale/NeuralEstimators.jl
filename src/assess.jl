@@ -18,15 +18,23 @@ If the estimator is an [`IntervalEstimator`](@ref), the column `estimate` will b
 
 If the estimator is a [`QuantileEstimator`](@ref), there will also be a column `prob` indicating the probability level of the corresponding quantile estimate.
 
+If the estimator is a [`PriorEstimator`](@ref), the field `estimates` is `nothing`, and the field `samples` is a long-form `DataFrame` with the columns `parameter`, `draw`, and `value` (as given above), and `distribution`, which is `"learned"` for draws from the learned distribution and `"true"` for test samples from the true distribution. The field `risk` then contains the average negative log density of the test samples under the learned distribution (or `nothing` if no test samples were given).
+
 Use `merge()` to combine assessments from multiple estimators of the same type or `join()` to combine assessments from a [`PointEstimator`](@ref) and an [`IntervalEstimator`](@ref).
 """
 struct Assessment
-    estimates::DataFrame
+    estimates::Union{DataFrame, Nothing}
     runtime::DataFrame
     samples::Union{DataFrame, Nothing}
     risk
 end
 Assessment(estimates, runtime) = Assessment(estimates, runtime, nothing, nothing)
+
+# The estimates of an assessment, which are absent for a PriorEstimator
+function _estimates(assessment::Assessment)
+    isnothing(assessment.estimates) && throw(ArgumentError("This assessment contains no estimates (e.g., it is the assessment of a PriorEstimator), so only `risk(assessment)` and `plot(assessment)` apply"))
+    return assessment.estimates
+end
 
 function merge(assessment::Assessment, assessments::Assessment...)
     estimates = assessment.estimates
@@ -102,6 +110,8 @@ end
 """
 	assess(estimator, θ, Z; ...)
 	assess(estimators::Vector, θ, Z; ...)
+	assess(estimator::PriorEstimator, θ; N = size(θ, 2), ...)
+	assess(estimator::PriorEstimator; N = 1000, ...)
 Assesses an `estimator` (or a collection of `estimators`) based on true parameters `θ` and corresponding simulated data `Z`.
 
 The parameters `θ` should be given as a ``d`` × ``K`` matrix, where ``d`` is the parameter dimension and ``K`` is the number of sampled parameter vectors.
@@ -109,6 +119,8 @@ The parameters `θ` should be given as a ``d`` × ``K`` matrix, where ``d`` is t
 When `Z` contains more simulated data sets than the number ``K`` of sampled parameter vectors, `θ` will be recycled via horizontal concatenation: `θ = repeat(θ, outer = (1, J))`, where `J = numobs(Z) ÷ K` is the number of simulated data sets for each parameter vector. This allows assessment of the estimator's sampling distribution under fixed parameters.
 
 The return value is of type [`Assessment`](@ref).
+
+A [`PriorEstimator`](@ref) is assessed without data. Instead, `N` draws from the learned distribution are compared with test samples `θ` from the true distribution, if given as a ``d`` × ``K`` matrix (by default, `N` is ``K``, or 1000 if no test samples are given), and the risk is the average negative log density of the test samples under the learned distribution (see [`risk`](@ref)). The draws can be visualised with `plot(assessment)`. The keyword arguments `parameter_names`, `estimator_name`, `device`, and `use_gpu` (the latter two passed to [`sample`](@ref sample(::PriorEstimator, ::Integer)) and [`logdensity`](@ref)) also apply.
 
 # Keyword arguments
 - `estimator_name::String` (or `estimator_names::Vector{String}` for multiple estimators): name(s) of the estimator(s) (sensible defaults provided).
@@ -242,6 +254,56 @@ function assess(
     end
 
     return Assessment(estimates, runtime, samples_df, empirical_risk)
+end
+
+# Learned distributions, with or without test samples θ from the true distribution
+assess(estimator::PriorEstimator; kwargs...) = _assessprior(estimator, nothing; kwargs...)
+assess(estimator::PriorEstimator, θ; kwargs...) = _assessprior(estimator, θ; kwargs...)
+assess(estimator::PriorEstimator, ps::NamedTuple, st::NamedTuple; kwargs...) = _assessprior(estimator, nothing, ps, st; kwargs...)
+assess(estimator::PriorEstimator, θ, ps::NamedTuple, st::NamedTuple; kwargs...) = _assessprior(estimator, θ, ps, st; kwargs...)
+assess(estimator::PriorEstimator, θ, Z, args...; kwargs...) = throw(ArgumentError("A PriorEstimator is assessed without data: use `assess(estimator, θ)`, where `θ` contains test samples from the true distribution, or `assess(estimator)`"))
+
+function _assessprior(
+    estimator::PriorEstimator, θ, args...;
+    N::Union{Nothing, Integer} = nothing,
+    parameter_names::Union{Nothing, Vector{String}} = nothing,
+    estimator_name::Union{Nothing, String} = nothing,
+    estimator_names::Union{Nothing, String} = nothing,
+    device = nothing,
+    use_gpu::Bool = true
+)
+    # Test samples from the true distribution, if given; NamedMatrix rows carry authoritative parameter names
+    if !isnothing(θ)
+        θ = _extractθ(θ)
+        θ isa NamedMatrix && (parameter_names = names(θ, 1))
+        θ = convert(Matrix, θ)
+    end
+
+    # Draws from the learned distribution
+    N = something(N, isnothing(θ) ? 1000 : size(θ, 2))
+    runtime = @elapsed θ_learned = sample(estimator, N, args...; device = device, use_gpu = use_gpu)
+    d = size(θ_learned, 1)
+    parameter_names = something(parameter_names, ["θ$i" for i ∈ 1:d])
+    @assert length(parameter_names) == d "length(parameter_names) ($(length(parameter_names))) must equal the parameter dimension d ($d)"
+    @assert isnothing(θ) || size(θ, 1) == d "The test samples have dimension $(size(θ, 1)), but the learned distribution has dimension $d"
+
+    # Average negative log density of the test samples under the learned distribution
+    empirical_risk = isnothing(θ) ? nothing : -mean(logdensity(estimator, θ, args...; device = device, use_gpu = use_gpu))
+
+    # All draws in long form, labelled by the distribution from which they were drawn
+    samples = _draws_to_df(θ_learned, parameter_names, "learned")
+    isnothing(θ) || (samples = vcat(samples, _draws_to_df(θ, parameter_names, "true")))
+    runtime = DataFrame(runtime = runtime)
+
+    # Add estimator name if it was provided
+    _add_estimator_name!(samples, runtime, _resolve_estimator_name(estimator_name, estimator_names))
+
+    return Assessment(nothing, runtime, samples, empirical_risk)
+end
+
+function _draws_to_df(θ::AbstractMatrix, parameter_names, distribution::String)
+    d, n = size(θ)
+    DataFrame(parameter = repeat(parameter_names, outer = n), distribution = distribution, draw = repeat(1:n, inner = d), value = vec(θ))
 end
 
 """
@@ -443,14 +505,14 @@ r(\hat{\boldsymbol{\theta}}(\cdot))
 where ``\{\boldsymbol{\theta}^{(k)} : k = 1, \dots, K\}`` denotes a set of ``K`` parameter vectors sampled from the
 prior and, for each ``k``, data ``\boldsymbol{Z}^{(k)}`` are simulated from the statistical model conditional on ``\boldsymbol{\theta}^{(k)}``.
 
-If the `Assessment` object corresponds to an estimator with a self-defined loss (e.g., [`PosteriorEstimator`](@ref)), the precomputed risk is returned directly. Otherwise, the risk is computed from the estimates and true parameters using the provided `loss` function.
+If the `Assessment` object corresponds to an estimator with a self-defined loss (e.g., [`PosteriorEstimator`](@ref)), the precomputed risk is returned directly. For a [`PriorEstimator`](@ref), this is the average negative log density of the test samples under the learned distribution. Otherwise, the risk is computed from the estimates and true parameters using the provided `loss` function.
 
 # Keyword arguments
 - `loss = (x, y) -> abs(x - y)`: a binary operator defining the loss function (default: absolute-error loss)
 - `average_over_parameters::Bool = false`: if `true`, the loss is averaged over all parameters; otherwise (default), it is computed separately for each parameter.
 """
 function risk(assessment::Assessment; loss = nothing, args...)
-    isnothing(loss) ? assessment.risk : risk(assessment.estimates; loss = loss, args...)
+    isnothing(loss) ? assessment.risk : risk(_estimates(assessment); loss = loss, args...)
 end
 
 function risk(df::DataFrame;
@@ -477,7 +539,7 @@ Computes a Monte Carlo approximation of an estimator's bias,
 where ``\{\boldsymbol{\theta}^{(k)} : k = 1, \dots, K\}`` denotes a set of ``K`` parameter vectors sampled from the
 prior and, for each ``k``, data ``\boldsymbol{Z}^{(k)}`` are simulated from the statistical model conditional on ``\boldsymbol{\theta}^{(k)}``.
 """
-bias(assessment::Assessment; args...) = bias(assessment.estimates; args...)
+bias(assessment::Assessment; args...) = bias(_estimates(assessment); args...)
 
 function bias(df::DataFrame;
     average_over_parameters::Bool = false,
@@ -502,7 +564,7 @@ Computes a Monte Carlo approximation of an estimator's root-mean-squared error,
 where ``\{\boldsymbol{\theta}^{(k)} : k = 1, \dots, K\}`` denotes a set of ``K`` parameter vectors sampled from the
 prior and, for each ``k``, data ``\boldsymbol{Z}^{(k)}`` are simulated from the statistical model conditional on ``\boldsymbol{\theta}^{(k)}``.
 """
-rmse(assessment::Assessment; args...) = rmse(assessment.estimates; args...)
+rmse(assessment::Assessment; args...) = rmse(_estimates(assessment); args...)
 
 function rmse(df::DataFrame; average_over_parameters::Bool = false,
     average_over_sample_sizes::Bool = true)
@@ -526,7 +588,7 @@ and the proportion of parameters below and above the lower and upper bounds, res
 function coverage(assessment::Assessment;
     average_over_parameters::Bool = false,
     average_over_sample_sizes::Bool = true)
-    df = assessment.estimates
+    df = _estimates(assessment)
 
     @assert all(["lower", "truth", "upper"] .∈ Ref(names(df))) "The assessment object should contain the columns `lower`, `upper`, and `truth`"
 
@@ -554,7 +616,7 @@ end
 function empiricalprob(assessment::Assessment;
     average_over_parameters::Bool = false,
     average_over_sample_sizes::Bool = true)
-    df = assessment.estimates
+    df = _estimates(assessment)
 
     @assert all(["prob", "estimate", "truth"] .∈ Ref(names(df)))
 
@@ -580,7 +642,7 @@ end
 function intervalscore(assessment::Assessment;
     average_over_parameters::Bool = false,
     average_over_sample_sizes::Bool = true)
-    df = assessment.estimates
+    df = _estimates(assessment)
 
     @assert all(["lower", "truth", "upper"] .∈ Ref(names(df))) "The assessment object should contain the columns `lower`, `upper`, and `truth`"
     @assert "α" ∈ names(df) "The assessment object should contain the column `α` specifying the nominal coverage of the interval"

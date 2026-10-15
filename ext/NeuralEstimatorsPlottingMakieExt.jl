@@ -88,10 +88,22 @@ By default all of them are drawn; use the keyword argument `plots` to select a s
   prior variance. Ideally the z-scores are centred on zero and the contractions
   are close to one.
 
+**Learned distributions** ([`PriorEstimator`](@ref)): draws from the learned
+distribution (filled histograms and coloured points), compared with test samples from the true
+distribution (outlined histograms and points in the text colour) if these were given
+to [`assess`](@ref); otherwise, the learned distribution is shown alone.
+
+- `:pairs` (default): with one parameter, a histogram; with two parameters, the two
+  marginal histograms and a scatter plot of the joint draws; with three or more
+  parameters, a pairs plot with the marginal histograms on the diagonal and scatter
+  plots of the joint draws off the diagonal (see `overlay`).
+- `:marginals`: the marginal histograms only, in a single row (see `ncols`).
+
 # Keyword arguments
 - `plots = nothing`: the plots to draw, given as a `Symbol` or a collection of
   `Symbol`s from those listed above, in the order in which they should appear
   (e.g., `plots = (:recovery, :ecdf)`). By default, all available plots are drawn.
+  For a [`PriorEstimator`](@ref), give one of `:pairs` (the default) or `:marginals`.
 - `intervals = false`: whether to draw intervals behind the point estimates in the
   `:recovery` plot. They are not drawn by default, since they tend to hide the
   points when there are many test data sets.
@@ -105,12 +117,17 @@ By default all of them are drawn; use the keyword argument `plots` to select a s
   `grid = true`, each estimator is instead given its own row of panels, which is
   easier to read with more than three estimators.
 - `ncols = nothing`: the number of panels in each row, after which the parameters
-  wrap onto a new row. By default, at most four, balanced across rows.
+  wrap onto a new row. By default, at most four, balanced across rows; for the
+  `:marginals` plot of a [`PriorEstimator`](@ref), all panels are in one row.
 - `transpose = nothing`: by default, the figure has one row of panels for each plot
   and one column for each parameter. If `transpose = true`, it instead has one row
   for each parameter and one column for each plot (e.g., 2 × 3 for two parameters
   and three plots), and `ncols` has no effect. With a single parameter, the figure
   is transposed unless `transpose = false`.
+- `overlay = false`: for the `:pairs` plot of a [`PriorEstimator`](@ref) with three or
+  more parameters, the learned draws are drawn below the diagonal and the test samples
+  above it. If `overlay = true`, both are instead drawn below the diagonal, and the
+  panels above it are left empty.
 - `figure = (;)`, `axis = (;)`: attributes passed to the `Figure` and to every
   `Axis`, respectively. By default the panels are of a fixed size and the figure
   is sized to fit them; give `figure = (; size = (w, h))` to fix the size of the
@@ -127,6 +144,11 @@ plot(assessment)                               # all available plots
 plot(assessment; plots = :recovery)            # a single plot
 plot(assessment; plots = (:recovery, :ecdf))   # a subset (posterior samples)
 plot(assessment; transpose = true)             # one row per parameter, one column per plot
+
+# Learned distributions (PriorEstimator), with or without test samples from the true distribution
+assessment = assess(estimator, θ_test)
+plot(assessment)                               # pairs plot
+plot(assessment; plots = :marginals)           # marginal histograms only
 ```
 """
 function plot(assessment::Assessment;
@@ -137,9 +159,11 @@ function plot(assessment::Assessment;
     grid::Bool = false,
     ncols::Union{Integer, Nothing} = nothing,
     transpose::Union{Bool, Nothing} = nothing,
+    overlay::Bool = false,
     figure = (;),
     axis = (;)
 )
+    _isprior(assessment) && return _plotprior(assessment; plots, overlay, ncols, figure, axis)
     0 < prob < 1 || throw(ArgumentError("`prob` must lie strictly between 0 and 1"))
     kinds = _resolveplots(assessment, plots)
     data = _plotdata(assessment, kinds, prob, difference, intervals)
@@ -215,6 +239,7 @@ end
 # ---- Which plots to draw, and the data behind them ----
 
 function _availableplots(assessment::Assessment)
+    _isprior(assessment) && return (:pairs, :marginals)
     columns = names(assessment.estimates)
     isnothing(assessment.samples) || return (:recovery, :ecdf, :zscore)
     "prob" ∈ columns && return (:calibration,)
@@ -466,6 +491,117 @@ function _typeset(name)
     i = findfirst(in('₀':'₉'), name)
     (isnothing(i) || i == firstindex(name) || !all(in('₀':'₉'), name[i:end])) && return name
     return rich(name[1:prevind(name, i)], subscript(map(c -> '0' + (c - '₀'), name[i:end])))
+end
+
+# ---- Learned distributions (PriorEstimator) ----
+
+# The assessment of a PriorEstimator has no estimates, and its samples are labelled by the distribution they are from
+_isprior(assessment::Assessment) = !isnothing(assessment.samples) && "distribution" ∈ names(assessment.samples)
+
+function _plotprior(assessment::Assessment; plots, overlay, ncols, figure, axis)
+    kinds = isnothing(plots) ? [:pairs] : _resolveplots(assessment, plots)
+    length(kinds) == 1 || throw(ArgumentError("`plots` should be one of :pairs or :marginals for the assessment of a PriorEstimator; received $(repr(plots))"))
+    kind = only(kinds)
+    samples = assessment.samples
+    if "estimator" ∈ names(samples) && length(unique(samples.estimator)) > 1
+        throw(ArgumentError("the assessments of several PriorEstimators cannot be drawn together; plot them one at a time"))
+    end
+
+    # Draws as d × n matrices, with the test samples from the true distribution (`truth`) only if they were given
+    parameters = unique(samples.parameter)
+    d = length(parameters)
+    learned = _drawmatrix(samples, "learned", parameters)
+    truth = _drawmatrix(samples, "true", parameters)
+    draws = isnothing(truth) ? [learned] : [learned, truth]
+
+    # One range and one set of bin edges for each parameter, shared by both samples and by every panel
+    limits = [_span(reduce(vcat, (x[i, :] for x in draws)), 0.05) for i in 1:d]
+    nbins = clamp(ceil(Int, sqrt(minimum(size.(draws, 2)))), 10, 50)
+    edges = [range(limits[i]...; length = nbins + 1) for i in 1:d]
+    colors, ink = _themecolors([""])
+    color = colors[""]
+    labels = _typeset.(parameters)
+
+    fixed = !haskey(figure, :size)
+    fig = Figure(; figure...)
+    layout = GridLayout(fig[1, 1])
+    mirrored = kind === :pairs && d >= 3 && !overlay && !isnothing(truth)   # test samples drawn above the diagonal
+
+    if kind === :marginals || d <= 2
+        # A row of marginal histograms (wrapped after `ncols` panels) and, with two parameters, a scatter plot of the joint draws
+        nc = kind === :marginals && !isnothing(ncols) ? clamp(ncols, 1, d) : d
+        side = d == 1 ? 300 : 220
+        panelsize = fixed ? (; width = side, height = 0.8 * side) : (;)
+        for i in 1:d
+            row, col = cld(i, nc), mod1(i, nc)
+            ax = Axis(layout[row, col]; xlabel = labels[i], ylabel = col == 1 ? "Density" : "", limits = (limits[i]..., nothing, nothing), panelsize..., axis...)
+            _drawmarginal!(ax, i, learned, truth, edges[i], color, ink)
+        end
+        if kind === :pairs && d == 2
+            ax = Axis(layout[1, 3]; xlabel = labels[1], ylabel = labels[2], limits = (limits[1]..., limits[2]...), panelsize..., axis...)
+            isnothing(truth) || _drawjoint!(ax, 2, 1, truth, ink)
+            _drawjoint!(ax, 2, 1, learned, color)
+        end
+    else
+        # Pairs plot: marginal histograms on the diagonal and scatter plots of the joint draws off the diagonal, with
+        # the learned draws below it and the test samples above it (or both below it, if `overlay = true`)
+        side = d <= 3 ? 200 : max(110, 600 ÷ d)
+        panelsize = fixed ? (; width = side, height = side) : (;)
+        for i in 1:d, j in 1:d
+            j > i && !mirrored && continue
+            ax = Axis(layout[i, j];
+                xlabel = i == d ? labels[j] : "",
+                ylabel = j == 1 && (i > 1 || mirrored) ? labels[i] : "",
+                xticklabelsvisible = i == d,
+                yticklabelsvisible = j == 1 && i > 1,
+                limits = i == j ? (limits[i]..., nothing, nothing) : (limits[j]..., limits[i]...),
+                panelsize..., axis...
+            )
+            if i == j
+                _drawmarginal!(ax, i, learned, truth, edges[i], color, ink)
+                hideydecorations!(ax; label = false)   # the density scale differs from the scale of the parameter
+            elseif j > i
+                _drawjoint!(ax, i, j, truth, ink)
+            else
+                overlay && !isnothing(truth) && _drawjoint!(ax, i, j, truth, ink)
+                _drawjoint!(ax, i, j, learned, color)
+            end
+        end
+    end
+
+    if !isnothing(truth)
+        which = mirrored ? (" (below the diagonal)", " (above the diagonal)") : ("", "")
+        Legend(fig[2, 1], [PolyElement(color = (color, 0.5)), LineElement(color = ink, linewidth = 1.5)],
+            ["Learned distribution" * which[1], "True distribution" * which[2]];
+            orientation = :horizontal, framevisible = false, padding = 0, tellwidth = fixed
+        )
+        rowgap!(fig.layout, 1, 12)
+    end
+    fixed && resize_to_layout!(fig)
+
+    return fig
+end
+
+# The draws from one distribution ("learned" or "true") as a d × n matrix, or `nothing` if there are none
+function _drawmatrix(samples::DataFrame, distribution::String, parameters)
+    df = filter(:distribution => ==(distribution), samples)
+    nrow(df) == 0 && return nothing
+    wide = unstack(df, :draw, :parameter, :value)
+    return permutedims(Matrix{Float64}(wide[:, parameters]))
+end
+
+# Histogram of the learned draws, outlined by that of the test samples
+function _drawmarginal!(ax, i, learned, truth, edges, color, ink)
+    hist!(ax, learned[i, :]; bins = edges, normalization = :pdf, color = (color, 0.5))
+    isnothing(truth) || stephist!(ax, truth[i, :]; bins = edges, normalization = :pdf, color = ink, linewidth = 1.5)
+    return ax
+end
+
+# Scatter plot of the joint draws of parameters j (x-axis) and i (y-axis), thinned so that dense panels remain legible
+function _drawjoint!(ax, i, j, draws, color)
+    n = min(size(draws, 2), 2000)
+    scatter!(ax, draws[j, 1:n], draws[i, 1:n]; color = (color, _opacity(n)), markersize = _markersize(n))
+    return ax
 end
 
 end  # module

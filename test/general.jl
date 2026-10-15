@@ -1391,10 +1391,17 @@ end
             @test y ≈ ds(P) rtol = 1e-4
             @test y ≈ ds(Z) rtol = 1e-4
             @test y ≈ reduce(hcat, [ds([z]) for z ∈ Z]) rtol = 1e-4
-            tgt = randn(Float32, d, length(ms))
-            g1 = trainables(Flux.gradient(m -> mae(m(G), tgt), ds)[1])
-            g2 = trainables(Flux.gradient(m -> mae(m(P), tgt), ds)[1])
-            @test all(isapprox.(g1, g2; rtol = 1e-3, atol = 1e-6))
+            # NB gradients are compared in double precision: in single precision, the gradient of
+            # the bias in the final layer of ψ, a sum over every node and replicate in the batch,
+            # carries rounding error of order 1e-4 that depends on how the batch is packed
+            Z64 = f64.(Z)
+            G64 = NeuralEstimators._packbatch(Z64)
+            P64 = NeuralEstimators.PackedGraphs(Z64)
+            ds64 = f64(ds)
+            tgt = randn(d, length(ms))
+            g1 = trainables(Flux.gradient(m -> mae(m(G64), tgt), ds64)[1])
+            g2 = trainables(Flux.gradient(m -> mae(m(P64), tgt), ds64)[1])
+            @test all(isapprox.(g1, g2; rtol = 1e-6))
             testbackprop(ds, G, dvc)
         end
     end
@@ -2009,6 +2016,32 @@ end
     @test width > height
     @test plot(assessment; transpose = false) isa Figure
     @test plot(merged; transpose = true, grid = true) isa Figure
+
+    # Learned distributions (PriorEstimator), with and without test samples from the true distribution. The
+    # default layout depends on the number of parameters: a histogram (d = 1), a row of two histograms and a
+    # scatter plot (d = 2), and a pairs plot (d ≥ 3), whose upper triangle is empty without test samples or
+    # with `overlay = true`
+    naxes(fig) = count(block -> block isa Axis, fig.content)
+    for (dd, npanels) in ((1, 1), (2, 3), (3, 9))
+        θ_prior = randn(Float32, dd, 100)
+        prior = train(PriorEstimator(dd; depth = 1, width = 16), θ_prior, θ_prior; epochs = 1, verbose = false, use_gpu = false, savepath = nothing)
+        prior_assessment = assess(prior, θ_prior; N = 200, use_gpu = false)
+        @test isnothing(prior_assessment.estimates)
+        @test isfinite(risk(prior_assessment))
+        @test nrow(prior_assessment.samples) == dd * (200 + 100)
+        @test Set(prior_assessment.samples.distribution) == Set(["learned", "true"])
+        learned = assess(prior; N = 200, use_gpu = false)
+        @test isnothing(risk(learned))
+        @test all(==("learned"), learned.samples.distribution)
+        corner = dd >= 3 ? dd * (dd + 1) ÷ 2 : npanels
+        @test naxes(plot(prior_assessment)) == npanels
+        @test naxes(plot(prior_assessment; overlay = true)) == corner
+        @test naxes(plot(learned)) == corner
+        @test naxes(plot(prior_assessment; plots = :marginals)) == dd
+        @test_throws ArgumentError plot(prior_assessment; plots = :ecdf)
+        @test_throws ArgumentError bias(prior_assessment)
+    end
+    @test_throws ArgumentError assess(PriorEstimator(2; depth = 1, width = 16), θ, Z)
 
     # Intervals are drawn behind the point estimates of the recovery plot only on request
     rangebars(fig) = sum(count(p -> p isa Rangebars, block.scene.plots) for block in fig.content if block isa Axis)

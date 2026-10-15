@@ -49,7 +49,7 @@ function matern(h, ρ, ν, σ² = one(typeof(h)))
 end
 
 # Constructor for above struct
-function sample(K::Integer, ξ)
+function sampler(K::Integer, ξ)
 
 	# Sample parameters from the prior
 	Π = ξ.Π
@@ -115,7 +115,7 @@ using oneAPI
 Below, we simulate a complete field and then remove a proportion of it at random, which is the kind of incomplete data the techniques in this section are designed for:
 
 ```julia
-θ = sample(1, ξ)
+θ = sampler(1, ξ)
 Z = simulate(θ, 1)[1][:, :, 1, 1]
 
 Z_incomplete = replace(removedata(Z, 0.25), missing => NaN)   # NaN plots as blank
@@ -179,7 +179,7 @@ network = DeepSet(ψ, ϕ)
 θ̂ = PointEstimator(network)
 
 # Train the masked neural Bayes estimator
-θ̂ = train(θ̂, sample, simulatemissing, sampler_args = (ξ,), simulator_args = 1, K = 1000, epochs = 10)
+θ̂ = train(θ̂, sampler, simulatemissing, sampler_args = (ξ,), simulator_args = 1, K = 1000, epochs = 10)
 ```
 
 ![Terminal output while training the masked estimator](assets/figures/missing_censored_the-masking-approach_training.gif)
@@ -187,7 +187,7 @@ network = DeepSet(ψ, ϕ)
 Once trained, we can apply our masked neural Bayes estimator to (incomplete) observed data. The data must be encoded in the same manner as during training. Below, we use simulated data as a surrogate for real data, with a missingness proportion of 0.25:
 
 ```julia
-θ = sample(1, ξ)     # true parameters
+θ = sampler(1, ξ)     # true parameters
 Z = simulate(θ, 1)[1]    # complete data
 Z = removedata(Z, 0.25)  # "observed" incomplete data (i.e., with missing values)
 UW = encodedata(Z)       # augmented data {U, W}
@@ -224,7 +224,7 @@ network = DeepSet(ψ, ϕ)
 
 # Train neural Bayes estimator
 H = 50
-θ̂ = train(θ̂, sample, simulate, sampler_args = (ξ,), simulator_args = H, K = 1000, epochs = 10)
+θ̂ = train(θ̂, sampler, simulate, sampler_args = (ξ,), simulator_args = H, K = 1000, epochs = 10)
 ```
 
 ![Terminal output while training the MAP estimator used by the neural EM algorithm](assets/figures/missing_censored_the-em-approach_training.gif)
@@ -301,7 +301,7 @@ end
 Now we can use the neural EM algorithm to get parameter point estimates from data containing missing values. The algorithm is implemented with the type [`EM`](@ref). Again, here we use simulated data as a surrogate for real data:
 
 ```julia
-θ = sample(1, ξ)            # true parameters
+θ = sampler(1, ξ)            # true parameters
 Z = simulate(θ, 1)[1][:, :]     # complete data
 Z = removedata(Z, 0.25)         # "observed" incomplete data (i.e., with missing values)
 θ₀ = mean.([Π...])              # initial estimate, the prior mean
@@ -332,7 +332,7 @@ using Distributions: cdf, Uniform, Normal, quantile
 using CairoMakie   
 
 # Sampling θ from the prior distribution
-function sample(K)
+function sampler(K)
 	ρ = rand(Uniform(-0.99, 0.99), K)
 	δ = rand(Uniform(0.0, 1.0), K)
 	θ = vcat(ρ', δ')
@@ -449,14 +449,14 @@ m = 200
 
 # Train an estimator with no censoring
 simulator1(θ, m) = simulatecensored(θ, m; c = [0, 0]) 
-estimator1 = train(estimator, sample, simulator1, simulator_args = m) 
+estimator1 = train(estimator, sampler, simulator1, simulator_args = m) 
 
 # Train an estimator with mild censoring
 simulator2(θ, m) = simulatecensored(θ, m; c = [0.5, 0.5]) 
-estimator2 = train(estimator, sample, simulator2, simulator_args = m)
+estimator2 = train(estimator, sampler, simulator2, simulator_args = m)
 
 # Assessment
-θ_test = sample(1000) 
+θ_test = sampler(1000) 
 UW_test1 = simulator1(θ_test, m)
 UW_test2 = simulator2(θ_test, m)
 assessment1 = assess(estimator1, θ_test, UW_test1, parameter_names = ["ρ", "δ"], estimator_name = "No censoring") 
@@ -508,8 +508,8 @@ end
 # Generate the data used for training and validation
 K = 50000  # number of training samples
 m = 500    # number of replicates in each data set
-θ_train  = sample(K)
-θ_val    = sample(K ÷ 5)
+θ_train  = sampler(K)
+θ_val    = sampler(K ÷ 5)
 τ_train  = sampleτ(K)
 τ_val    = sampleτ(K ÷ 5)
 UW_train = simulatecensored(θ_train, τ_train, m)
@@ -540,7 +540,7 @@ Below, we assess the estimator for different values of $\tau$. As expected, RMSE
 
 ```julia
 # Test parameters
-θ_test = sample(1000)
+θ_test = sampler(1000)
 
 # Assessment with τ fixed to 0 (no censoring)
 τ_test1  = fill(0.0, 1000)'

@@ -2,7 +2,7 @@
 CollapsedDocStrings = true
 ```
 
-## Inference with observed data
+## Inference
 
 The following functions facilitate the use of a trained neural estimator with observed data.
 
@@ -36,4 +36,18 @@ bootstrap
 interval
 
 quantiles
+```
+
+### Learned prior distributions
+
+The following functions are used with a trained [`PriorEstimator`](@ref).
+
+```@docs
+sample(::PriorEstimator, ::Integer)
+
+logdensity
+
+forward
+
+inverse
 ```

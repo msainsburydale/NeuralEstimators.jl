@@ -40,9 +40,13 @@ function LuxEstimator(estimator::LuxEstimator)
 end
 
 # Methods - just pass on the estimator and its parameters/states
-for f in (:estimate, :infer, :summarystatistics, :assess, :sampleposterior, :spikeprobability, :bootstrap, :interval, :quantiles, :posteriormean, :posteriormedian, :posteriorquantile, :logratio, :logposterior, :_logdensity)
+for f in (:estimate, :infer, :summarystatistics, :assess, :sampleposterior, :spikeprobability, :bootstrap, :interval, :quantiles, :posteriormean, :posteriormedian, :posteriorquantile, :logratio, :logposterior, :_logdensity, :logdensity, :forward, :inverse)
     @eval $f(estimator::LuxEstimator, args...; kwargs...) = $f(estimator.estimator, args..., estimator.ps, estimator.st; kwargs...)
 end
+# NB sample() is StatsBase.sample, so it is forwarded with explicit signatures: a method taking
+# (estimator, args...) would be ambiguous with AbstractMCMC's sample(model, ::AbstractSampler, N)
+sample(estimator::LuxEstimator; kwargs...) = sample(estimator.estimator, estimator.ps, estimator.st; kwargs...)
+sample(estimator::LuxEstimator, N::Integer; kwargs...) = sample(estimator.estimator, N, estimator.ps, estimator.st; kwargs...)
 
 # Summary network helpers
 summarynetwork(estimator::LuxEstimator) = summarynetwork(estimator.estimator)

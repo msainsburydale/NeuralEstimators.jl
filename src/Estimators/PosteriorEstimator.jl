@@ -42,7 +42,7 @@ estimator = train(estimator, sampler, simulator, K = 3000)
 Z_test = simulator(θ_test);
 assessment = assess(estimator, θ_test, Z_test)
 
-# Inference with observed data 
+# Inference 
 θ = sampler(1)
 Z = simulator(θ)
 sampleposterior(estimator, Z) # posterior draws

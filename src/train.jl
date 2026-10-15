@@ -2,6 +2,8 @@
     train(estimator, θ_train::P, θ_val::P, Z_train::T, Z_val::T; ...) where {P, T}
     train(estimator, θ_train::P, θ_val::P, simulator; ...) where P
     train(estimator, sampler, simulator; ...)
+    train(estimator::PriorEstimator, θ_train::P, θ_val::P; ...) where P
+    train(estimator::PriorEstimator, sampler; ...)
 Train a neural `estimator`.
 
 The methods cater for different variants of "on-the-fly" simulation.
@@ -9,6 +11,8 @@ Specifically, a callable `sampler` can be provided to continuously sample new pa
 and a callable `simulator` can be provided to continuously simulate new data conditional on the parameters. If
 provided with specific sets of parameters (`θ_train` and `θ_val`) and/or data
 (`Z_train` and `Z_val`), they will be held fixed during training.
+
+A [`PriorEstimator`](@ref) learns a distribution from parameter samples alone, so it is trained without data or a `simulator`.
 
 The validation parameters and data are always held fixed.
 

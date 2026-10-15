@@ -499,6 +499,117 @@ end
 end
 
 # ──────────────────────────────────────────────────────────────────────────────
+# PriorEstimator (unconditional density estimation)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@testset "PriorEstimator: $backend, $q" for backend in (Flux, Lux), q in (NormalisingFlow, GaussianMixture)
+    devices, adtypes = backend_config(backend)
+    # NormalisingFlow requires runtime activity with Enzyme
+    if q === NormalisingFlow
+        adtypes = replace(a -> a isa AutoEnzyme ? AutoEnzyme(mode = Enzyme.set_runtime_activity(Enzyme.Reverse)) : a, adtypes)
+    end
+    # NB no assignment in the closure, which would overwrite the variable `est` used below
+    make_prior() = (backend === Lux ? LuxEstimator : identity)(PriorEstimator(d; q = q, backend = backend, depth = 1, width = 16))
+    trained_type = backend === Lux ? LuxEstimator : PriorEstimator
+    is_reactant(device) = nameof(typeof(device)) === :ReactantDevice
+
+    # NB AutoReactant is used only with a ReactantDevice: on other devices, train() replaces it with
+    # AutoEnzyme() (without runtime activity), which does not support NormalisingFlow
+    cases = [(device, adtype) for device in devices for adtype in adtypes if !(adtype isa AutoReactant) || is_reactant(device)]
+    @testset "Training: $(nameof(typeof(device))) | $(nameof(typeof(adtype)))" for (device, adtype) in cases
+        est = train(make_prior(), θ_train, θ_val; device = device, adtype = adtype, epochs = 1, verbose = false, savepath = nothing)
+        @test est isa trained_type
+    end
+
+    # On machines without a functional GPU, the devices above do not include a ReactantDevice, so
+    # Reactant is tested here on the XLA CPU backend (see the Reactant testset above)
+    if backend === Lux && !any(is_reactant, devices)
+        @testset "Training: Reactant (XLA CPU)" begin
+            device = try
+                Reactant.set_default_backend("cpu")
+                reactant_device()
+            catch err
+                @warn "Reactant backend unavailable, skipping the Reactant test of PriorEstimator" err
+                nothing
+            end
+            if !isnothing(device)
+                # NB K divisible by the batchsize, since `partial = false` under a ReactantDevice
+                est = train(make_prior(), sampler(128), sampler(128); device = device, epochs = 2, verbose = false, savepath = nothing)
+                @test est isa LuxEstimator
+                @test all(isfinite, logdensity(est, θ_test; use_gpu = false))
+            end
+        end
+    end
+
+    est = train(make_prior(), θ_train, θ_val; epochs = 1, verbose = false, use_gpu = false, savepath = nothing)
+
+    @testset "Training with a sampler" begin
+        @test train(est, sampler; K = 100, epochs = 1, verbose = false, use_gpu = false, savepath = nothing) isa trained_type
+    end
+
+    @testset "Training with data is rejected" begin
+        @test_throws ArgumentError train(make_prior(), θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false, use_gpu = false, savepath = nothing)
+        @test_throws ArgumentError train(make_prior(), sampler, simulator; K = 100, epochs = 1, verbose = false, use_gpu = false, savepath = nothing)
+    end
+
+    @testset "Inference: $(nameof(typeof(device)))" for device in filter(!is_reactant, devices)
+        @test size(sample(est, 50; device = device)) == (d, 50)
+        @test size(sample(est; N = 50, device = device)) == (d, 50)
+        @test size(sample(est; device = device)) == (d, 1000)
+
+        ld = logdensity(est, θ_test; device = device)
+        @test ld isa AbstractVector
+        @test length(ld) == size(θ_test, 2)
+        @test all(isfinite, ld)
+        @test logdensity(est, θ_test[:, 1]; device = device) ≈ ld[1]
+        @test logdensity(est, θ_test; batchsize = 7, device = device) ≈ ld
+
+        if q === NormalisingFlow
+            U = forward(est, θ_test; device = device)
+            @test size(U) == size(θ_test)
+            @test maximum(abs.(inverse(est, U; device = device) .- θ_test.array)) < 1e-2
+            @test forward(est, θ_test[:, 1]; device = device) ≈ U[:, 1]
+            @test size(inverse(est, U[:, 1]; device = device)) == (d,)
+        else
+            @test_throws ArgumentError forward(est, θ_test; device = device)
+            @test_throws ArgumentError inverse(est, θ_test; device = device)
+        end
+    end
+
+    @testset "assess" begin
+        @test assess(est, θ_test; N = 50, use_gpu = false) isa Assessment
+        @test assess(est; N = 50, use_gpu = false) isa Assessment
+    end
+
+    @testset "logdensity as the logprior of a RatioEstimator" begin
+        logprior = θ -> logdensity(est, θ; use_gpu = false)
+        ratio = make_estimator(backend, :ratio)
+        grid = expandgrid(0:0.05:1, 0:0.05:1)'
+        @test size(sampleposterior(ratio, Z_single; grid = grid, logprior = logprior, N = 50)) == (d, 50, 1)
+        lower, upper = [0.0f0, 0.0f0], [1.0f0, 1.0f0]
+        @test size(sampleposterior(ratio, Z_single; lower = lower, upper = upper, logprior = logprior, N = 20, warmup = 20)) == (d, 20, 1)
+    end
+
+    @testset "Saving and loading" begin
+        # NB the permutations of a NormalisingFlow are drawn when it is constructed and, with Lux, they
+        # are not stored in the parameters or states, so the same seed is used for both constructions
+        savepath = mktempdir()
+        Random.seed!(1)
+        est = train(make_prior(), θ_train, θ_val; epochs = 1, verbose = false, use_gpu = false, savepath = savepath)
+        Random.seed!(1)
+        loaded = loadestimator(make_prior(), savepath)
+        @test logdensity(loaded, θ_test; use_gpu = false) ≈ logdensity(est, θ_test; use_gpu = false)
+    end
+end
+
+# With a single parameter, a NormalisingFlow reduces to a Gaussian distribution, so a GaussianMixture is used instead
+@testset "PriorEstimator: one parameter, $backend" for backend in (Flux, Lux)
+    est = @test_logs (:info, r"GaussianMixture is used instead") PriorEstimator(1; backend = backend, depth = 1, width = 16)
+    @test est.q isa GaussianMixture
+    @test PriorEstimator(2; backend = backend, depth = 1, width = 16).q isa NormalisingFlow
+end
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Saving and loading the neural network
 # ──────────────────────────────────────────────────────────────────────────────
 
