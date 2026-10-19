@@ -7,7 +7,7 @@ Normalising flows are diffeomorphisms (i.e., invertible, differentiable transfor
 
 `NormalisingFlow` uses affine coupling blocks (see [`AffineCouplingBlock`](@ref)), with optional activation normalisation ([`ActNorm`](@ref); [Kingma and Dhariwal, 2018](https://dl.acm.org/doi/10.5555/3327546.3327685)) and permutations applied between each block via [`CouplingLayer`](@ref). The base distribution is taken to be a standard multivariate Gaussian distribution.
 
-When using a `NormalisingFlow` as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) summary statistics are used to condition the affine coupling blocks at each layer.
+When using a `NormalisingFlow` as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) summary statistics are used to condition the affine coupling blocks at each layer. If `num_summaries = 0`, the flow is unconditional (e.g., when used in a [`PriorEstimator`](@ref)), which requires `d > 1`.
 
 !!! note
     To use `NormalisingFlow` with `Enzyme.jl`, set `adtype = AutoEnzyme(mode = set_runtime_activity(Enzyme.Reverse))` in [`train`](@ref).
@@ -345,8 +345,9 @@ softclamp(s) = softclamp_scale .* atan.(s ./ clamp_value)
 
 # Flux (stateful)
 function forward(net::AffineCouplingBlock, X, Y, tz)
-    S = softclamp(net.scale(vcat(Y, tz)))
-    T = net.translate(vcat(Y, tz))
+    inp = vcat(Y, tz)
+    S = softclamp(net.scale(inp))
+    T = net.translate(inp)
     return X .* exp.(S) .+ T, sum(S; dims = 1)
 end
 

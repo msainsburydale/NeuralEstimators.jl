@@ -66,6 +66,7 @@ AbstractNeuralEstimator
 │   ├── PointEstimator
 │   └── QuantileEstimator (and variants)
 ├── PosteriorEstimator
+├── PriorEstimator
 ├── RatioEstimator
 ```
 
@@ -73,7 +74,7 @@ Every concrete estimator wraps one or more Flux/Lux models and must be callable 
 
 ### `AbstractApproximateDistribution`
 
-An abstract type for families of parametric distributions used to approximate the posterior distribution by objects of type `PosteriorEstimator`. 
+An abstract type for families of parametric distributions used to approximate the posterior distribution by objects of type `PosteriorEstimator`, and to approximate a distribution from samples alone (i.e., unconditional density estimation) by objects of type `PriorEstimator`. 
 
 ### `AbstractParameterSet`
 
@@ -156,7 +157,11 @@ After running `import NeuralEstimators: <function name>`:
 1. `import NeuralEstimators: _logdensity, sampleposterior` and define methods:
    - `_logdensity(q::MyDist, θ::AbstractMatrix, t::AbstractMatrix)`: log-density of `q` evaluated at parameters `θ`, given summary statistics `t`.
    - `sampleposterior(q::MyDist, t::AbstractMatrix, N::Integer; device)`: draws `N` posterior samples from `q` given summary statistics `t`, where each column of `t` corresponds to an independent data set. Should return a `d × N × K` array.
-1. Test the distribution by plugging it into a `PosteriorEstimator`, then train and assess the estimator to verify correctness.
+1. Support unconditional density estimation, which `PriorEstimator` uses to learn a distribution from samples alone. In this case, the distribution is constructed with `num_summaries = 0`, and the methods above are given an empty `0 × K` matrix of summary statistics `t` (a `0 × 1` matrix in `sampleposterior`).
+   - A neural network that takes part of `θ` as input alongside the summary statistics (e.g., a coupling network of a `NormalisingFlow`) needs no changes.
+   - A neural network whose only input is the summary statistics (e.g., one mapping them to the distributional parameters) has no input in this case. Replace it with the distributional parameters themselves, learned directly, by constructing it with `_learnedconstant(backend, out => activation, ...)` when `num_summaries == 0` (see the constructors of `GaussianMixture` and `SpikeAndSlab`). Do not use a layer with no inputs instead: Lux initialises its biases to ±Inf, Flux initialises them to zero (so that, e.g., the components of a mixture are identical and remain so during training), and Reactant cannot differentiate its empty weight matrix.
+   - Parameters learned directly need a larger learning rate than the weights of a neural network. If your distribution has no neural network when unconditional, define `_defaultoptimiser(q::MyDist)` to return the larger default used by `PriorEstimator` (see `src/Estimators/PriorEstimator.jl`).
+1. Test the distribution by plugging it into a `PosteriorEstimator`, then train and assess the estimator to verify correctness. Also add the distribution to the `PriorEstimator` testsets in `test/backends.jl`.
 1. Write a docstring with a self-contained example that can be copy-pasted and run.
 
 **Consolidating into the package:**

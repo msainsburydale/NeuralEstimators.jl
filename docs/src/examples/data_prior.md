@@ -57,6 +57,8 @@ By default, a [`PriorEstimator`](@ref) approximates the distribution with a [`No
 estimator = PriorEstimator(d)
 ```
 
+For example, `PriorEstimator(d; q = GaussianMixture)` approximates the distribution with a Gaussian mixture, whose parameters are learned directly rather than as the output of a neural network; since such parameters require a larger learning rate, [`train`](@ref) then uses a larger learning rate by default (see [`PriorEstimator`](@ref)).
+
 ## Training the estimator
 
 We train the estimator with [`train`](@ref), passing the training and validation samples. No data or simulator are needed:

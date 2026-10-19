@@ -609,6 +609,57 @@ end
     @test PriorEstimator(2; backend = backend, depth = 1, width = 16).q isa NormalisingFlow
 end
 
+# Unconditional distributions (num_summaries = 0), which are given an empty 0 × K matrix of summary statistics
+@testset "Unconditional approximate distributions: $backend" for backend in (Flux, Lux)
+    nparams(q) = backend === Lux ? Lux.parameterlength(Lux.setup(Random.default_rng(), q)[1]) : sum(length, Flux.trainables(q))
+    t = zeros(Float32, 0, 5)
+
+    # A flow has no weights for the absent summary statistics
+    @test nparams(PriorEstimator(2; backend = backend, depth = 1, width = 16).q) == nparams(NormalisingFlow(2, 0; backend = backend, depth = 1, width = 16))
+
+    # Otherwise, the distributional parameters are learned directly: they are the weights of the network, whose output is
+    # the same for each of the K (empty) columns of summary statistics
+    @testset "$(nameof(typeof(q))) with d = $(q isa SpikeAndSlab ? 1 : q.d)" for q in (
+        GaussianMixture(1, 0; backend = backend), GaussianMixture(2, 0; diagonal = true, backend = backend),
+        GaussianMixture(2, 0; backend = backend), SpikeAndSlab(1, 0; backend = backend)
+    )
+        @test nparams(q) == numdistributionalparams(q)
+        mixture = q isa SpikeAndSlab ? q.slab : q
+        if backend === Lux
+            ps, st = Lux.setup(Random.default_rng(), mixture)
+            κ = first(mixture.inference_network(t, ps.inference_network, st.inference_network))
+        else
+            κ = mixture.inference_network(t)
+        end
+        @test size(κ) == (numdistributionalparams(mixture), size(t, 2))
+        @test all(isfinite, κ)
+        @test all(κ .== κ[:, 1])
+        μ = κ[(mixture.num_components + 1):((1 + mixture.d) * mixture.num_components), 1]
+        @test allunique(μ) # the components are distinct, so that they can be learned
+    end
+
+    # SpikeAndSlab as a learned prior: samples with a point mass at zero
+    θ_spike = NamedMatrix(β = ifelse.(rand(Float32, 200) .< 0.5f0, 0.0f0, randn(Float32, 200)))
+    est = (backend === Lux ? LuxEstimator : identity)(PriorEstimator(1; q = SpikeAndSlab, backend = backend))
+    est = train(est, θ_spike, θ_spike; epochs = 1, verbose = false, use_gpu = false, savepath = nothing)
+    @test any(==(0), sample(est, 200; use_gpu = false))
+    @test all(isfinite, logdensity(est, θ_spike; use_gpu = false))
+
+    # Parameters learned directly need a larger learning rate, which is the default when training a PriorEstimator
+    @test NeuralEstimators._defaultoptimiser(PriorEstimator(2; backend = backend, depth = 1, width = 16)).eta == 5e-4
+    @testset "Default learning rate: $q" for (d, q) in ((1, GaussianMixture), (2, Gaussian), (1, SpikeAndSlab))
+        @test NeuralEstimators._defaultoptimiser(PriorEstimator(d; q = q, backend = backend)).eta == 2e-2
+    end
+
+    # An optimiser given to train() takes precedence over the default
+    wrap = backend === Lux ? LuxEstimator : identity
+    est = wrap(PriorEstimator(1; q = GaussianMixture, backend = backend))
+    flatparams(e) = Optimisers.destructure(backend === Lux ? e.ps : e)[1]
+    θ₀ = copy(flatparams(est))
+    est = train(est, θ_spike, θ_spike; optimiser = Descent(0.0), lr_schedule = nothing, epochs = 1, verbose = false, use_gpu = false, savepath = nothing)
+    @test flatparams(est) == θ₀
+end
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Saving and loading the neural network
 # ──────────────────────────────────────────────────────────────────────────────

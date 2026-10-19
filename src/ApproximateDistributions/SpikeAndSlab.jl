@@ -14,6 +14,8 @@ where $\delta_c(\cdot)$ denotes a point mass at the spike location $c$ (`spike`)
 
 When using a `SpikeAndSlab` distribution as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) summary statistics are mapped to the spike probability $\pi$ using a neural network (`classifier`), and to the parameters of the slab as described in the documentation of the chosen slab distribution. 
 
+If `num_summaries = 0`, the distribution is unconditional (e.g., when used in a [`PriorEstimator`](@ref)): the spike probability is then learned directly (`classifier_kwargs` is not used), and the slab is constructed with `num_summaries = 0`.
+
 The slab models the parameter on the real line. The functions `transform` and `invtransform` map between the parameter space and the real line: `transform` is applied to parameters before evaluating the slab density, and `invtransform` is applied to slab samples to map them back to the parameter space. Both default to `identity`. 
 
 # Keyword arguments
@@ -87,7 +89,8 @@ function SpikeAndSlab(
 )
     @assert num_parameters == 1 "SpikeAndSlab currently supports only univariate parameters (num_parameters == 1)"
     B = _resolvebackend(backend)
-    classifier = MLP(num_summaries, 1; backend = B, output_activation = identity, classifier_kwargs...)
+    # Unconditional (e.g., in a PriorEstimator): the logit of the spike probability is learned directly (see _learnedconstant())
+    classifier = num_summaries == 0 ? _learnedconstant(B, 1 => identity) : MLP(num_summaries, 1; backend = B, output_activation = identity, classifier_kwargs...)
     slab_dist = slab isa AbstractApproximateDistribution ? slab : slab(num_parameters, num_summaries; backend = B, kwargs...)
     SpikeAndSlab(classifier, slab_dist, spike, transform, invtransform)
 end

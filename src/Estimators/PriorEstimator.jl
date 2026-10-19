@@ -3,17 +3,20 @@
 	PriorEstimator(num_parameters::Integer; q = NormalisingFlow, kwargs...)
 A neural estimator that approximates a probability distribution $p(\boldsymbol{\theta})$ from samples alone, without conditioning on data (i.e., unconditional density estimation). A typical use is to learn a prior distribution from samples that encode prior knowledge, such as parameter estimates from many previous analyses or posterior draws from an earlier analysis.
 
-The distribution is approximated by `q`, which may be any of the in-built [Approximate distributions](@ref) (e.g., [`NormalisingFlow`](@ref), the default, or [`GaussianMixture`](@ref)). It is constructed given `num_parameters`, with any additional keyword arguments passed to the constructor of `q`.
+The distribution is approximated by `q`, which may be any of the in-built [Approximate distributions](@ref) (e.g., [`NormalisingFlow`](@ref), the default, or [`GaussianMixture`](@ref)). It is constructed given `num_parameters` and `num_summaries = 0` (i.e., it is unconditional), with any additional keyword arguments passed to the constructor of `q`. The parameters of a [`GaussianMixture`](@ref), [`Gaussian`](@ref), or [`SpikeAndSlab`](@ref) distribution are then learned directly, so that keyword arguments specifying a neural network (e.g., `depth` and `width`) apply only to a [`NormalisingFlow`](@ref).
 
 The estimator is trained with [`train`](@ref), given either fixed training and validation samples, `train(estimator, θ_train, θ_val)`, or a function `sampler` such that `sampler(K)` returns `K` samples, `train(estimator, sampler)`, in which case new samples are drawn during training. In both cases, the samples are stored as a ``d`` × ``K`` matrix (or a [`NamedMatrix`](@ref)), where ``d`` is the dimension of the parameter vector.
 
 Once trained, the learned distribution can be sampled with [`sample`](@ref sample(::PriorEstimator, ::Integer)) and its density evaluated with [`logdensity`](@ref). When `q` is a [`NormalisingFlow`](@ref), [`forward`](@ref) and [`inverse`](@ref) map between the parameter space and the latent space of the flow, in which the learned distribution is standard Gaussian.
 
-!!! note
+!!! note "Standardisation"
     The parameters are not standardised internally. When they are on very different scales, standardise each parameter before training (e.g., by subtracting its mean and dividing by its standard deviation), and apply the inverse transformation to the samples.
 
-!!! note
+!!! note "Single parameter"
     With a single parameter, the coupling layers of a [`NormalisingFlow`](@ref) have nothing to condition on, so the flow reduces to an affine transformation of its Gaussian base distribution. Hence, when `num_parameters = 1`, a [`GaussianMixture`](@ref) is used in place of a `NormalisingFlow`.
+
+!!! note "Learning rate"
+    Since the parameters of a [`GaussianMixture`](@ref), [`Gaussian`](@ref), or [`SpikeAndSlab`](@ref) distribution are learned directly, they require a larger learning rate than the weights of a neural network. Hence, in this case, [`train`](@ref) uses the optimiser `Adam(2e-2)` by default. 
 
 # Examples
 ```julia
@@ -51,17 +54,14 @@ function PriorEstimator(num_parameters::Integer; q = NormalisingFlow, kwargs...)
         @info "PriorEstimator: a NormalisingFlow with a single parameter reduces to a Gaussian distribution, so a GaussianMixture is used instead."
         q = GaussianMixture
     end
-    PriorEstimator(q(num_parameters, 1; kwargs...))
+    PriorEstimator(q(num_parameters, 0; kwargs...))
 end
 
 # ---- Training ----
 
-# The distribution is not conditioned on data, so it is conditioned on a constant summary statistic
-# (one per parameter vector), which leaves it unconditional. NB a constant is used rather than an
-# empty set of summary statistics, since Lux initialises the biases of a layer with no inputs to ±Inf
-# (its default bias initialisation scales with 1/√fan_in).
-_constantsummary(θ) = fill!(similar(θ, 1, size(θ, 2)), 1)
-@non_differentiable _constantsummary(::Any)
+# The distribution is not conditioned on data (num_summaries = 0), so its summary statistics are an empty 0 × K matrix
+_emptysummary(θ) = similar(θ, 0, size(θ, 2))
+@non_differentiable _emptysummary(::Any)
 
 _loss(estimator::PriorEstimator, loss = nothing) = (ld, θ) -> -mean(ld)
 
@@ -70,26 +70,34 @@ _inputoutput(estimator::PriorEstimator, ::Nothing, θ) = (θ, θ)
 _inputoutput(estimator::PriorEstimator, Z, θ) = throw(ArgumentError("A PriorEstimator is trained with parameter samples alone, without data: use `train(estimator, θ_train, θ_val)` or `train(estimator, sampler)`"))
 
 # Forward pass: Stateful (Flux)
-(estimator::PriorEstimator)(θ) = _logdensity(estimator.q, θ, _constantsummary(θ))
+(estimator::PriorEstimator)(θ) = _logdensity(estimator.q, θ, _emptysummary(θ))
 
 # Forward pass: Stateless (Lux)
 function (estimator::PriorEstimator)(θ, ps, st)
-    ld, st_q = _logdensity(estimator.q, θ, _constantsummary(θ), ps.q, st.q)
+    ld, st_q = _logdensity(estimator.q, θ, _emptysummary(θ), ps.q, st.q)
     return ld, (q = st_q,)
 end
 
 # Both methods use the generic methods of train() with no data (Z = nothing). LuxEstimator is included
 # so that an estimator containing Lux networks can be trained further after training or loading.
 const _PriorEstimators = Union{PriorEstimator, LuxEstimator{<:PriorEstimator}}
-function train(estimator::_PriorEstimators, θ_train::P, θ_val::P; kwargs...) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
-    train(estimator, θ_train, θ_val, nothing, nothing; kwargs...)
+function train(estimator::_PriorEstimators, θ_train::P, θ_val::P; optimiser::Optimisers.AbstractRule = _defaultoptimiser(estimator), kwargs...) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+    train(estimator, θ_train, θ_val, nothing, nothing; optimiser = optimiser, kwargs...)
 end
-train(estimator::_PriorEstimators, sampler; kwargs...) = train(estimator, sampler, _nosimulator; kwargs...)
+train(estimator::_PriorEstimators, sampler; optimiser::Optimisers.AbstractRule = _defaultoptimiser(estimator), kwargs...) = train(estimator, sampler, _nosimulator; optimiser = optimiser, kwargs...)
 _nosimulator(θ, args...; kwargs...) = nothing
+
+# Default optimiser. The parameters of a GaussianMixture (including a Gaussian) or SpikeAndSlab distribution are learned
+# directly, since an unconditional distribution has no summary statistics to map to them (see _learnedconstant()). They
+# need a larger learning rate than the weights of a neural network, many of which contribute to each of its outputs.
+_defaultoptimiser(estimator::PriorEstimator) = _defaultoptimiser(estimator.q)
+_defaultoptimiser(estimator::LuxEstimator) = _defaultoptimiser(estimator.estimator)
+_defaultoptimiser(::Any) = Adam(5e-4) # the default of train()
+_defaultoptimiser(::Union{GaussianMixture, SpikeAndSlab}) = Adam(2e-2)
 
 # ---- Inference ----
 
-# Applies `f` to parameters conditioned on the constant summary statistic. This is a callable
+# Applies `f` to parameters conditioned on the empty summary statistics. This is a callable
 # struct so that _applywithdevice() can be reused for its batching, device placement, and test mode:
 # for Flux, `f(q, θ, t)` returns an array; for Lux, `f(q, θ, t, ps, st)` returns a tuple whose first
 # element is that array.
@@ -97,8 +105,8 @@ _nosimulator(θ, args...; kwargs...) = nothing
     f
     estimator
 end
-(m::_PriorMap)(θ) = m.f(m.estimator.q, θ, _constantsummary(θ))
-(m::_PriorMap)(θ, ps, st) = m.f(m.estimator.q, θ, _constantsummary(θ), ps.q, st.q)
+(m::_PriorMap)(θ) = m.f(m.estimator.q, θ, _emptysummary(θ))
+(m::_PriorMap)(θ, ps, st) = m.f(m.estimator.q, θ, _emptysummary(θ), ps.q, st.q)
 
 # Maps parameters to the latent space of a normalising flow, dropping the log-determinant of the Jacobian
 _tolatent(flow, θ, t) = first(forward(flow, θ, t))
@@ -130,7 +138,7 @@ See also [`logdensity`](@ref) and [`inverse`](@ref).
 """
 function sample(estimator::PriorEstimator, N::Integer; device = nothing, use_gpu::Bool = true)
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = false)
-    θ = sampleposterior(estimator.q, ones(Float32, 1, 1), N; device = device)
+    θ = sampleposterior(estimator.q, zeros(Float32, 0, 1), N; device = device)
     return θ[:, :, 1]
 end
 sample(estimator::PriorEstimator; N::Integer = 1000, kwargs...) = sample(estimator, N; kwargs...)
@@ -138,7 +146,7 @@ sample(estimator::PriorEstimator; N::Integer = 1000, kwargs...) = sample(estimat
 # Stateless (Lux)
 function sample(estimator::PriorEstimator, N::Integer, ps, st; device = nothing, use_gpu::Bool = true)
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = false)
-    θ = sampleposterior(estimator.q, ones(Float32, 1, 1), N, ps.q, st.q; device = device)
+    θ = sampleposterior(estimator.q, zeros(Float32, 0, 1), N, ps.q, st.q; device = device)
     return θ[:, :, 1]
 end
 # NB ps and st are typed, since a method with untyped arguments would be ambiguous with AbstractMCMC's sample(model, ::AbstractSampler, N)

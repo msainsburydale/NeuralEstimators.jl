@@ -17,6 +17,8 @@ where $\boldsymbol{T}_j$ is a unit lower-triangular matrix and $\boldsymbol{D}_j
 
 When using a `GaussianMixture` as the approximate distribution of a [`PosteriorEstimator`](@ref), the (learned) summary statistics are mapped to the mixture parameters by `depth` hidden layers of `width` units, each followed by `activation`, and then by output heads that use output activations that guarantee valid mixture parameters.
 
+If `num_summaries = 0`, the distribution is unconditional (e.g., when used in a [`PriorEstimator`](@ref)): the mixture parameters are then learned directly, and `depth`, `width`, `activation`, and `kwargs` are not used.
+
 # Keyword arguments
 - `num_components::Integer = 10`: number of components in the mixture.
 - `diagonal::Bool = false`: whether the covariance matrix of each component is diagonal (`true`) or dense (`false`). Dense covariance matrices allow each component to capture dependence between the parameters, at the cost of $d(d-1)/2$ additional distributional parameters per component.
@@ -38,6 +40,13 @@ function GaussianMixture(d::Integer, num_summaries::Integer; num_components::Int
     @assert depth >= 0
     B = _resolvebackend(backend)
     diagonal = diagonal || d == 1 # a 1×1 covariance matrix has no off-diagonal elements
+
+    # Unconditional (e.g., in a PriorEstimator): the distributional parameters are learned directly (see _learnedconstant())
+    if num_summaries == 0
+        heads = (num_components => identity, d * num_components => identity, d * num_components => softplus)
+        diagonal || (heads = (heads..., triangularnumber(d - 1) * num_components => identity))
+        return GaussianMixture(d, num_summaries, num_components, _learnedconstant(B, heads...), diagonal ? nothing : _trilbases(d))
+    end
 
     # Hidden layers, each followed by `activation`. The output heads below read from
     # the final hidden layer; feeding them from a layer of width (2d+1)*num_components
