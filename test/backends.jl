@@ -660,6 +660,24 @@ end
     @test flatparams(est) == θ₀
 end
 
+# With Lux, the layers built by the package are initialised as Flux does (glorot_uniform weights, zero biases), unless
+# initialisations are given
+@testset "Lux initialisation" begin
+    glorotbound(W) = sqrt(6 / sum(size(W))) # the bound of glorot_uniform
+    ps, _ = Lux.setup(Random.default_rng(), MLP(3, 2; depth = 2, width = 8, backend = Lux))
+    @test all(iszero(ps[k].bias) for k in keys(ps))
+    @test all(abs.(ps.layer_1.weight) .<= glorotbound(ps.layer_1.weight))
+    ps, _ = Lux.setup(Random.default_rng(), MLP(3, 2; depth = 2, width = 8, backend = Lux, init_bias = Lux.ones32))
+    @test all(isone, ps.layer_1.bias)
+
+    # Layers built other than with MLP: the network of a GaussianMixture, and the heads of an unconditional one
+    ps, _ = Lux.setup(Random.default_rng(), GaussianMixture(2, 3; depth = 1, width = 8, backend = Lux))
+    @test iszero(ps.inference_network.layer_1.bias)
+    @test all(abs.(ps.inference_network.layer_1.weight) .<= glorotbound(ps.inference_network.layer_1.weight))
+    ps, _ = Lux.setup(Random.default_rng(), GaussianMixture(1, 0; backend = Lux))
+    @test all(all(abs.(h.weight) .<= glorotbound(h.weight)) for h in values(ps.inference_network.layer_2))
+end
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Saving and loading the neural network
 # ──────────────────────────────────────────────────────────────────────────────

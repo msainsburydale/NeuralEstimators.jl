@@ -25,7 +25,7 @@ If `num_summaries = 0`, the distribution is unconditional (e.g., when used in a 
 - `depth::Integer = 2`: the number of hidden layers preceding the output heads.
 - `width::Integer = 128`: the width of each hidden layer.
 - `activation = relu`: the activation function used in each hidden layer.
-- `kwargs`: additional keyword arguments passed to each layer (e.g., `init_weight`, `init_bias`).
+- `kwargs`: additional keyword arguments passed to each layer (e.g., `init_weight`, `init_bias`). By default, the layers are initialised according to Flux conventions, regardless of the backend (weights use `glorot_uniform`, and biases are set to zero).
 """
 struct GaussianMixture{D, M, B} <: AbstractApproximateDistribution
     d::D
@@ -47,6 +47,8 @@ function GaussianMixture(d::Integer, num_summaries::Integer; num_components::Int
         diagonal || (heads = (heads..., triangularnumber(d - 1) * num_components => identity))
         return GaussianMixture(d, num_summaries, num_components, _learnedconstant(B, heads...), diagonal ? nothing : _trilbases(d))
     end
+
+    kwargs = _fluxinit(B, kwargs) # with Lux, initialise the layers as in Flux
 
     # Hidden layers, each followed by `activation`. The output heads below read from
     # the final hidden layer; feeding them from a layer of width (2d+1)*num_components

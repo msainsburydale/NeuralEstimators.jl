@@ -3,16 +3,20 @@
 
 A traditional fully-connected multilayer perceptron (MLP) with input dimension `in` and output dimension `out`.
 
+By default, the layers are initialised according to Flux conventions, regardless of the backend: weights use `glorot_uniform`, and biases are set to zero.
+
 # Keyword arguments
 - `depth::Integer = 2`: the number of hidden layers.
 - `width::Integer = 128`: the width of each hidden layer.
 - `activation = relu`: the activation function used in each hidden layer.
 - `output_activation = identity`: the activation function used in the output layer.
 - `backend::Union{Nothing, Module} = nothing`: the backend to use for constructing the network (e.g., `Lux` or `Flux`). If `nothing`, the backend is resolved automatically.
+- `kwargs`: additional keyword arguments passed to each `Dense` layer (e.g., `init_weight` and `init_bias` with Lux, or `init` and `bias` with Flux).
 """
 function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128, activation = relu, output_activation = identity, backend::Union{Nothing, Module} = nothing, kwargs...)
     @assert depth >= 0
     B = _resolvebackend(backend)
+    kwargs = _fluxinit(B, kwargs)
     if depth == 0
         layers = Any[B.Dense(in => out, output_activation; kwargs...)]
     else
@@ -23,6 +27,15 @@ function MLP(in::Integer, out::Integer; depth::Integer = 2, width::Integer = 128
     end
 
     return B.Chain(layers...)
+end
+
+# Keyword arguments for the Dense layers of backend B, such that Lux layers are initialised as in Flux (glorot_uniform
+# weights, zero biases); initialisations given by the user take precedence. Lux's own defaults (a uniform distribution
+# whose bounds scale with the inverse square root of the number of inputs, for both the weights and the biases) can give
+# badly conditioned networks, such as the coupling networks of a NormalisingFlow.
+function _fluxinit(B::Module, kwargs)
+    lux = get(Base.loaded_modules, _LUX_UUID, nothing)
+    return !isnothing(lux) && B === lux ? (; init_weight = lux.glorot_uniform, init_bias = lux.zeros32, kwargs...) : kwargs
 end
 
 """

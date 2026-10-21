@@ -43,8 +43,9 @@ const MIN_SCALE = 1.0f-6
 # An unconditional distribution receives an empty 0 × K matrix of summary statistics. A network that would see only the
 # summary statistics (e.g., that of a GaussianMixture) is then replaced by the distributional parameters themselves,
 # learned directly: each head is a bias-free Dense layer applied to a row of ones, so that its weights are the
-# distributional parameters (and its activation keeps them valid). The random initialisation of the weights ensures
-# that the components of a mixture are distinct, so that they can be learned. Parameters learned directly need a larger
+# distributional parameters (and its activation keeps them valid). The random initialisation of the weights (by
+# glorot_uniform with either backend; see _fluxinit()) ensures that the components of a mixture are distinct, so that
+# they can be learned. Parameters learned directly need a larger
 # learning rate than the weights of a neural network (see _defaultoptimiser() in PriorEstimator.jl).
 # NB a Dense layer with no inputs (and a bias) cannot be used instead: Lux initialises its biases to ±Inf (the default
 # bias initialisation scales with 1/√fan_in), Flux initialises them to zero (so that the components of a mixture are
@@ -55,8 +56,8 @@ _onesrow(t) = fill!(similar(t, 1, size(t, 2)), 1)
 # heads: pairs `out => activation`, whose outputs are concatenated
 function _learnedconstant(B::Module, heads::Pair...)
     lux = get(Base.loaded_modules, _LUX_UUID, nothing)
-    nobias = !isnothing(lux) && B === lux ? (use_bias = false,) : (bias = false,)
-    return B.Chain(_onesrow, B.Parallel(vcat, (B.Dense(1 => out, activation; nobias...) for (out, activation) in heads)...))
+    kwargs = _fluxinit(B, !isnothing(lux) && B === lux ? (use_bias = false,) : (bias = false,))
+    return B.Chain(_onesrow, B.Parallel(vcat, (B.Dense(1 => out, activation; kwargs...) for (out, activation) in heads)...))
 end
 
 
