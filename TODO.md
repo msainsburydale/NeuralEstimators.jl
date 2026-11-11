@@ -42,7 +42,8 @@ A checklist of planned tasks, improvements, and ideas for the package. Feel free
 - Find and remove type instabilities (test using [JET.jl](https://github.com/aviatesk/JET.jl)).
 - For some operations involving only matrices and MLPs (e.g., inference-network transformations of summary statistics), it might be faster to always use the CPU (at least for certain batchsize ranges).
 - Moving a batch of data to the GPU currently transfers each data set separately (`input |> device` in `_train_step`), which is one transfer per data set; batching the transfer would reduce the overhead for [DeepSet](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Modules) architectures.
-- Add a check for NaNs in the inputs/outputs. Also, if the training risk or validation risk becomes NaN, immediately halt training.
+- Add a check for NaNs in the inputs/outputs. 
+- If the empirical risk becomes NaN, immediately halt training.
 
 ### Backend
 - Lux + Reactant support for [`SpatialGraphConv`](https://msainsburydale.github.io/NeuralEstimators.jl/dev/API/architectures#Layers).

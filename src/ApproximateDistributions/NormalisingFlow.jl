@@ -422,14 +422,23 @@ inverse(::ActNorm, U::AbstractMatrix, ps, st::NamedTuple) = ((U .- ps.bias) .* e
 
 """
     Permutation(in::Integer)
-A layer that permutes the inputs (of dimension `in`) entering a coupling block. 
+A layer that permutes the inputs (of dimension `in`) entering a coupling block.
 
-Note that a permutation layer is invertible with Jacobian determinant |J| = 1. 
+Note that a permutation layer is invertible with Jacobian determinant |J| = 1.
+
+The permutation is drawn at random. With Flux, it is drawn (from the global random number
+generator) when the layer is constructed, and it is stored in the layer. With Lux, it is drawn
+from the random number generator given to `Lux.setup` (e.g., via [`LuxEstimator`](@ref)), and
+it is stored in the states of the layer. In both cases, the permutation is saved by
+[`train`](@ref) and restored by [`loadestimator`](@ref).
 """
 @concrete struct Permutation
     permutation
     inv_permutation
 end
+# NB the permutation stored in the struct is used by Flux. With Lux, `initialstates` (see the Lux extension) draws the
+#    permutation from the rng given to `Lux.setup`, so that only the length of the permutation stored in the struct is
+#    used.
 
 function Permutation(d::Integer)
     perm = randperm(d)
@@ -441,6 +450,6 @@ end
 forward(l::Permutation, θ::AbstractMatrix) = θ[l.permutation, :]
 inverse(l::Permutation, U::AbstractMatrix) = U[l.inv_permutation, :]
 
-# Lux (stateless) — ps/st are empty; just thread them through
-forward(l::Permutation, θ::AbstractMatrix, ps, st::NamedTuple) = θ[l.permutation, :], st
-inverse(l::Permutation, U::AbstractMatrix, ps, st::NamedTuple) = U[l.inv_permutation, :], st
+# Lux (stateless) — the permutation is held in the states as a tuple (see `initialstates` in the Lux extension)
+forward(::Permutation, θ::AbstractMatrix, ps, st::NamedTuple) = θ[collect(st.permutation), :], st
+inverse(::Permutation, U::AbstractMatrix, ps, st::NamedTuple) = U[collect(st.inv_permutation), :], st

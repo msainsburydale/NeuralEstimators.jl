@@ -1585,6 +1585,9 @@ end
     est = train(est, θ, θ, Z, Z; kw...)
     @test size(estimate(est, Z; use_gpu = false)) == (d, K)
     @test assess(est, θ, Z; use_gpu = false) isa Assessment
+    assessment = assess(est, θ, Z; probs = [0.05, 0.95], B = 5, use_gpu = false) # non-parametric bootstrap intervals
+    @test all(["lower", "upper", "α"] .∈ Ref(names(assessment.estimates)))
+    @test nrow(coverage(assessment)) == d
     @test size(bootstrap(est, spatialgraph(rand(40, 2), rand(40, 8)); B = 5, use_gpu = false), 1) == d
 
     # expert summaries are concatenated to the summary network's output, so num_summaries = dₜ + 1
@@ -2064,6 +2067,61 @@ end
     lower, upper = ext._ecdfband(n, p, 0.95)
     @test all(lower .<= upper) && lower[end] == upper[end] == n
     @test 0.95 <= ext._coverage(n, p, lower, upper) < 0.96
+end
+
+@testset "assess(θ, θ̂)" begin
+    # Point estimates: the methods for estimators call assess(θ, θ̂) once the estimator has been applied to the data
+    point = PointEstimator(Chain(Dense(m, 16, gelu), Dense(16, d)))
+    θ̂ = estimate(point, Z; use_gpu = false)
+    @test assess(point, θ, Z; use_gpu = false).estimates == assess(θ, θ̂).estimates
+    assessment = assess(θ, θ̂; estimator_name = "other", m = fill(m, K))
+    @test ismissing(only(assessment.runtime.runtime))
+    @test all(==(m), assessment.estimates.m)
+    @test nrow(rmse(assessment; average_over_sample_sizes = false)) == d
+
+    # θ is recycled when there are several data sets for each parameter vector
+    assessment = assess(θ, hcat(θ̂, θ̂))
+    @test sort(unique(assessment.estimates.j)) == [1, 2]
+    @test filter(:j => ==(1), assessment.estimates).truth == filter(:j => ==(2), assessment.estimates).truth
+    @test_throws AssertionError assess(θ, θ̂[:, 1:(K - 1)])
+
+    # Posterior samples, compared with those of a neural posterior estimator
+    N = 100
+    samples = randn(Float32, d, N, K)
+    assessment = assess(θ, samples; pointsummary = median, estimator_name = "other", runtime = 1.0)
+    @test nrow(assessment.samples) == d * N * K
+    @test assessment.estimates.estimate ≈ vec(permutedims(dropdims(median(samples; dims = 2); dims = 2)))
+    @test plot(assessment) isa Figure
+    posterior = PosteriorEstimator(Chain(Dense(m, 16, gelu), Dense(16, 3d)), d; num_summaries = 3d, q = Gaussian)
+    merged = merge(assessment, assess(posterior, θ, Z; N = N, estimator_name = "NPE", use_gpu = false))
+    @test Set(merged.samples.estimator) == Set(["other", "NPE"])
+    @test plot(merged) isa Figure
+
+    # Functions of the parameters are assessed as further parameters
+    total = "μ + σ" => x -> x[1] + x[2]
+    assessment = assess(θ, samples; functions = [total])
+    @test unique(assessment.estimates.parameter) == ["μ", "σ", "μ + σ"]
+    @test filter(:parameter => ==("μ + σ"), assessment.estimates).truth ≈ vec(sum(convert(Matrix, θ); dims = 1))
+    @test filter(:parameter => ==("μ + σ"), assessment.samples).value ≈ vec(sum(samples; dims = 1))
+    @test plot(assessment) isa Figure
+    @test "μ + σ" ∈ assess(posterior, θ, Z; N = N, functions = [total], use_gpu = false).estimates.parameter
+    @test assess(θ, samples; functions = total).samples == assess(θ, samples; functions = [total]).samples   # a single function need not be wrapped
+    @test assess(θ, samples; functions = "μσ²").samples == assess(θ, samples; functions = ["μσ²"]).samples
+    @test "μσ²" ∈ assess(posterior, θ, Z; N = N, functions = "μσ²", use_gpu = false).estimates.parameter
+
+    # ... indexed by name, or given as strings in the parameter names, in which superscripts denote powers and adjacent names products
+    assessment = assess(θ, samples; functions = ["μσ" => x -> x["μ"] * x["σ"], "μ·σ²", "μσ²", "log(σ²)"])
+    @test filter(:parameter => ==("μσ"), assessment.samples).value ≈ vec(samples[1, :, :] .* samples[2, :, :])
+    @test filter(:parameter => ==("μ·σ²"), assessment.samples).value ≈ vec(samples[1, :, :] .* samples[2, :, :] .^ 2)
+    @test filter(:parameter => ==("μσ²"), assessment.samples).value == filter(:parameter => ==("μ·σ²"), assessment.samples).value
+    @test filter(:parameter => ==("log(σ²)"), assessment.samples).value ≈ vec(log.(samples[2, :, :] .^ 2))
+    @test filter(:parameter => ==("μ·σ²"), assessment.estimates).truth ≈ θ["μ", :] .* θ["σ", :] .^ 2
+    squared = assess(abs2.(convert(Matrix, θ)), abs2.(samples); parameter_names = ["μ²", "σ²"], functions = ["σ"])
+    @test filter(:parameter => ==("σ"), squared.samples).value ≈ vec(abs.(samples[2, :, :]))
+    @test_throws ArgumentError assess(θ, samples; functions = ["μ + ν"])
+
+    # An estimator cannot be assessed without data
+    @test_throws MethodError assess(point, θ)
 end
 
 @testset "PosteriorEstimator: SpikeAndSlab" begin

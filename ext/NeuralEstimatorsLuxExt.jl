@@ -114,7 +114,14 @@ LuxCore.initialparameters(::AbstractRNG, l::ActNorm) = (log_scale = copy(l.log_s
 LuxCore.initialstates(::AbstractRNG, ::ActNorm) = NamedTuple()
 
 LuxCore.initialparameters(::AbstractRNG, ::Permutation) = NamedTuple()
-LuxCore.initialstates(::AbstractRNG, ::Permutation) = NamedTuple()
+
+# The permutation is a non-trainable state drawn from the rng given to Lux.setup, so that this rng determines the flow,
+# and so that the permutation is saved with the estimator (see the docstring of Permutation). It is stored as a tuple,
+# so that devices leave it on the host, where it acts as a constant index (e.g., in code compiled by Reactant)
+function LuxCore.initialstates(rng::AbstractRNG, l::Permutation)
+    perm = randperm(rng, length(l.permutation))
+    return (permutation = Tuple(perm), inv_permutation = Tuple(invperm(perm)))
+end
 
 # ---- Utility functions ----
 
@@ -185,6 +192,13 @@ end
 # the saved parameters do not match the architecture of the given estimator
 _pstructure(x) = fmapstructure(y -> y isa AbstractArray ? size(y) : nothing, x)
 
+# Structure of a tree of states: the keys of the named tuples, the lengths of the tuples, and the sizes of the arrays.
+# Other leaves (e.g., random number generators, or the Vals that indicate the training mode) are not compared
+_sstructure(x::NamedTuple) = NamedTuple{keys(x)}(map(_sstructure, values(x)))
+_sstructure(x::Tuple) = map(_sstructure, x)
+_sstructure(x::AbstractArray) = size(x)
+_sstructure(x) = nothing
+
 function _loadestimator(estimator::LuxEstimator, path::String)
     saved = BSON.load(path, @__MODULE__)
     if !(haskey(saved, :parameters) && haskey(saved, :states))
@@ -193,6 +207,11 @@ function _loadestimator(estimator::LuxEstimator, path::String)
     parameters, states = saved[:parameters], saved[:states]
     if _pstructure(parameters) != _pstructure(estimator.ps)
         throw(ArgumentError("The parameters stored in $(path) do not match the architecture of the given estimator (saved parameterlength $(Lux.parameterlength(parameters)), estimator parameterlength $(Lux.parameterlength(estimator.ps))); please ensure that the same architecture is used when loading."))
+    end
+    # The states can hold information that the parameters do not (e.g., the permutations of a NormalisingFlow), so they
+    # must also match the architecture of the given estimator
+    if _sstructure(states) != _sstructure(estimator.st)
+        throw(ArgumentError("The states stored in $(path) do not match the architecture of the given estimator; please ensure that the same architecture is used when loading. Note that the states of a NormalisingFlow include its permutations, which earlier versions of NeuralEstimators did not store: an estimator containing a NormalisingFlow that was saved by such a version must be retrained."))
     end
     return LuxEstimator(estimator.estimator, parameters, states)
 end

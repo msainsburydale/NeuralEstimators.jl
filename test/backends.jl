@@ -383,6 +383,54 @@ end
     @test assess(est, θ_test, Z_test; N = 50) isa Assessment
 end
 
+# Regression tests for the permutations of a NormalisingFlow. With Lux, these were drawn from the global random number
+# generator when the flow was constructed, and were not stored in its parameters or states, so that they were not
+# saved: loadestimator() then silently returned an incorrect estimator, unless it was given an estimator constructed in
+# the same random state. With Lux, they are now drawn from the random number generator given to Lux.setup, and stored
+# in the states. NB with four parameters, two independent draws of the permutations almost surely differ.
+@testset "Lux NormalisingFlow: Lux.setup determines the permutations" begin
+    p, num_summaries = 4, 3
+    flow1 = NormalisingFlow(p, num_summaries; backend = Lux)
+    rand(100) # advance the global random number generator, so that the second flow is constructed in another state
+    flow2 = NormalisingFlow(p, num_summaries; backend = Lux)
+    ps1, st1 = Lux.setup(Xoshiro(1), flow1)
+    ps2, st2 = Lux.setup(Xoshiro(1), flow2)
+    θ = randn(Float32, p, 16)
+    tz = randn(Float32, num_summaries, 16)
+    @test first(NeuralEstimators._logdensity(flow1, θ, tz, ps1, st1)) == first(NeuralEstimators._logdensity(flow2, θ, tz, ps2, st2))
+    Random.seed!(1)
+    draws1 = sampleposterior(flow1, tz, 10, ps1, st1)
+    Random.seed!(1)
+    draws2 = sampleposterior(flow2, tz, 10, ps2, st2)
+    @test draws1 == draws2
+end
+
+@testset "NormalisingFlow: loadestimator restores the permutations ($backend)" for backend in (Flux, Lux)
+    p = 4
+    θ_tr, θ_va = rand(Float32, p, 256), rand(Float32, p, 256)
+    Z_tr = θ_tr .+ 0.1f0 .* randn(Float32, p, 256)
+    Z_va = θ_va .+ 0.1f0 .* randn(Float32, p, 256)
+    make(; kwargs...) = PosteriorEstimator(MLP(p, p; depth = 1, width = 16, backend = backend), p; num_summaries = p, q = NormalisingFlow, depth = 1, kwargs...)
+    savepath = mktempdir()
+    trained = train(make(), θ_tr, θ_va, Z_tr, Z_va; device = cpu_device(), adtype = AutoZygote(), epochs = 1, savepath = savepath, verbose = false)
+
+    rand(100) # advance the global random number generator, so that the estimator is constructed in another state
+    loaded = loadestimator(make(), savepath)
+    ld(est) = (x = NeuralEstimators._logdensity(est, θ_va, Z_va); x isa Tuple ? first(x) : x) # Lux also returns the states
+    @test ld(loaded) ≈ ld(trained)
+    Random.seed!(1)
+    draws_trained = sampleposterior(trained, Z_va[:, 1:5]; N = 20)
+    Random.seed!(1)
+    draws_loaded = sampleposterior(loaded, Z_va[:, 1:5]; N = 20)
+    @test draws_loaded ≈ draws_trained
+
+    if backend === Lux
+        # The states must also match the architecture of the given estimator. Otherwise, the parameters of a flow with
+        # permutations would load silently into a flow without them, since the two flows have the same parameters
+        @test_throws ArgumentError loadestimator(make(use_permutation = false), savepath)
+    end
+end
+
 @testset "Lux SpikeAndSlab" begin
     num_summaries = 4
     sampler1(K) = NamedMatrix(θ = Float32.(rand(K) .< 0.5) .* randn(Float32, K))

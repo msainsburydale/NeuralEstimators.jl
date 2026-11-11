@@ -110,6 +110,8 @@ end
 """
 	assess(estimator, θ, Z; ...)
 	assess(estimators::Vector, θ, Z; ...)
+	assess(θ, θ̂::AbstractMatrix; ...)
+	assess(θ, samples::AbstractArray{<:Any, 3}; ...)
 	assess(estimator::PriorEstimator, θ; N = size(θ, 2), ...)
 	assess(estimator::PriorEstimator; N = 1000, ...)
 Assesses an `estimator` (or a collection of `estimators`) based on true parameters `θ` and corresponding simulated data `Z`.
@@ -120,6 +122,8 @@ When `Z` contains more simulated data sets than the number ``K`` of sampled para
 
 The return value is of type [`Assessment`](@ref).
 
+Inferences obtained by any means (e.g., MCMC or maximum likelihood) can be assessed by passing them in place of the estimator and data: `θ̂` is a ``d`` × ``K`` matrix of point estimates and `samples` is a ``d`` × ``N`` × ``K`` array of posterior samples, where ``N`` is the number of draws (the formats returned by [`estimate`](@ref) and [`sampleposterior`](@ref), respectively). As above, `θ` is recycled when the inferences relate to more than ``K`` data sets. The methods for estimators call these methods once the estimator has been applied to `Z`, and assessments of different methods can be combined with `merge()` for comparison.
+
 A [`PriorEstimator`](@ref) is assessed without data. Instead, `N` draws from the learned distribution are compared with test samples `θ` from the true distribution, if given as a ``d`` × ``K`` matrix (by default, `N` is ``K``, or 1000 if no test samples are given), and the risk is the average negative log density of the test samples under the learned distribution (see [`risk`](@ref)). The draws can be visualised with `plot(assessment)`. The keyword arguments `parameter_names`, `estimator_name`, `device`, and `use_gpu` (the latter two passed to [`sample`](@ref sample(::PriorEstimator, ::Integer)) and [`logdensity`](@ref)) also apply.
 
 # Keyword arguments
@@ -128,7 +132,8 @@ A [`PriorEstimator`](@ref) is assessed without data. Instead, `N` draws from the
 - `use_gpu = true`: `Bool` or `Vector{Bool}` with length equal to the number of estimators.
 - `probs = nothing` (applicable only to [`PointEstimator`](@ref)): probability levels taking values between 0 and 1. By default, no bootstrap uncertainty quantification is done; if `probs` is provided, it must be a two-element vector specifying the lower and upper probability levels for non-parametric bootstrap intervals (note that parametric bootstrap is not currently supported with `assess()`).
 - `B::Integer = 400` (applicable only to [`PointEstimator`](@ref)): number of bootstrap samples.
-- `pointsummary::Function = mean` (applicable only to estimators that yield posterior samples): a function that summarises a vector of posterior samples into a single point estimate for each marginal; any function mapping a vector to a scalar is valid (e.g., `median` for the posterior median).
+- `pointsummary::Function = mean` (applicable only to posterior samples): a function that summarises a vector of posterior samples into a single point estimate for each marginal; any function mapping a vector to a scalar is valid (e.g., `median` for the posterior median).
+- `functions = ()` (applicable only to posterior samples): functions of the parameters to assess in addition to the parameters themselves. Each is given either as a pair `name => f`, where `f` maps a parameter vector to a scalar and may index the parameters by position or by name (e.g., `"σ" => θ -> sqrt(θ["σ²"])`), or as a string in the parameter names (e.g., `"σ²/ρ"` or `"σ²ρ"`), in which a superscript on a name denotes a power of that parameter (e.g., `"σ²"` is the square of a parameter named `σ`, and `"σ"` is the square root of a parameter named `σ²`) and adjacent names denote a product. A single function may be given on its own (e.g., `functions = "σ²/ρ"`). Each function is applied to the true parameters and to every posterior draw. This is useful when, for example, the parameters are weakly identified but a function of them is not.
 - `kwargs...` (applicable only to estimators that yield posterior samples): additional keyword arguments passed to [`sampleposterior`](@ref).
 """
 function assess end
@@ -153,8 +158,8 @@ function assess(
         ξ = xi
     end
 
-    # Set up
-    θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
+    # Set up (θ itself is passed on unchanged, to be recycled by assess(θ, estimates))
+    _, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
 
     # Obtain estimates
     if !isnothing(ξ)
@@ -162,17 +167,10 @@ function assess(
     else
         runtime = @elapsed estimates = estimate(estimator, Z, args...; use_gpu = use_gpu, kwargs...)
     end
-    estimates = convert(Matrix, estimates) # convert to Matrix in case estimator returns a different format (e.g., adjoint vector)
-    runtime = DataFrame(runtime = runtime)
 
-    # Compute the empirical risk
-    loss = _loss(estimator, loss)
-    empirical_risk = !isnothing(loss) ? loss(estimates, θ) : nothing
-
-    # Convert true and estimated parameter to DataFrame, then merge
-    estimates = _estimates_to_df(estimates, parameter_names, K, J, m)
-    θ_df = _truth_to_df(θ, parameter_names, nrow(estimates))
-    estimates = _attach_truth(θ_df, estimates)
+    # Assess the estimates
+    assessment = assess(θ, estimates; parameter_names, m, runtime, loss = _loss(estimator, loss))
+    estimates = assessment.estimates
 
     if !isnothing(probs)
         @assert length(probs) == 2
@@ -185,7 +183,7 @@ function assess(
         intervals[!, "m"] = m
         intervals[!, "k"] = repeat(1:K, J)
         intervals[!, "j"] = repeat(1:J, inner = K)
-        intervals = _merge_interval(θ_df, intervals)
+        intervals = _merge_interval(estimates, intervals)
         estimates[:, "lower"] = intervals[:, "lower"]
         estimates[:, "upper"] = intervals[:, "upper"]
         estimates[:, "α"] .= 1 - (probs[2] - probs[1])
@@ -193,6 +191,35 @@ function assess(
 
     # Add estimator name if it was provided
     estimator_name = _resolve_estimator_name(estimator_name, estimator_names)
+    _add_estimator_name!(estimates, assessment.runtime, estimator_name)
+
+    return assessment
+end
+
+# Point estimates obtained by any means
+function assess(
+    θ::P, estimates::AbstractMatrix;
+    parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
+    estimator_name::Union{Nothing, String} = nothing,
+    m = fill(1, size(estimates, 2)),
+    runtime = missing,
+    loss = nothing
+) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+
+    # Set up (the estimates stand in for the data, as they contain one column per data set)
+    θ, parameter_names, _, K, J, _ = _assess_setup(θ, estimates, parameter_names)
+    estimates = convert(Matrix, estimates) # convert to Matrix in case estimator returns a different format (e.g., adjoint vector)
+    runtime = DataFrame(runtime = runtime)
+
+    # Compute the empirical risk
+    empirical_risk = !isnothing(loss) ? loss(estimates, θ) : nothing
+
+    # Convert true and estimated parameter to DataFrame, then merge
+    estimates = _estimates_to_df(estimates, parameter_names, K, J, m)
+    θ_df = _truth_to_df(θ, parameter_names, nrow(estimates))
+    estimates = _attach_truth(θ_df, estimates)
+
+    # Add estimator name if it was provided
     _add_estimator_name!(estimates, runtime, estimator_name)
 
     return Assessment(estimates, runtime, nothing, empirical_risk)
@@ -205,15 +232,45 @@ function assess(
     estimator_name::Union{Nothing, String} = nothing,
     estimator_names::Union{Nothing, String} = nothing,
     pointsummary::Function = mean,
+    functions::Union{Tuple, AbstractVector, AbstractString, Pair} = (),
     kwargs... #Document these kwargs...
 )
 
-    # Set up
-    θ, parameter_names, d, K, J, m = _assess_setup(θ, Z, parameter_names)
+    # Set up (θ itself is passed on unchanged, to be recycled by assess(θ, samples))
+    m = last(_assess_setup(θ, Z, parameter_names))
 
     # Posterior samples 
     runtime = @elapsed samples = sampleposterior(estimator, Z, args...; kwargs...)
+
+    # Assess the posterior samples
+    estimator_name = _resolve_estimator_name(estimator_name, estimator_names)
+    return assess(θ, samples; parameter_names, estimator_name, pointsummary, functions, m, runtime)
+end
+
+# Posterior samples obtained by any means
+function assess(
+    θ::P, samples::AbstractArray{<:Any, 3};
+    parameter_names::Vector{String} = ["θ$i" for i ∈ 1:size(θ, 1)],
+    estimator_name::Union{Nothing, String} = nothing,
+    m = fill(1, size(samples, 3)),
+    runtime = missing,
+    pointsummary::Function = mean,
+    functions::Union{Tuple, AbstractVector, AbstractString, Pair} = ()
+) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
+
+    # Set up (the samples stand in for the data, as they contain one slice per data set)
+    θ, parameter_names, _, K, J, _ = _assess_setup(θ, samples, parameter_names)
     runtime = DataFrame(runtime = runtime)
+
+    # Functions of the parameters, each applied to the true parameters and to every posterior draw, are assessed as further parameters
+    functions isa Union{AbstractString, Pair} && (functions = (functions,)) # a single function
+    θ₀, samples₀, names₀ = θ, samples, parameter_names
+    for spec in functions
+        name, f = _functionofparameters(spec, names₀)
+        θ = vcat(θ, f(θ₀))
+        samples = vcat(samples, f(samples₀))
+        parameter_names = vcat(parameter_names, name)
+    end
 
     # Empirical risk
     # NB not including this for now; see the comments in assess.jl
@@ -247,13 +304,67 @@ function assess(
     samples_df = vcat(sample_dfs...)
 
     # Add estimator name if it was provided
-    estimator_name = _resolve_estimator_name(estimator_name, estimator_names)
     _add_estimator_name!(estimates, runtime, estimator_name)
     if !isnothing(estimator_name)
         samples_df[!, "estimator"] .= estimator_name
     end
 
     return Assessment(estimates, runtime, samples_df, empirical_risk)
+end
+
+# A function of the parameters given to assess(θ, samples), returned with its name. The returned function maps an array whose
+# first dimension indexes the parameters (e.g., the d × N × K posterior samples) to the values of the function, in an array
+# whose first dimension has size one
+function _functionofparameters(spec::Pair, parameter_names)
+    name, f = spec
+    function g(x)
+        draws = reshape(x, size(x, 1), :)
+        draw = similar(draws, size(draws, 1)) # each draw is copied into this vector, which f sees with the parameter names
+        θ = NamedArray(draw, (parameter_names,), (:parameter,))
+        return reshape(map(column -> (copyto!(draw, column); f(θ)), eachcol(draws)), 1, size(x)[2:end]...)
+    end
+    return string(name), g
+end
+
+# A string in the parameter names (e.g., "σ²/ρ") is evaluated on all draws at once
+function _functionofparameters(spec::AbstractString, parameter_names)
+    expression = Meta.parse(spec)
+
+    # The integer written in superscript, and a name split into its base and the exponent written in superscript at its
+    # end (1 if there is none), e.g., "σ²" → ("σ", 2)
+    superscripts = Dict(zip("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-"))
+    superscript(s) = parse(Int, map(c -> superscripts[c], s))
+    power(name) = (m = match(r"^(.+?)(⁻?[⁰¹²³⁴⁵⁶⁷⁸⁹]+)$", name); isnothing(m) ? (name, 1) : (String(m[1]), superscript(m[2])))
+
+    function evaluate(ex, θ)
+        ex isa Number && return ex
+        if ex isa Symbol
+            i = findfirst(==(string(ex)), parameter_names)
+            isnothing(i) || return θ[i, :]
+            # Otherwise, a product of powers of parameters written without operators (e.g., "σ²ρ"), read from the left: at
+            # each step, the longest parameter name (or parameter name without its exponent), then an optional exponent
+            rest, value = string(ex), 1
+            while !isempty(rest)
+                candidates = [(i, b, q) for (i, name) in enumerate(parameter_names) for (b, q) in ((name, 1), power(name)) if startswith(rest, b)]
+                isempty(candidates) && throw(ArgumentError("`$rest` in \"$spec\" is not a parameter (the parameters are $(join(parameter_names, ", ")))"))
+                i, b, q = argmax(c -> length(c[2]), candidates)
+                rest = chop(rest; head = length(b), tail = 0)
+                m = match(r"^⁻?[⁰¹²³⁴⁵⁶⁷⁸⁹]+", rest)
+                p = isnothing(m) ? 1 : superscript(m.match)
+                isnothing(m) || (rest = chop(rest; head = length(m.match), tail = 0))
+                value = value .* θ[i, :] .^ (p % q == 0 ? p ÷ q : convert(float(eltype(θ)), p / q))
+            end
+            return value
+        end
+        if Meta.isexpr(ex, :call) && ex.args[1] isa Symbol
+            op = ex.args[1] === :⋅ ? :* : ex.args[1] # σ²·ρ is parsed as a dot product
+            isdefined(Base, op) && return broadcast(getfield(Base, op), (evaluate(a, θ) for a in ex.args[2:end])...)
+        end
+        throw(ArgumentError("`$ex` in \"$spec\" cannot be evaluated: use parameter names, numbers, arithmetic operators, and functions from Base (e.g., `log`)"))
+    end
+
+    g(x) = reshape(evaluate(expression, reshape(x, size(x, 1), :)), 1, size(x)[2:end]...)
+    return String(spec), g
 end
 
 # Learned distributions, with or without test samples θ from the true distribution
@@ -312,7 +423,8 @@ end
 Shared pre-processing for all `assess()` methods. Validates inputs, resolves
 `parameter_names` from a `NamedMatrix` where available, computes the replication
 factor `J`, expands `θ` to match `Z` when `J > 1`, and builds the per-dataset
-sample-size vector `m`.
+sample-size vector `m`. `Z` may also be the inferences passed to `assess(θ, θ̂)`
+or `assess(θ, samples)`, whose last dimension indexes the data sets.
 
 Returns `(θ, parameter_names, d, K, J, m)` where:
 - `θ`               — expanded parameter matrix (`d × KJ`)
@@ -338,7 +450,7 @@ function _assess_setup(θ::P, Z, parameter_names::Vector{String}) where {P <: Un
 
     # Validate and compute the replication factor J
     KJ = numobs(Z)
-    @assert KJ % K == 0 "The number of data sets in `Z` ($KJ) must be a multiple of the number of parameter vectors in `θ` ($K)"
+    @assert KJ % K == 0 "The number of data sets ($KJ) must be a multiple of the number of parameter vectors in `θ` ($K)"
     J = KJ ÷ K
 
     # Expand θ so each column aligns with the corresponding dataset in Z
