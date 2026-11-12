@@ -32,9 +32,12 @@ end
 (r::RiskBatch)(model, ps, st, input, output) = r.loss(_forward(model, ps, st, input), output)
 
 # Cache key for compiled risk: must support RatioEstimator inputs `(Z, θ)`, etc.
+# NB the fallback keys on the object itself, so a type that holds arrays needs its own method: otherwise, each batch
+# is a cache miss and the risk is recompiled for every batch
 _compile_key(x::AbstractArray) = size(x)
 _compile_key(x::Tuple) = map(_compile_key, x)
 _compile_key(P::PackedReplicates) = isnothing(P.mask) ? (size(P.data), Tuple(P.sample_sizes)) : (size(P.data), size(P.mask))
+_compile_key(d::DataAndSummaries) = (_compile_key(d.Z), _compile_key(d.S))
 _compile_key(x) = x
 
 # Forward field access used by train.jl (e.g. .optimizer, .optimizer_state)

@@ -507,6 +507,18 @@ end
     end
 end
 
+# Under Reactant, the compiled validation risk is cached by the shapes of each batch, so that it is compiled once
+# rather than for every batch. A DataAndSummaries batch used to be keyed by the object itself, which recompiled the
+# risk for every batch
+@testset "Reactant compile cache: DataAndSummaries" begin
+    ext = Base.get_extension(NeuralEstimators, :NeuralEstimatorsReactantExt)
+    batch(K) = DataAndSummaries(rand(Float32, 4, 3, 1, K), rand(Float32, 2, K))
+    @test ext._compile_key(batch(8)) == ext._compile_key(batch(8))
+    @test ext._compile_key(batch(8)) != ext._compile_key(batch(4))
+    @test ext._compile_key((batch(8), rand(Float32, d, 8))) == ext._compile_key((batch(8), rand(Float32, d, 8)))
+    @test ext._compile_key(DataAndSummaries(rand(Float32, 4, 3, 1, 8))) == ((4, 3, 1, 8), nothing)
+end
+
 @testset "Lux TelescopingRatioEstimator" begin
     lower, upper = [0.0f0, 0.0f0], [1.0f0, 1.0f0]
     grid = expandgrid(0:0.1:1, 0:0.1:1)'
