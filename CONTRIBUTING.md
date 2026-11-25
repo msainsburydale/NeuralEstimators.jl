@@ -121,9 +121,11 @@ The recommended workflow for developing a new estimator type is to first prototy
 
 **Interactive prototyping:**
 1. Define a custom struct subtyping `AbstractNeuralEstimator`, for example, `struct MyEstimator <: AbstractNeuralEstimator`. This struct will have fields storing the neural networks and anything else needed for inference.
+   * To support standardisation (see `Standardiser`), add the fields `data_standardiser` and `parameter_standardiser` (set by the keyword arguments `standardise_data` and `standardise_parameters` through `_standardiser()`), and list only the neural networks in the functor (e.g., `@functor MyEstimator (summary_network, inference_network)`), so that the standardisers are not optimised and are saved separately. `train()` then fits, saves, and restores them automatically. Estimators without these fields are not standardised.
 1. Define convenience constructors. 
 1. Define the forward pass of the estimator: `(estimator::MyEstimator)(input) = ...`  
-   * When applying the summary network to data, use `_summarystatistics(estimator, Z)` rather than `estimator.summary_network(Z)`.
+   * When applying the summary network to data, use `_summarystatistics(estimator, _standardisedata(estimator.data_standardiser, Z))` rather than `estimator.summary_network(Z)`. `_summarystatistics` handles the data containers of the package (e.g., `DataAndSummaries`), and `_standardisedata` standardises the data; the latter is a no-op during training, since `_inputoutput` has already standardised the data.
+   * Where parameters enter a network, standardise them with `_standardise(estimator.parameter_standardiser, θ)`; where a network outputs parameters, map them back with `_unstandardise(estimator.parameter_standardiser, θ̂)`. During training, these are no-ops, since `_inputoutput` has already standardised the data and parameters.
 1. `import` and extend the relevant functions listed below.
 1. Train and assess the estimator to verify correctness.
 1. Write a docstring for the estimator with a self-contained example that can be copy-pasted and run.
@@ -139,7 +141,7 @@ After running `import NeuralEstimators: <function name>`:
 - Training: 
    - `_loss(estimator::MyEstimator, loss)`: by default, returns `loss` unchanged. Define `_loss(estimator::MyEstimator, loss = nothing)` to enforce a specific objective regardless of what the user provides.
 
-   - `_inputoutput(estimator, Z, θ)`: by default, returns `(Z, θ)` as the `(input, output)` pair, where `Z` is the simulated data and `θ` is the true parameters, so that training minimises `loss(estimator(Z), θ)`. Override if the estimator requires a different input/output structure.
+   - `_inputoutput(estimator, Z, θ)`: by default, returns `(Z, θ)` as the `(input, output)` pair (standardised, if the estimator has standardisers), where `Z` is the simulated data and `θ` is the true parameters, so that training minimises `loss(estimator(Z), θ)`. Override if the estimator requires a different input/output structure, standardising the data with `_standardisedata(_unmark(estimator.data_standardiser), Z)` and the parameters with `_standardise(_unmark(estimator.parameter_standardiser), θ)`.
 
 - Inference: extend existing functions (e.g., `sampleposterior`) or define new ones as needed. 
 - Assessment: if your estimator returns point estimates via `estimate` or posterior

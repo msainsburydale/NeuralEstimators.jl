@@ -40,9 +40,15 @@ function LuxEstimator(estimator::LuxEstimator)
 end
 
 # Methods - just pass on the estimator and its parameters/states
-for f in (:estimate, :infer, :summarystatistics, :assess, :sampleposterior, :spikeprobability, :bootstrap, :interval, :quantiles, :posteriormean, :posteriormedian, :posteriorquantile, :logratio, :logposterior, :_logdensity, :logdensity, :forward, :inverse)
+# NB bootstrap is not forwarded: its methods dispatch on later arguments and only pass the estimator on to estimate(), which
+# is forwarded, so that a LuxEstimator needs no method of its own (one taking `args...` would be ambiguous with them)
+for f in (:estimate, :infer, :assess, :sampleposterior, :spikeprobability, :interval, :quantiles, :posteriormean, :posteriormedian, :posteriorquantile, :logratio, :logposterior, :_logdensity, :logdensity, :forward, :inverse)
     @eval $f(estimator::LuxEstimator, args...; kwargs...) = $f(estimator.estimator, args..., estimator.ps, estimator.st; kwargs...)
 end
+# NB summarystatistics has methods for DataAndSummaries data, so it is forwarded with explicit signatures (a method taking
+# `args...` would be ambiguous with them)
+summarystatistics(estimator::LuxEstimator, Z; kwargs...) = summarystatistics(estimator.estimator, Z, estimator.ps, estimator.st; kwargs...)
+summarystatistics(estimator::LuxEstimator, d::DataAndSummaries; kwargs...) = summarystatistics(estimator.estimator, d, estimator.ps, estimator.st; kwargs...)
 # NB sample() is StatsBase.sample, so it is forwarded with explicit signatures: a method taking
 # (estimator, args...) would be ambiguous with AbstractMCMC's sample(model, ::AbstractSampler, N)
 sample(estimator::LuxEstimator; kwargs...) = sample(estimator.estimator, estimator.ps, estimator.st; kwargs...)
@@ -55,3 +61,7 @@ _has_summary_network(e::LuxEstimator) = hasfield(typeof(e.estimator), :summary_n
 
 # Loss function inherited from estimator type
 _loss(estimator::LuxEstimator, loss = nothing) = _loss(estimator.estimator, loss)
+
+# Standardisers and bounds of the wrapped estimator (see _transformations)
+_transformations(estimator::LuxEstimator) = _transformations(estimator.estimator)
+_settransformations(estimator::LuxEstimator, entry::NamedTuple) = LuxEstimator(_settransformations(estimator.estimator, entry), estimator.ps, estimator.st)

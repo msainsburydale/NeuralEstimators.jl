@@ -1,6 +1,7 @@
 @doc raw"""
 	PriorEstimator <: AbstractNeuralEstimator
-	PriorEstimator(num_parameters::Integer; q = NormalisingFlow, kwargs...)
+	PriorEstimator(num_parameters::Integer; q = NormalisingFlow, standardise_parameters = true, kwargs...)
+	PriorEstimator(q::AbstractApproximateDistribution; standardise_parameters = true)
 A neural estimator that approximates a probability distribution $p(\boldsymbol{\theta})$ from samples alone, without conditioning on data (i.e., unconditional density estimation). A typical use is to learn a prior distribution from samples that encode prior knowledge, such as parameter estimates from many previous analyses or posterior draws from an earlier analysis.
 
 The distribution is approximated by `q`, which may be any of the in-built [Approximate distributions](@ref) (e.g., [`NormalisingFlow`](@ref), the default, or [`GaussianMixture`](@ref)). It is constructed given `num_parameters` and `num_summaries = 0` (i.e., it is unconditional), with any additional keyword arguments passed to the constructor of `q`. The parameters of a [`GaussianMixture`](@ref), [`Gaussian`](@ref), or [`SpikeAndSlab`](@ref) distribution are then learned directly, so that keyword arguments specifying a neural network (e.g., `depth` and `width`) apply only to a [`NormalisingFlow`](@ref).
@@ -10,7 +11,7 @@ The estimator is trained with [`train`](@ref), given either fixed training and v
 Once trained, the learned distribution can be sampled with [`sample`](@ref sample(::PriorEstimator, ::Integer)) and its density evaluated with [`logdensity`](@ref). When `q` is a [`NormalisingFlow`](@ref), [`forward`](@ref) and [`inverse`](@ref) map between the parameter space and the latent space of the flow, in which the learned distribution is standard Gaussian.
 
 !!! note "Standardisation"
-    The parameters are not standardised internally. When they are on very different scales, standardise each parameter before training (e.g., by subtracting its mean and dividing by its standard deviation), and apply the inverse transformation to the samples.
+    By default (`standardise_parameters = true`), `q` approximates the distribution of the standardised parameters, with the mean and standard deviation of each parameter computed from the training samples (see [`Standardiser`](@ref)). The samples, densities, and latent variables returned by [`sample`](@ref sample(::PriorEstimator, ::Integer)), [`logdensity`](@ref), [`forward`](@ref), and [`inverse`](@ref) are all on the original scale (the log density includes the log determinant of the Jacobian of the standardisation, ``-\sum_i \log \sigma_i``), while the training and validation risks are the negative log density of the standardised parameters. The default is `standardise_parameters = false` when `q` is a [`SpikeAndSlab`](@ref), which locates its spike on the original scale.
 
 !!! note "Single parameter"
     With a single parameter, the coupling layers of a [`NormalisingFlow`](@ref) have nothing to condition on, so the flow reduces to an affine transformation of its Gaussian base distribution. Hence, when `num_parameters = 1`, a [`GaussianMixture`](@ref) is used in place of a `NormalisingFlow`.
@@ -42,10 +43,25 @@ inverse(estimator, U)      # recovers θ
 """
 @concrete struct PriorEstimator <: AbstractNeuralEstimator
     q
+    parameter_standardiser # see Standardiser
+end
+
+# The standardiser is applied on the host and saved separately (see _transformations), so it is kept out of the functor:
+# the Flux state (and hence the loading of estimators saved previously) is unchanged
+@functor PriorEstimator (q,)
+
+# Constructor: approximate distribution
+# NB the parameters are not standardised by default when q is a SpikeAndSlab, which locates its spike on the original scale
+function PriorEstimator(q::AbstractApproximateDistribution; standardise_parameters = !(q isa SpikeAndSlab))
+    parameter_standardiser = _standardiser(standardise_parameters)
+    if q isa SpikeAndSlab && !isnothing(parameter_standardiser)
+        throw(ArgumentError("A SpikeAndSlab locates its spike on the original scale of the parameter, so the parameters cannot be standardised: set `standardise_parameters = false`."))
+    end
+    PriorEstimator(q, parameter_standardiser)
 end
 
 # Constructor: number of parameters => build approximate distribution automatically
-function PriorEstimator(num_parameters::Integer; q = NormalisingFlow, kwargs...)
+function PriorEstimator(num_parameters::Integer; q = NormalisingFlow, standardise_parameters = !(q === SpikeAndSlab || q == "SpikeAndSlab"), kwargs...)
     # Convert string to type if needed
     if q isa String
         q = getfield(@__MODULE__, Symbol(q))
@@ -54,7 +70,7 @@ function PriorEstimator(num_parameters::Integer; q = NormalisingFlow, kwargs...)
         @info "PriorEstimator: a NormalisingFlow with a single parameter reduces to a Gaussian distribution, so a GaussianMixture is used instead."
         q = GaussianMixture
     end
-    PriorEstimator(q(num_parameters, 0; kwargs...))
+    PriorEstimator(q(num_parameters, 0; kwargs...); standardise_parameters)
 end
 
 # ---- Training ----
@@ -65,8 +81,12 @@ _emptysummary(θ) = similar(θ, 0, size(θ, 2))
 
 _loss(estimator::PriorEstimator, loss = nothing) = (ld, θ) -> -mean(ld)
 
-# No data are simulated (Z = nothing), so the parameters are both the input and the output placeholder
-_inputoutput(estimator::PriorEstimator, ::Nothing, θ) = (θ, θ)
+# No data are simulated (Z = nothing), so the parameters (standardised once, on the host; see _Prestandardised) are both
+# the input and the output placeholder
+function _inputoutput(estimator::PriorEstimator, ::Nothing, θ)
+    θ = _toqscale(estimator, θ)
+    return θ, θ
+end
 _inputoutput(estimator::PriorEstimator, Z, θ) = throw(ArgumentError("A PriorEstimator is trained with parameter samples alone, without data: use `train(estimator, θ_train, θ_val)` or `train(estimator, sampler)`"))
 
 # Forward pass: Stateful (Flux)
@@ -114,12 +134,23 @@ _tolatent(flow, θ, t, ps, st) = forward(flow, θ, t, ps, st) # returns (U, log_
 
 # Applies `f` to a d × K matrix or a d-dimensional vector θ, returning a matrix with K columns
 function _applyprior(f, estimator::PriorEstimator, θ, args...; batchsize::Integer = 10_000, kwargs...)
+    _applywithdevice(_PriorMap(f, estimator), _parametermatrix(θ), args...; batchsize = batchsize, kwargs...)
+end
+
+# A d × K matrix of parameters, given a matrix, a named matrix, or a single parameter vector
+function _parametermatrix(θ)
     θ = _stripnames(_extractθ(θ))
     if θ isa AbstractVector
         θ = reshape(θ, :, 1)
     end
-    _applywithdevice(_PriorMap(f, estimator), θ, args...; batchsize = batchsize, kwargs...)
+    return θ
 end
+
+# Adds the log determinant of the Jacobian of the standardisation, -Σᵢ log σᵢ, to log densities of the standardised
+# parameters, giving log densities of the parameters on the original scale
+_withjacobian(ld, ::Nothing, d) = ld
+_withjacobian(ld, ::Standardiser{Nothing}, d) = ld
+_withjacobian(ld, s::Standardiser, d) = ld .- eltype(ld)(s.std isa Number ? d * log(s.std) : sum(log, s.std))
 
 function _checkflow(estimator::PriorEstimator, f)
     estimator.q isa NormalisingFlow || throw(ArgumentError("`$f` is only defined for a `PriorEstimator` whose approximate distribution is a `NormalisingFlow`"))
@@ -139,7 +170,7 @@ See also [`logdensity`](@ref) and [`inverse`](@ref).
 function sample(estimator::PriorEstimator, N::Integer; device = nothing, use_gpu::Bool = true)
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = false)
     θ = sampleposterior(estimator.q, zeros(Float32, 0, 1), N; device = device)
-    return θ[:, :, 1]
+    return _fromqscale(estimator, θ[:, :, 1])
 end
 sample(estimator::PriorEstimator; N::Integer = 1000, kwargs...) = sample(estimator, N; kwargs...)
 
@@ -147,7 +178,7 @@ sample(estimator::PriorEstimator; N::Integer = 1000, kwargs...) = sample(estimat
 function sample(estimator::PriorEstimator, N::Integer, ps, st; device = nothing, use_gpu::Bool = true)
     device = _resolvedevice(device = device, use_gpu = use_gpu, verbose = false)
     θ = sampleposterior(estimator.q, zeros(Float32, 0, 1), N, ps.q, st.q; device = device)
-    return θ[:, :, 1]
+    return _fromqscale(estimator, θ[:, :, 1])
 end
 # NB ps and st are typed, since a method with untyped arguments would be ambiguous with AbstractMCMC's sample(model, ::AbstractSampler, N)
 sample(estimator::PriorEstimator, ps::NamedTuple, st::NamedTuple; N::Integer = 1000, kwargs...) = sample(estimator, N, ps, st; kwargs...)
@@ -166,13 +197,15 @@ function logdensity end
 
 # Stateful (Flux)
 function logdensity(estimator::PriorEstimator, θ; kwargs...)
-    ld = _applyprior(_logdensity, estimator, θ; kwargs...)
+    θ̃ = _toqscale(estimator, _parametermatrix(θ))
+    ld = _withjacobian(_applyprior(_logdensity, estimator, θ̃; kwargs...), estimator.parameter_standardiser, size(θ̃, 1))
     return θ isa AbstractVector ? only(ld) : vec(ld)
 end
 
 # Stateless (Lux)
 function logdensity(estimator::PriorEstimator, θ, ps, st; kwargs...)
-    ld = _applyprior(_logdensity, estimator, θ, ps, st; kwargs...)
+    θ̃ = _toqscale(estimator, _parametermatrix(θ))
+    ld = _withjacobian(_applyprior(_logdensity, estimator, θ̃, ps, st; kwargs...), estimator.parameter_standardiser, size(θ̃, 1))
     return θ isa AbstractVector ? only(ld) : vec(ld)
 end
 
@@ -188,14 +221,14 @@ See also [`inverse`](@ref).
 """
 function forward(estimator::PriorEstimator, θ; kwargs...)
     _checkflow(estimator, forward)
-    U = _applyprior(_tolatent, estimator, θ; kwargs...)
+    U = _applyprior(_tolatent, estimator, _toqscale(estimator, _parametermatrix(θ)); kwargs...)
     return θ isa AbstractVector ? vec(U) : U
 end
 
 # Stateless (Lux)
 function forward(estimator::PriorEstimator, θ, ps, st; kwargs...)
     _checkflow(estimator, forward)
-    U = _applyprior(_tolatent, estimator, θ, ps, st; kwargs...)
+    U = _applyprior(_tolatent, estimator, _toqscale(estimator, _parametermatrix(θ)), ps, st; kwargs...)
     return θ isa AbstractVector ? vec(U) : U
 end
 
@@ -209,13 +242,13 @@ Keyword arguments are as in [`logdensity`](@ref).
 """
 function inverse(estimator::PriorEstimator, U; kwargs...)
     _checkflow(estimator, inverse)
-    θ = _applyprior(inverse, estimator, U; kwargs...)
+    θ = _fromqscale(estimator, _applyprior(inverse, estimator, U; kwargs...))
     return U isa AbstractVector ? vec(θ) : θ
 end
 
 # Stateless (Lux)
 function inverse(estimator::PriorEstimator, U, ps, st; kwargs...)
     _checkflow(estimator, inverse)
-    θ = _applyprior(inverse, estimator, U, ps, st; kwargs...)
+    θ = _fromqscale(estimator, _applyprior(inverse, estimator, U, ps, st; kwargs...))
     return U isa AbstractVector ? vec(θ) : θ
 end

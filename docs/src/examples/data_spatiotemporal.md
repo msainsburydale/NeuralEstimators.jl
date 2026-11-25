@@ -213,7 +213,8 @@ estimator = PointEstimator(network, d; num_summaries = num_summaries)
 estimator = PosteriorEstimator(network, d; num_summaries = num_summaries)
 ```
 ```julia [Ratio estimator]
-estimator = RatioEstimator(network, d; num_summaries = num_summaries)
+estimator = TelescopingRatioEstimator(network, d; num_summaries = num_summaries, sampler = sampler)
+lower, upper = [0.05, 0.1], [0.5, 0.9]  # bounds of the parameters, needed for posterior sampling
 ```
 
 :::
@@ -254,8 +255,20 @@ The function [`assess`](@ref) can be used to assess the trained estimator:
 ```julia
 θ_test = sampler(1000)
 Z_test = simulator(θ_test, 20);
+```
+
+::: code-group
+```julia [Point estimator]
 assessment = assess(estimator, θ_test, Z_test)
 ```
+```julia [Posterior estimator]
+assessment = assess(estimator, θ_test, Z_test)
+```
+```julia [Ratio estimator]
+assessment = assess(estimator, θ_test, Z_test; lower, upper)
+```
+
+:::
 
 The resulting `Assessment` object contains ground-truth parameters, estimates, and other quantities that can be used to compute quantitative and qualitative diagnostics:
 ```julia
@@ -282,7 +295,7 @@ estimate(estimator, Z)
 sampleposterior(estimator, Z)
 ```
 ```julia [Ratio estimator]
-sampleposterior(estimator, Z)
+sampleposterior(estimator, Z; lower, upper)
 ```
 
 :::

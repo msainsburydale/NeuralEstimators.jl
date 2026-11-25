@@ -10,16 +10,14 @@ The methods cater for different variants of "on-the-fly" simulation.
 Specifically, a callable `sampler` can be provided to continuously sample new parameters, 
 and a callable `simulator` can be provided to continuously simulate new data conditional on the parameters. If
 provided with specific sets of parameters (`θ_train` and `θ_val`) and/or data
-(`Z_train` and `Z_val`), they will be held fixed during training.
+(`Z_train` and `Z_val`), they will be held fixed during training. The validation parameters and data are always held fixed.
 
-A [`PriorEstimator`](@ref) learns a distribution from parameter samples alone, so it is trained without data or a `simulator`.
+The trained estimator is always returned on the CPU, and the returned value should always be assigned: e.g., `estimator = train(estimator, ...)`.
 
-The validation parameters and data are always held fixed.
-
-The trained estimator is always returned on the CPU. 
+Before training begins, the standardisers of the estimator that are not yet fitted (see [`Standardiser`](@ref)) are fitted to the training data. They are never refitted, in particular when training an estimator that was trained or loaded before. The training and validation risks are evaluated on the standardised scale (and, for an estimator with parameter bounds, after the parameters are mapped to an unbounded scale).
 
 # Keyword arguments common to all methods:
-- `loss = mae` (applicable only to [`PointEstimator`](@ref)): loss function used to train the neural network. 
+- `loss = mae` (applicable only to [`PointEstimator`](@ref)): loss function used to train the neural network. By default, it also decides whether the parameters are standardised, the first time that the estimator is trained (see [`PointEstimator`](@ref)). With parameter bounds (`lower` and `upper`), use `mae` or a quantile loss: for any other loss, impose the constraints within the neural network itself (see [`PointEstimator`](@ref)).
 - `epochs = 100`: number of epochs to train the neural network. An epoch is one complete pass through the entire training data set when doing stochastic gradient descent.
 - `stopping_epochs = 5`: cease training if the risk does not improve in this number of epochs.
 - `batchsize = 32`: the batchsize to use when performing stochastic gradient descent, that is, the number of training samples processed between each update of the neural-network parameters.
@@ -41,7 +39,7 @@ The trained estimator is always returned on the CPU.
   - `final_estimator.bson`: neural-network parameters (and states) at the final epoch.
   - `train_time.csv`: total training time in seconds.
 
-  Note that the `*_estimator.bson` files store only the parameters (and states) of the neural networks, not their architecture: to load them, one must first construct an estimator with the same architecture (see [`loadestimator`](@ref)).
+  Note that the `*_estimator.bson` files store the parameters (and states) of the neural networks and everything else needed to use the estimator (its standardisers and parameter bounds), but not the architecture of the neural networks: to load them, one must first construct an estimator with the same architecture (see [`loadestimator`](@ref)).
 - `risk_history::Union{Nothing, Matrix} = nothing`: a matrix with two columns containing the training and validation risk from a previous call to `train()`, used to initialise the risk history when continuing training. Can be loaded from a previous call to `train` using [`loadrisk`](@ref).
 - `verbose = true`: flag indicating whether information, including empirical risk values and timings, should be printed to the console during training.
 
@@ -162,7 +160,9 @@ function _resolve_adtype(trainstate, device, adtype, verbose = true)
             @info "Setting adtype = AutoReactant() since device is a ReactantDevice."
             adtype = AutoReactant()
         elseif adtype isa AutoReactant && !(device isa ReactantDevice)
-            adtype = trainstate isa FluxTrainState || device isa CUDADevice ? AutoZygote() : AutoEnzyme()
+            # NB the default above, rather than AutoEnzyme(), which (without runtime activity) does not support
+            # NormalisingFlow or TelescopingRatioEstimator
+            adtype = AutoZygote()
             @info "Setting adtype = $(nameof(typeof(adtype)))() since AutoReactant requires reactant_device(), but device = $(nameof(typeof(device)))() was provided."
         elseif device isa CUDADevice && adtype isa AutoEnzyme
             @info "Setting adtype = AutoZygote() since AutoEnzyme is not yet fully supported with gpu_device()."
@@ -301,6 +301,16 @@ function _status!(d::_TrainDisplay, msg; transient::Bool = false)
     return nothing
 end
 
+# Erases a transient status, so that a message logged next (e.g., by _fitunfitted) starts on a line of its own
+function _clearstatus!(d::_TrainDisplay)
+    d.overwrite && d.nlines > 0 || return nothing
+    _erase_block!(d.io, d.nlines)
+    print(d.io, "\r\e[K")
+    d.nlines = 0
+    flush(d.io)
+    return nothing
+end
+
 function _refresh_label(kind::Symbol, first::Bool)
     verb = first ? "Simulating" : "Refreshing"
     kind === :parameters && return "$verb training parameters..."
@@ -417,6 +427,11 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 ) where {P, T}
+    # With a frozen summary network, an inference network that is the identity leaves nothing to train
+    if freeze_summary_network && trainstate.model isa PointEstimator && _is_identity(trainstate.model.inference_network)
+        @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function; returning the estimator unchanged."
+        return _trainstate_to_device(trainstate, cpu_device())
+    end
     progress = _TrainDisplay(verbose)
 
     # Determine device
@@ -426,8 +441,9 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
     # Determine adtype and check deep-learning backend + adtype + device are compatible
     adtype = _resolve_adtype(trainstate, device, adtype, verbose)
 
-    # Move trainstate to device and extract the current estimator
+    # Move trainstate to device, fit the standardisers (once; see Standardiser), and extract the current estimator
     trainstate = _trainstate_to_device(trainstate, device)
+    trainstate = _fitunfitted(trainstate, θ_train, Z_train, loss, verbose)
     estimator = getestimator(trainstate)
 
     train_time = 0.0
@@ -440,9 +456,6 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
         elseif device isa ReactantDevice
             @warn "`freeze_summary_network = true` is not supported with `reactant_device()` and will be ignored. If this affects your use case, please contact the package maintainer."
             freeze_summary_network = false
-        elseif estimator isa PointEstimator && _is_identity(estimator.inference_network)
-            @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function; returning the estimator unchanged."
-            return trainstate
         else
             _freeze_summary_network!(trainstate)
             verbose && _status!(progress, "Computing summary statistics..."; transient = true)
@@ -454,6 +467,10 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
             train_time += t
         end
     end
+
+    # The data loaders standardise the data and parameters once, on the host, so the forward pass of the estimator
+    # being trained skips standardisation (see _Prestandardised)
+    trainstate = _markstandardisers(trainstate)
 
     verbose && _status!(progress, "Constructing the training set..."; transient = true)
     train_set = _dataloader(estimator, Z_train, θ_train, batchsize; shuffle = shuffle, partial = partial)
@@ -537,7 +554,7 @@ function train(trainstate, θ_train::P, θ_val::P, Z_train::T, Z_val::T;
         CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
     end
 
-    return _trainstate_to_device(trainstate_best, cpu_device())
+    return _unmarkstandardisers(_trainstate_to_device(trainstate_best, cpu_device()))
 end
 
 function train(trainstate, θ_train::P, θ_val::P, simulator;
@@ -561,6 +578,11 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     freeze_summary_network::Bool = false,
     adtype::Union{AbstractADType, Nothing} = nothing
 ) where {P}
+    # With a frozen summary network, an inference network that is the identity leaves nothing to train
+    if freeze_summary_network && trainstate.model isa PointEstimator && _is_identity(trainstate.model.inference_network)
+        @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function; returning the estimator unchanged."
+        return _trainstate_to_device(trainstate, cpu_device())
+    end
     progress = _TrainDisplay(verbose)
 
     if !isnothing(m)
@@ -589,6 +611,12 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
     verbose && _status!(progress, "Simulating validation data..."; transient = true)
     train_time = @elapsed Z_val = simulator(θ_val, simulator_args...; simulator_kwargs...)
 
+    # Fit the standardisers (once; see Standardiser), given the training parameters and, since the training data
+    # have not yet been simulated, the validation data
+    verbose && _clearstatus!(progress)
+    trainstate = _fitunfitted(trainstate, θ_train, Z_val, loss, verbose)
+    estimator = getestimator(trainstate)
+
     if freeze_summary_network
         if !_has_summary_network(estimator)
             @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
@@ -596,9 +624,6 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
         elseif device isa ReactantDevice
             @warn "`freeze_summary_network = true` is not supported with `reactant_device()` and will be ignored. If this affects your use case, please contact the package maintainer."
             freeze_summary_network = false
-        elseif estimator isa PointEstimator && _is_identity(estimator.inference_network)
-            @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function; returning the estimator unchanged."
-            return trainstate
         else
             _freeze_summary_network!(trainstate)
             verbose && _status!(progress, "Computing summary statistics..."; transient = true)
@@ -606,6 +631,10 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
             train_time += t
         end
     end
+
+    # The data loaders standardise the data and parameters once, on the host, so the forward pass of the estimator
+    # being trained skips standardisation (see _Prestandardised)
+    trainstate = _markstandardisers(trainstate)
 
     verbose && _status!(progress, "Constructing the validation set..."; transient = true)
     val_set = _dataloader(estimator, Z_val, θ_val, batchsize; shuffle = false, partial = partial)
@@ -729,7 +758,7 @@ function train(trainstate, θ_train::P, θ_val::P, simulator;
         CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
     end
 
-    return _trainstate_to_device(trainstate_best, cpu_device())
+    return _unmarkstandardisers(_trainstate_to_device(trainstate_best, cpu_device()))
 end
 
 function train(trainstate, sampler, simulator;
@@ -759,6 +788,11 @@ function train(trainstate, sampler, simulator;
     risk_history::Union{Nothing, Matrix} = nothing,
     freeze_summary_network::Bool = false
 )
+    # With a frozen summary network, an inference network that is the identity leaves nothing to train
+    if freeze_summary_network && trainstate.model isa PointEstimator && _is_identity(trainstate.model.inference_network)
+        @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function; returning the estimator unchanged."
+        return _trainstate_to_device(trainstate, cpu_device())
+    end
     progress = _TrainDisplay(verbose)
 
     if !isnothing(m)
@@ -801,6 +835,12 @@ function train(trainstate, sampler, simulator;
     t = @elapsed Z_val = simulator(θ_val, simulator_args...; simulator_kwargs...)
     train_time += t
 
+    # Fit the standardisers (once; see Standardiser), given the validation parameters and data, since the training
+    # parameters and data have not yet been simulated
+    verbose && _clearstatus!(progress)
+    trainstate = _fitunfitted(trainstate, θ_val, Z_val, loss, verbose)
+    estimator = getestimator(trainstate)
+
     if freeze_summary_network
         if !_has_summary_network(estimator)
             @warn "`freeze_summary_network = true` has no effect for estimators without a `summary_network` field"
@@ -808,9 +848,6 @@ function train(trainstate, sampler, simulator;
         elseif device isa ReactantDevice
             @warn "`freeze_summary_network = true` is not supported with `reactant_device()` and will be ignored. If this affects your use case, please contact the package maintainer."
             freeze_summary_network = false
-        elseif estimator isa PointEstimator && _is_identity(estimator.inference_network)
-            @warn "`freeze_summary_network = true` has no effect when the inference network is the identity function; returning the estimator unchanged."
-            return trainstate
         else
             _freeze_summary_network!(trainstate)
             verbose && _status!(progress, "Computing summary statistics..."; transient = true)
@@ -818,6 +855,10 @@ function train(trainstate, sampler, simulator;
             train_time += t
         end
     end
+
+    # The data loaders standardise the data and parameters once, on the host, so the forward pass of the estimator
+    # being trained skips standardisation (see _Prestandardised)
+    trainstate = _markstandardisers(trainstate)
 
     verbose && _status!(progress, "Constructing the validation set..."; transient = true)
     val_set = _dataloader(estimator, Z_val, θ_val, batchsize; shuffle = false, partial = partial)
@@ -955,7 +996,7 @@ function train(trainstate, sampler, simulator;
         CSV.write(joinpath(savepath, "train_time.csv"), Tables.table([train_time]), header = false)
     end
 
-    return _trainstate_to_device(trainstate_best, cpu_device())
+    return _unmarkstandardisers(_trainstate_to_device(trainstate_best, cpu_device()))
 end
 
 """
@@ -967,12 +1008,14 @@ Saves a training-state checkpoint to disk as two separate BSON files, where the 
   - `<prefix>_optimizer.bson`: optimiser rule and optimiser state, used for continued
     training; see [`loadoptimiser`](@ref). Written to both `savepath` and `tempdir()`, so
     that it can be loaded without arguments during the current session.
-  - `<prefix>_estimator.bson`: neural-network parameters (and states), used for continued
-    training and for loading the estimator in a different session; see
-    [`loadestimator`](@ref). Written only to an explicit `savepath`.
+  - `<prefix>_estimator.bson`: neural-network parameters (and states), and the standardisers
+    and parameter bounds of the estimator, used for continued training and for loading the
+    estimator in a different session; see [`loadestimator`](@ref). Written only to an
+    explicit `savepath`.
 
 The optimiser file is backend-agnostic and written here; the estimator file is written by
-`_save_estimator`, whose methods are defined in the Flux, Lux, and Reactant extensions.
+`_save_estimator(getestimator(trainstate), savepath, prefix)`, whose methods are defined in the
+Flux and Lux extensions.
 """
 function _save_trainstate(trainstate, savepath; best::Bool = true)
     isnothing(savepath) && return nothing
@@ -980,7 +1023,7 @@ function _save_trainstate(trainstate, savepath; best::Bool = true)
     _save_optimizer(trainstate, savepath, prefix)
     # NB the estimator is saved only to an explicit savepath; tempdir() is used for
     # within-session inspection of the risk history and optimiser
-    savepath != tempdir() && _save_estimator(trainstate, savepath, prefix)
+    savepath != tempdir() && _save_estimator(getestimator(trainstate), savepath, prefix)
     return nothing
 end
 
@@ -1013,19 +1056,21 @@ function _save_optimizer(trainstate, savepath, prefix)
 end
 
 """
-    _save_estimator(trainstate, savepath, prefix)
+    _save_estimator(estimator, savepath, prefix)
 
-Saves the neural-network parameters (and states) held by `trainstate` to
-`<prefix>_estimator.bson` in `savepath`. Methods are defined in the Flux, Lux, and Reactant
-extensions.
+Saves the neural-network parameters (and states) of `estimator` to `<prefix>_estimator.bson`
+in `savepath`, together with its standardisers and parameter bounds (see `_transformations`).
+Methods are defined in the Flux and Lux extensions.
 """
 function _save_estimator end
 
 # For generic estimators, use the user-specified loss function
 _loss(estimator, loss) = loss
 
-# Constructs inputs and outputs (default simulated data and corresponding true parameters, respectively)
-_inputoutput(estimator, Z, θ) = (Z, θ)
+# Constructs inputs and outputs (default simulated data and corresponding true parameters, respectively), standardised
+# once per data set, on the host (see _Prestandardised), with the parameters first mapped to an unbounded scale if the
+# estimator has parameter bounds (see _toqscale)
+_inputoutput(estimator, Z, θ) = (_standardisedata(_unmark(_datastandardiser(estimator)), Z), _toqscale(estimator, θ))
 
 # Thin wrapper around DataLoader. `train` resolves shuffle/partial (validation is
 # never shuffled; partial defaults to false only under ReactantDevice).
@@ -1109,12 +1154,16 @@ end
 
 """
     loadestimator(estimator, savepath::String = tempdir(); best::Bool = true)
-Loads the neural-network parameters (and states) saved during a call to `train()`, returning a
-copy of `estimator` in which these parameters have been loaded.
+Loads the neural-network parameters (and states) saved during a call to `train()` or by
+[`saveestimator`](@ref), returning a copy of `estimator` in which these parameters have been loaded.
 
 The given `estimator` provides the architecture only, which must match the architecture that
 was trained: the saved files store the parameters (and states) of the neural networks, not
-their architecture. The given `estimator` is not modified.
+their architecture. Everything else needed to use the estimator is restored from the saved file,
+namely its standardisers (see [`Standardiser`](@ref)) and parameter bounds (keyword arguments
+`lower` and `upper`), so these need not be given when constructing `estimator`. The
+exception is a custom `transform` and `invtransform` of a [`PosteriorEstimator`](@ref), which
+cannot be saved, so the same functions must be given. The given `estimator` is not modified.
 
 Note that the parameters are saved only when `train()` is given a `savepath` other than
 `tempdir()`, and that the same deep-learning backend must be loaded as when training. When the
@@ -1137,7 +1186,7 @@ estimator = train(estimator, θ_train, θ_val, Z_train, Z_val, savepath = "path/
 estimator = loadestimator(estimator, "path/to/folder")
 ```
 
-See also [`train`](@ref), [`loadoptimiser`](@ref), and [`loadrisk`](@ref).
+See also [`saveestimator`](@ref), [`train`](@ref), [`loadoptimiser`](@ref), and [`loadrisk`](@ref).
 """
 function loadestimator(estimator::AbstractNeuralEstimator, savepath::String = tempdir(); best::Bool = true)
     prefix = best ? "best" : "final"
@@ -1145,10 +1194,11 @@ function loadestimator(estimator::AbstractNeuralEstimator, savepath::String = te
     @assert isfile(path) "No saved estimator found at $(path). Note that the estimator is saved only when `train()` is given a `savepath` other than `tempdir()`; please ensure that `train()` has been called with such a `savepath`, and that the correct `savepath` has been provided here."
     # Estimators containing Lux networks need not be wrapped in a LuxEstimator by the user
     # (train() wraps them too; see _construct_train_state), so route them to the Lux method
-    # rather than relying on dispatch alone
+    # rather than relying on dispatch alone, as for the components of an Ensemble
     lux = get(Base.loaded_modules, _LUX_UUID, nothing)
-    if !isnothing(lux) && !(estimator isa LuxEstimator) && _is_lux_network(estimator, lux)
-        estimator = LuxEstimator(estimator) # NB the ps/st initialised here are immediately replaced
+    if !isnothing(lux)
+        wrap(e) = !(e isa LuxEstimator) && _is_lux_network(e, lux) ? LuxEstimator(e) : e # NB the ps/st initialised here are immediately replaced
+        estimator = estimator isa Ensemble ? Ensemble([wrap(e) for e in estimator.estimators]) : wrap(estimator)
     end
     return _loadestimator(estimator, path)
 end
@@ -1157,6 +1207,46 @@ end
 # the Lux extension (dispatching on LuxEstimator); since LuxEstimator <: AbstractNeuralEstimator,
 # the Lux method is strictly more specific and the two are never ambiguous
 _loadestimator(estimator, path) = error("loadestimator() requires the deep-learning backend of the estimator to be loaded. Please load the backend that was used during training (e.g., `using Flux` or `using Lux`) and try again.")
+
+"""
+    saveestimator(estimator, savepath::String)
+Saves `estimator` to the file `best_estimator.bson` in `savepath` (the file read by default by
+[`loadestimator`](@ref)), in the same format as the files saved during training by [`train`](@ref).
+
+The file stores the parameters (and states) of the neural networks, together with everything else
+needed to use the estimator, namely its standardisers (see [`Standardiser`](@ref)) and parameter
+bounds (keyword arguments `lower` and `upper`). It does not store the architecture of the networks: to load
+the estimator, construct an estimator with the same architecture and pass it to [`loadestimator`](@ref).
+
+When the estimator contains [Lux.jl](https://lux.csail.mit.edu/stable/) networks, pass the
+[`LuxEstimator`](@ref) returned by [`train`](@ref) or [`loadestimator`](@ref), which stores the parameters and states (for
+an [`Ensemble`](@ref), an ensemble of such estimators, as returned by [`train`](@ref) or [`loadestimator`](@ref)).
+
+# Examples
+```julia
+using NeuralEstimators, Flux
+
+# ... construct and train `estimator`
+saveestimator(estimator, "path/to/folder")
+
+# In a new session: construct an estimator with the same architecture, then load it
+estimator = loadestimator(estimator, "path/to/folder")
+```
+"""
+function saveestimator(estimator::AbstractNeuralEstimator, savepath::String)
+    lux = get(Base.loaded_modules, _LUX_UUID, nothing)
+    if !isnothing(lux) && estimator isa Ensemble
+        components = estimator.estimators
+        if any(e -> e isa LuxEstimator || _is_lux_network(e, lux), components)
+            all(e -> e isa LuxEstimator, components) || throw(ArgumentError("The components of the Ensemble contain Lux networks, whose parameters and states are stored in LuxEstimators: pass an Ensemble whose components are all LuxEstimators, such as the Ensemble returned by train() or loadestimator()"))
+            estimator = Ensemble([e for e in components]) # NB a concrete element type, so that the Lux method of _save_estimator applies
+        end
+    elseif !isnothing(lux) && !(estimator isa LuxEstimator) && _is_lux_network(estimator, lux)
+        throw(ArgumentError("The estimator contains Lux networks, whose parameters and states are stored in a LuxEstimator: pass the LuxEstimator returned by train() or loadestimator()"))
+    end
+    _save_estimator(estimator, savepath, "best")
+    return nothing
+end
 
 """
 	loadrisk(savepath::String = tempdir())

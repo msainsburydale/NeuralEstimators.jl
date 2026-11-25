@@ -14,7 +14,10 @@ The parameter summary network maps $\boldsymbol{\theta}$ to a vector of `2 * num
 
 For numerical stability, training is done on the log-scale using the relation 
 $\log r(\boldsymbol{Z}, \boldsymbol{\theta}) = \text{logit}(c^*(\boldsymbol{Z}, \boldsymbol{\theta}))$, 
-where $c^*(\cdot, \cdot)$ denotes the Bayes classifier as described in the [methodology](@ref "Neural ratio estimators") section. 
+where $c^*(\cdot, \cdot)$ denotes the Bayes classifier as described in the [methodology](@ref "Neural ratio estimators") section.
+During training, each data set is paired both with its own parameters and with independent parameters (drawn with
+`sampler`, or otherwise obtained by permuting the training parameters), so that its summary statistics are computed once
+for both pairs; hence, the `batchsize` of [`train`](@ref) is the number of data sets, each giving two pairs.
 
 Given data `Z` and parameters `θ`, the estimated ratio can be obtained using [`logratio`](@ref) 
 and can be used in various Bayesian
@@ -28,6 +31,8 @@ inferential algorithms. For Bayesian inference, posterior samples can be obtaine
 - `num_summaries_θ::Integer = 2 * num_parameters`: the number of summaries output by the parameter summary network.
 - `summary_network_θ_kwargs::NamedTuple = (;)`: keyword arguments passed to the MLP constructor for the parameter summary network.
 - `sampler::Union{Nothing, Function} = nothing`: a function returnting `K` independent draws from the prior as a `d x K` matrix, the same as passed to [`train`](@ref). This can also be ignored, i.e., `nothing`, for backwards compatibility, see below. 
+- `standardise_data = true`: whether, or how, to standardise the data before they enter the summary network (see [`Standardiser`](@ref)).
+- `standardise_parameters = true`: whether, or how, to standardise the parameters before they enter the parameter summary network. Neither form of standardisation changes the likelihood-to-evidence ratio being estimated.
 - `kwargs...`: additional keyword arguments passed to the MLP constructor for the inference network.
 
 # Examples
@@ -57,7 +62,8 @@ plotrisk()
 θ = sampler(1)
 z = simulator(θ)
 
-# Grid-based sampling
+# Grid-based sampling, over a grid that covers the support of the prior
+grid = expandgrid(0:0.01:1, 0:0.01:1)'
 logratio(estimator, z; grid = grid)                # log of likelihood-to-evidence ratios
 sampleposterior(estimator, z; grid = grid)         # posterior sampling
 
@@ -70,16 +76,20 @@ sampleposterior(estimator, z; lower = [0.0, 0.0], upper = [1.0, 1.0]) # requires
     summary_network_θ # summary network for θ 
     inference_network
     sampler     # same sampler that generates theta, or nothing, for backwards compatibility
+    data_standardiser      # see Standardiser
+    parameter_standardiser # standardises θ before the parameter summary network
 end
 
-# Backwards compatibility to allow for a sampler to not be passed to the RatioEstimator class
+# Constructor: networks and (optionally, for backwards compatibility) the sampler
 # there is no clash with the constructor below, where the Integer type specification differs
-RatioEstimator(summary_network, summary_network_θ, inference_network) =
-    RatioEstimator(summary_network, summary_network_θ, inference_network, nothing)
+function RatioEstimator(summary_network, summary_network_θ, inference_network, sampler = nothing; standardise_data = true, standardise_parameters = true)
+    RatioEstimator(summary_network, summary_network_θ, inference_network, sampler, _standardiser(standardise_data), _standardiser(standardise_parameters))
+end
 
 # The sampler is intentionally kept out of the network
 # e.g., to prevent silent transformations from cpu to gpu before _inputoutput invokes it
 # e.g., to not make the optimizer compute gradients w.r.t. sampler
+# The standardisers are likewise applied outside the networks and saved separately (see _transformations)
 @functor RatioEstimator (summary_network, summary_network_θ, inference_network)
 
 # Constructor: number of parameters and optional summary network => MLP inference network
@@ -89,6 +99,8 @@ function RatioEstimator(
     num_summaries_θ::Integer = 2num_parameters,
     summary_network_θ_kwargs::NamedTuple = (;),
     sampler::Union{Nothing, Function} = nothing,
+    standardise_data = true,
+    standardise_parameters = true,
     kwargs...
 )
     summary_network = _resolvesummarynetwork(summary_network; kwargs...)
@@ -99,7 +111,7 @@ function RatioEstimator(
     summary_network_θ = _matchsimplechains(summary_network_θ, num_parameters, summary_network)
     inference_network = _matchsimplechains(inference_network, num_summaries + num_summaries_θ, summary_network, summary_network_θ)
     @info "RatioEstimator: num_summaries = $num_summaries."
-    RatioEstimator(summary_network, summary_network_θ, inference_network, sampler)
+    RatioEstimator(summary_network, summary_network_θ, inference_network, sampler; standardise_data, standardise_parameters)
 end
 
 # Constructor: consistent argument ordering
@@ -128,43 +140,42 @@ function _inputoutput(estimator::RatioEstimator, Z, θ)
     θ̃ = if isnothing(estimator.sampler)
         getobs(θ, shuffle(1:K))
     else
-        # this is the same sampler as the one passed to train(), hence it 
+        # this is the same sampler as the one passed to train(), hence it
         # might return a parameter set with names and any float type;
         # strip names below, as the data loader will handle the conversion to Float32
         θ̃ = _stripnames(_extractθ(estimator.sampler(K)))
         @assert size(θ̃) == size(θ) "sampler must generate parameters of the same dimensions as theta; expected $(size(θ)) got $(size(θ̃))"
         θ̃
     end
-    Z̃ = Z
 
-    # Combine dependent and independent pairs
-    θ = hcat(θ, θ̃)
-    Z = _mergedata(Z, Z̃)
+    # Each data set is paired with its own parameters (a dependent pair, label 1) and with the independent parameters θ̃
+    # (an independent pair, label 0), and the training forward pass computes its summary statistics once for both pairs.
+    # The labels of the two pairs are stacked along rows, so that every component of the input has K observations, as
+    # required by the data loader, which keeps each (Z, θ, θ̃) together when shuffled
+    output = vcat(ones(Float32, 1, K), zeros(Float32, 1, K))
 
-    # Binary class labels: 1 for dependent pairs (Z, θ), 0 for independent pairs (Z̃, θ̃)
-    output = [ones(Float32, 1, K) zeros(Float32, 1, K)]
-
-    # Shuffle everything just in case batching isn't shuffled properly downstream
-    idx = shuffle(1:2K)
-    Z = getobs(Z, idx)
-    θ = getobs(θ, idx)
-    output = output[:, idx]
-
-    input = (Z, θ)
+    # Standardised once, on the host (see _Prestandardised)
+    sθ = _unmark(estimator.parameter_standardiser)
+    input = (_standardisedata(_unmark(estimator.data_standardiser), Z), _standardise(sθ, θ), _standardise(sθ, θ̃))
     return input, output
 end
 
 _loss(estimator::RatioEstimator, loss = nothing) = logitbinarycrossentropy
 
+# Forward pass: the original when the standardisers apply no map (e.g., during training, when the data and parameters are
+# standardised on the host); otherwise, the data and parameters are standardised first (see _NoMap)
+const _RatioEstimatorNoMap = RatioEstimator{<:Any, <:Any, <:Any, <:Any, <:_NoMap, <:_NoMap}
+
 # Forward pass: Stateful (Flux)
-function (estimator::RatioEstimator)(Z, θ)
+function (estimator::_RatioEstimatorNoMap)(Z, θ)
     tz = _summarystatistics(estimator, Z)
     tθ = estimator.summary_network_θ(θ)
     estimator.inference_network(vcat(tz, tθ))
 end
+(estimator::RatioEstimator)(Z, θ) = _withoutstandardisers(estimator)(_standardisedata(estimator.data_standardiser, Z), _standardise(estimator.parameter_standardiser, θ))
 
 # Forward pass: Stateless (Lux)
-function (e::RatioEstimator)(Z, θ, ps, st)
+function (e::_RatioEstimatorNoMap)(Z, θ, ps, st)
     tz, st_s = _summarystatistics(e, Z, ps.summary_network, st.summary_network)
     # NB: Enzyme's static analyis doesn't like it when we extract data 
     #     from a custom struct (e.g., Summaries or DataAndSummaries) and then 
@@ -176,10 +187,33 @@ function (e::RatioEstimator)(Z, θ, ps, st)
     logr, st_i = e.inference_network(vcat(tz, tθ), ps.inference_network, st.inference_network)
     return logr, (summary_network = st_s, summary_network_θ = st_sθ, inference_network = st_i)
 end
+(e::RatioEstimator)(Z, θ, ps, st) = _withoutstandardisers(e)(_standardisedata(e.data_standardiser, Z), _standardise(e.parameter_standardiser, θ), ps, st)
 
-# Tuple methods used internally during training
-(estimator::RatioEstimator)(Zθ::Tuple) = estimator(Zθ[1], Zθ[2])
-(estimator::RatioEstimator)(Zθ::Tuple, ps, st) = estimator(Zθ[1], Zθ[2], ps, st)
+# Training forward pass: the 2 × K logits of the dependent pairs (Z, θ) and of the independent pairs (Z, θ̃), matching the
+# class labels constructed in _inputoutput. The summary statistics of each data set are computed once for both pairs, and
+# the other networks are applied to all 2K pairs at once
+function (estimator::_RatioEstimatorNoMap)(Z, θ, θ̃)
+    tz = _summarystatistics(estimator, Z)
+    tθ = estimator.summary_network_θ(hcat(θ, θ̃))
+    logr = estimator.inference_network(vcat(hcat(tz, tz), tθ))
+    K = size(tz, 2)
+    vcat(logr[:, 1:K], logr[:, (K + 1):(2K)])
+end
+function (e::_RatioEstimatorNoMap)(Z, θ, θ̃, ps, st)
+    tz, st_s = _summarystatistics(e, Z, ps.summary_network, st.summary_network)
+    tz = tz |> copy # NB see the note on Enzyme above
+    tθ, st_sθ = e.summary_network_θ(hcat(θ, θ̃), ps.summary_network_θ, st.summary_network_θ)
+    logr, st_i = e.inference_network(vcat(hcat(tz, tz), tθ), ps.inference_network, st.inference_network)
+    K = size(tz, 2)
+    return vcat(logr[:, 1:K], logr[:, (K + 1):(2K)]), (summary_network = st_s, summary_network_θ = st_sθ, inference_network = st_i)
+end
+(e::RatioEstimator)(Z, θ, θ̃) = _withoutstandardisers(e)(_standardisedata(e.data_standardiser, Z), _standardise(e.parameter_standardiser, θ), _standardise(e.parameter_standardiser, θ̃))
+(e::RatioEstimator)(Z, θ, θ̃, ps, st) = _withoutstandardisers(e)(_standardisedata(e.data_standardiser, Z), _standardise(e.parameter_standardiser, θ), _standardise(e.parameter_standardiser, θ̃), ps, st)
+
+# Tuple methods used internally during training (the input constructed by _inputoutput)
+(estimator::RatioEstimator)(input::Tuple) = estimator(input...)
+(estimator::RatioEstimator)(input::Tuple, ps, st) = estimator(input..., ps, st)
+(estimator::_RatioEstimatorNoMap)(input::Tuple, ps, st) = estimator(input..., ps, st) # resolves the ambiguity with the training forward pass
 
 # ---- Inference: Stateful (Flux) ----
 
@@ -197,7 +231,7 @@ A matrix of log ratios with one row per data set and one column per grid point.
 function logratio(estimator::RatioEstimator, Z; grid, kwargs...)
     grid = f32(grid)
     summary_stats_Z = summarystatistics(estimator, Z; kwargs...)
-    summary_stats_θ = estimator.summary_network_θ(grid)
+    summary_stats_θ = estimator.summary_network_θ(_standardise(estimator.parameter_standardiser, grid))
     _gridlogratio(estimator, summary_stats_Z, summary_stats_θ)
 end
 
@@ -234,7 +268,7 @@ function sampleposterior(
 
     summary_stats = summarystatistics(estimator, Z; kwargs...)
     logpθ = logprior.(eachcol(grid))
-    summary_stats_θ = estimator.summary_network_θ(grid)
+    summary_stats_θ = estimator.summary_network_θ(_standardise(estimator.parameter_standardiser, grid))
 
     log_ratios = _gridlogratio(estimator, summary_stats, summary_stats_θ)
 
@@ -256,7 +290,7 @@ function _sampleposterior_hmc end
 function logratio(estimator::RatioEstimator, Z, ps, st; grid, kwargs...)
     grid = f32(grid)
     summary_stats_Z = summarystatistics(estimator, Z, ps, st; kwargs...)
-    summary_stats_θ = first(estimator.summary_network_θ(grid, ps.summary_network_θ, st.summary_network_θ))
+    summary_stats_θ = first(estimator.summary_network_θ(_standardise(estimator.parameter_standardiser, grid), ps.summary_network_θ, st.summary_network_θ))
     _gridlogratio(estimator, summary_stats_Z, summary_stats_θ, ps.inference_network, st.inference_network)
 end
 
@@ -291,7 +325,7 @@ function sampleposterior(
     grid = f32(grid)
 
     summary_stats_Z = summarystatistics(estimator, Z, ps, st; kwargs...)
-    summary_stats_θ = first(estimator.summary_network_θ(grid, ps.summary_network_θ, st.summary_network_θ))
+    summary_stats_θ = first(estimator.summary_network_θ(_standardise(estimator.parameter_standardiser, grid), ps.summary_network_θ, st.summary_network_θ))
     logpθ = logprior.(eachcol(grid))
 
     log_ratios = _gridlogratio(estimator, summary_stats_Z, summary_stats_θ, ps.inference_network, st.inference_network)

@@ -104,10 +104,8 @@ end
             @test ds.Z === Z
             @test ds.S === S
 
-            # Without expert summaries
-            ds_no_s = DataAndSummaries(Z)
-            @test ds_no_s.Z === Z
-            @test isnothing(ds_no_s.S)
+            # The expert summary statistics are required
+            @test_throws MethodError DataAndSummaries(Z)
 
             # Assert mismatch between numobs(Z) and size(S, 2)
             @test_throws AssertionError DataAndSummaries(Z, randn(3, K + 1))
@@ -154,9 +152,6 @@ end
 
         # ---- f32 ----
         @testset "f32" begin
-            ds = DataAndSummaries(Z)
-            ds32 = f32(ds)
-            @test eltype(ds32.Z[1]) == Float32
             ds = DataAndSummaries(Z, S)
             ds32 = f32(ds)
             @test eltype(ds32.Z[1]) == Float32
@@ -175,12 +170,6 @@ end
             t = estimator(ds)
             @test size(t, 1) == num_summaries + size(S, 1)  # 4 + 3 = 7
             @test size(t, 2) == K
-
-            # Without expert summaries: output size unchanged
-            ds_no_s = DataAndSummaries(Z) |> f32
-            t_no_s = estimator(ds_no_s)
-            @test size(t_no_s, 1) == num_summaries
-            @test size(t_no_s, 2) == K
         end
     end
 
@@ -620,6 +609,14 @@ end
 
     _finishline!(d)
     @test String(take!(io)) == "\n"
+
+    # A transient status is erased before a message is logged, which then starts on a line of its own
+    _status!(d, "phase"; transient = true)
+    take!(io)
+    NeuralEstimators._clearstatus!(d)
+    @test String(take!(io)) == "\r\r\e[K" && d.nlines == 0
+    NeuralEstimators._clearstatus!(d)
+    @test String(take!(io)) == "" # nothing to erase
 
     msg = _epoch_status(6, 100, 0.049, 0.054, 0.046, 2, 5, 5e-4, 0.114)
     @test occursin("6/100", msg)
@@ -1716,17 +1713,15 @@ end
 @testset "IntervalEstimator" begin
     num_summaries = 3d
     summary_network = Chain(Dense(m, 64, relu), Dense(64, 64, relu), Dense(64, num_summaries))
-    min_supp = [-1.0, -1.0]
-    max_supp = [1.0, 1.0]
-    c = Compress(min_supp, max_supp)
-    estimator = IntervalEstimator(summary_network, d; num_summaries = num_summaries, c = c)
+    lower, upper = [-Inf, 0], [Inf, 1] # μ ∈ ℝ and σ ∈ (0, 1), the support of the prior given by sampler()
+    estimator = IntervalEstimator(summary_network, d; num_summaries = num_summaries, lower = lower, upper = upper)
     show(devnull, estimator)
 
     # Forward pass
     θ̂ = estimator(Z)
     ci = interval(estimator, Z)
     @test size(θ̂) == (2d, K)
-    @test all(min_supp .< θ̂[1:d, :] .< θ̂[(d + 1):end, :] .< max_supp)
+    @test all(lower .<= θ̂[1:d, :] .<= θ̂[(d + 1):end, :] .<= upper)
     @test all([size(c) == (d, 2) for c in ci])
 
     # Training
@@ -1825,8 +1820,27 @@ end
     r = estimator(Z, θ)
     @test size(r) == (1, K)
 
+    # Training pairs: each data set is paired with its own parameters (label 1) and with independent parameters (label 0),
+    # with the labels in the rows of the output, so that the training forward pass computes its summary statistics once
+    est = RatioEstimator(summary_network, d; num_summaries = num_summaries, standardise_data = Standardiser(Z), standardise_parameters = Standardiser(θ.array))
+    (Zs, θs, θ̃s), labels = NeuralEstimators._inputoutput(est, Z, θ.array)
+    @test numobs(Zs) == numobs(θs) == numobs(θ̃s) == K
+    @test labels == vcat(ones(Float32, 1, K), zeros(Float32, 1, K))
+    @test sortslices(θ̃s; dims = 2) == sortslices(θs; dims = 2) # without a sampler, a permutation of the parameters...
+    @test θ̃s != θs                                             # ...that pairs the data sets with other parameters
+    ref =RatioEstimator(est.summary_network, est.summary_network_θ, est.inference_network; standardise_data = false, standardise_parameters = false)
+    @test NeuralEstimators._mapstandardisers(NeuralEstimators._mark, est)((Zs, θs, θ̃s)) ≈ vcat(ref(Zs, θs), ref(Zs, θ̃s))
+    @test est(Z, θ.array, θ.array[:, end:-1:1]) ≈ vcat(est(Z, θ.array), est(Z, θ.array[:, end:-1:1]))
+    @test size(NeuralEstimators._inputoutput(RatioEstimator(summary_network, d; num_summaries, sampler), Z, θ.array)[1][3]) == size(θ) # with a sampler
+
     # Training
     estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, verbose = false)
+
+    # Data stored in an array with three or more dimensions (e.g., images for a CNN)
+    simulator4(θ) = reshape(reduce(hcat, [θ[1, k] .+ θ[2, k] .* randn(Float32, 16) for k in 1:size(θ, 2)]), 4, 4, 1, :)
+    cnn = Chain(Conv((2, 2), 1 => 4, relu), Flux.flatten, Dense(36, num_summaries))
+    trained = train(RatioEstimator(cnn, d; num_summaries = num_summaries), sampler, simulator4; K = 64, epochs = 1, verbose = false)
+    @test all(isfinite, trained(simulator4(θ), θ.array))
 
     # Inference (grid-based)
     grid = expandgrid(0:0.01:1, 0:0.01:1)'  # fine gridding of the parameter space
@@ -1904,6 +1918,47 @@ end
     @test_throws AssertionError logposterior(estimator, θpoints, z; lower = lower, upper = upper, method = :other)
 
     assessment = assess(estimator, θ, Z; lower = lower, upper = upper)
+end
+
+@testset "TelescopingRatioEstimator: concentrated posteriors" begin
+    # Gaussian conditionals much narrower than the box [-4, 4]², given to the sampler as head logits (the parameters
+    # are not standardised, so the rows of the head inputs hold the summary z of Z followed by θ₁, ..., θᵢ):
+    # θ₁ | Z ~ N(z, σ₁²) and θ₂ | θ₁, Z ~ N(θ₁, σ₂²)
+    σ₁, σ₂ = 0.003f0, 0.002f0
+    estimator = TelescopingRatioEstimator(2; num_summaries = 1, sampler = K -> rand(Float32, 2, K), standardise_parameters = false)
+    headfun(i, X) = i == 1 ? -(X[2:2, :] .- X[1:1, :]) .^ 2 ./ 2σ₁^2 : -(X[3:3, :] .- X[2:2, :]) .^ 2 ./ 2σ₂^2
+    tzs = Float32[0.3 -1.2]  # two data sets
+    lower, upper = [-4, -4], [4, 4]
+    N = 5000
+    seed!(1)
+    θ = first(NeuralEstimators._sequential_core(estimator, headfun, tzs, lower, upper, N, nothing, 128, nothing))
+    for (k, μ) in enumerate(tzs)
+        θ₁, θ₂ = θ[1, (k - 1) * N .+ (1:N)], θ[2, (k - 1) * N .+ (1:N)]
+        @test abs(mean(θ₁) - μ) < 0.1σ₁
+        @test std(θ₁) ≈ σ₁ rtol = 0.05
+        @test abs(mean(θ₂ .- θ₁)) < 0.1σ₂
+        @test std(θ₂ .- θ₁) ≈ σ₂ rtol = 0.05
+    end
+
+    # Normalised log density: exact near the mode, and -Inf where the sampler assigns no mass
+    θpoints = Float32[0.3 0.303 0.0 0.3; 0.3 0.301 0.0 0.5]
+    lq = last(NeuralEstimators._sequential_core(estimator, headfun, tzs[:, 1:1], lower, upper, 0, θpoints, 128, nothing; logq = true))
+    lmode = -log(2π * σ₁ * σ₂)
+    @test lq[1:2] ≈ [lmode, lmode - 1] atol = 0.01
+    @test lq[3:4] == [-Inf, -Inf]
+
+    # Mass at a bound: the zoomed interval keeps the bound exactly, so that the draws stay in the box and the log density
+    # at the bound is finite (recomputing the bound from the midpoint and half-width rounds -1.07f0 outwards, 0.05f0 inwards)
+    estimator₁ = TelescopingRatioEstimator(1; num_summaries = 1, sampler = K -> rand(Float32, 1, K), standardise_parameters = false)
+    exponential(_, X) = -(X[2:2, :] .- X[1:1, :]) ./ 1f-6  # θ | Z ~ z + Exp(10⁶)
+    θ = first(NeuralEstimators._sequential_core(estimator₁, exponential, Float32[-1.07;;], [-1.07], [3.69], N, nothing, 128, nothing))
+    @test all(θ .>= -1.07f0)
+    lq = last(NeuralEstimators._sequential_core(estimator₁, exponential, Float32[0.05;;], [0.05], [0.5], 0, Float32[0.05;;], 128, nothing; logq = true))
+    @test isfinite(only(lq))
+
+    # A NaN or Inf from logpriors (here at the lower bound) is an error rather than silently corrupting the draws
+    @test_throws AssertionError NeuralEstimators._sequential_core(estimator, headfun, tzs, [0, 0], [1, 1], 10, nothing, 128, [x -> 0 * log(x), x -> zero(x)])
+    @test_throws AssertionError NeuralEstimators._sequential_core(estimator, headfun, tzs, [0, 0], [1, 1], 10, nothing, 128, [x -> -log(x) / 2, x -> zero(x)])
 end
 
 @testset "Chebyshev approximation" begin
@@ -2175,6 +2230,628 @@ end
     samples2 = sampleposterior(estimator2, Z2)
     @test size(samples2) == (d1, 1000, K)
     @test all(samples2 .>= 0) # spike (0) or positive slab draws
+end
+
+@testset "PosteriorEstimator: parameter bounds" begin
+    # scaledlogit and scaledlogistic with finite, one-sided, and infinite bounds
+    x = collect(-10.0:0.5:10.0)
+    for (a, b) in ((0.0, 1.0), (2.0, 7.0), (0.0, Inf), (-Inf, 1.0), (-Inf, Inf))
+        y = scaledlogistic.(x, a, b)
+        @test all(a .< y .< b)
+        @test scaledlogit.(y, a, b) ≈ x
+        @test @inferred(scaledlogit(y[1], a, b)) isa Float64
+        @test @inferred(scaledlogistic(0.5, a, b)) isa Float64
+        @test @inferred(scaledlogit(Float32(y[1]), Float32(a), Float32(b))) isa Float32
+        @test @inferred(scaledlogistic(0.5f0, a, b)) isa Float64 # computed in the precision of the bounds
+        # A value on a finite bound is mapped to a finite value
+        isfinite(a) && @test isfinite(scaledlogit(a, a, b))
+        isfinite(b) && @test isfinite(scaledlogit(b, a, b))
+    end
+    L = log(1 / eps(Float32) - 1)
+    @test scaledlogit(0.0, 0.0, 1.0) ≈ -L
+    @test scaledlogit(1, 0, 1) ≈ L
+    @test scaledlogit(prevfloat(2.0), 2.0, 7.0) ≈ -L # beyond a bound by a rounding error
+    @test scaledlogit(1.0000003f-5, 1e-6, 1e-5) ≈ L # e.g., a Float32 log-uniform draw beyond the upper bound through rounding
+    @test scaledlogit(1e-10, 0.0, 1.0) ≈ log(1e-10 / (1 - 1e-10)) # values inside the bounds are mapped exactly, even close to a bound
+    @test_throws DomainError scaledlogit(1.9, 2.0, 7.0)
+    @test_throws DomainError scaledlogit(-0.1, 0.0, Inf)
+    @test isnan(scaledlogit(NaN, 0.0, 1.0))
+    @test Flux.gradient(t -> scaledlogit(t, 0.0, 1.0), 0.0)[1] == 0 # finite at a bound
+    @test scaledlogistic(40.0, -0.1, 0.2) <= 0.2 # without clamping, rounding gives 0.20000000000000004
+
+    # μ ∈ ℝ and σ ∈ (0, 1), the support of the prior given by sampler()
+    lower, upper = [-Inf, 0], [Inf, 1]
+    num_summaries = 3d
+    network() = Chain(Dense(m, 16, gelu), Dense(16, num_summaries))
+    for approxdist in [NormalisingFlow, GaussianMixture, Gaussian]
+        estimator = PosteriorEstimator(network(), d; num_summaries = num_summaries, q = approxdist, lower = lower, upper = upper)
+        @test PosteriorEstimator(network(), approxdist(d, num_summaries); lower = lower, upper = upper) isa PosteriorEstimator
+        @test PosteriorEstimator(approxdist(d, num_summaries), network(); lower = lower, upper = upper) isa PosteriorEstimator
+
+        # The parameters are transformed before training
+        θ_plain = θ.array
+        input, _ = NeuralEstimators._inputoutput(estimator, Z, θ_plain)
+        @test input[2] ≈ scaledlogit.(θ_plain, lower, upper)
+        @test estimator.invtransform(input[2]) ≈ θ_plain
+
+        # The posterior draws, and summaries thereof, lie within the bounds
+        estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, K = 100, verbose = false)
+        samples = sampleposterior(estimator, Z)
+        @test size(samples) == (d, 1000, K)
+        @test all(lower .<= samples .<= upper)
+        @test all(lower .<= posteriormean(estimator, Z) .<= upper)
+        @test all(lower .<= posteriorquantile(estimator, Z, [0.1, 0.9]) .<= upper)
+        @test size(sampleposterior(estimator, Z; N = 0)) == (d, 0, K)
+        @test assess(estimator, θ, Z) isa Assessment
+    end
+
+    # A parameter beyond a bound by more than a rounding error is an error
+    estimator = PosteriorEstimator(network(), d; num_summaries = num_summaries, lower = lower, upper = upper)
+    @test_throws DomainError NeuralEstimators._inputoutput(estimator, Z, [0.0 0.0; 0.5 1.5])
+
+    # Training parameters on a bound (e.g., rand(Float32) draws equal to zero) give finite risks
+    estimator = PosteriorEstimator(network(), d; num_summaries = num_summaries, q = GaussianMixture, lower = lower, upper = upper)
+    θ_train, θ_val = sampler(100), sampler(50)
+    θ_train[2, 1:2] = [0, 1]
+    θ_val[2, 1] = 0
+    savepath = mktempdir()
+    trained = train(estimator, θ_train, θ_val, simulator, simulator_args = m, epochs = 2, savepath = savepath, verbose = false)
+    @test all(isfinite, loadrisk(savepath))
+
+    # The bounds are saved with the estimator, so it is loaded into an estimator constructed without them
+    @test keys(Flux.state(estimator)) == (:summary_network, :q)
+    loaded = loadestimator(PosteriorEstimator(network(), d; num_summaries = num_summaries, q = GaussianMixture), savepath)
+    @test loaded.transform isa NeuralEstimators._ScaledLogit && loaded.transform.lower == lower && loaded.transform.upper == upper
+    seed!(1)
+    samples1 = sampleposterior(trained, Z; N = 50, use_gpu = false)
+    seed!(1)
+    samples2 = sampleposterior(loaded, Z; N = 50, use_gpu = false)
+    @test samples1 == samples2
+
+    # A custom transformation: the log of σ + 0.1, so that σ > -0.1
+    transform(θ) = vcat(θ[1:1, :], log.(θ[2:2, :] .+ 0.1f0))
+    invtransform(θ) = vcat(θ[1:1, :], exp.(θ[2:2, :]) .- 0.1f0)
+    estimator = PosteriorEstimator(network(), d; num_summaries = num_summaries, q = GaussianMixture, transform = transform, invtransform = invtransform)
+    estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, K = 100, verbose = false)
+    @test all(sampleposterior(estimator, Z)[2, :, :] .> -0.1f0)
+
+    # Invalid specifications
+    @test_throws ArgumentError PosteriorEstimator(network(), d; num_summaries = num_summaries, lower = lower, transform = transform, invtransform = invtransform)
+    @test_throws ArgumentError PosteriorEstimator(network(), d; num_summaries = num_summaries, transform = transform)
+    @test_throws AssertionError PosteriorEstimator(network(), d; num_summaries = num_summaries, lower = [0, 1], upper = [1, 1])
+    @test_throws ArgumentError PosteriorEstimator(network(), 1; num_summaries = num_summaries, q = SpikeAndSlab, lower = 0)
+    # NB a transformation of the slab of a SpikeAndSlab is given to the SpikeAndSlab itself
+    @test_throws ArgumentError PosteriorEstimator(network(), 1; num_summaries = num_summaries, q = SpikeAndSlab, transform = θ -> log.(θ), invtransform = θ -> exp.(θ))
+end
+
+@testset "Neural Bayes estimators: parameter bounds" begin
+    using NeuralEstimators: _ScaledLogit, _ScaledLogistic, _applybounds, _homogeneity, _fitunfitted, _mapstandardisers, _mark, _inputoutput, _unstandardise, _repeatrows, _rows, MetalDevice
+    lower, upper = [-Inf, 0], [Inf, 1] # μ ∈ ℝ and σ ∈ (0, 1), the support of the prior given by sampler()
+    num_summaries = 3d
+    network() = Chain(Dense(m, 16, gelu), Dense(16, num_summaries))
+    θ_train, θ_val = sampler(100), sampler(50)
+    Z_train, Z_val = simulator(θ_train, m), simulator(θ_val, m)
+
+    # The bounds give the maps to and from the real line, which are not part of the functors
+    for est in (PointEstimator(Chain(Dense(m, 16, gelu), Dense(16, d)); lower, upper), PointEstimator(network(), d; num_summaries, lower, upper), IntervalEstimator(network(), d; num_summaries, lower, upper), QuantileEstimator(network(), d; num_summaries, lower, upper))
+        @test est.transform isa _ScaledLogit && est.invtransform isa _ScaledLogistic
+        @test est.transform.lower == lower && est.transform.upper == upper
+    end
+    @test PointEstimator(network(), d; num_summaries).transform === identity
+    @test PointEstimator(network(), d; num_summaries, lower = [0]).transform.lower === 0.0 # a single bound applies to every parameter
+    @test keys(Flux.state(PointEstimator(network(), d; num_summaries, lower, upper))) == (:summary_network, :inference_network)
+    @test_throws AssertionError PointEstimator(network(), d; num_summaries, lower = [0, 1], upper = [1, 1])
+    @test_throws ArgumentError IntervalEstimator(network(), d; num_summaries, c = Compress([0, 0], [1, 1])) # removed: use lower and upper
+
+    # On another device (e.g., a GPU, or traced by Reactant), the bounds of each row are fixed in a closure, with the same result as on the host
+    x = randn(2, 7)
+    for (a, b) in ((lower, upper), (0.0, 1.0), (0.0, Inf), (-Inf, 1.0), ([-1.0, -Inf], [1.0, 2.0]))
+        @test _applybounds(scaledlogistic, x, a, b, Any) == _applybounds(scaledlogistic, x, a, b)
+        y = _applybounds(scaledlogistic, x, a, b)
+        @test _applybounds(scaledlogit, y, a, b, Any) == _applybounds(scaledlogit, y, a, b)
+        # On a GPU that may not support double precision (e.g., Metal), the bounds are applied in single precision
+        y32 = _applybounds(scaledlogistic, Float32.(x), a, b, MetalDevice)
+        @test y32 isa Matrix{Float32} && y32 ≈ y
+    end
+
+    # ---- Conformance: each estimator equals the same networks without bounds or standardisation, applied to standardised
+    # data, with the outputs unstandardised and mapped back by scaledlogistic (for each probability level) ----
+    sZ = Standardiser(Z_train)
+    sθ = Standardiser(scaledlogit.(θ_train.array, lower, upper)) # the transformed parameters are standardised
+    Zs = (Z .- sZ.mean) ./ sZ.std
+    back(y) = scaledlogistic.(_unstandardise(sθ, y), lower, upper)
+    unmapped = (standardise_data = false, standardise_parameters = false)
+    est = PointEstimator(network(), d; num_summaries, lower, upper, standardise_data = sZ, standardise_parameters = sθ)
+    ref = PointEstimator(est.summary_network, est.inference_network; unmapped...)
+    @test est(Z) ≈ back(ref(Zs))
+    # NB the estimates are mapped back in double precision, but computed by networks in single precision, and estimate()
+    # applies them in batches, which can change the rounding (e.g., on Linux with OpenBLAS); hence the tolerance of single precision
+    @test estimate(est, Z; use_gpu = false) ≈ est(Z) rtol = 1e-5
+    @test _mapstandardisers(_mark, est)(Zs) ≈ ref(Zs) # the estimator being trained outputs the transformed and standardised scale
+    @test _inputoutput(est, Z, θ.array)[2] ≈ (scaledlogit.(θ.array, lower, upper) .- sθ.mean) ./ sθ.std
+    est = IntervalEstimator(network(), d; num_summaries, lower, upper, standardise_data = sZ, standardise_parameters = sθ)
+    ref = IntervalEstimator(est.summary_network, est.u, est.v, est.probs, est.g; unmapped...)
+    out = ref(Zs)
+    @test est(Z) ≈ vcat(back(out[1:d, :]), back(out[(d + 1):end, :]))
+    @test _mapstandardisers(_mark, est)(Zs) ≈ out
+    est = QuantileEstimator(network(), d; num_summaries, lower, upper, standardise_data = sZ, standardise_parameters = sθ)
+    ref = QuantileEstimator(est.summary_network, est.summary_network_θ, est.v, est.probs, est.g, est.i; unmapped...)
+    out = ref(Zs)
+    @test est(Z) ≈ reduce(vcat, [back(out[(1:d) .+ (t - 1) * d, :]) for t in 1:3])
+    @test _mapstandardisers(_mark, est)(Zs) ≈ out
+    θs = (scaledlogit.(θ.array, lower, upper) .- sθ.mean) ./ sθ.std # the parameters on the scale of training
+    @test _inputoutput(est, Z, θ.array)[2] ≈ θs
+    input, output = _inputoutput(QuantileEstimator(network(), d; num_summaries, i = 1, lower, upper, standardise_data = sZ, standardise_parameters = sθ), Z, θ.array)
+    @test input[2] ≈ θs[2:2, :] && output ≈ θs[1:1, :]
+    # Full conditionals: θ₋ᵢ is mapped to the real line and standardised, and the quantiles of θᵢ are mapped back
+    est = QuantileEstimator(network(), d; num_summaries, i = 1, lower, upper, standardise_data = sZ, standardise_parameters = sθ)
+    ref = QuantileEstimator(est.summary_network, est.summary_network_θ, est.v, est.probs, est.g, est.i; unmapped...)
+    σ = θ.array[2:2, :]
+    σs = (scaledlogit.(σ, 0, 1) .- sθ.mean[2:2, :]) ./ sθ.std[2:2, :]
+    @test est(Z, σ) ≈ _unstandardise(_repeatrows(_rows(sθ, 1:1), 3), ref(Zs, σs)) # μ is unbounded
+    est = QuantileEstimator(network(), d; num_summaries, i = 2, lower, upper, standardise_data = sZ, standardise_parameters = sθ)
+    ref = QuantileEstimator(est.summary_network, est.summary_network_θ, est.v, est.probs, est.g, est.i; unmapped...)
+    μ = θ.array[1:1, :]
+    μs = (μ .- sθ.mean[1:1, :]) ./ sθ.std[1:1, :]
+    @test est(Z, μ) ≈ scaledlogistic.(_unstandardise(_repeatrows(_rows(sθ, 2:2), 3), ref(Zs, μs)), 0, 1)
+    est = QuantileEstimator(network(), d; num_summaries, i = 1, lower = [-Inf, 0], upper = [Inf, 10])
+    @test size(est(Z, rand(1:9, 1, K))) == (3, K) # integer θ₋ᵢ
+    # Without standardisation, the bounds are still applied (the forward passes that apply no map are those of training)
+    for est in (PointEstimator(network(), d; num_summaries, lower, upper, unmapped...), IntervalEstimator(network(), d; num_summaries, lower, upper, unmapped...), QuantileEstimator(network(), d; num_summaries, lower, upper, unmapped...))
+        y = est(Z)
+        @test all(0 .<= y[2:d:end, :] .<= 1)
+        @test _mapstandardisers(_mark, est)(Z) ≈ scaledlogit.(y, repeat(lower, size(y, 1) ÷ d), repeat(upper, size(y, 1) ÷ d)) rtol = 1e-4
+    end
+
+    # ---- train() warns if the loss is one for which the bounds of a PointEstimator change the Bayes estimator: any loss
+    # whose Bayes estimators are not posterior quantiles. The check is that of _invariantloss, with homogeneity of degree one ----
+    s = Standardiser(θ_train.array)
+    @test _homogeneity(NeuralEstimators.mae, s, θ_train.array) ≈ 2 rtol = 1e-3
+    @test _homogeneity((x, y) -> quantileloss(x, y, 0.3), s, θ_train.array) ≈ 2 rtol = 1e-3
+    @test _homogeneity(NeuralEstimators.mse, s, θ_train.array) ≈ 4 rtol = 1e-3
+    @test isnothing(_homogeneity((x, y) -> tanhloss(x, y, 0.1), s, θ_train.array))
+    @test isnothing(_homogeneity((x, y) -> sum(sqrt.(mean(abs2, x .- y; dims = 2))), s, θ_train.array)) # not a mean over the parameter vectors
+    fit(est, loss; verbose = false) = _fitunfitted(FluxTrainState(est, Adam(), Optimisers.setup(Adam(), est)), θ_train, Z_train, loss, verbose)
+    bounded = PointEstimator(network(), d; num_summaries, lower, upper, standardise_parameters = true)
+    @test_logs fit(bounded, NeuralEstimators.mae; verbose = true)
+    @test_logs fit(bounded, (x, y) -> quantileloss(x, y, 0.1); verbose = true)
+    @test_logs (:warn, r"within the neural network itself") fit(bounded, NeuralEstimators.mse)
+    @test_logs (:warn, r"within the neural network itself") fit(bounded, (x, y) -> tanhloss(x, y, 0.1); verbose = true)
+    unbounded = PointEstimator(network(), d; num_summaries, standardise_parameters = true) # NB constructed outside @test_logs, which would capture its @info
+    @test_logs fit(unbounded, NeuralEstimators.mse; verbose = true)
+    fitted = PointEstimator(network(), d; num_summaries, lower, upper, standardise_data = sZ, standardise_parameters = sθ) # nothing to fit: the warning is given at every call to train()
+    @test_logs (:warn, r"within the neural network itself") fit(fitted, NeuralEstimators.mse)
+    @test_logs (:warn, r"within the neural network itself") fit(bounded, (x, y) -> sum(sqrt.(mean(abs2, x .- y; dims = 2)))) # not a mean over the parameter vectors
+
+    # ---- Training: the parameters are transformed before they are standardised, and the estimates lie within the bounds.
+    # The bounds are saved with the estimator, so it is loaded into an estimator constructed without them ----
+    for (est, arch) in ((PointEstimator(network(), d; num_summaries, lower, upper), () -> PointEstimator(network(), d; num_summaries)),
+                        (IntervalEstimator(network(), d; num_summaries, lower, upper), () -> IntervalEstimator(network(), d; num_summaries)))
+        savepath = mktempdir()
+        trained = train(est, θ_train, θ_val, Z_train, Z_val; epochs = 2, savepath = savepath, verbose = false)
+        @test trained.parameter_standardiser.mean ≈ Standardiser(scaledlogit.(θ_train.array, lower, upper)).mean
+        @test trained.invtransform isa _ScaledLogistic # no longer marked
+        θ̂ = estimate(trained, Z_val; use_gpu = false)
+        @test all(0 .<= θ̂[2:d:end, :] .<= 1)
+        loaded = loadestimator(arch(), savepath)
+        @test loaded.transform isa _ScaledLogit && loaded.transform.lower == lower && loaded.transform.upper == upper
+        @test estimate(loaded, Z_val; use_gpu = false) ≈ θ̂
+    end
+    trained = train(QuantileEstimator(network(), d; num_summaries, lower, upper), θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false)
+    @test trained.parameter_standardiser.mean ≈ Standardiser(scaledlogit.(θ_train.array, lower, upper)).mean
+    @test all(0 .<= estimate(trained, Z; use_gpu = false)[2:d:end, :] .<= 1)
+end
+
+# A type of data defined by the user, standardised through the hook of the package (see Standardiser): the values Z are
+# standardised, and the indicators W are not. NB types and methods must be defined at the top level, not within a testset
+struct _UserData{A, B}
+    Z::A
+    W::B
+end
+MLUtils.numobs(d::_UserData) = MLUtils.numobs(d.Z)
+MLUtils.getobs(d::_UserData, i) = _UserData(MLUtils.getobs(d.Z, i), MLUtils.getobs(d.W, i))
+(s::Standardiser)(d::_UserData) = _UserData(s(d.Z), d.W)
+NeuralEstimators.fitstandardiser(d::_UserData) = NeuralEstimators.fitstandardiser(d.Z)
+# A type whose method of fitstandardiser returns neither a Standardiser nor nothing
+struct _BadData
+    Z::Matrix{Float64}
+end
+NeuralEstimators.fitstandardiser(::_BadData) = 1
+
+# A RatioEstimator pairs each data set with two parameter vectors without merging the data, so that data stored in a type
+# defined by the user need only support numobs and getobs
+@testset "RatioEstimator: data stored in a type defined by the user" begin
+    θ_train, θ_val = sampler(64), sampler(32)
+    userdata(θ) = _UserData(simulator(θ, m), rand(Bool, m, size(θ, 2)))
+    Z_train, Z_val = userdata(θ_train), userdata(θ_val)
+    network = Chain(z -> vcat(z.Z, Float32.(z.W)), Dense(2m, 16, gelu), Dense(16, 3d))
+    trained = train(RatioEstimator(network, d; num_summaries = 3d), θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false)
+    @test all(isfinite, trained(Z_val, θ_val.array))
+end
+
+@testset "Standardisation" begin
+    using NeuralEstimators: _standardise, _unstandardise, _standardisedata, _Prestandardised, _inputoutput, _transformations, _repeatrows, _rows, _mapstandardisers, _mark
+    using NeuralEstimators: _AutoStandardiser, _invariantloss, _linearoutputs, _fitunfitted, fitstandardiser, _withoutstandardisers
+    num_summaries = 3d
+    network() = Chain(Dense(m, 16, gelu), Dense(16, num_summaries))
+
+    # ---- Standardiser ----
+    θm = Float64.(θ.array)
+    s = Standardiser(θ)
+    @test s isa Standardiser{Matrix{Float32}} && size(s.mean) == (d, 1)
+    @test vec(s.mean) ≈ vec(mean(θm; dims = 2))
+    @test vec(s.std) ≈ vec(std(θm; dims = 2, corrected = false))
+    @test _standardise(s, θm) ≈ (θm .- s.mean) ./ s.std
+    @test _unstandardise(s, _standardise(s, θm)) ≈ θm
+    @test Standardiser(1, 2) isa Standardiser{Float32}
+    @test Standardiser([1, 2], 3).std == Float32[3; 3;;] # broadcast to a common shape
+    @test_throws ArgumentError Standardiser(0, 0)
+    @test_throws ArgumentError Standardiser([0, 1], [1, Inf])
+    @test_throws ArgumentError Standardiser("a", 1)
+
+    # The default rule for each container
+    @test Standardiser(randn(Float32, 3)).mean isa Float32                    # vector: a single statistic
+    @test size(Standardiser(randn(4, 10)).mean) == (4, 1)                    # matrix: one per row
+    @test Standardiser(randn(Float32, 4, 4, 1, 10)).mean isa Float32          # three or more dimensions: a single statistic
+    @test Standardiser(rand(1:3, 4, 4, 1, 10)).mean isa Float32               # integer data
+    Zv = [randn(Float32, 3, mᵢ) .+ Float32[0, 10, 100] for mᵢ in (5, 7)]       # vector of data sets: per row, pooled over replicates
+    sv = Standardiser(Zv)
+    @test vec(sv.mean) ≈ vec(mean(reduce(hcat, Zv); dims = 2))
+    @test vec(sv.std) ≈ vec(std(reduce(hcat, Zv); dims = 2, corrected = false))
+    @test Standardiser(PackedReplicates(Zv)).mean ≈ sv.mean
+    sP = Standardiser(PackedReplicates(Zv; max_sample_size = 7))             # the padding is excluded
+    @test sP.mean ≈ sv.mean && sP.std ≈ sv.std
+    @test Standardiser(fill(5.0f0, 2, 10)).std == ones(Float32, 2, 1)        # zero variance: σ = 1
+    @test Standardiser([1f7, 1f7 + 1]).std == 1f0                           # variation too small to resolve in single precision: σ = 1
+    @test_throws ArgumentError Standardiser(fill(NaN, 2, 3))                 # non-finite values
+    @test_throws ArgumentError Standardiser((Z, Z))                          # unsupported container
+    S = randn(Float32, 2, K)
+    dS = DataAndSummaries(Z, S)
+    @test_throws ArgumentError Standardiser(dS)
+
+    # Standardisation of the data, in single precision, for each container
+    Zs = _standardisedata(sv, Zv)
+    @test eltype(Zs) == Matrix{Float32} && Zs[2] ≈ (Zv[2] .- sv.mean) ./ sv.std
+    P = PackedReplicates(Zv; max_sample_size = 7)
+    Ps = _standardisedata(sv, P)
+    @test Ps isa PackedReplicates && Ps.data ≈ (P.data .- sv.mean) ./ sv.std && Ps.mask == P.mask
+    sZ, sS = Standardiser(Z), Standardiser(S)
+    t = _standardisedata((Z = sZ, S = sS), dS)
+    @test t.Z ≈ (Z .- sZ.mean) ./ sZ.std && t.S ≈ (S .- sS.mean) ./ sS.std
+    @test _standardisedata(sZ, dS).S === S                                 # a single standardiser applies to the data only
+    @test _standardisedata(sZ, Summaries(S)).S === S                       # precomputed summary statistics are not standardised
+    @test _standardisedata(Standardiser(), Z) === Z                         # unfitted
+    @test _standardisedata(_Prestandardised(sZ), Z) === Z                   # standardised on the host during training
+    @test eltype(_standardisedata(Standardiser(1, 2), Float64.(Z))) == Float32
+    # The public call operator applies a standardiser in the same way, and an unfitted standardiser returns the data unchanged
+    @test sZ(Z) ≈ (Z .- sZ.mean) ./ sZ.std && sv(Zv) == Zs && sv(P).data == Ps.data && sZ(dS).Z ≈ t.Z && sZ(dS).S === S
+    @test sZ(Summaries(S)).S === S && Standardiser()(Z) === Z && Standardiser()(Zv) === Zv
+
+    # ---- Defaults ----
+    @test PointEstimator(network(), d; num_summaries).data_standardiser isa Standardiser{Nothing}
+    @test PointEstimator(network(), d; num_summaries).parameter_standardiser isa _AutoStandardiser # standardised if this leaves the estimator unchanged
+    @test_throws ArgumentError PointEstimator(network(), d; num_summaries, standardise_data = :auto) # :auto applies to the parameters of a PointEstimator only
+    @test_throws ArgumentError PosteriorEstimator(network(), d; num_summaries, standardise_parameters = :auto)
+    @test isnothing(PointEstimator(network(), d; num_summaries, standardise_data = false).data_standardiser)
+    @test PointEstimator(network(), d; num_summaries, standardise_data = (Z = false, S = true)).data_standardiser == (Z = nothing, S = Standardiser())
+    @test_throws ArgumentError PointEstimator(network(), d; num_summaries, standardise_data = 1)
+    @test IntervalEstimator(network(), d; num_summaries).parameter_standardiser isa Standardiser{Nothing}
+    @test QuantileEstimator(network(), d; num_summaries).parameter_standardiser isa Standardiser{Nothing}
+    @test PosteriorEstimator(network(), d; num_summaries).parameter_standardiser isa Standardiser{Nothing}
+    @test isnothing(PosteriorEstimator(network(), 1; num_summaries, q = SpikeAndSlab).parameter_standardiser)
+    @test_throws ArgumentError PosteriorEstimator(network(), 1; num_summaries, q = SpikeAndSlab, standardise_parameters = true)
+    @test RatioEstimator(network(), d; num_summaries).parameter_standardiser isa Standardiser{Nothing}
+    @test TelescopingRatioEstimator(network(), d; num_summaries, sampler).parameter_standardiser isa Standardiser{Nothing}
+    @test PriorEstimator(d).parameter_standardiser isa Standardiser{Nothing}
+    @test isnothing(PriorEstimator(1; q = SpikeAndSlab).parameter_standardiser)
+    @test_throws ArgumentError PriorEstimator(SpikeAndSlab(1, 0); standardise_parameters = true)
+
+    # The standardisers are not part of the functors, so the Flux state (and hence the loading of files saved previously) is unchanged
+    @test keys(Flux.state(PointEstimator(network(), d; num_summaries))) == (:summary_network, :inference_network)
+    @test keys(Flux.state(IntervalEstimator(network(), d; num_summaries))) == (:summary_network, :u, :v, :probs, :g)
+    @test keys(Flux.state(QuantileEstimator(network(), d; num_summaries))) == (:summary_network, :summary_network_θ, :v, :probs, :g, :i)
+    @test keys(Flux.state(PosteriorEstimator(network(), d; num_summaries))) == (:summary_network, :q)
+    @test keys(Flux.state(RatioEstimator(network(), d; num_summaries))) == (:summary_network, :summary_network_θ, :inference_network)
+    @test keys(Flux.state(TelescopingRatioEstimator(network(), d; num_summaries, sampler))) == (:summary_network, :heads)
+    @test keys(Flux.state(PriorEstimator(d))) == (:q,)
+
+    # Unfitted standardisers are the identity, so that an untrained estimator can be applied
+    e1 = PointEstimator(network(), d; num_summaries, standardise_parameters = true)
+    e0 = PointEstimator(e1.summary_network, e1.inference_network; standardise_data = false)
+    @test e1(Z) == e0(Z)
+
+    # ---- Conformance: a standardised estimator equals the unstandardised estimator with the same networks, applied to
+    # standardised inputs and with its outputs mapped back ----
+    sθ = Standardiser(θ)
+    Zs = (Z .- sZ.mean) ./ sZ.std
+    θs = (θ.array .- sθ.mean) ./ sθ.std
+    grid = expandgrid(-1:0.5:1, 0:0.25:1)'
+    grids = (grid .- sθ.mean) ./ sθ.std
+
+    # PointEstimator
+    est = PointEstimator(network(), d; num_summaries, standardise_data = sZ, standardise_parameters = sθ)
+    ref = PointEstimator(est.summary_network, est.inference_network; standardise_data = false)
+    @test est(Z) ≈ _unstandardise(sθ, ref(Zs))
+    @test estimate(est, Z; use_gpu = false) ≈ est(Z)
+    @test summarystatistics(est, Z; use_gpu = false) ≈ est.summary_network(Zs)
+
+    # IntervalEstimator and QuantileEstimator
+    est = IntervalEstimator(network(), d; num_summaries, standardise_data = sZ, standardise_parameters = sθ)
+    ref = IntervalEstimator(est.summary_network, est.u, est.v, est.probs, est.g; standardise_data = false)
+    out = ref(Zs)
+    @test est(Z) ≈ vcat(_unstandardise(sθ, out[1:d, :]), _unstandardise(sθ, out[(d + 1):end, :]))
+    est = QuantileEstimator(network(), d; num_summaries, standardise_data = sZ, standardise_parameters = sθ)
+    ref = QuantileEstimator(est.summary_network, est.summary_network_θ, est.v, est.probs, est.g, est.i; standardise_data = false)
+    @test est(Z) ≈ _unstandardise(_repeatrows(sθ, 3), ref(Zs))
+    est = QuantileEstimator(network(), d; num_summaries, i = 2, standardise_data = sZ, standardise_parameters = sθ)
+    ref = QuantileEstimator(est.summary_network, est.summary_network_θ, est.v, est.probs, est.g, est.i; standardise_data = false)
+    θ₁ = θ.array[1:1, :]
+    @test est(Z, θ₁) ≈ _unstandardise(_repeatrows(_rows(sθ, 2:2), 3), ref(Zs, θs[1:1, :]))
+
+    # PosteriorEstimator
+    est = PosteriorEstimator(network(), d; num_summaries, q = Gaussian, standardise_data = sZ, standardise_parameters = sθ)
+    ref = PosteriorEstimator(est.summary_network, est.q; standardise_data = false, standardise_parameters = false)
+    seed!(1)
+    a = sampleposterior(est, Z; N = 10, use_gpu = false)
+    seed!(1)
+    b = sampleposterior(ref, Zs; N = 10, use_gpu = false)
+    @test reshape(a, d, :) ≈ _unstandardise(sθ, reshape(b, d, :))
+
+    # RatioEstimator
+    est = RatioEstimator(network(), d; num_summaries, standardise_data = sZ, standardise_parameters = sθ)
+    ref = RatioEstimator(est.summary_network, est.summary_network_θ, est.inference_network; standardise_data = false, standardise_parameters = false)
+    @test est(Z, θ.array) ≈ ref(Zs, θs)
+    @test logratio(est, Z[:, 1:2]; grid = grid, use_gpu = false) ≈ logratio(ref, Zs[:, 1:2]; grid = grids, use_gpu = false)
+    samples = sampleposterior(est, Z[:, 1:1]; lower = [-3.0, 0.0], upper = [3.0, 1.0], N = 10, warmup = 10, use_gpu = false)
+    @test size(samples) == (d, 10, 1) && all([-3.0, 0.0] .<= samples[:, :, 1] .<= [3.0, 1.0])
+
+    # TelescopingRatioEstimator
+    est = TelescopingRatioEstimator(network(), d; num_summaries, sampler, standardise_data = sZ, standardise_parameters = sθ)
+    ref = TelescopingRatioEstimator(est.summary_network, est.heads, sampler; standardise_data = false, standardise_parameters = false)
+    @test est(Z, θ.array) ≈ ref(Zs, θs)
+    @test logratio(est, Z[:, 1:2]; grid = grid, use_gpu = false) ≈ logratio(ref, Zs[:, 1:2]; grid = grids, use_gpu = false)
+    lower, upper = [-3.0, 0.0], [3.0, 1.0]
+    lowers, uppers = vec(_standardise(sθ, reshape(lower, :, 1))), vec(_standardise(sθ, reshape(upper, :, 1)))
+    lq = logposterior(est, θ.array[:, 1:5], Z[:, 1:1]; lower, upper, method = :chebyshev, use_gpu = false)
+    lqs = logposterior(ref, θs[:, 1:5], Zs[:, 1:1]; lower = lowers, upper = uppers, method = :chebyshev, use_gpu = false)
+    @test lq ≈ lqs .- sum(log, sθ.std) rtol = 1e-3 # the densities of the standardised parameters, with the Jacobian
+    seed!(1)
+    a = sampleposterior(est, Z[:, 1:1]; lower, upper, N = 20, use_gpu = false)
+    seed!(1)
+    b = sampleposterior(ref, Zs[:, 1:1]; lower = lowers, upper = uppers, N = 20, use_gpu = false)
+    @test reshape(a, d, :) ≈ _unstandardise(sθ, reshape(b, d, :)) rtol = 1e-3
+
+    # PriorEstimator
+    est = PriorEstimator(GaussianMixture(d, 0); standardise_parameters = sθ)
+    ref = PriorEstimator(est.q; standardise_parameters = false)
+    @test logdensity(est, θ; use_gpu = false) ≈ logdensity(ref, θs; use_gpu = false) .- sum(log, sθ.std)
+    @test logdensity(est, θ.array[:, 1]; use_gpu = false) ≈ logdensity(est, θ; use_gpu = false)[1]
+    @test all(isfinite, ForwardDiff.gradient(x -> logdensity(est, x; use_gpu = false), Float64.(θ.array[:, 1]))) # e.g., as the log prior of NUTS
+    seed!(1)
+    a = sample(est, 10; use_gpu = false)
+    seed!(1)
+    b = sample(ref, 10; use_gpu = false)
+    @test a ≈ _unstandardise(sθ, b)
+    flow = PriorEstimator(NormalisingFlow(d, 0); standardise_parameters = sθ)
+    flowref = PriorEstimator(flow.q; standardise_parameters = false)
+    @test forward(flow, θ; use_gpu = false) ≈ forward(flowref, θs; use_gpu = false)
+    U = randn(Float32, d, 5)
+    @test inverse(flow, U; use_gpu = false) ≈ _unstandardise(sθ, inverse(flowref, U; use_gpu = false))
+
+    # Expert summary statistics (DataAndSummaries)
+    est = PointEstimator(network(), d; num_summaries = num_summaries + 2, standardise_data = (Z = sZ, S = sS))
+    ref = PointEstimator(est.summary_network, est.inference_network; standardise_data = false)
+    Ss = (S .- sS.mean) ./ sS.std
+    @test est(dS) ≈ ref(DataAndSummaries(Zs, Ss))
+    @test estimate(est, dS; use_gpu = false) ≈ est(dS)
+    @test summarystatistics(est, dS; use_gpu = false) ≈ vcat(est.summary_network(Zs), Ss)
+
+    # ---- Training: the standardisers are fitted once, and the data and parameters are standardised on the host ----
+    θ_train, θ_val = sampler(100), sampler(50)
+    Z_train, Z_val = simulator(θ_train, m), simulator(θ_val, m)
+    est = PointEstimator(network(), d; num_summaries, standardise_parameters = true)
+    trained = train(est, θ_train, θ_val, Z_train, Z_val; epochs = 2, verbose = false)
+    @test trained.data_standardiser.mean ≈ Standardiser(Z_train).mean # fitted to the training data
+    @test trained.parameter_standardiser.mean ≈ Standardiser(θ_train).mean
+    @test est.parameter_standardiser isa Standardiser{Nothing}       # the given estimator keeps its unfitted standardisers
+    input, output = _inputoutput(trained, Z_val, θ_val.array)
+    @test output ≈ _standardise(trained.parameter_standardiser, θ_val.array)
+    marked = _mapstandardisers(_mark, trained)                       # the estimator being trained skips standardisation
+    @test marked(input) ≈ _standardise(trained.parameter_standardiser, trained(Z_val)) rtol = 1e-4
+    trained2 = train(trained, θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false) # never refitted
+    @test trained2.parameter_standardiser.mean == trained.parameter_standardiser.mean
+    @test trained2.data_standardiser.std == trained.data_standardiser.std
+    trained = train(est, sampler, simulator; simulator_args = m, K = 100, epochs = 1, verbose = false) # fitted to the validation data
+    @test trained.parameter_standardiser isa Standardiser{Matrix{Float32}}
+    trained = train(est, θ_train, θ_val, simulator; simulator_args = m, epochs = 1, verbose = false)
+    @test trained.parameter_standardiser.mean ≈ Standardiser(θ_train).mean
+    trained = train(est, θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false, freeze_summary_network = true)
+    @test trained.data_standardiser isa Standardiser{Matrix{Float32}}
+    est = IntervalEstimator(network(), d; num_summaries, lower = [-Inf, 0], upper = [Inf, 1], standardise_parameters = true)
+    trained = train(est, θ_train, θ_val, Z_train, Z_val; epochs = 2, verbose = false)
+    intervals = estimate(trained, Z_val; use_gpu = false)
+    @test all(0 .<= intervals[[2, 4], :] .<= 1)
+    @test trained.parameter_standardiser.mean ≈ Standardiser(scaledlogit.(θ_train.array, [-Inf, 0], [Inf, 1])).mean # fitted to the transformed parameters
+    est = PointEstimator(network(), d; num_summaries, standardise_parameters = false)
+    trainstate = FluxTrainState(est, Adam(), Optimisers.setup(Adam(), est))
+    trainstate = @test_logs (:info, r"data are not standardised") _fitunfitted(trainstate, θ_train, (Z_train, Z_train), NeuralEstimators.mae, true) # unsupported data
+    @test isnothing(trainstate.model.data_standardiser)
+
+    # ---- Automatic standardisation of the parameters of a PointEstimator: only if this leaves the estimator unchanged ----
+    # The loss: a sum over the parameters of positively homogeneous functions of the errors, on both scales
+    θl = θ_train.array
+    sl = Standardiser(θl)
+    for loss in (NeuralEstimators.mae, NeuralEstimators.mse, Flux.mae, (x, y) -> quantileloss(x, y, 0.3), (x, y) -> kpowerloss(x, y, 2; joint = false, safeorigin = false))
+        @test _invariantloss(loss, sl, θl)
+    end
+    for loss in ((x, y) -> tanhloss(x, y, 0.1), (x, y) -> tanhloss(x, y, 0.1; joint = false), (x, y) -> tanhloss(x, y, 1e-4), # incl. saturated
+                 (x, y) -> kpowerloss(x, y, 0.5), (x, y) -> kpowerloss(x, y, 2; safeorigin = false), (x, y) -> Flux.huber_loss(x, y),
+                 (x, y) -> mean(abs.(x .- y) ./ abs.(y)), (x, y) -> mean(abs.(log.(x) .- log.(y))), (x, y) -> error("a loss that throws"))
+        @test !_invariantloss(loss, sl, θl)
+    end
+    # Constants chosen for the original scale are detected, also when the loss is nearly linear on the standardised scale
+    θ289 = 500 .+ 289 .* randn(2, 200)
+    @test !_invariantloss((x, y) -> tanhloss(x, y, 50), Standardiser(θ289), θ289)
+    @test !_invariantloss((x, y) -> Flux.huber_loss(x, y; delta = 6), Standardiser(θ289), θ289)
+    for θs in (1f-3 .* randn(Float32, 2, 100) .+ 0.5f0, 1f3 .* randn(Float32, 2, 100), 1f5 .+ randn(Float32, 2, 100), randn(Float32, 1, 100), randn(Float32, 1000, 100))
+        @test _invariantloss(NeuralEstimators.mae, Standardiser(θs), θs)
+        @test !_invariantloss((x, y) -> tanhloss(x, y, 0.1), Standardiser(θs), θs)
+    end
+    θ1000 = randn(1000, 100)
+    @test !_invariantloss((x, y) -> kpowerloss(x, y, 0.5; safeorigin = false), Standardiser(θ1000), θ1000) # a power of a sum over many parameters
+    seed!(3); u = rand(); seed!(3); _invariantloss(NeuralEstimators.mae, sl, θl); @test rand() == u # the global random stream is unchanged
+    # The neural network: a final linear layer with one output per parameter
+    @test _linearoutputs(PointEstimator(network(), d; num_summaries)) == d                       # the MLP inference network
+    @test _linearoutputs(PointEstimator(Chain(Dense(m, 16, gelu), Dense(16, d)))) == d             # a single network
+    @test _linearoutputs(Chain(Dense(m, 16, gelu), Dense(16, d), identity)) == d                   # final identity layers are skipped
+    @test isnothing(_linearoutputs(Chain(Dense(m, 16, gelu), Dense(16, d, exp))))
+    @test isnothing(_linearoutputs(Chain(Dense(m, d), Compress(zeros(d), ones(d)))))
+    @test isnothing(_linearoutputs(Chain(Dense(m, d, softplus), identity)))
+    @test isnothing(_linearoutputs(Chain(Dense(m, 1), Parallel(vcat, Dense(1, 1), Dense(1, 1, softplus)))))
+    @test isnothing(_linearoutputs(Chain()))
+    @test _linearoutputs(DeepSet(Chain(Dense(1, 8, relu)), Chain(Dense(8, d)))) == d
+    @test isnothing(_linearoutputs(DeepSet(Chain(Dense(1, 8, relu)), Chain(Dense(8, d, exp)))))
+    @test isnothing(_linearoutputs(DeepSet(Chain(Dense(1, 8, relu)), identity)))
+    # The decision, made when the standardisers are fitted (with a message when verbose)
+    decide(est, loss; verbose = false) = _fitunfitted(FluxTrainState(est, Adam(), Optimisers.setup(Adam(), est)), θ_train, Z_train, loss, verbose).model.parameter_standardiser
+    tanh01 = (x, y) -> tanhloss(x, y, 0.1)
+    auto = PointEstimator(network(), d; num_summaries)
+    constrained = PointEstimator(Chain(Dense(m, 16, gelu), Dense(16, d, exp)))
+    wide = PointEstimator(Chain(Dense(m, 16, gelu), Dense(16, 2d)))      # an output that is not one per parameter
+    forced = PointEstimator(network(), d; num_summaries, standardise_parameters = true)
+    off = PointEstimator(network(), d; num_summaries, standardise_parameters = false)
+    @test decide(auto, NeuralEstimators.mae) isa Standardiser{Matrix{Float32}}
+    @test (@test_logs (:info, r"parameters are standardised") decide(auto, NeuralEstimators.mae; verbose = true)) isa Standardiser
+    @test isnothing(@test_logs (:info, r"would change the Bayes estimator") decide(auto, tanh01; verbose = true))
+    @test isnothing(@test_logs (:info, r"may constrain the estimates") decide(constrained, NeuralEstimators.mae; verbose = true))
+    @test isnothing(decide(wide, (x, y) -> NeuralEstimators.mae(x[1:size(y, 1), :], y)))
+    @test (@test_logs decide(forced, tanh01; verbose = true)) isa Standardiser # explicit: no message
+    @test isnothing(@test_logs decide(off, NeuralEstimators.mae; verbose = true))
+    # Training: the decision is made once, by the first call to train()
+    trained = train(PointEstimator(network(), d; num_summaries), θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false)
+    @test trained.parameter_standardiser.mean ≈ Standardiser(θ_train).mean
+    @test isnothing(train(PointEstimator(network(), d; num_summaries), θ_train, θ_val, Z_train, Z_val; loss = tanh01, epochs = 1, verbose = false).parameter_standardiser)
+    @test train(trained, θ_train, θ_val, Z_train, Z_val; loss = tanh01, epochs = 1, verbose = false).parameter_standardiser.mean == trained.parameter_standardiser.mean
+    @test isnothing(train(PointEstimator(network(), d; num_summaries), θ_train, θ_val, simulator; simulator_args = m, loss = tanh01, epochs = 1, verbose = false).parameter_standardiser)
+    @test isnothing(train(PointEstimator(network(), d; num_summaries), sampler, simulator; simulator_args = m, K = 50, loss = tanh01, epochs = 1, verbose = false).parameter_standardiser)
+    # Parameters stored as an array with three or more dimensions (e.g., p parameters at each of L locations), with a single statistic
+    p, L = 2, 5
+    θ3 = 100 .+ 10 .* randn(Float32, p, L, 64)
+    Z3 = randn(Float32, m, 64)
+    e3 = PointEstimator(Chain(Dense(m, 4L, gelu), x -> reshape(x, 4, L, :), Dense(4, p)))
+    @test _invariantloss(NeuralEstimators.mae, Standardiser(θ3), θ3) && !_invariantloss(tanh01, Standardiser(θ3), θ3)
+    trained3 = train(e3, θ3, θ3, Z3, Z3; epochs = 1, verbose = false)
+    @test trained3.parameter_standardiser isa Standardiser{Float32}
+    @test size(trained3(Z3)) == size(θ3)
+    # Interval and quantile estimators standardise the parameters by default
+    @test train(QuantileEstimator(network(), d; num_summaries), θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false).parameter_standardiser isa Standardiser{Matrix{Float32}}
+    # An untrained estimator keeps its default through saving and loading
+    savepath5 = mktempdir()
+    saveestimator(PointEstimator(network(), d; num_summaries), savepath5)
+    @test loadestimator(PointEstimator(network(), d; num_summaries, standardise_parameters = false), savepath5).parameter_standardiser isa _AutoStandardiser
+
+    # ---- Data stored in a type defined by the user (see _UserData) ----
+    ud_train, ud_val = _UserData(Z_train, rand(Bool, size(Z_train))), _UserData(Z_val, rand(Bool, size(Z_val)))
+    @test fitstandardiser(ud_train).mean == fitstandardiser(Z_train).mean # the statistics of the values only
+    @test Standardiser(ud_train).std == Standardiser(Z_train).std
+    @test_throws ArgumentError Standardiser(_BadData(randn(2, 3)))         # fitstandardiser must return a Standardiser or nothing
+    userest = PointEstimator(Chain(u -> vcat(u.Z, Float32.(u.W)), Dense(2m, 16, gelu), Dense(16, d)))
+    trained = train(userest, θ_train, θ_val, ud_train, ud_val; epochs = 1, verbose = false)
+    su = trained.data_standardiser
+    @test su.mean ≈ Standardiser(Z_train).mean
+    ud_std = _UserData(su(ud_val.Z), ud_val.W)                             # the values standardised, the indicators unchanged
+    @test trained(ud_val) ≈ _unstandardise(trained.parameter_standardiser, _withoutstandardisers(trained)(ud_std))
+    @test estimate(trained, ud_val; use_gpu = false) ≈ trained(ud_val)    # mini-batches of the type
+    @test summarystatistics(trained, ud_val; use_gpu = false) ≈ trained.summary_network(ud_std)
+    @test su(DataAndSummaries(ud_val, randn(Float32, 2, size(Z_val, 2)))).Z.Z ≈ ud_std.Z # within a container of the package
+    @test Standardiser()(ud_val).Z === ud_val.Z
+    usimulator(θ, m) = _UserData(simulator(θ, m), rand(Bool, m, size(θ, 2)))
+    trained = train(userest, θ_train, θ_val, usimulator; simulator_args = m, epochs = 1, verbose = false) # simulated data
+    @test trained.data_standardiser isa Standardiser{Matrix{Float32}}
+
+    # ---- Persistence ----
+    savepath = mktempdir()
+    est = PosteriorEstimator(network(), d; num_summaries, q = Gaussian, lower = [-Inf, 0], upper = [Inf, 1])
+    trained = train(est, θ_train, θ_val, Z_train, Z_val; epochs = 2, savepath = savepath, verbose = false)
+    @test _transformations(trained).bounds == (lower = [-Inf, 0.0], upper = [Inf, 1.0])
+    loaded = loadestimator(PosteriorEstimator(network(), d; num_summaries, q = Gaussian), savepath) # the architecture only
+    @test loaded.transform isa NeuralEstimators._ScaledLogit
+    @test loaded.parameter_standardiser.mean == trained.parameter_standardiser.mean
+    @test loaded.data_standardiser.std == trained.data_standardiser.std
+    seed!(1)
+    a = sampleposterior(trained, Z; N = 20, use_gpu = false)
+    seed!(1)
+    b = sampleposterior(loaded, Z; N = 20, use_gpu = false)
+    @test a == b
+    # The saved estimator is authoritative, with a warning if the given estimator has different statistics
+    given = PosteriorEstimator(network(), d; num_summaries, q = Gaussian, standardise_parameters = Standardiser([0, 0], [1, 1]))
+    loaded = @test_logs (:warn, r"differs") loadestimator(given, savepath)
+    @test loaded.parameter_standardiser.mean == trained.parameter_standardiser.mean
+    # saveestimator() saves the same file
+    savepath2 = mktempdir()
+    saveestimator(trained, savepath2)
+    loaded = loadestimator(PosteriorEstimator(network(), d; num_summaries, q = Gaussian), savepath2)
+    seed!(1)
+    @test sampleposterior(loaded, Z; N = 20, use_gpu = false) == a
+    # Custom transformations cannot be saved, so they must be given again
+    transform(x) = vcat(x[1:1, :], log.(x[2:2, :] .+ 0.1))
+    invtransform(x) = vcat(x[1:1, :], exp.(x[2:2, :]) .- 0.1)
+    saveestimator(PosteriorEstimator(network(), d; num_summaries, q = Gaussian, transform, invtransform), savepath2)
+    @test_throws ArgumentError loadestimator(PosteriorEstimator(network(), d; num_summaries, q = Gaussian), savepath2)
+    @test loadestimator(PosteriorEstimator(network(), d; num_summaries, q = Gaussian, transform, invtransform), savepath2).transform === transform
+    # A file saved without the standardisers and bounds (e.g., by an earlier version) is loaded without them
+    model_state = Flux.state(trained)
+    savepath3 = mktempdir()
+    NeuralEstimators.@save joinpath(savepath3, "best_estimator.bson") model_state
+    loaded = loadestimator(PosteriorEstimator(network(), d; num_summaries, q = Gaussian), savepath3)
+    @test isnothing(loaded.data_standardiser) && isnothing(loaded.parameter_standardiser) && loaded.transform === identity
+    # Ensemble: the standardisers of each component
+    savepath4 = mktempdir()
+    ensemble = Ensemble([PointEstimator(network(), d; num_summaries, standardise_parameters = true) for _ = 1:2])
+    ensemble = train(ensemble, θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false, savepath = savepath4)
+    loaded = loadestimator(Ensemble([PointEstimator(network(), d; num_summaries) for _ = 1:2]), savepath4)
+    @test estimate(loaded, Z; use_gpu = false) ≈ estimate(ensemble, Z; use_gpu = false)
+    @test_throws ArgumentError loadestimator(PointEstimator(network(), d; num_summaries), savepath4) # an Ensemble file
+
+    # ---- Containers, shapes, and precision ----
+    est = PointEstimator(network(), d; num_summaries, standardise_data = sZ, standardise_parameters = sθ)
+    # Containers whose element type is wider than their contents are standardised like concretely typed data
+    @test est(Matrix{Union{Missing, Float32}}(Z)) ≈ est(Z)
+    Zvec = [randn(Float32, 1, mᵢ) .+ 5 for mᵢ in (3, 5)]
+    deepset = PointEstimator(DeepSet(Chain(Dense(1, 16, gelu)), Chain(Dense(16, num_summaries))), d; num_summaries, standardise_data = Standardiser([z .- 5 for z in Zvec]))
+    @test deepset(Any[z for z in Zvec]) ≈ deepset(Zvec)                                         # Vector{Any}
+    @test deepset([Float64.(Zvec[1]), Zvec[2]]) ≈ deepset(Zvec)                                # mixed precision (Vector{Matrix})
+    posterior = PosteriorEstimator(network(), d; num_summaries, q = Gaussian, standardise_data = sZ, standardise_parameters = sθ)
+    @test summarystatistics(posterior, Matrix{Union{Missing, Float64}}(Z); use_gpu = false) ≈ summarystatistics(posterior, Z; use_gpu = false)
+    # A single data set given as a vector keeps its shape, and a mis-shaped input is an error rather than broadcast
+    @test est(Z[:, 1]) isa AbstractVector && est(Z[:, 1]) ≈ vec(est(Z[:, 1:1]))
+    @test_throws DimensionMismatch est(Z[1:1, :])
+    q2 = QuantileEstimator(network(), 3; num_summaries, i = 1, standardise_data = sZ, standardise_parameters = Standardiser([0, 1, 2], [1, 2, 3]))
+    @test_throws DimensionMismatch q2(Z[:, 1:2], [0.2f0, 0.7f0]) # a single conditioning vector whose length equals the number of data sets
+    # Data in double precision are rounded to single precision before they are standardised, as for estimate()
+    Z64 = 1f6 .+ Float64.(Z)
+    est64 = PointEstimator(network(), d; num_summaries, standardise_data = Standardiser(Z64))
+    @test est64(Z64) ≈ estimate(est64, Z64; use_gpu = false)
+
+    # ---- Statistics ----
+    @test Standardiser(fill(1, 1, 1), fill(3, 1, 1)).std === 3f0 # a single statistic is stored as a number
+    single = PriorEstimator(GaussianMixture(d, 0); standardise_parameters = Standardiser(fill(1, 1, 1), fill(3, 1, 1)))
+    scalar = PriorEstimator(single.q; standardise_parameters = Standardiser(1, 3))
+    @test logdensity(single, θ; use_gpu = false) ≈ logdensity(scalar, θ; use_gpu = false)
+    tiny = Standardiser(1e-50 .* randn(2, 100)) # a standard deviation that underflows in single precision
+    @test tiny.std == ones(Float32, 2, 1) && all(isfinite, _standardise(tiny, 1e-50 .* randn(2, 3)))
+    @test_throws ArgumentError Standardiser(fill(1e40, 2, 3) .* randn(2, 3)) # overflows in single precision
+    @test tanhloss(randn(Float32, d, 5), randn(Float32, d, 5), 0.1f0) isa Real # NB tanh_fast
+
+    # ---- freeze_summary_network with an identity inference network returns the estimator unchanged ----
+    e = PointEstimator(Chain(Dense(m, 16, gelu), Dense(16, d)))
+    ret = @test_logs (:warn, r"returning the estimator unchanged") match_mode = :any train(e, θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false, freeze_summary_network = true)
+    @test ret.data_standardiser isa Standardiser{Nothing}
+    @test ret(Z) == e(Z)
+    for args in ((θ_train, θ_val, simulator), (sampler, simulator))
+        ret = @test_logs (:warn, r"returning the estimator unchanged") match_mode = :any train(e, args...; simulator_args = m, epochs = 1, verbose = false, freeze_summary_network = true)
+        @test ret(Z) == e(Z)
+    end
 end
 
 @testset "Expert summaries only (no summary network)" begin

@@ -110,7 +110,12 @@ estimator = PosteriorEstimator(network, d; num_summaries = num_summaries)
 ```
 
 ```julia [Ratio estimator]
-estimator = RatioEstimator(network, d; num_summaries = num_summaries)
+estimator = TelescopingRatioEstimator(network, d; num_summaries = num_summaries, sampler = sampler)
+
+# Bounds holding essentially all of the prior mass, and the marginal log prior densities, needed for posterior sampling
+using Distributions: logpdf
+lower, upper = [-4.0, 0.0], [4.0, 20.0]
+logpriors = [μ -> -μ^2 / 2, σ -> σ > 0 ? logpdf(InverseGamma(3, 1), σ) : -Inf]
 ```
 
 :::
@@ -145,9 +150,23 @@ The function [`assess`](@ref) can then be used to assess the trained estimator b
 ```julia
 θ_test = sampler(1000)           # test parameters
 Z_test = simulator(θ_test, 50)   # test data
+```
 
+::: code-group
+
+```julia [Point estimator]
 assessment = assess(estimator, θ_test, Z_test)
 ```
+
+```julia [Posterior estimator]
+assessment = assess(estimator, θ_test, Z_test)
+```
+
+```julia [Ratio estimator]
+assessment = assess(estimator, θ_test, Z_test; lower, upper, logpriors)
+```
+
+:::
 
 The resulting [`Assessment`](@ref) object contains ground-truth parameters, estimates, and other quantities that can be used to compute quantitative and qualitative diagnostics:
 
@@ -181,7 +200,7 @@ sampleposterior(estimator, Z)      # posterior sample
 ```
 
 ```julia [Ratio estimator]
-sampleposterior(estimator, Z)      # posterior sample
+sampleposterior(estimator, Z; lower, upper, logpriors)  # posterior sample
 ```
 
 :::

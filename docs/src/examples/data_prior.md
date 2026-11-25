@@ -47,7 +47,7 @@ d = size(θ_train, 1)  # dimension of the parameter vector
 ```
 
 !!! note "Standardising the parameters"
-    A `PriorEstimator` does not standardise the parameters. When they are on very different scales, standardise each parameter before training (e.g., subtract its mean and divide by its standard deviation, both computed from the training samples), and apply the inverse transformation to samples from the learned distribution.
+    By default, a `PriorEstimator` standardises each parameter with its mean and standard deviation, both computed from the training samples, so that parameters on very different scales need no preprocessing (see [`Standardiser`](@ref)). The samples, densities, and latent variables returned by [`sample`](@ref sample(::PriorEstimator, ::Integer)), [`logdensity`](@ref), [`forward`](@ref), and [`inverse`](@ref) are on the original scale.
 
 ## Constructing the estimator
 
@@ -80,6 +80,8 @@ The risk is the average of $-\log q(\boldsymbol{\theta})$ over the samples, wher
 ```
 
 where $H(p)$ is the (differential) entropy of $p$ and $\mathrm{KL}(p \,\|\, q)$ is the Kullback–Leibler (KL) divergence from $q$ to $p$. Since $H(p)$ does not depend on $q$, minimising the expected risk is equivalent to minimising the KL divergence. Since the KL divergence is non-negative and zero if and only if $q = p$ (almost everywhere), the expected risk is bounded below by $H(p)$, with equality if and only if $q = p$. Here, since $\mu$ and $\sigma$ are independent, $H(p)$ is the sum of the entropies of their distributions, $N(0, 1)$ and $U(0, 1)$, namely $\frac{1}{2}\log(2\pi e) + 0 \approx 1.42$.
+
+Since the parameters are standardised by default (see the note above), the risks reported during training are those of the standardised parameters, $\tilde{\theta}_i = (\theta_i - \hat\mu_i)/\hat\sigma_i$, whose distribution has entropy $H(p) - \sum_i \log \hat\sigma_i$, while the KL divergence is unchanged by the standardisation. Here, $\hat{\boldsymbol{\sigma}} \approx (1, 1/\sqrt{12})'$, so these risks are bounded below by about $1.42 + \log\sqrt{12} \approx 2.66$. The density of the learned distribution, as given by [`logdensity`](@ref) and used by [`assess`](@ref) below, is on the original scale of the parameters.
 
 The risk over the course of training can be plotted using [`plotrisk`](@ref):
 

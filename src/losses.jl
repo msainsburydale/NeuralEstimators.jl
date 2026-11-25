@@ -67,14 +67,16 @@ function tanhloss(θ̂, θ, κ; joint::Bool = true, scale_by_parameter_dim::Bool
 end
 
 @doc raw"""
-    kpowerloss(θ̂, θ, κ; agg = mean, safeorigin = true, ϵ = 0.1)
+    kpowerloss(θ̂, θ, κ; agg = mean, safeorigin = true, ϵ = 0.1, joint = true)
 For `κ` > 0, the `κ`-th power absolute-distance loss function,
 ```math
 L(\hat{\boldsymbol{\theta}}, \boldsymbol{\theta}) = \|\hat{\boldsymbol{\theta}} - \boldsymbol{\theta}\|_1^\kappa,
 ```
-contains the squared-error (`κ` = 2), absolute-error (`κ` = 2), and 0--1 (`κ` → 0) loss functions as special
+contains the squared-error (`κ` = 2), absolute-error (`κ` = 1), and 0--1 (`κ` → 0) loss functions as special
 cases. It is Lipschitz continuous if `κ` = 1, convex if `κ` ≥ 1, and strictly convex if `κ` > 1. It is
 quasiconvex for all `κ` > 0.
+
+If `joint = true` (default), the L₁ norm is computed over each parameter vector, so that, with `κ` close to zero, the resulting Bayes estimator approximates the mode of the joint posterior distribution. Otherwise, if `joint = false`, the loss function is computed for each parameter and summed, so that the Bayes estimator approximates the vector containing the modes of the marginal posterior distributions.
 
 If `safeorigin = true`, the loss function is modified to be piecewise, continuous, and linear in the `ϵ`-interval surrounding the origin, to avoid pathologies around the origin. 
 

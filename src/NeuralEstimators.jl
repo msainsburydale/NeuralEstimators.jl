@@ -17,17 +17,17 @@ using Folds
 using Functors
 using InvertedIndices
 using LinearAlgebra
-using MLDataDevices: cpu_device, gpu_device, reactant_device, CPUDevice, CUDADevice, ReactantDevice, AbstractDevice
+using MLDataDevices: cpu_device, gpu_device, reactant_device, CPUDevice, CUDADevice, ReactantDevice, MetalDevice, oneAPIDevice, AbstractDevice, get_device, get_device_type
 using MLUtils: DataLoader, flatten, zeros_like, unsqueeze
 import MLUtils: numobs, joinobs, getobs
 using NamedArrays
 import NamedArrays: NamedMatrix
 using NearestNeighbors: KDTree, BallTree, BruteTree, knn, inrange, MinkowskiMetric # NB used for adjacencymatrix()
-using NNlib: logσ, softplus, softmax, logsoftmax, relu, ⊠, batched_transpose, logsumexp, sigmoid, scatter, gather
+using NNlib: logσ, softplus, softmax, logsoftmax, relu, ⊠, batched_transpose, logsumexp, sigmoid, scatter, gather, tanh_fast
 using Optimisers
 using ParameterSchedulers
 using Printf: @sprintf
-using Random: randexp, shuffle, randperm, AbstractRNG
+using Random: randexp, shuffle, randperm, AbstractRNG, Xoshiro
 using SparseArrays
 using Statistics: mean, median, sum, quantile
 using StatsBase
@@ -40,6 +40,9 @@ include("losses.jl")
 export DataAndSummaries, Summaries, PackedReplicates
 export AbstractParameterSet, NamedMatrix
 include("DataParameters.jl")
+
+export Standardiser
+include("Standardiser.jl")
 
 export DeepSet, MLP, MultiHeadMLP, Compress, CovarianceMatrix, CorrelationMatrix, ResidualBlock, PowerDifference
 export IndicatorWeights, KernelWeights
@@ -83,9 +86,14 @@ for T in (:PointEstimator, :PosteriorEstimator, :IntervalEstimator, :QuantileEst
         throw(ArgumentError("summary_network cannot be an Integer"))
     end
 end
+# Likewise, an approximate distribution and an integer is ambiguous between PosteriorEstimator(q, summary_network) and
+# PosteriorEstimator(summary_network, d)
+function PosteriorEstimator(::AbstractApproximateDistribution, ::Integer; kwargs...)
+    throw(ArgumentError("summary_network cannot be an Integer: give the summary network and the approximate distribution, as in PosteriorEstimator(summary_network, q)"))
+end
 
 export train
-export plotrisk, loadrisk, loadoptimiser, loadestimator
+export plotrisk, loadrisk, loadoptimiser, loadestimator, saveestimator
 include("train.jl")
 
 export FluxTrainState

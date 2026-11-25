@@ -122,18 +122,21 @@ function _train_ensemble(ensemble::Ensemble, args...; kwargs...)
     ensemble = Ensemble(estimators)
 
     if !isnothing(savepath)
-        if !ispath(savepath)
-            mkpath(savepath)
-        end
         # NB each component estimator is the best-performing one from its own training run, so
         # this is the ensemble's "best" checkpoint; there is no "final" counterpart. Saved with
-        # the same file name and key as for a single estimator, so that it can be loaded with
+        # the same file name and keys as for a single estimator, so that it can be loaded with
         # loadestimator(ensemble, savepath).
-        model_state = _state(ensemble)
-        @save joinpath(savepath, "best_estimator.bson") model_state
+        saveestimator(ensemble, savepath)
     end
 
     return ensemble
 end
 
-function _state end
+# The standardisers and bounds of the component estimators, saved as one entry per component (see _transformations).
+# A single entry (_NO_TRANSFORMATIONS, for files saved without them) applies to every component
+_transformations(ensemble::Ensemble) = [_transformations(estimator) for estimator in ensemble.estimators]
+function _settransformations(ensemble::Ensemble, entries::AbstractVector)
+    length(entries) == length(ensemble) || throw(ArgumentError("The saved ensemble has $(length(entries)) component estimators, but the given ensemble has $(length(ensemble))"))
+    Ensemble([_settransformations(estimator, entry) for (estimator, entry) in zip(ensemble.estimators, entries)])
+end
+_settransformations(ensemble::Ensemble, entry::NamedTuple) = Ensemble([_settransformations(estimator, entry) for estimator in ensemble.estimators])

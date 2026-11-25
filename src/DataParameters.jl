@@ -86,6 +86,7 @@ end
 
 _stripnames(x::NamedArray) = x.array
 _stripnames(x::AbstractArray) = x
+_stripnames(x) = x
 
 """
 	DataAndSummaries(Z, S)
@@ -121,8 +122,6 @@ struct DataAndSummaries{A, B}
         @assert numobs(Z) == size(S, 2) "The number of data sets in Z ($(numobs(Z))) must match the number of columns in S ($(size(S, 2)))"
         new{typeof(Z), typeof(S)}(Z, S)
     end
-    DataAndSummaries(Z, ::Nothing) = new{typeof(Z), Nothing}(Z, nothing)
-    DataAndSummaries(Z) = new{typeof(Z), Nothing}(Z, nothing)
 end
 
 # Methods

@@ -9,16 +9,14 @@ The estimator employs a representation that prevents quantile crossing. Specific
 it constructs intervals for each parameter
 ``\theta_i``, ``i = 1, \dots, d,``  of the form,
 ```math
-[c_i(u_i(\boldsymbol{Z})), \;\; c_i(u_i(\boldsymbol{Z})) + g(v_i(\boldsymbol{Z})))],
+[u_i(\boldsymbol{Z}), \;\; u_i(\boldsymbol{Z}) + g(v_i(\boldsymbol{Z}))],
 ```
 where  ``\boldsymbol{u}(⋅) \equiv (u_1(\cdot), \dots, u_d(\cdot))'`` and
 ``\boldsymbol{v}(⋅) \equiv (v_1(\cdot), \dots, v_d(\cdot))'`` are neural networks
-that map from the sample space to ``\mathbb{R}^d``; $g(\cdot)$ is a
-monotonically increasing function (e.g., exponential or softplus); and each
-``c_i(⋅)`` is a monotonically increasing function that maps its input to the
-prior support of ``\theta_i``.
-
-The functions ``c_i(⋅)`` may be collectively defined by a ``d``-dimensional [`Compress`](@ref) object, which can constrain the interval estimator's output to the prior support. If these functions are unspecified, they will be set to the identity function so that the range of the intervals will be unrestricted.
+that map from the sample space to ``\mathbb{R}^d``, and $g(\cdot)$ is a
+monotonically increasing function (e.g., exponential or softplus). The intervals are constructed on the scale of the
+standardised parameters (mapped to the real line first, given bounds `lower` and `upper`), and then mapped back to the
+original scale, which preserves this ordering.
 
 The return value when applied to data using [`estimate`](@ref) is a matrix with ``2d`` rows, where the first and second ``d`` rows correspond to the lower and upper bounds, respectively. The function [`interval`](@ref) can be used to format this output in a readable ``d`` × 2 matrix.  
 
@@ -26,9 +24,11 @@ See also [`QuantileEstimator`](@ref).
 
 # Keyword arguments
 - `num_summaries::Integer`: the number of summaries output by `summary_network`. Must match the output dimension of `summary_network`.
-- `c::Union{Function, Compress} = identity`: monotonically increasing function(s) mapping to the prior support of each parameter.
 - `probs = [0.025, 0.975]`: probability levels for the lower and upper bounds.
 - `g = softplus`: monotonically increasing function used to ensure a positive interval width.
+- `lower = nothing`, `upper = nothing`: lower and upper bounds of the parameters (e.g., the support of the prior), each given as a vector of length $d$ or as a scalar that applies to all parameters. Bounds may be infinite, and `nothing` leaves the parameters unbounded on that side. The parameters are then mapped to the real line by [`scaledlogit`](@ref) before they are standardised, and the intervals are mapped back by [`scaledlogistic`](@ref), so that they lie within the bounds. Since these maps are increasing, the intervals being estimated do not change (see [`PointEstimator`](@ref)).
+- `standardise_data = true`: whether, or how, to standardise the data before they enter the neural networks (see [`Standardiser`](@ref)). This does not change the quantity being estimated.
+- `standardise_parameters = true`: whether, or how, to standardise the parameters, so that the quantile loss is evaluated on the standardised scale (see [`Standardiser`](@ref)). Since the quantile loss is a sum over the parameters of positively homogeneous functions of the errors, the intervals being estimated do not change (see [`PointEstimator`](@ref)). The networks estimate the standardised bounds of the intervals, which are mapped back to the original scale. Set `standardise_parameters = false` if `u` or `v` is given and constrains its output (e.g., with the activation function `softplus` or `exp`), since it would otherwise be constrained on the standardised scale.
 - `kwargs...`: additional keyword arguments passed to the MLP constructors for the inference networks `u` and `v`.
 
 # Examples
@@ -45,8 +45,8 @@ simulator(θ::AbstractMatrix) = reduce(hcat, simulator.(eachcol(θ)))
 num_summaries = 3d
 summary_network = Chain(Dense(m, 64, relu), Dense(64, 64, relu), Dense(64, num_summaries))
 
-# Initialise and train the estimator
-estimator = IntervalEstimator(d, summary_network; num_summaries = num_summaries)
+# Initialise and train the estimator, with the intervals constrained to the support of the prior
+estimator = IntervalEstimator(d, summary_network; num_summaries = num_summaries, lower = 0, upper = 1)
 estimator = train(estimator, sampler, simulator, K = 3000)
 
 # Assessment
@@ -62,24 +62,39 @@ estimate(estimator, Z)
 interval(estimator, Z)
 ```
 """
-struct IntervalEstimator{M, N, H, C, G} <: AbstractBayesEstimator
+struct IntervalEstimator{M, N, H, G, DS, PS, T, IT} <: AbstractBayesEstimator
     summary_network::M
     u::N  # inference network for lower bound
     v::N  # inference network for interval width
-    c::C
     probs::H
     g::G
+    data_standardiser::DS      # see Standardiser
+    parameter_standardiser::PS # the bounds are estimated on the standardised scale
+    transform::T               # maps the parameters to the real line given bounds (identity without bounds)
+    invtransform::IT           # maps the bounds of the intervals back to the parameter space
+end
+
+# The standardisers and parameter bounds are kept out of the functor, as for PointEstimator
+@functor IntervalEstimator (summary_network, u, v, probs, g)
+
+# Constructor: networks and settings
+function IntervalEstimator(summary_network, u, v, probs, g; lower::Union{Nothing, Real, AbstractVector} = nothing, upper::Union{Nothing, Real, AbstractVector} = nothing, standardise_data = true, standardise_parameters = true)
+    IntervalEstimator(summary_network, u, v, probs, g, _standardiser(standardise_data), _standardiser(standardise_parameters), _transforms(lower, upper)...)
 end
 
 # Constructor: number of parameters and optional summary network => two MLP inference networks
 function IntervalEstimator(
     num_parameters::Integer, summary_network = identity;
     num_summaries::Integer,
-    c::Union{Function, Compress} = identity,
     probs = [0.025, 0.975],
     g = softplus,
+    lower = nothing,
+    upper = nothing,
+    standardise_data = true,
+    standardise_parameters = true,
     kwargs...
 )
+    haskey(kwargs, :c) && throw(ArgumentError("The argument `c` of IntervalEstimator was removed: constrain the intervals to the support of the prior with `lower` and `upper` instead"))
     summary_network = _resolvesummarynetwork(summary_network; kwargs...)
     if !isa(probs, AbstractArray)
         probs = [probs]
@@ -90,7 +105,7 @@ function IntervalEstimator(
     u = MLP(num_summaries, num_parameters; backend = B, output_activation = identity, nt...)
     v = MLP(num_summaries, num_parameters; backend = B, output_activation = identity, nt...)
     @info "IntervalEstimator: num_summaries = $num_summaries."
-    IntervalEstimator(summary_network, u, v, c, probs, g)
+    IntervalEstimator(summary_network, u, v, probs, g; lower, upper, standardise_data, standardise_parameters)
 end
 
 # Constructor: consistent argument ordering
@@ -98,12 +113,17 @@ IntervalEstimator(summary_network, num_parameters::Integer; kwargs...) = Interva
 
 Optimisers.trainable(est::IntervalEstimator) = (summary_network = est.summary_network, u = est.u, v = est.v)
 
-function (est::IntervalEstimator)(Z)
+# Forward pass: the original when the standardisers and the inverse transform apply no map (e.g., during training, when
+# the data and parameters are mapped on the host; see _NoMap); otherwise, the data are standardised and the bounds of the
+# intervals (lower bounds, then upper bounds) mapped back around it
+const _IntervalEstimatorNoMap = IntervalEstimator{<:Any, <:Any, <:Any, <:Any, <:_NoMap, <:_NoMap, <:Any, <:Union{typeof(identity), _NoMap}}
+function (est::_IntervalEstimatorNoMap)(Z)
     S = _summarystatistics(est, Z)  # shared summary statistics
     bₗ = est.u(S)                    # lower bound
     bᵤ = bₗ .+ est.g.(est.v(S))     # upper bound (guaranteed > lower)
-    vcat(est.c(bₗ), est.c(bᵤ))
+    vcat(bₗ, bᵤ)
 end
+(est::IntervalEstimator)(Z) = _repeatrows(est.invtransform, 2)(_unstandardise(_repeatrows(est.parameter_standardiser, 2), _withoutstandardisers(est)(_standardisedata(est.data_standardiser, Z))))
 
 @doc raw"""
 	QuantileEstimator <: AbstractBayesEstimator
@@ -157,6 +177,9 @@ The function [`quantiles`](@ref) can be used to format this output in a readable
 - `i::Union{Integer, Nothing} = nothing`: if set to a positive integer, the estimator targets the full conditional distribution of $\theta_i \mid \boldsymbol{Z}, \boldsymbol{\theta}_{-i}$.
 - `num_summaries_θ::Integer = 2 * (num_parameters - 1)`: number of summaries for the parameter summary network (only used when `i` is specified).
 - `summary_network_θ_kwargs::NamedTuple = (;)`: keyword arguments for the parameter summary network MLP (only used when `i` is specified).
+- `lower = nothing`, `upper = nothing`: lower and upper bounds of the parameters (e.g., the support of the prior), each given as a vector of length $d$ or as a scalar that applies to all parameters. Bounds may be infinite, and `nothing` leaves the parameters unbounded on that side. The parameters (including $\boldsymbol{\theta}_{-i}$, when `i` is specified) are then mapped to the real line by [`scaledlogit`](@ref) before they are standardised, and the quantiles are mapped back by [`scaledlogistic`](@ref), so that they lie within the bounds. Since these maps are increasing, the quantiles being estimated do not change (see [`PointEstimator`](@ref)).
+- `standardise_data = true`: whether, or how, to standardise the data before they enter the neural networks (see [`Standardiser`](@ref)). This does not change the quantity being estimated.
+- `standardise_parameters = true`: whether, or how, to standardise the parameters (including $\boldsymbol{\theta}_{-i}$, when `i` is specified), so that the networks estimate the quantiles of the standardised parameters, which are mapped back to the original scale (see [`Standardiser`](@ref)). Since the quantile loss is a sum over the parameters of positively homogeneous functions of the errors, the quantiles being estimated do not change (see [`PointEstimator`](@ref)). Set `standardise_parameters = false` if `v` is given and constrains its output (e.g., with the activation function `softplus` or `exp`), since it would otherwise be constrained on the standardised scale.
 - `kwargs...`: additional keyword arguments passed to the MLP constructors for the inference networks.
 
 # Examples
@@ -209,13 +232,25 @@ estimate(q₁, (Z, θ₋ᵢ))
 quantiles(q₁, (Z, θ₋ᵢ))
 ```
 """
-struct QuantileEstimator{M1, M2, V, P, G, I} <: AbstractBayesEstimator
+struct QuantileEstimator{M1, M2, V, P, G, I, DS, PS, T, IT} <: AbstractBayesEstimator
     summary_network::M1          # summary network for data Z
     summary_network_θ::M2        # summary network for θ₋ᵢ (nothing when i is nothing)
     v::V                         # vector of T MLP inference networks
     probs::P
     g::G
     i::I
+    data_standardiser::DS        # see Standardiser
+    parameter_standardiser::PS   # the quantiles are estimated on the standardised scale
+    transform::T                 # maps the parameters to the real line given bounds (identity without bounds)
+    invtransform::IT             # maps the quantiles back to the parameter space
+end
+
+# The standardisers and parameter bounds are kept out of the functor, as for PointEstimator
+@functor QuantileEstimator (summary_network, summary_network_θ, v, probs, g, i)
+
+# Constructor: networks and settings
+function QuantileEstimator(summary_network, summary_network_θ, v, probs, g, i; lower::Union{Nothing, Real, AbstractVector} = nothing, upper::Union{Nothing, Real, AbstractVector} = nothing, standardise_data = true, standardise_parameters = true)
+    QuantileEstimator(summary_network, summary_network_θ, v, probs, g, i, _standardiser(standardise_data), _standardiser(standardise_parameters), _transforms(lower, upper)...)
 end
 
 # QuantileEstimatorDiscrete is deprecated, use QuantileEstimator instead
@@ -231,6 +266,10 @@ function QuantileEstimator(
     i::Union{Integer, Nothing} = nothing,
     num_summaries_θ::Integer = 2 * (num_parameters - 1),
     summary_network_θ_kwargs::NamedTuple = (;),
+    lower = nothing,
+    upper = nothing,
+    standardise_data = true,
+    standardise_parameters = true,
     kwargs...
 )
     summary_network = _resolvesummarynetwork(summary_network; kwargs...)
@@ -259,7 +298,7 @@ function QuantileEstimator(
     v = [MLP(inference_input_dim, num_out; backend = B, output_activation = identity, nt...) for _ = 1:T]
 
     @info "QuantileEstimator: num_summaries = $num_summaries, T = $T quantile levels$(isnothing(i) ? "" : ", full conditional i = $i")."
-    QuantileEstimator(summary_network, summary_network_θ, v, probs, g, i)
+    QuantileEstimator(summary_network, summary_network_θ, v, probs, g, i; lower, upper, standardise_data, standardise_parameters)
 end
 
 # Constructor: consistent argument ordering
@@ -285,15 +324,19 @@ function _apply_quantile_networks(est::QuantileEstimator, S)
     reduce(vcat, q)
 end
 
-# Forward pass
-function (est::QuantileEstimator)(Z)
+# Forward pass: the original when the standardisers and the inverse transform apply no map (e.g., during training, when
+# the data and parameters are mapped on the host; see _NoMap); otherwise, the data are standardised and the quantiles
+# (whose rows are ordered by probability level, d rows each) mapped back around it
+const _QuantileEstimatorNoMap = QuantileEstimator{<:Any, <:Any, <:Any, <:Any, <:Any, <:Any, <:_NoMap, <:_NoMap, <:Any, <:Union{typeof(identity), _NoMap}}
+function (est::_QuantileEstimatorNoMap)(Z)
     @assert isnothing(est.i) "This estimator targets a full conditional: call est(Z, θ₋ᵢ) instead"
     S = _summarystatistics(est, Z)
     _apply_quantile_networks(est, S)
 end
+(est::QuantileEstimator)(Z) = _repeatrows(est.invtransform, length(est.probs))(_unstandardise(_repeatrows(est.parameter_standardiser, length(est.probs)), _withoutstandardisers(est)(_standardisedata(est.data_standardiser, Z))))
 
 # Forward pass for full conditional: accepts Z and θ₋ᵢ
-function (est::QuantileEstimator)(Z, θ₋ᵢ)
+function (est::_QuantileEstimatorNoMap)(Z, θ₋ᵢ)
     @assert !isnothing(est.i) "This estimator targets marginal posteriors: call est(Z) instead"
 
     S_Z = _summarystatistics(est, Z)
@@ -305,9 +348,21 @@ function (est::QuantileEstimator)(Z, θ₋ᵢ)
     S = vcat(S_Z, S_θ)
     _apply_quantile_networks(est, S)
 end
+function (est::QuantileEstimator)(Z, θ₋ᵢ)
+    @assert !isnothing(est.i) "This estimator targets marginal posteriors: call est(Z) instead"
+    S_Z = _summarystatistics(est, _standardisedata(est.data_standardiser, Z))
+    θ₋ᵢ = _prepare_θ₋ᵢ(θ₋ᵢ, S_Z)
+    θ₋ᵢ = convert(AbstractArray{Float32}, _rows(est.transform, Not(est.i))(θ₋ᵢ)) # mapped to the real line given bounds, in single precision
+    sθ = est.parameter_standardiser
+    S_θ = est.summary_network_θ(_standardise(_rows(sθ, Not(est.i)), θ₋ᵢ))
+    q = _unstandardise(_repeatrows(_rows(sθ, (est.i):(est.i)), length(est.probs)), _apply_quantile_networks(est, vcat(S_Z, S_θ)))
+    return _repeatrows(_rows(est.invtransform, (est.i):(est.i)), length(est.probs))(q)
+end
 
-# Tuple method for full conditional case
+# Tuple method for full conditional case (NB the method for _QuantileEstimatorNoMap resolves the ambiguity with the
+# forward pass of a single argument)
 (est::QuantileEstimator)(Zθ::Tuple) = est(Zθ[1], Zθ[2])
+(est::_QuantileEstimatorNoMap)(Zθ::Tuple) = est(Zθ[1], Zθ[2])
 
 # Helper: coerce θ₋ᵢ to a matrix with columns matching the number of data sets
 function _prepare_θ₋ᵢ(θ₋ᵢ::Number, S_Z)
@@ -335,6 +390,9 @@ function _prepare_θ₋ᵢ(θ₋ᵢ::AbstractVector{<:AbstractVector}, S_Z)
 end
 
 function _inputoutput(estimator::QuantileEstimator, Z, θ)
+    # Standardised once, on the host (see _Prestandardised), with the parameters first mapped to the real line given bounds
+    Z = _standardisedata(_unmark(estimator.data_standardiser), Z)
+    θ = _toqscale(estimator, θ)
     i = estimator.i
     if isnothing(i)
         input = Z
@@ -348,6 +406,9 @@ function _inputoutput(estimator::QuantileEstimator, Z, θ)
     end
     return input, output
 end
+
+# Parameter bounds: saved with the estimator and restored by loadestimator() (see _transformations)
+_hasbounds(::Union{IntervalEstimator, QuantileEstimator}) = true
 
 function _loss(estimator::Union{IntervalEstimator, QuantileEstimator}, loss = nothing)
     # NB: probs is on the CPU but CUDA handles the implicit transfer in quantileloss

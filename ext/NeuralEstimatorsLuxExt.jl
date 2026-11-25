@@ -1,7 +1,7 @@
 module NeuralEstimatorsLuxExt
 
 using NeuralEstimators
-using NeuralEstimators: @set, _uses_deepset, _check_deepset_input, numobs, _resolvedevice, _DataLoader, cpu, _TrainDisplay, _bar!, _SILENT_DISPLAY
+using NeuralEstimators: @set, _uses_deepset, _check_deepset_input, numobs, _resolvedevice, _DataLoader, cpu, _TrainDisplay, _bar!, _SILENT_DISPLAY, _is_identity
 import NeuralEstimators: estimate
 import NeuralEstimators: summarystatistics, _summarystatistics, _applywithdevice
 
@@ -144,6 +144,16 @@ end
 import NeuralEstimators: _identity_layer
 _identity_layer(::Val{:Lux}) = Lux.WrappedFunction(identity)
 
+# The number of outputs of a network whose final layer is linear, or nothing (see NeuralEstimators._linearoutputs). Final
+# layers that are the identity are skipped
+import NeuralEstimators: _linearoutputs
+function _linearoutputs(c::Lux.Chain)
+    layers = values(c.layers)
+    i = findlast(l -> !_is_identity(l), layers)
+    return isnothing(i) ? nothing : _linearoutputs(layers[i])
+end
+_linearoutputs(l::Lux.Dense) = l.activation === identity ? l.out_dims : nothing
+
 # SimpleChains.jl is untested and not officially supported; this only keeps the backends consistent, so that
 # the networks constructed internally are SimpleChainsLayers whenever the summary network is one.
 # NB SimpleChains allocates its working memory per chain *type*, so two chains of the same type used in one
@@ -180,11 +190,12 @@ using BSON
 using BSON: @save
 using Functors: fmapstructure
 
-function _save_estimator(trainstate::TrainState, savepath, prefix)
-    parameters = cpu_device()(trainstate.parameters)
-    states = cpu_device()(trainstate.states)
+function _save_estimator(estimator::LuxEstimator, savepath, prefix)
+    parameters = cpu_device()(estimator.ps)
+    states = cpu_device()(estimator.st)
+    transformations = NeuralEstimators._transformations(estimator) # standardisers and parameter bounds
     !ispath(savepath) && mkpath(savepath)
-    @save joinpath(savepath, "$(prefix)_estimator.bson") parameters states
+    @save joinpath(savepath, "$(prefix)_estimator.bson") parameters states transformations
     return nothing
 end
 
@@ -199,12 +210,17 @@ _sstructure(x::Tuple) = map(_sstructure, x)
 _sstructure(x::AbstractArray) = size(x)
 _sstructure(x) = nothing
 
-function _loadestimator(estimator::LuxEstimator, path::String)
+# Reads an estimator file saved by a Lux method of _save_estimator
+function _loadluxfile(path::String)
     saved = BSON.load(path, @__MODULE__)
     if !(haskey(saved, :parameters) && haskey(saved, :states))
         throw(ArgumentError("$(path) does not contain the parameters and states of Lux neural networks (found keys $(collect(keys(saved)))). If the estimator contains Flux networks, do not wrap it in a LuxEstimator."))
     end
-    parameters, states = saved[:parameters], saved[:states]
+    return saved
+end
+
+# The estimator with the parameters and states read from `path`, which must match its architecture
+function _withparameters(estimator::LuxEstimator, parameters, states, path::String)
     if _pstructure(parameters) != _pstructure(estimator.ps)
         throw(ArgumentError("The parameters stored in $(path) do not match the architecture of the given estimator (saved parameterlength $(Lux.parameterlength(parameters)), estimator parameterlength $(Lux.parameterlength(estimator.ps))); please ensure that the same architecture is used when loading."))
     end
@@ -214,6 +230,40 @@ function _loadestimator(estimator::LuxEstimator, path::String)
         throw(ArgumentError("The states stored in $(path) do not match the architecture of the given estimator; please ensure that the same architecture is used when loading. Note that the states of a NormalisingFlow include its permutations, which earlier versions of NeuralEstimators did not store: an estimator containing a NormalisingFlow that was saved by such a version must be retrained."))
     end
     return LuxEstimator(estimator.estimator, parameters, states)
+end
+
+function _loadestimator(estimator::LuxEstimator, path::String)
+    saved = _loadluxfile(path)
+    if saved[:parameters] isa AbstractVector
+        throw(ArgumentError("The estimator saved in $(path) is an Ensemble of $(length(saved[:parameters])) estimators, but the given estimator is a LuxEstimator: please ensure that the same architecture is used when loading"))
+    end
+    estimator = _withparameters(estimator, saved[:parameters], saved[:states], path)
+    # The standardisers and parameter bounds saved with the estimator replace those of the given estimator, which
+    # provides the architecture only
+    return NeuralEstimators._restoretransformations(estimator, saved)
+end
+
+# An Ensemble of LuxEstimators is saved with the parameters and states of each component estimator, since its states can
+# hold information that its parameters do not (e.g., the permutations of a NormalisingFlow), and so that saving does not
+# require Flux. NB the vectors have element type Any, since BSON cannot load a vector of elements of a bits type of size
+# zero, such as the (empty) states of networks without states
+function _save_estimator(ensemble::Ensemble{<:LuxEstimator}, savepath, prefix)
+    parameters = Any[cpu_device()(estimator.ps) for estimator in ensemble.estimators]
+    states = Any[cpu_device()(estimator.st) for estimator in ensemble.estimators]
+    transformations = NeuralEstimators._transformations(ensemble) # standardisers and parameter bounds of each component
+    !ispath(savepath) && mkpath(savepath)
+    @save joinpath(savepath, "$(prefix)_estimator.bson") parameters states transformations
+    return nothing
+end
+
+function _loadestimator(ensemble::Ensemble{<:LuxEstimator}, path::String)
+    saved = _loadluxfile(path)
+    parameters, states = saved[:parameters], saved[:states]
+    if !(parameters isa AbstractVector && length(parameters) == length(ensemble))
+        throw(ArgumentError("The estimator saved in $(path) is not an Ensemble of $(length(ensemble)) estimators: please ensure that the same architecture is used when loading"))
+    end
+    ensemble = Ensemble([_withparameters(estimator, ps, st, path) for (estimator, ps, st) in zip(ensemble.estimators, parameters, states)])
+    return NeuralEstimators._restoretransformations(ensemble, saved)
 end
 
 TrainState(e::LuxEstimator, optimiser::Optimisers.AbstractRule) = Lux.Training.TrainState(e.estimator, e.ps, e.st, optimiser)

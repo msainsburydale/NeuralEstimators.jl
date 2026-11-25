@@ -141,21 +141,22 @@ estimator = RatioEstimator(network, d; num_summaries = d)
 # Train the estimator
 estimator = train(estimator, sampler, simulator)
 
-# Lower and upper bounds for θ
+# Lower and upper bounds for θ, and the log prior density up to a constant
 lower = [-5.0, 0]
 upper = [5.0, 1] 
+logprior(θ) = -θ[1]^2 / 2
 
 # Assess the estimator
 θ_test = sampler(100)
 Z_test = simulator(θ_test)
-assessment = assess(estimator, θ_test, Z_test; lower = lower, upper = upper)
+assessment = assess(estimator, θ_test, Z_test; lower = lower, upper = upper, logprior = logprior)
 bias(assessment)
 rmse(assessment)
 
 # Apply to observed data
 θ = sampler(1)                   # ground truth (not known in practice)
 Z = simulator(θ)                 # stand-in for real observations
-infer(estimator, Z; lower = lower, upper = upper) # approximate posterior sample
+infer(estimator, Z; lower = lower, upper = upper, logprior = logprior) # approximate posterior sample
 ```
 
 :::

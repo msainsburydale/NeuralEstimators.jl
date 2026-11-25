@@ -7,8 +7,8 @@ using BSON: @save
 
 # ---------------------- Utility functions ---------------------
 
-import NeuralEstimators: _applywithdevice
-using NeuralEstimators: _uses_deepset, _check_deepset_input, _packbatch, _resolvedevice, _DataLoader, cpu, numobs, _TrainDisplay, _bar!, _SILENT_DISPLAY
+import NeuralEstimators: _applywithdevice, _linearoutputs
+using NeuralEstimators: _uses_deepset, _check_deepset_input, _packbatch, _resolvedevice, _DataLoader, cpu, numobs, _TrainDisplay, _bar!, _SILENT_DISPLAY, _is_identity
 using Flux: testmode!
 
 function _applywithdevice(network, z; batchsize::Integer = 32, kwargs...)
@@ -29,8 +29,13 @@ function _applywithdevice(network, z; batchsize::Integer = 32, kwargs...)
     end
 end
 
-import NeuralEstimators: _state
-_state(ensemble) = Flux.state(Flux.cpu(ensemble))
+# The number of outputs of a network whose final layer is linear, or nothing (see NeuralEstimators._linearoutputs). Final
+# layers that are the identity are skipped
+function _linearoutputs(c::Flux.Chain)
+    i = findlast(l -> !_is_identity(l), c.layers)
+    return isnothing(i) ? nothing : _linearoutputs(c.layers[i])
+end
+_linearoutputs(l::Flux.Dense) = l.σ === identity ? size(l.weight, 1) : nothing
 
 # ---------------------- Training  ---------------------
 
@@ -44,10 +49,12 @@ import NeuralEstimators: getestimator, _save_estimator, _loadestimator, _train_s
 
 getestimator(trainstate::FluxTrainState) = trainstate.model
 
-function _save_estimator(trainstate::FluxTrainState, savepath, prefix)
-    model_state = Flux.state(cpu_device()(trainstate.model))
+function _save_estimator(estimator::AbstractNeuralEstimator, savepath, prefix)
+    estimator = cpu_device()(estimator)
+    model_state = Flux.state(estimator)
+    transformations = NeuralEstimators._transformations(estimator) # standardisers and parameter bounds
     !ispath(savepath) && mkpath(savepath)
-    @save joinpath(savepath, "$(prefix)_estimator.bson") model_state
+    @save joinpath(savepath, "$(prefix)_estimator.bson") model_state transformations
     return nothing
 end
 
@@ -59,12 +66,15 @@ function _loadestimator(estimator::AbstractNeuralEstimator, path::String)
     # NB Flux.loadmodel! mutates its first argument, so we load into a copy: loadestimator()
     # returns a new estimator and never modifies the estimator it is given
     estimator = deepcopy(cpu_device()(estimator))
-    try
-        return Flux.loadmodel!(estimator, saved[:model_state])
+    estimator = try
+        Flux.loadmodel!(estimator, saved[:model_state])
     catch e
         (e isa ArgumentError || e isa DimensionMismatch) || rethrow()
         throw(ArgumentError("The parameters stored in $(path) do not match the architecture of the given estimator; please ensure that the same architecture is used when loading. Original error: $(e)"))
     end
+    # The standardisers and parameter bounds saved with the estimator replace those of the given estimator, which
+    # provides the architecture only
+    return NeuralEstimators._restoretransformations(estimator, saved)
 end
 
 function _risk(trainstate::FluxTrainState, loss, data, device)

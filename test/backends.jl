@@ -64,6 +64,10 @@ function make_estimator(backend, estimator_type::Symbol)
 
     est = if estimator_type === :point
         PointEstimator(network, d; num_summaries = d, depth = 1)
+    elseif estimator_type === :point_unstandardised # the parameters are not standardised (by default, they are for the loss mae)
+        PointEstimator(network, d; num_summaries = d, depth = 1, standardise_parameters = false)
+    elseif estimator_type === :point_bounded # the support of the prior given by sampler(), which can return a bound
+        PointEstimator(network, d; num_summaries = d, depth = 1, lower = [0, 0], upper = 1)
     elseif estimator_type === :ratio
         RatioEstimator(network, d; num_summaries = d, depth = 1)
     elseif estimator_type === :posterior_mixture
@@ -72,6 +76,8 @@ function make_estimator(backend, estimator_type::Symbol)
         PosteriorEstimator(network, d; num_summaries = d, depth = 1, q = GaussianMixture, diagonal = true)
     elseif estimator_type === :posterior_gaussian
         PosteriorEstimator(network, d; num_summaries = d, depth = 1, q = Gaussian)
+    elseif estimator_type === :posterior_bounded # the support of the prior given by sampler(), which can return a bound (rand(Float32) can return zero)
+        PosteriorEstimator(network, d; num_summaries = d, depth = 1, q = GaussianMixture, lower = [0, 0], upper = 1)
     else
         error("Unknown estimator type: $estimator_type")
     end
@@ -214,7 +220,7 @@ TRAINING_SCENARIOS = [
         devices, adtypes = backend_config(backend)
 
         @testset "$backend_name backend" begin
-            for estimator_type in (:point, :ratio, :posterior_mixture, :posterior_mixture_diagonal, :posterior_gaussian)
+            for estimator_type in (:point, :point_unstandardised, :point_bounded, :ratio, :posterior_mixture, :posterior_mixture_diagonal, :posterior_gaussian, :posterior_bounded)
                 est_label = string(estimator_type)
 
                 @testset "$est_label estimator" begin
@@ -259,11 +265,15 @@ TRAINING_SCENARIOS = [
                     @testset "Inference" begin
                         est = make_estimator(backend, estimator_type)
 
-                        if estimator_type === :point
+                        if estimator_type in (:point, :point_unstandardised, :point_bounded)
                             @testset "estimate" begin
                                 out = estimate(est, Z_single; device = first(devices))
                                 @test out isa AbstractArray
                                 @test size(out, 1) == d
+                                # The bounds are applied on the device of the estimates (e.g., a GPU; under Reactant, see the compiled forward pass below)
+                                for device in filter(dv -> nameof(typeof(dv)) !== :ReactantDevice, devices)
+                                    estimator_type === :point_bounded && @test all(0 .<= estimate(est, Z_test; device = device) .<= 1)
+                                end
                             end
 
                             @testset "assess (point)" begin
@@ -271,16 +281,18 @@ TRAINING_SCENARIOS = [
                                 @test result !== nothing
                             end
 
-                        elseif estimator_type in (:posterior_gaussian, :posterior_mixture, :posterior_mixture_diagonal)
+                        elseif estimator_type in (:posterior_gaussian, :posterior_mixture, :posterior_mixture_diagonal, :posterior_bounded)
                             @testset "sampleposterior" begin
                                 samples = sampleposterior(est, Z_single; device = first(devices))
                                 @test samples isa AbstractArray
+                                estimator_type === :posterior_bounded && @test all(0 .<= samples .<= 1)
                             end
 
                             @testset "posteriormean" begin
                                 pm = posteriormean(est, Z_single; device = first(devices))
                                 @test pm isa AbstractArray
                                 @test size(pm, 1) == d
+                                estimator_type === :posterior_bounded && @test all(0 .<= pm .<= 1)
                             end
 
                             @testset "assess (posterior)" begin
@@ -326,6 +338,13 @@ end
         est = backend === Lux ? LuxEstimator(est) : est
         out = estimate(est, S; use_gpu = false)
         @test size(out) == (d, 8)
+
+        # TelescopingRatioEstimator (with Lux, training used to fail, since the identity was not wrapped in a layer)
+        est = TelescopingRatioEstimator(d; num_summaries = d, sampler = sampler, depth = 1, width = 8, backend = backend)
+        θ_tr = sampler(32)
+        S_tr = θ_tr.array .+ 0.1f0 .* randn(Float32, d, 32)
+        est = train(est, θ_tr, θ_tr, S_tr, S_tr; epochs = 1, verbose = false, savepath = nothing, use_gpu = false)
+        @test size(sampleposterior(est, S_tr[:, 1:1]; lower = [0, 0], upper = [1, 1], N = 20, use_gpu = false)) == (d, 20, 1)
     end
 end
 
@@ -471,7 +490,7 @@ end
 # back to the XLA CPU backend, so that the approximate distributions with dense covariance matrices
 # (GaussianMixture and Gaussian, by default) are also tested with Reactant on CPU-only machines
 # (e.g., the CI runners).
-@testset "Lux $estimator_type: Reactant" for estimator_type in (:posterior_mixture, :posterior_gaussian)
+@testset "Lux $estimator_type: Reactant" for estimator_type in (:posterior_mixture, :posterior_gaussian, :posterior_bounded)
     device = try
         Reactant.set_default_backend(CUDA.functional() ? "gpu" : "cpu")
         reactant_device()
@@ -501,22 +520,87 @@ end
         # the Gaussian estimator, the two risks differed by up to 2e-2 in relative terms on the XLA
         # GPU backend (99% quantile 9e-3), against 5e-7 on the XLA CPU backend. Hence, the check is
         # strict on the CPU, and only guards against gross errors on the GPU.
+        # NB the risk is computed by the estimator being trained, whose standardisers are fitted and marked (so that its
+        # forward pass skips them), from the inputs constructed by train(), which are standardised (and, for
+        # :posterior_bounded, transformed) on the host
         rtol = CUDA.functional() ? 1.0f-1 : 1.0f-4
-        @test -mean(est0((Z_va, θ_va.array))) ≈ history[1, 2] rtol = rtol
-        @test size(sampleposterior(est, Z_single; N = 50)) == (d, 50, 1)
+        input, _ = NeuralEstimators._inputoutput(est.estimator, Z_va, θ_va.array)
+        marked = LuxEstimator(NeuralEstimators._mapstandardisers(NeuralEstimators._mark, est.estimator), est0.ps, est0.st)
+        @test -mean(marked(NeuralEstimators.f32(input))) ≈ history[1, 2] rtol = rtol
+        samples = sampleposterior(est, Z_single; N = 50)
+        @test size(samples) == (d, 50, 1)
+        estimator_type === :posterior_bounded && @test all(0 .<= samples .<= 1)
     end
 end
 
+# A PointEstimator with parameter bounds trained with Reactant (on the XLA CPU backend when no GPU is available): the
+# parameters are transformed and standardised on the host, so that the initial validation risk computed by the compiled
+# graph equals the eager risk of the starting weights on that scale, and the estimates lie within the bounds
+@testset "Lux point_bounded: Reactant" begin
+    device = try
+        Reactant.set_default_backend(CUDA.functional() ? "gpu" : "cpu")
+        reactant_device()
+    catch err
+        @warn "Reactant backend unavailable, skipping the Reactant test of point_bounded" err
+        nothing
+    end
+    if !isnothing(device)
+        K_r = 128 # NB divisible by the batchsize, since `partial = false` under a ReactantDevice
+        θ_tr, θ_va = sampler(K_r), sampler(K_r)
+        Z_tr, Z_va = simulator(θ_tr), simulator(θ_va)
+        savepath = mktempdir()
+        est0 = make_estimator(Lux, :point_bounded)
+        est = train(est0, θ_tr, θ_va, Z_tr, Z_va; device = device, epochs = 2, stopping_epochs = 3, savepath = savepath, verbose = false)
+        history = loadrisk(savepath)
+        @test all(isfinite, history)
+        rtol = CUDA.functional() ? 1.0f-1 : 1.0f-4 # NB see the Reactant test of the PosteriorEstimator above
+        input, output = NeuralEstimators._inputoutput(est.estimator, Z_va, θ_va.array)
+        marked = LuxEstimator(NeuralEstimators._mapstandardisers(NeuralEstimators._mark, est.estimator), est0.ps, est0.st)
+        @test NeuralEstimators.mae(marked(NeuralEstimators.f32(input)), NeuralEstimators.f32(output)) ≈ history[1, 2] rtol = rtol
+        @test all(0 .<= estimate(est, Z_test; device = cpu_device()) .<= 1)
+    end
+end
+
+# Data stored in a type defined by the user (NB types must be defined at the top level, not within a testset)
+struct _KeyData{A, B}
+    Z::A
+    W::B
+end
+NeuralEstimators.numobs(k::_KeyData) = NeuralEstimators.numobs(k.Z) # e.g., for DataAndSummaries
+
 # Under Reactant, the compiled validation risk is cached by the shapes of each batch, so that it is compiled once
-# rather than for every batch. A DataAndSummaries batch used to be keyed by the object itself, which recompiled the
-# risk for every batch
-@testset "Reactant compile cache: DataAndSummaries" begin
+# rather than for every batch. A DataAndSummaries batch, and data stored in a type defined by the user, used to be keyed
+# by the object itself, which recompiled the risk for every batch
+@testset "Reactant compile cache" begin
     ext = Base.get_extension(NeuralEstimators, :NeuralEstimatorsReactantExt)
     batch(K) = DataAndSummaries(rand(Float32, 4, 3, 1, K), rand(Float32, 2, K))
     @test ext._compile_key(batch(8)) == ext._compile_key(batch(8))
     @test ext._compile_key(batch(8)) != ext._compile_key(batch(4))
     @test ext._compile_key((batch(8), rand(Float32, d, 8))) == ext._compile_key((batch(8), rand(Float32, d, 8)))
-    @test ext._compile_key(DataAndSummaries(rand(Float32, 4, 3, 1, 8))) == ((4, 3, 1, 8), nothing)
+    @test ext._compile_key(DataAndSummaries(rand(Float32, 4, 3, 1, 8), rand(Float32, 2, 8))) == ((4, 3, 1, 8), (2, 8))
+    # A type defined by the user: keyed by its type and the sizes of the arrays that it stores, and by the values of its other
+    # fields (constants under Reactant), also when nested in a container or moved to the device
+    userbatch(K) = _KeyData(rand(Float32, 3, K), rand(Float32, 3, K))
+    @test ext._compile_key(userbatch(8)) == ext._compile_key(userbatch(8))
+    @test ext._compile_key(userbatch(8)) != ext._compile_key(userbatch(4))
+    @test ext._compile_key(DataAndSummaries(userbatch(8), rand(Float32, 2, 8))) == ext._compile_key(DataAndSummaries(userbatch(8), rand(Float32, 2, 8)))
+    @test ext._compile_key(_KeyData(rand(Float32, 3, 8), 1)) != ext._compile_key(_KeyData(rand(Float32, 3, 8), 2))
+    @test ext._compile_key(Reactant.to_rarray(userbatch(8))) == ext._compile_key(Reactant.to_rarray(userbatch(8)))
+    @test ext._compile_key(Reactant.to_rarray(userbatch(8))) != ext._compile_key(Reactant.to_rarray(userbatch(4)))
+end
+
+# scaledlogistic and scaledlogit may be compiled by Reactant (e.g., scaledlogistic as an activation function). Reactant traces
+# the arguments of a broadcast, so that bounds given as arguments use the generic methods, while bounds fixed in a closure use
+# the methods for Real bounds (which may be infinite) with a traced θ, including θ on a bound
+@testset "scaledlogistic and scaledlogit: Reactant" begin
+    x = Float32[-5, 0, 2, 5]
+    xr = Reactant.to_rarray(x)
+    f(x) = scaledlogistic.(x, 0.0f0, 2.0f0)
+    g(x) = (θ -> scaledlogit(θ, -5.0f0, 5.0f0)).(x)
+    h(x) = (θ -> scaledlogistic(θ, 0.0f0, Inf32)).(x)
+    @test Array(@compile(f(xr))(xr)) ≈ f(x)
+    @test Array(@compile(g(xr))(xr)) ≈ g(x)
+    @test Array(@compile(h(xr))(xr)) ≈ h(x)
 end
 
 @testset "Lux TelescopingRatioEstimator" begin
@@ -573,9 +657,11 @@ end
     trained_type = backend === Lux ? LuxEstimator : PriorEstimator
     is_reactant(device) = nameof(typeof(device)) === :ReactantDevice
 
-    # NB AutoReactant is used only with a ReactantDevice: on other devices, train() replaces it with
-    # AutoEnzyme() (without runtime activity), which does not support NormalisingFlow
-    cases = [(device, adtype) for device in devices for adtype in adtypes if !(adtype isa AutoReactant) || is_reactant(device)]
+    # NB AutoReactant is used only with a ReactantDevice: on other devices, train() replaces it with AutoZygote(), the
+    # default, which supports NormalisingFlow (unlike AutoEnzyme() without runtime activity). The case of the CPU is added
+    # explicitly, since backend_config() gives AutoReactant() only with a functional GPU
+    cases = Any[(device, adtype) for device in devices for adtype in adtypes if !(adtype isa AutoReactant) || is_reactant(device)]
+    backend === Lux && push!(cases, (cpu_device(), AutoReactant()))
     @testset "Training: $(nameof(typeof(device))) | $(nameof(typeof(adtype)))" for (device, adtype) in cases
         est = train(make_prior(), θ_train, θ_val; device = device, adtype = adtype, epochs = 1, verbose = false, savepath = nothing)
         @test est isa trained_type
@@ -771,8 +857,136 @@ function saveload_cases()
     return cases
 end
 
-# Validation risk of an estimator, computed in the same way as the default loss (mae)
-_saveload_risk(estimator, Z, θ) = mean(abs.(estimate(estimator, Z; device = cpu_device()) .- θ.array))
+# Validation risk of an estimator, computed as train() records it for the default loss (mae): on the standardised scale
+# when the parameters are standardised
+function _saveload_risk(estimator, Z, θ)
+    s = NeuralEstimators._parameterstandardiser(estimator isa LuxEstimator ? estimator.estimator : estimator)
+    return mean(abs.(NeuralEstimators._standardise(s, estimate(estimator, Z; device = cpu_device())) .- NeuralEstimators._standardise(s, θ.array)))
+end
+
+# The standardisers and parameter bounds are saved with the estimator, so it can be loaded into an estimator constructed
+# with the architecture only
+@testset "Standardisation: saving and loading ($backend)" for backend in (Flux, Lux)
+    θ_tr, θ_va = sampler(64), sampler(64)
+    Z_tr, Z_va = simulator(θ_tr), simulator(θ_va)
+    savepath = mktempdir()
+    trained = train(make_estimator(backend, :posterior_bounded), θ_tr, θ_va, Z_tr, Z_va; device = cpu_device(), epochs = 2, savepath = savepath, verbose = false)
+    inner(e) = e isa LuxEstimator ? e.estimator : e
+    for loaded in (loadestimator(make_estimator(backend, :posterior_mixture), savepath), (saveestimator(trained, savepath); loadestimator(make_estimator(backend, :posterior_mixture), savepath)))
+        @test inner(loaded).transform isa NeuralEstimators._ScaledLogit
+        @test inner(loaded).parameter_standardiser.mean == inner(trained).parameter_standardiser.mean
+        @test inner(loaded).data_standardiser.std == inner(trained).data_standardiser.std
+        Random.seed!(1)
+        a = sampleposterior(trained, Z_test[:, 1:2]; N = 20, device = cpu_device())
+        Random.seed!(1)
+        b = sampleposterior(loaded, Z_test[:, 1:2]; N = 20, device = cpu_device())
+        @test a ≈ b
+        @test all(0 .<= b .<= 1)
+    end
+    # A PointEstimator with bounds
+    savepath = mktempdir()
+    trained = train(make_estimator(backend, :point_bounded), θ_tr, θ_va, Z_tr, Z_va; device = cpu_device(), epochs = 2, savepath = savepath, verbose = false)
+    for loaded in (loadestimator(make_estimator(backend, :point), savepath), (saveestimator(trained, savepath); loadestimator(make_estimator(backend, :point), savepath)))
+        @test inner(loaded).transform isa NeuralEstimators._ScaledLogit
+        @test inner(loaded).parameter_standardiser.mean == inner(trained).parameter_standardiser.mean
+        b = estimate(loaded, Z_test; device = cpu_device())
+        @test b ≈ estimate(trained, Z_test; device = cpu_device())
+        @test all(0 .<= b .<= 1)
+    end
+end
+
+# A Lux Ensemble keeps the standardisers of its components when it is saved and loaded
+@testset "Standardisation: saving and loading a Lux Ensemble" begin
+    θ_tr, θ_va = sampler(64), sampler(64)
+    Z_tr, Z_va = simulator(θ_tr), simulator(θ_va)
+    arch() = PointEstimator(MLP(n, d; depth = 1, width = 16, backend = Lux), d; num_summaries = d, depth = 1, standardise_parameters = true)
+    savepath = mktempdir()
+    ensemble = train(Ensemble([arch() for _ = 1:2]), θ_tr, θ_va, Z_tr, Z_va; device = cpu_device(), epochs = 1, savepath = savepath, verbose = false)
+    loaded = loadestimator(Ensemble([LuxEstimator(arch()) for _ = 1:2]), savepath)
+    @test all(c -> c.estimator.parameter_standardiser isa Standardiser{<:AbstractArray}, loaded.estimators)
+    @test estimate(loaded, Z_test; device = cpu_device()) ≈ estimate(ensemble, Z_test; device = cpu_device())
+end
+
+# A Lux Ensemble is saved with the parameters and states of its estimators (the states of a NormalisingFlow hold its
+# permutations), and can be loaded into an Ensemble whose estimators are not wrapped in a LuxEstimator. NB that saving
+# does not require Flux is not tested here, since Flux is loaded
+@testset "Saving and loading a Lux Ensemble of normalising flows" begin
+    arch() = PosteriorEstimator(MLP(n, d; depth = 1, width = 16, backend = Lux), d; num_summaries = d, q = NormalisingFlow, depth = 1)
+    ensemble = Ensemble([LuxEstimator(arch(); rng = Xoshiro(j)) for j = 1:2])
+    template = Ensemble([LuxEstimator(arch(); rng = Xoshiro(10 + j)) for j = 1:2])
+    @test all(j -> template[j].st != ensemble[j].st, 1:2) # sanity check: other permutations
+    savepath = mktempdir()
+    saveestimator(ensemble, savepath)
+    @test issubset((:parameters, :states, :transformations), keys(NeuralEstimators.load(joinpath(savepath, "best_estimator.bson"), NeuralEstimators)))
+    for loaded in (loadestimator(template, savepath), loadestimator(Ensemble([arch() for _ = 1:2]), savepath))
+        @test loaded isa Ensemble{<:LuxEstimator}
+        for j = 1:2
+            @test loaded[j].st == ensemble[j].st
+            Random.seed!(1)
+            a = sampleposterior(ensemble[j], Z_test[:, 1:2]; N = 20, device = cpu_device())
+            Random.seed!(1)
+            b = sampleposterior(loaded[j], Z_test[:, 1:2]; N = 20, device = cpu_device())
+            @test a == b
+        end
+    end
+    # An Ensemble of LuxEstimators whose vector has an abstract element type is saved in the same way
+    savepath_abstract = mktempdir()
+    saveestimator(Ensemble(AbstractNeuralEstimator[ensemble[1], ensemble[2]]), savepath_abstract)
+    @test all(j -> loadestimator(template, savepath_abstract)[j].st == ensemble[j].st, 1:2)
+    # An architecture that does not match is rejected before the standardisers of the given estimator are replaced, with no warning
+    narrow() = LuxEstimator(PosteriorEstimator(MLP(n, d; depth = 1, width = 8, backend = Lux), d; num_summaries = d, q = NormalisingFlow, depth = 1, standardise_parameters = Standardiser([0, 0], [1, 1])))
+    @test_logs min_level = Base.CoreLogging.Warn (@test_throws ArgumentError loadestimator(Ensemble([narrow() for _ = 1:2]), savepath))
+    # An Ensemble file and a single estimator, or Ensembles of different sizes, do not match
+    @test_throws ArgumentError loadestimator(template[1], savepath)
+    @test_throws ArgumentError loadestimator(Ensemble([arch() for _ = 1:3]), savepath)
+    savepath_single = mktempdir()
+    saveestimator(ensemble[1], savepath_single)
+    @test_throws ArgumentError loadestimator(template, savepath_single)
+    # The estimators of an Ensemble to be saved must store their parameters and states
+    @test_throws ArgumentError saveestimator(Ensemble([arch() for _ = 1:2]), mktempdir())
+end
+
+# With a frozen summary network, an identity inference network leaves nothing to train, and the estimator is returned unchanged
+@testset "freeze_summary_network with an identity inference network (Lux)" begin
+    est = LuxEstimator(PointEstimator(MLP(n, d; depth = 1, width = 16, backend = Lux)))
+    ret = @test_logs (:warn, r"returning the estimator unchanged") match_mode = :any train(est, θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false, freeze_summary_network = true)
+    @test ret isa LuxEstimator
+    @test estimate(ret, Z_test; device = cpu_device()) == estimate(est, Z_test; device = cpu_device())
+end
+
+# The parameters of a Lux PointEstimator are standardised by default only if this leaves the estimator unchanged
+@testset "Automatic standardisation of the parameters of a Lux PointEstimator" begin
+    trained = train(make_estimator(Lux, :point), θ_train, θ_val, Z_train, Z_val; device = cpu_device(), epochs = 1, verbose = false)
+    @test trained.estimator.parameter_standardiser isa Standardiser{<:AbstractArray}
+    constrained = PointEstimator(Lux.Chain(Lux.Dense(n, 16, Lux.gelu), Lux.Dense(16, d, exp)))
+    @test isnothing(train(constrained, θ_train, θ_val, Z_train, Z_val; device = cpu_device(), epochs = 1, verbose = false).estimator.parameter_standardiser)
+end
+
+# A forward pass compiled by Reactant standardises the data and maps the estimates back, as the eager forward pass does
+@testset "Standardisation: forward pass compiled by Reactant" begin
+    device = try
+        Reactant.set_default_backend(CUDA.functional() ? "gpu" : "cpu")
+        reactant_device()
+    catch err
+        @warn "Reactant backend unavailable, skipping the compiled standardisation test" err
+        nothing
+    end
+    if !isnothing(device)
+        est = LuxEstimator(PointEstimator(MLP(n, d; depth = 1, width = 16, backend = Lux), d; num_summaries = d, depth = 1, standardise_data = Standardiser(Z_train), standardise_parameters = Standardiser(θ_train)))
+        forward(e, Z, ps, st) = first(e(Z, ps, st))
+        Zr, psr, str = device(Z_test), device(est.ps), device(Lux.testmode(est.st))
+        compiled = @compile forward(est.estimator, Zr, psr, str)
+        rtol = CUDA.functional() ? 1.0f-2 : 1.0f-4 # NB TF32 on the XLA GPU backend
+        @test Array(compiled(est.estimator, Zr, psr, str)) ≈ est(Z_test) rtol = rtol
+        # With parameter bounds, including an infinite one: when traced, the bounds of each parameter are fixed in a closure
+        est = LuxEstimator(PointEstimator(MLP(n, d; depth = 1, width = 16, backend = Lux), d; num_summaries = d, depth = 1, lower = [0, 0], upper = [1, Inf], standardise_data = Standardiser(Z_train), standardise_parameters = Standardiser(θ_train)))
+        psr, str = device(est.ps), device(Lux.testmode(est.st))
+        compiled = @compile forward(est.estimator, Zr, psr, str)
+        out = Array(compiled(est.estimator, Zr, psr, str))
+        @test out ≈ est(Z_test) rtol = rtol
+        @test all(0 .<= out[1, :] .<= 1) && all(out[2, :] .>= 0)
+    end
+end
 
 @testset "Saving and loading the neural network" begin
     # NB K divisible by the batchsize, so that `partial = false` (the default under a
@@ -970,15 +1184,21 @@ end
             # The initial risk is the sharpest check available: loss_per_epoch.csv row 1 is the
             # validation risk of exactly these starting weights, computed by _risk on `device`,
             # so comparing it against the eager risk of the same estimator isolates the forward
-            # pass with no training noise in the way. NB train() does not mutate Lux estimators.
+            # pass with no training noise in the way. NB the eager risk uses the standardisers of the
+            # data and parameters that train() fits to the training data before computing the initial
+            # risk, and it is computed before training, since on the CPU train() updates the parameter
+            # arrays of a Lux estimator in place.
             est0 = make_cnn_estimator()
-            risk_initial_eager = _saveload_risk(est0, Z_va, θ_va)
+            s = Standardiser(Z_tr)
+            fitted = LuxEstimator(PointEstimator(est0.estimator.summary_network, est0.estimator.inference_network; standardise_data = s, standardise_parameters = Standardiser(θ_tr)), est0.ps, est0.st)
+            risk_initial_eager = _saveload_risk(fitted, Z_va, θ_va)
             trained = train(
                 est0, θ_tr, θ_va, Z_tr, Z_va;
                 device = device, epochs = epochs, stopping_epochs = epochs + 1,
                 batchsize = batchsize, savepath = savepath, verbose = false
             )
             history = loadrisk(savepath)
+            @test trained.estimator.data_standardiser.mean == s.mean
 
             @test risk_initial_eager ≈ history[1, 2] rtol = rtol_forward
 
@@ -992,4 +1212,59 @@ end
             @test _saveload_risk(loaded, Z_va, θ_va) ≈ minimum(history[:, 2]) rtol = rtol_forward
         end
     end
+end
+
+# ──────────────────────────────────────────────────────────────────────────────
+# LuxEstimator forwarding, the fallback of AutoReactant(), and method ambiguities
+# ──────────────────────────────────────────────────────────────────────────────
+
+# With Lux, bootstrap, assess(...; probs), and summarystatistics with DataAndSummaries data (also used by
+# train(...; freeze_summary_network = true)) used to fail with method ambiguities
+@testset "Lux: bootstrap, assess with probs, and summarystatistics with DataAndSummaries" begin
+    # Parametric bootstrap, with an estimator for matrix data
+    est = train(make_estimator(Lux, :point), θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false, device = cpu_device(), savepath = nothing)
+    θ₁ = sampler(1)
+    @test size(bootstrap(est, θ₁, reduce(hcat, [simulator(θ₁) for _ in 1:5]); use_gpu = false)) == (d, 5)
+    @test size(bootstrap(est, θ₁, (θ, m) -> simulator(θ), n; B = 5, use_gpu = false)) == (d, 5)
+
+    # Non-parametric bootstrap, which resamples the replicates of a data set, with a DeepSet
+    num_summaries = 8
+    ds = DeepSet(
+        Lux.Chain(Lux.Dense(1 => 16, Lux.relu), Lux.Dense(16 => num_summaries, Lux.relu)),
+        Lux.Chain(Lux.Dense(num_summaries => 16, Lux.relu), Lux.Dense(16 => num_summaries))
+    )
+    replicates(θ) = [θ[1, k] .+ θ[2, k] .* randn(Float32, 1, 10) for k in 1:size(θ, 2)]
+    θ_tr, θ_va = sampler(16), sampler(16)
+    est = LuxEstimator(PointEstimator(ds, d; num_summaries = num_summaries, depth = 1, width = 8))
+    est = train(est, θ_tr, θ_va, replicates(θ_tr), replicates(θ_va); epochs = 1, verbose = false, device = cpu_device(), adtype = AutoZygote(), savepath = nothing)
+    Z₁ = replicates(θ₁)
+    @test size(bootstrap(est, Z₁; B = 5, use_gpu = false)) == (d, 5)    # a vector holding one data set
+    @test size(bootstrap(est, Z₁[1]; B = 5, use_gpu = false)) == (d, 5) # one data set
+    @test assess(est, θ_va, replicates(θ_va); probs = [0.025, 0.975], B = 5, use_gpu = false) isa Assessment
+
+    # Data with expert summary statistics
+    expert(Z) = reduce(hcat, [[mean(z), mean(abs2, z)] for z in Z])
+    withexpert(Z) = DataAndSummaries(Z, expert(Z))
+    est = LuxEstimator(PointEstimator(ds, d; num_summaries = num_summaries + 2, depth = 1, width = 8))
+    d_tr, d_va = withexpert(replicates(θ_tr)), withexpert(replicates(θ_va))
+    @test size(summarystatistics(est, d_va; use_gpu = false)) == (num_summaries + 2, 16)
+    trained = train(est, θ_tr, θ_va, d_tr, d_va; epochs = 1, verbose = false, device = cpu_device(), adtype = AutoZygote(), freeze_summary_network = true, savepath = nothing)
+    @test size(estimate(trained, d_va; use_gpu = false)) == (d, 16)
+end
+
+# AutoReactant() requires a ReactantDevice: on other devices, train() falls back to AutoZygote(), the default (with Lux on
+# the CPU, the fallback used to be AutoEnzyme(), which without runtime activity does not support NormalisingFlow)
+@testset "AutoReactant without a ReactantDevice" begin
+    for backend in (Flux, Lux)
+        ts = NeuralEstimators._construct_train_state(make_estimator(backend, :point), Optimisers.Adam())
+        @test (@test_logs (:info, r"Setting adtype = AutoZygote") NeuralEstimators._resolve_adtype(ts, cpu_device(), AutoReactant(), false)) isa AutoZygote
+    end
+end
+
+# No method ambiguities in the package, including with the methods that its extensions define for its functions (NB an
+# ambiguity between two methods that are both defined by extensions is not detected, since extensions are separate modules)
+@testset "Method ambiguities" begin
+    ambiguities = Test.detect_ambiguities(NeuralEstimators; recursive = true)
+    foreach(a -> println("  ", a[1].sig, "  <->  ", a[2].sig), ambiguities)
+    @test isempty(ambiguities)
 end

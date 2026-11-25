@@ -84,7 +84,7 @@ Returns a $d$ × `N` × $K$ array of posterior samples, where $d$ is the dimensi
 Remaining keyword arguments are passed onto [`summarystatistics`](@ref).
 
 # PosteriorEstimator
-Draws independent samples from the approximate posterior distribution associated with the estimator.
+Draws independent samples from the approximate posterior distribution associated with the estimator. If the estimator was constructed with parameter bounds (or a transformation), the draws are mapped back to the original scale, so that they lie within the bounds (see [`PosteriorEstimator`](@ref)).
 
 # RatioEstimator
 Draw posterior samples by one of two approaches, selected by which keyword arguments are supplied:
@@ -108,13 +108,14 @@ Draw posterior samples by one of two approaches, selected by which keyword argum
 Draw posterior samples sequentially in the coordinates of $\theta$: first generate
 $\theta_1 \mid Z$, then $\theta_2 \mid \theta_1, Z$, and so on. 
 Each one-dimensional conditional density is approximated by a
-Chebyshev polynomial of the given `degree` on `[lower[i], upper[i]]`, and then sampled by inversion sampling.
+Chebyshev polynomial of the given `degree` on `[lower[i], upper[i]]`, or on the sub-interval that holds its mass when
+the posterior is concentrated relative to this interval, and then sampled by inversion sampling.
 
 **Keyword arguments when sampling with TelescopingRatioEstimators**: 
 
-- `lower::AbstractVector`, `upper::AbstractVector`: prior bounds for each of the `d` parameters.
+- `lower::AbstractVector`, `upper::AbstractVector`: bounds for each of the `d` parameters, to which the draws are confined (for a prior with unbounded support, choose bounds that hold essentially all of its mass).
 - `degree::Integer = 128`: degree of the Chebyshev approximation of each conditional density.
-- `logpriors = nothing`: an iterable collection of `d` functions where `logpriors[i]` is the log marginal prior density for the `i`-th parameter. This must agree with the marginal priors used during training, otherwise samples will be drawn from the wrong distribution. By default, assumes uniform marginal priors with bounds specified by `lower` and `upper`.
+- `logpriors = nothing`: a vector of `d` functions where `logpriors[i]` is the log marginal prior density for the `i`-th parameter, returning finite values, or `-Inf` where the density is zero (never `NaN` or `Inf`). More precisely, these must be the marginal densities of the distribution sampled by the estimator's `sampler` (the prior, or a reference distribution; see [`TelescopingRatioEstimator`](@ref)), otherwise samples will be drawn from the wrong distribution. By default, assumes uniform marginal priors with bounds specified by `lower` and `upper`.
 - `chebyshev_batchsize::Integer = 1`: number of data sets fused together (per parameter) for efficiency.
 """
 function sampleposterior end
@@ -276,8 +277,6 @@ function bootstrap(estimator, parameters::P, simulator, m::Integer, args...; B::
     Z = stackarrays(Z) # TODO more general function that "batches" a collection of data sets based on the type of the elements
     bootstrap(estimator, parameters, Z, args...; kwargs...)
 end
-
-#TODO args... might not work here because of {P <: Union{AbstractMatrix, AbstractParameterSet}}... might need specific bootstrap method for LuxEstimator
 
 function bootstrap(estimator, parameters::P, Z, args...; use_gpu::Bool = true) where {P <: Union{AbstractMatrix, AbstractParameterSet}}
     @assert numobs(parameters) == 1 "Parametric bootstrapping is designed for a single parameter configuration only: received $(numobs(parameters)) parameter configurations"

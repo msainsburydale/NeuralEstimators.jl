@@ -18,6 +18,10 @@ contains an additional parameter, θ₀, which is the input value corresponding 
 the functions midpoint. In `Compress`, we fix θ₀ = 0, since the output of a
 randomly initialised neural network is typically around zero.
 
+For a [`PointEstimator`](@ref) trained with the loss `mae` or a quantile loss, and for an [`IntervalEstimator`](@ref)
+or [`QuantileEstimator`](@ref), constrain the estimates with the keyword arguments `lower` and `upper` of the
+estimator instead. With any other loss, constrain them within the neural network, for example with `Compress`.
+
 # Examples
 ```julia
 using NeuralEstimators, Flux

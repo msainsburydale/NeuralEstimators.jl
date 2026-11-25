@@ -7,6 +7,7 @@ using LuxCore
 using Optimisers
 using Reactant
 using MLDataDevices: CPUDevice
+using Functors: fmapstructure
 
 using Lux.Training: TrainState
 
@@ -32,13 +33,15 @@ end
 (r::RiskBatch)(model, ps, st, input, output) = r.loss(_forward(model, ps, st, input), output)
 
 # Cache key for compiled risk: must support RatioEstimator inputs `(Z, θ)`, etc.
-# NB the fallback keys on the object itself, so a type that holds arrays needs its own method: otherwise, each batch
-# is a cache miss and the risk is recompiled for every batch
 _compile_key(x::AbstractArray) = size(x)
 _compile_key(x::Tuple) = map(_compile_key, x)
 _compile_key(P::PackedReplicates) = isnothing(P.mask) ? (size(P.data), Tuple(P.sample_sizes)) : (size(P.data), size(P.mask))
 _compile_key(d::DataAndSummaries) = (_compile_key(d.Z), _compile_key(d.S))
-_compile_key(x) = x
+# Other types (e.g., data stored in a type defined by the user): the type and the structure of its functor, with each array
+# replaced by its size, so that batches of the same shapes share the compiled risk. The device transfer moves the leaves of
+# the functor, so that the arrays are traced by Reactant (only their shapes matter) and other leaves, such as integers, are
+# constants keyed by their values. A bits value (e.g., `nothing` or a number) is its own key
+_compile_key(x) = isbits(x) ? x : (typeof(x), fmapstructure(l -> l isa AbstractArray ? size(l) : l, x))
 
 # Forward field access used by train.jl (e.g. .optimizer, .optimizer_state)
 function Base.getproperty(r::ReactantTrainState, s::Symbol)
@@ -68,7 +71,7 @@ end
 
 # ---- Training primitives ----
 
-import NeuralEstimators: _risk, _train_step, _trainstate_to_device, getestimator, _save_estimator, _serialisable_optimizer
+import NeuralEstimators: _risk, _train_step, _trainstate_to_device, getestimator, _serialisable_optimizer, _setmodel
 
 function _risk(r::ReactantTrainState, loss, data, device::ReactantDevice)
     ts = r.trainstate
@@ -103,9 +106,14 @@ end
 
 getestimator(r::ReactantTrainState) = getestimator(r.trainstate)
 
-# NB no _save_optimizer method is needed here, since ReactantTrainState forwards
-# .optimizer/.optimizer_state to the inner TrainState (see Base.getproperty above)
-_save_estimator(r::ReactantTrainState, savepath, prefix) = _save_estimator(r.trainstate, savepath, prefix)
+# NB no _save_optimizer or _save_estimator method is needed here, since ReactantTrainState forwards
+# .optimizer/.optimizer_state to the inner TrainState (see Base.getproperty above), and getestimator() unwraps it
+
+# Sets the estimator of the inner TrainState (e.g., to fit its standardisers; see NeuralEstimators._fitunfitted)
+function _setmodel(r::ReactantTrainState, model)
+    r.trainstate = _setmodel(r.trainstate, model)
+    return r
+end
 
 # cpu_device() unwraps the ConcreteRNumbers held by the rule; also strip Lux's Reactant
 # wrapper, so that loadoptimiser() returns a plain Optimisers.jl rule that can be reused on

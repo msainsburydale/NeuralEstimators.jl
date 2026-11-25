@@ -97,6 +97,9 @@ function DeepSet(ψ; a::Function = mean, latent_dim::Integer, output_dim::Intege
 end
 Base.show(io::IO, D::DeepSet) = print(io, "\nDeepSet object with:\nInner network:  $(D.ψ)\nAggregation function:  $(D.a)\nConditioning on log sample size: $(!isnothing(D.S))\nOuter network:  $(D.ϕ)")
 
+# The output of a DeepSet is that of its outer network (see _linearoutputs)
+_linearoutputs(d::DeepSet) = _linearoutputs(d.ϕ)
+
 @concrete struct ElementwiseAggregator
     a
 end

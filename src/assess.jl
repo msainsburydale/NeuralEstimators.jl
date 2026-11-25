@@ -174,7 +174,8 @@ function assess(
 
     if !isnothing(probs)
         @assert length(probs) == 2
-        bs = bootstrap.(Ref(estimator), Z, use_gpu = use_gpu, B = B)
+        # NB the parameters and states of Lux networks are given in args (see LuxEstimator), so that the estimator is rewrapped
+        bs = bootstrap.(Ref(isempty(args) ? estimator : LuxEstimator(estimator, args...)), Z, use_gpu = use_gpu, B = B)
         # compute bootstrap intervals and convert to same format returned by IntervalEstimator
         intervals = stack(vec.(interval.(bs, probs = probs)))
         # convert to dataframe and merge

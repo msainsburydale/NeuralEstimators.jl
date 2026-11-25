@@ -25,7 +25,7 @@ _toθ(lower, upper, u) = lower .+ (upper .- lower) ./ (1 .+ exp.(-u))
 #TODO concrete fields
 struct _NRELogDensity{M <: AbstractMatrix, F}
     tz::M       # cached data summaries, one column
-    net_θ::Any                # estimator.summary_network_θ (a closure over ps/st for Lux)
+    net_θ::Any                # estimator.summary_network_θ, applied to standardised parameters (a closure, also over ps/st for Lux)
     net_inf::Any              # estimator.inference_network (a closure over ps/st for Lux)
     lower::Vector{Float64}
     upper::Vector{Float64}
@@ -46,13 +46,14 @@ end
 # Stateful (Flux)
 function NeuralEstimators._sampleposterior_hmc(estimator::RatioEstimator, Z; N::Integer, lower::AbstractVector, upper::AbstractVector, logprior::Function, warmup::Integer, kwargs...)
     summary_stats_Z = summarystatistics(estimator, Z; kwargs...)
-    return _nuts(summary_stats_Z, estimator.summary_network_θ, estimator.inference_network, N, lower, upper, logprior, warmup)
+    net_θ = x -> estimator.summary_network_θ(NeuralEstimators._standardise(estimator.parameter_standardiser, x))
+    return _nuts(summary_stats_Z, net_θ, estimator.inference_network, N, lower, upper, logprior, warmup)
 end
 
 # Stateless (Lux): close over the parameters and states so that the log density sees plain functions
 function NeuralEstimators._sampleposterior_hmc(estimator::RatioEstimator, Z, ps, st; N::Integer, lower::AbstractVector, upper::AbstractVector, logprior::Function, warmup::Integer, kwargs...)
     summary_stats_Z = summarystatistics(estimator, Z, ps, st; kwargs...)
-    net_θ = x -> first(estimator.summary_network_θ(x, ps.summary_network_θ, st.summary_network_θ))
+    net_θ = x -> first(estimator.summary_network_θ(NeuralEstimators._standardise(estimator.parameter_standardiser, x), ps.summary_network_θ, st.summary_network_θ))
     net_inf = x -> first(estimator.inference_network(x, ps.inference_network, st.inference_network))
     return _nuts(summary_stats_Z, net_θ, net_inf, N, lower, upper, logprior, warmup)
 end

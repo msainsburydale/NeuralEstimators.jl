@@ -365,13 +365,66 @@ function initializepotts(grid::AbstractMatrix{Union{Missing, I}}, mask, β) wher
     return convert(Matrix{I}, grid)
 end
 
-# Scaled logistic function for constraining parameters
+@doc raw"""
+    scaledlogistic(θ, a, b)
+    scaledlogistic(θ, Ω)
+Maps ``\theta \in \mathbb{R}`` to the interval ``(a, b)``, where either bound may be infinite:
+```math
+\begin{cases}
+a + (b - a)/(1 + e^{-\theta}), & a \textrm{ and } b \textrm{ finite}, \\
+a + e^{\theta}, & a \textrm{ finite}, b = \infty, \\
+b - e^{-\theta}, & a = -\infty, b \textrm{ finite}, \\
+\theta, & a = -\infty, b = \infty.
+\end{cases}
+```
+The bounds may instead be given as the minimum and maximum of a collection `Ω`. Bounds that are not `Real` numbers must be finite: in particular, Reactant.jl traces the arguments of a broadcast, so that infinite bounds must then be fixed in a closure (e.g., `(θ -> scaledlogistic(θ, 0, Inf)).(x)`).
+
+This is the inverse of [`scaledlogit`](@ref). It is used, for example, to map the posterior draws of a [`PosteriorEstimator`](@ref) constructed with bounds back to the parameter space.
+"""
 scaledlogistic(θ, Ω) = scaledlogistic(θ, minimum(Ω), maximum(Ω))
 scaledlogistic(θ, a, b) = a + (b - a) / (1 + exp(-θ))
+# Bounds that may be infinite. NB the branches are on the bounds only, so that θ may be traced (e.g., by Reactant). Bounds
+# that are traced (e.g., the arguments of a broadcast traced by Reactant) are not Real, so the method above is then used
+function scaledlogistic(θ, a::Real, b::Real)
+    θ = float(promote_type(typeof(θ), typeof(a), typeof(b)))(θ) # computed in the precision of the bounds
+    isfinite(a) && isfinite(b) && return clamp(a + (b - a) / (1 + exp(-θ)), a, b) # NB rounding can give a value just beyond b
+    isfinite(a) && return a + exp(θ)
+    isfinite(b) && return b - exp(-θ)
+    return θ
+end
 
-# Inverse of scaledlogistic
-scaledlogit(f, Ω) = scaledlogit(f, minimum(Ω), maximum(Ω))
-scaledlogit(f, a, b) = log((f - a) / (b - f))
+@doc raw"""
+    scaledlogit(θ, a, b)
+    scaledlogit(θ, Ω)
+Maps ``\theta \in (a, b)`` to the real line, where either bound may be infinite: by the scaled logit function ``\log\{(\theta - a)/(b - \theta)\}`` if both bounds are finite, by ``\log(\theta - a)`` if only ``a`` is finite, by ``-\log(b - \theta)`` if only ``b`` is finite, and by the identity otherwise. The bounds may instead be given as the minimum and maximum of a collection `Ω`. As for [`scaledlogistic`](@ref), bounds that are not `Real` numbers must be finite.
+
+This is the inverse of [`scaledlogistic`](@ref).
+
+A value on a finite bound (e.g., a `rand(Float32)` draw equal to zero), or beyond it by less than ``64\epsilon\max(|a|, |b|)`` (e.g., through rounding in single precision), where ``\epsilon`` is the machine epsilon of `Float32` and infinite bounds are ignored, is mapped to ``\mp\log(1/\epsilon - 1) \approx \mp 15.9``: that is, as if it lay a relative distance ``\epsilon`` inside an interval with finite bounds. A value further beyond a bound gives the logarithm of a negative number (a `DomainError`).
+"""
+scaledlogit(θ, Ω) = scaledlogit(θ, minimum(Ω), maximum(Ω))
+scaledlogit(θ, a, b) = log((θ - a) / (b - θ))
+# Bounds that may be infinite (see the corresponding method of scaledlogistic). NB θ may be traced, so the branches on θ use
+# ifelse, and the logarithm is evaluated at a valid argument for a value on a bound, so that its gradient is finite
+function scaledlogit(θ, a::Real, b::Real)
+    T = float(promote_type(typeof(θ), typeof(a), typeof(b)))
+    θ = T(θ) # computed in the precision of the bounds
+    L = T(log(1 / eps(Float32) - 1)) # the value of a parameter on a bound
+    tol = 64 * eps(Float32) * max(isfinite(a) ? abs(a) : 0, isfinite(b) ? abs(b) : 0) # rounding error beyond a bound
+    if isfinite(a) && isfinite(b)
+        lo = (a - tol <= θ) & (θ <= a)
+        hi = (b <= θ) & (θ <= b + tol)
+        θ₀ = ifelse(lo | hi, T((a + b) / 2), θ)
+        return ifelse(lo, -L, ifelse(hi, L, log((θ₀ - a) / (b - θ₀))))
+    elseif isfinite(a)
+        lo = (a - tol <= θ) & (θ <= a)
+        return ifelse(lo, -L, log(ifelse(lo, one(θ), θ - a)))
+    elseif isfinite(b)
+        hi = (b <= θ) & (θ <= b + tol)
+        return ifelse(hi, L, -log(ifelse(hi, one(θ), b - θ)))
+    end
+    return θ
+end
 
 @doc raw"""
     gaussiandensity(Z::V, L::LT) where {V <: AbstractVector, LT <: LowerTriangular}

@@ -47,7 +47,7 @@ using Flux
 ```
 
 ```julia [Lux]
-using Lux
+using Lux, Zygote
 
 # NB: for the most computationally efficient setup, pass device = reactant_device() to train()
 using Reactant
@@ -137,6 +137,8 @@ d = 6    # number of parameters (entries of A and innovation standard deviations
 num_summaries = 3d
 ```
 
+The CNN below can be used with either deep-learning backend, whereas the LSTM is constructed differently in Flux and Lux:
+
 ::: code-group
 
 ```julia [CNN]
@@ -152,11 +154,20 @@ network = Chain(
 )
 ```
 
-```julia [LSTM]
+```julia [LSTM (Flux)]
 network = Chain(
     # LSTM: maps observation at each step to a hidden state
     LSTM(p => 64),
     x -> x[:, end, :],                # take the final hidden state
+    Dense(64, 64, gelu),
+    Dense(64, num_summaries, gelu)
+)
+```
+
+```julia [LSTM (Lux)]
+network = Chain(
+    # LSTM: Recurrence runs the cell over the time steps and returns the final hidden state
+    Recurrence(LSTMCell(p => 64)),
     Dense(64, 64, gelu),
     Dense(64, num_summaries, gelu)
 )
@@ -179,7 +190,15 @@ estimator = PosteriorEstimator(network, d; num_summaries = num_summaries)
 ```
 
 ```julia [Ratio estimator]
-estimator = RatioEstimator(network, d; num_summaries = num_summaries)
+# During training, the estimator contrasts each parameter with independent draws from a reference distribution whose
+# marginal densities are known: here, the prior without the stationarity constraint, which couples the entries of A
+reference(K) = vcat(0.5 .* randn(4, K), abs.(0.5 .* randn(2, K)))
+estimator = TelescopingRatioEstimator(network, d; num_summaries = num_summaries, sampler = reference)
+
+# Bounds holding essentially all of the prior mass, and the marginal log densities of the reference distribution,
+# needed for posterior sampling
+lower, upper = [-2.0, -2.0, -2.0, -2.0, 0.0, 0.0], fill(2.0, 6)
+logpriors = fill(θ -> -2θ^2, 6)
 ```
 
 :::
@@ -234,8 +253,25 @@ The function [`assess`](@ref) can then be used to assess the trained estimator b
 ```julia
 θ_test = sampler(1000)
 Z_test = simulator(θ_test, T)
+```
+
+::: code-group
+
+```julia [Point estimator]
 assessment = assess(estimator, θ_test, Z_test)
 ```
+
+```julia [Posterior estimator]
+assessment = assess(estimator, θ_test, Z_test)
+```
+
+```julia [Ratio estimator]
+assessment = assess(estimator, θ_test, Z_test; lower, upper, logpriors)
+```
+
+:::
+
+With the ratio estimator, this step takes several minutes (about eight on a recent laptop CPU), since `assess` draws 1000 posterior samples for each of the 1000 test data sets, one parameter at a time; fewer draws (e.g., `N = 250` passed to `assess`) reduce this proportionally.
 
 The resulting [`Assessment`](@ref) object contains ground-truth parameters, estimates, and other quantities that can be used to compute quantitative and qualitative diagnostics:
 
@@ -267,7 +303,7 @@ sampleposterior(estimator, Z)      # posterior sample
 ```
 
 ```julia [Ratio estimator]
-sampleposterior(estimator, Z)      # posterior sample
+sampleposterior(estimator, Z; lower, upper, logpriors)  # posterior sample
 ```
 
 :::
