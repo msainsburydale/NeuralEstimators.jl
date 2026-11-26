@@ -386,7 +386,7 @@ function _homogeneity(loss, s::Standardiser, θ::AbstractArray)
     Θ₁, Θ₂ = vectors(1:n), vectors((K - n + 1):K)
     rows(v) = reshape(v, d, ntuple(_ -> 1, N - 1)...) # one value per row, the same along the other dimensions
     σ = rows(s.std isa Number ? fill(s.std, d) : vec(s.std))
-    subsets = [rows(isodd.((0:(d - 1)) .>> b)) for b in 0:(ceil(Int, log2(d)) - 1)]
+    subsets = [rows(isodd.((0:(d - 1)) .>> b)) for b = 0:(ceil(Int, log2(d)) - 1)]
     L(θ̂, θ) = Float64(loss(θ̂, θ))
     same(a, b) = isfinite(a) && isfinite(b) && isapprox(a, b; rtol = 1e-3)
     factor = nothing

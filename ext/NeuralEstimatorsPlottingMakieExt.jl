@@ -330,7 +330,7 @@ function _ecdf(posteriors::DataFrame, prob, difference)
         # Evaluate at G thresholds on the rank scale; under calibration the rank is uniform on 0:L, so that
         # P(rank < threshold) = threshold / (L + 1) exactly
         G = min(L + 1, n, 1000)
-        thresholds = [fld(i * (L + 1), G) for i in 0:G]
+        thresholds = [fld(i * (L + 1), G) for i = 0:G]
         x = thresholds ./ (L + 1)
         ranks = sort(df.rank)
         y = [searchsortedfirst(ranks, threshold) - 1 for threshold in thresholds] ./ n
@@ -353,7 +353,7 @@ function _ecdfband(n::Integer, p::AbstractVector, prob::Real)
     limits(γ) = (Int.(binominvcdf.(n, p, γ / 2)), Int.(binominvcdf.(n, p, 1 - γ / 2)))
     lo, hi = 0.0, 1 - prob
     _coverage(n, p, limits(hi)...) >= prob && return limits(hi)
-    for _ in 1:25   # the coverage is non-increasing in γ, and the limits are integers
+    for _ = 1:25   # the coverage is non-increasing in γ, and the limits are integers
         γ = (lo + hi) / 2
         _coverage(n, p, limits(γ)...) >= prob ? (lo = γ) : (hi = γ)
     end
@@ -371,7 +371,7 @@ function _coverage(n::Integer, p::AbstractVector, lower::Vector{Int}, upper::Vec
         previous = p[i]
         increment = poispdf.(λ, 0:Int(poisinvcdf(λ, 1 - 1e-12)))
         updated = zeros(upper[i] - lower[i] + 1)
-        for x in lower[i]:upper[i], x₀ in max(from, x - length(increment) + 1):min(to, x)
+        for x = lower[i]:upper[i], x₀ = max(from, x - length(increment) + 1):min(to, x)
             updated[x - lower[i] + 1] += inside[x₀ - from + 1] * increment[x - x₀ + 1]
         end
         inside, from, to = updated, lower[i], upper[i]
@@ -515,9 +515,9 @@ function _plotprior(assessment::Assessment; plots, overlay, ncols, figure, axis)
     draws = isnothing(truth) ? [learned] : [learned, truth]
 
     # One range and one set of bin edges for each parameter, shared by both samples and by every panel
-    limits = [_span(reduce(vcat, (x[i, :] for x in draws)), 0.05) for i in 1:d]
+    limits = [_span(reduce(vcat, (x[i, :] for x in draws)), 0.05) for i = 1:d]
     nbins = clamp(ceil(Int, sqrt(minimum(size.(draws, 2)))), 10, 50)
-    edges = [range(limits[i]...; length = nbins + 1) for i in 1:d]
+    edges = [range(limits[i]...; length = nbins + 1) for i = 1:d]
     colors, ink = _themecolors([""])
     color = colors[""]
     labels = _typeset.(parameters)
@@ -532,7 +532,7 @@ function _plotprior(assessment::Assessment; plots, overlay, ncols, figure, axis)
         nc = kind === :marginals && !isnothing(ncols) ? clamp(ncols, 1, d) : d
         side = d == 1 ? 300 : 220
         panelsize = fixed ? (; width = side, height = 0.8 * side) : (;)
-        for i in 1:d
+        for i = 1:d
             row, col = cld(i, nc), mod1(i, nc)
             ax = Axis(layout[row, col]; xlabel = labels[i], ylabel = col == 1 ? "Density" : "", limits = (limits[i]..., nothing, nothing), panelsize..., axis...)
             _drawmarginal!(ax, i, learned, truth, edges[i], color, ink)
@@ -547,7 +547,7 @@ function _plotprior(assessment::Assessment; plots, overlay, ncols, figure, axis)
         # the learned draws below it and the test samples above it (or both below it, if `overlay = true`)
         side = d <= 3 ? 200 : max(110, 600 ÷ d)
         panelsize = fixed ? (; width = side, height = side) : (;)
-        for i in 1:d, j in 1:d
+        for i = 1:d, j = 1:d
             j > i && !mirrored && continue
             ax = Axis(layout[i, j];
                 xlabel = i == d ? labels[j] : "",
