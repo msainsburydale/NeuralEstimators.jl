@@ -63,5 +63,6 @@ _has_summary_network(e::LuxEstimator) = hasfield(typeof(e.estimator), :summary_n
 _loss(estimator::LuxEstimator, loss = nothing) = _loss(estimator.estimator, loss)
 
 # Standardisers and bounds of the wrapped estimator (see _transformations)
+datastandardiser(estimator::LuxEstimator) = datastandardiser(estimator.estimator)
 _transformations(estimator::LuxEstimator) = _transformations(estimator.estimator)
 _settransformations(estimator::LuxEstimator, entry::NamedTuple) = LuxEstimator(_settransformations(estimator.estimator, entry), estimator.ps, estimator.st)

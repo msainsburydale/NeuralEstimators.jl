@@ -68,6 +68,8 @@ summarynetwork
 setsummarynetwork
 
 summarystatistics
+
+datastandardiser
 ```
 
 ## Lux.jl convenience wrapper

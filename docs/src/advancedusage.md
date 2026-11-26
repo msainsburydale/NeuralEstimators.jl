@@ -190,9 +190,9 @@ The above strategies are facilitated with various methods of [`train()`](@ref) a
 
 It is important to ensure that the inputs and outputs of the neural networks are on a reasonable numerical scale, since values with very large absolute value can lead to numerical instability during training (e.g., exploding gradients).
 
-Hence, by default, every estimator standardises the data before they enter the neural networks, by subtracting a mean and dividing by a standard deviation, and also standardises the parameters, except the parameters of a [`SpikeAndSlab`](@ref) distribution and, when this would change the estimator, those of a [`PointEstimator`](@ref) (see below). The means and standard deviations are computed by [`train`](@ref) from the training data before training begins, and they are saved with the estimator (see [Saving and loading estimators](@ref)). Since standardisation is a fixed bijective map, it does not change the quantity being estimated, and the data, parameters, estimates, and posterior draws given to and returned by every function of the package remain on the original scale.
+Hence, by default, every estimator standardises the data before they enter the neural networks, by subtracting a mean and dividing by a standard deviation, and also standardises the parameters, except those of a [`PointEstimator`](@ref) when this would change the estimator (see below). The means and standard deviations are computed by [`train`](@ref) from the training data before training begins, and they are saved with the estimator (see [Saving and loading estimators](@ref)). The data, parameters, estimates, and posterior draws given to and returned by every function of the package remain on the original scale.
 
-Standardisation is controlled by the keyword arguments `standardise_data` and `standardise_parameters` of each estimator, which may be `true`, `false`, or a [`Standardiser`](@ref) with statistics given by the user (and, for the parameters of a [`PointEstimator`](@ref), `:auto`, the default); for data stored as [`DataAndSummaries`](@ref) objects, `standardise_data` may also be a named tuple `(Z = …, S = …)` of these values for the data and the expert summary statistics. For example:
+Standardisation is controlled by the keyword arguments `standardise_data` and `standardise_parameters` of each estimator, which may be `true`, `false`, or a [`Standardiser`](@ref) with statistics given by the user. For data stored as [`DataAndSummaries`](@ref) objects, `standardise_data` may also be a named tuple `(Z = …, S = …)` of these values for the data and the expert summary statistics. For example:
 ```julia
 # No standardisation of the data
 estimator = PosteriorEstimator(d, summary_network; num_summaries, standardise_data = false)
@@ -201,37 +201,31 @@ estimator = PosteriorEstimator(d, summary_network; num_summaries, standardise_da
 s = Standardiser(mean(Z; dims = (1, 2, 4)), std(Z; dims = (1, 2, 4)))
 estimator = PosteriorEstimator(d, summary_network; num_summaries, standardise_data = s)
 
-# Standardisation of the parameters of a point estimator, whatever its loss function and output layer (by default, they
-# are standardised only if this leaves the estimator unchanged; see PointEstimator)
-estimator = PointEstimator(d, summary_network; num_summaries, standardise_parameters = true)
-
 # Expert summary statistics standardised, but not the data given to the summary network
 estimator = PosteriorEstimator(d, summary_network; num_summaries, standardise_data = (Z = false, S = true))
 ```
 
 Note the following:
-- By default, the statistics are computed per row of data stored as matrices (e.g., the expert summary statistics of [`DataAndSummaries`](@ref) objects, or the data sets of a [`DeepSet`](@ref), pooled over the replicates), and are pooled over all elements of arrays with three or more dimensions (e.g., images); see [`Standardiser`](@ref).
-- Standardisation is applied before the summary network. A transformation in the first layer of the network that relies on the original scale or support of the data, such as `z -> log.(1 .+ z)` for positive data, should therefore be applied in the simulator instead, so that standardisation follows it, or used with `standardise_data = false`. Transformations of this kind remain useful for heavy-tailed data, whose mean and standard deviation are dominated by the largest values. 
+- By default, the statistics are computed per row of data stored as matrices, and are pooled over all elements of arrays with three or more dimensions (e.g., images); see [`Standardiser`](@ref).
 - When the parameters of a [`PointEstimator`](@ref) are standardised, its loss function is evaluated on the standardised scale, and an output layer that constrains the estimates (e.g., the activation function `softplus` or `exp`) constrains them on the standardised scale. Hence, by default (`standardise_parameters = :auto`), [`train`](@ref) standardises them only if this leaves the estimator unchanged: if the loss function is, for example, `mae` or `mse` (but not [`tanhloss`](@ref)), and the neural network ends in a `Dense` layer without activation function. Parameter bounds (`lower` and `upper`) are likewise imposed by evaluating the loss on a transformed scale, which leaves the estimator unchanged only for `mae` and quantile losses: with any other loss, impose the constraints within the neural network itself instead (see [`PointEstimator`](@ref)).
-- When a summary network is reused in another estimator (e.g., for transfer learning; see [`setsummarynetwork`](@ref)), pass the data standardiser of the original estimator, `standardise_data = estimator.data_standardiser`, so that the network sees data on the same scale. For a [`LuxEstimator`](@ref), as returned by `train()` and `loadestimator()` with Lux, this is `estimator.estimator.data_standardiser`, and for a Lux `TrainState` it is `trainstate.model.data_standardiser`.
+- Standardisation is applied before the summary network. A transformation in the first layer of the network that relies on the original scale or support of the data, such as `z -> log.(1 .+ z)` for positive data, should therefore be applied in the simulator instead, so that standardisation follows it, or used with `standardise_data = false`. Transformations of this kind remain useful for heavy-tailed data, whose mean and standard deviation are dominated by the largest values. 
+- When a summary network is reused in another estimator (e.g., for transfer learning; see [`setsummarynetwork`](@ref)), pass the data standardiser of the original estimator, `standardise_data = datastandardiser(estimator)` (see [`datastandardiser`](@ref)), so that the network sees data on the same scale.
 
-Data stored in a type defined by the user are not standardised by default. To standardise them, add a method of the call operator of [`Standardiser`](@ref), `s(Z)`, which applies a standardiser `s` to data `Z`, and, so that [`train`](@ref) can compute the statistics (with `standardise_data = true`, the default), a method of [`NeuralEstimators.fitstandardiser`](@ref). For example, for data sets stored together with indicators of missingness that should not be standardised:
+Data stored in a type defined by the user are not standardised by default. To standardise them, add a method of the call operator of [`Standardiser`](@ref), and, so that [`train`](@ref) can compute the statistics (with `standardise_data = true`, the default), a method of [`NeuralEstimators.fitstandardiser`](@ref). For example, for data sets stored together with indicators of missingness that should not be standardised:
 ```julia
 struct MyData{A, B}
-    Z::A # values
+    Y::A # values
     W::B # indicators of missingness
 end
 
 # Standardise the values only, with statistics computed from the values only
-(s::Standardiser)(d::MyData) = MyData(s(d.Z), d.W)
-NeuralEstimators.fitstandardiser(d::MyData) = NeuralEstimators.fitstandardiser(d.Z)
+(s::Standardiser)(Z::MyData) = MyData(s(Z.Y), d.W)
+NeuralEstimators.fitstandardiser(Z::MyData) = NeuralEstimators.fitstandardiser(Z.Y)
 ```
 Note the following:
-- The method of the call operator is applied once to all of the data on the host during training (and by [`summarystatistics`](@ref)), and to each mini-batch at inference, possibly on a GPU, and never within automatic differentiation. It should therefore apply `s` to the arrays that the type stores, as above, which converts them to single precision and moves the statistics to their device, and it should not modify its input.
-- The methods are needed for the type of the data given to [`train`](@ref) and [`estimate`](@ref). For example, for a vector of `MyData` objects, define `(s::Standardiser)(Z::AbstractVector{<:MyData}) = map(s, Z)` and a method of `fitstandardiser` that pools the statistics, such as `NeuralEstimators.fitstandardiser(Z::AbstractVector{<:MyData}) = NeuralEstimators.fitstandardiser([d.Z for d in Z])`.
+- The method of the call operator is applied once to all of the data on the host during training, and to each mini-batch at inference, possibly on a GPU, and never within automatic differentiation. It should therefore apply `s` to the arrays that the type stores, as above, and it should not modify its input.
+- The methods are needed for the type of the data given to [`train`](@ref) and [`estimate`](@ref). For example, for a vector of `MyData` objects, define `(s::Standardiser)(Z::AbstractVector{<:MyData}) = map(s, Z)` and a method of `fitstandardiser` that pools the statistics, such as `NeuralEstimators.fitstandardiser(Z::AbstractVector{<:MyData}) = NeuralEstimators.fitstandardiser([z.Y for z in Z])`.
 - `fitstandardiser` must return a `Standardiser`, or `nothing` if the statistics cannot be computed (the data are then not standardised). With statistics given by the user (e.g., `standardise_data = Standardiser(mean, std)`), only the method of the call operator is needed.
-- The methods should dispatch on the type of the data only, not on that of the standardiser.
-- A `Standardiser` should be given to an estimator through `standardise_data`, rather than placed in its neural network, where it would be neither saved with the estimator nor skipped during training (when the data have already been standardised).
 - As for any type of data, `numobs` and `getobs` must also be defined, so that the data can be split into mini-batches.
 
 See [feature scaling](https://en.wikipedia.org/wiki/Feature_scaling) for further discussion and possible approaches. 

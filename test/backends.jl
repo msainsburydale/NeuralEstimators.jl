@@ -876,6 +876,7 @@ end
         @test inner(loaded).transform isa NeuralEstimators._ScaledLogit
         @test inner(loaded).parameter_standardiser.mean == inner(trained).parameter_standardiser.mean
         @test inner(loaded).data_standardiser.std == inner(trained).data_standardiser.std
+        @test datastandardiser(loaded) === inner(loaded).data_standardiser # forwarded by a LuxEstimator
         Random.seed!(1)
         a = sampleposterior(trained, Z_test[:, 1:2]; N = 20, device = cpu_device())
         Random.seed!(1)

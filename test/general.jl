@@ -2661,6 +2661,8 @@ end
     trained2 = train(trained, θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false) # never refitted
     @test trained2.parameter_standardiser.mean == trained.parameter_standardiser.mean
     @test trained2.data_standardiser.std == trained.data_standardiser.std
+    reused = PointEstimator(summarynetwork(trained), d; num_summaries, standardise_data = datastandardiser(trained)) # e.g., transfer learning
+    @test datastandardiser(reused) === datastandardiser(trained)
     trained = train(est, sampler, simulator; simulator_args = m, K = 100, epochs = 1, verbose = false) # fitted to the validation data
     @test trained.parameter_standardiser isa Standardiser{Matrix{Float32}}
     trained = train(est, θ_train, θ_val, simulator; simulator_args = m, epochs = 1, verbose = false)

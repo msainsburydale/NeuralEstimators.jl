@@ -70,7 +70,7 @@ export AbstractNeuralEstimator, AbstractBayesEstimator
 export PosteriorEstimator, PriorEstimator, RatioEstimator, TelescopingRatioEstimator, PointEstimator, IntervalEstimator, QuantileEstimator
 export Ensemble
 export LuxEstimator
-export summarynetwork, setsummarynetwork, summarystatistics
+export summarynetwork, setsummarynetwork, summarystatistics, datastandardiser
 include(joinpath("Estimators", "Estimators.jl"))
 include(joinpath("Estimators", "Ensemble.jl"))
 for file in sort(readdir(joinpath(@__DIR__, "Estimators")))

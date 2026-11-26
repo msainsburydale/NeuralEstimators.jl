@@ -29,6 +29,8 @@ function (e.g., `mae`, `mse`, and the quantile loss), but not otherwise (e.g., f
 The statistics are saved with the estimator (see [`train`](@ref) and
 [`saveestimator`](@ref)) and restored by [`loadestimator`](@ref), and they are never recomputed once training has begun.
 
+See also [`datastandardiser`](@ref).
+
 # Examples
 ```julia
 using NeuralEstimators
