@@ -59,5 +59,3 @@ function _learnedconstant(B::Module, heads::Pair...)
     kwargs = _fluxinit(B, !isnothing(lux) && B === lux ? (use_bias = false,) : (bias = false,))
     return B.Chain(_onesrow, B.Parallel(vcat, (B.Dense(1 => out, activation; kwargs...) for (out, activation) in heads)...))
 end
-
-

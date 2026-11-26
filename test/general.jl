@@ -885,7 +885,7 @@ end
             # the first branch of the Parallel block at the end of the inference network.
             weights_head = q.inference_network.layers[end].layers[1]
             copyto!(weights_head.bias,
-                    eltype(weights_head.bias).(collect(range(0, -200; length = J))))
+                eltype(weights_head.bias).(collect(range(0, -200; length = J))))
 
             # The log-density stayed finite even with the bug, so the gradient is the
             # assertion that matters. Differentiating with respect to the summary
@@ -1831,7 +1831,7 @@ end
     @test labels == vcat(ones(Float32, 1, K), zeros(Float32, 1, K))
     @test sortslices(θ̃s; dims = 2) == sortslices(θs; dims = 2) # without a sampler, a permutation of the parameters...
     @test θ̃s != θs                                             # ...that pairs the data sets with other parameters
-    ref =RatioEstimator(est.summary_network, est.summary_network_θ, est.inference_network; standardise_data = false, standardise_parameters = false)
+    ref = RatioEstimator(est.summary_network, est.summary_network_θ, est.inference_network; standardise_data = false, standardise_parameters = false)
     @test NeuralEstimators._mapstandardisers(NeuralEstimators._mark, est)((Zs, θs, θ̃s)) ≈ vcat(ref(Zs, θs), ref(Zs, θ̃s))
     @test est(Z, θ.array, θ.array[:, end:-1:1]) ≈ vcat(est(Z, θ.array), est(Z, θ.array[:, end:-1:1]))
     @test size(NeuralEstimators._inputoutput(RatioEstimator(summary_network, d; num_summaries, sampler), Z, θ.array)[1][3]) == size(θ) # with a sampler
@@ -1840,7 +1840,7 @@ end
     estimator = train(estimator, sampler, simulator, simulator_args = m, epochs = 1, verbose = false)
 
     # Data stored in an array with three or more dimensions (e.g., images for a CNN)
-    simulator4(θ) = reshape(reduce(hcat, [θ[1, k] .+ θ[2, k] .* randn(Float32, 16) for k in 1:size(θ, 2)]), 4, 4, 1, :)
+    simulator4(θ) = reshape(reduce(hcat, [θ[1, k] .+ θ[2, k] .* randn(Float32, 16) for k = 1:size(θ, 2)]), 4, 4, 1, :)
     cnn = Chain(Conv((2, 2), 1 => 4, relu), Flux.flatten, Dense(36, num_summaries))
     trained = train(RatioEstimator(cnn, d; num_summaries = num_summaries), sampler, simulator4; K = 64, epochs = 1, verbose = false)
     @test all(isfinite, trained(simulator4(θ), θ.array))
@@ -1953,7 +1953,7 @@ end
     # Mass at a bound: the zoomed interval keeps the bound exactly, so that the draws stay in the box and the log density
     # at the bound is finite (recomputing the bound from the midpoint and half-width rounds -1.07f0 outwards, 0.05f0 inwards)
     estimator₁ = TelescopingRatioEstimator(1; num_summaries = 1, sampler = K -> rand(Float32, 1, K), standardise_parameters = false)
-    exponential(_, X) = -(X[2:2, :] .- X[1:1, :]) ./ 1f-6  # θ | Z ~ z + Exp(10⁶)
+    exponential(_, X) = -(X[2:2, :] .- X[1:1, :]) ./ 1.0f-6  # θ | Z ~ z + Exp(10⁶)
     θ = first(NeuralEstimators._sequential_core(estimator₁, exponential, Float32[-1.07;;], [-1.07], [3.69], N, nothing, 128, nothing))
     @test all(θ .>= -1.07f0)
     lq = last(NeuralEstimators._sequential_core(estimator₁, exponential, Float32[0.05;;], [0.05], [0.5], 0, Float32[0.05;;], 128, nothing; logq = true))
@@ -2380,7 +2380,7 @@ end
     est = QuantileEstimator(network(), d; num_summaries, lower, upper, standardise_data = sZ, standardise_parameters = sθ)
     ref = QuantileEstimator(est.summary_network, est.summary_network_θ, est.v, est.probs, est.g, est.i; unmapped...)
     out = ref(Zs)
-    @test est(Z) ≈ reduce(vcat, [back(out[(1:d) .+ (t - 1) * d, :]) for t in 1:3])
+    @test est(Z) ≈ reduce(vcat, [back(out[(1:d) .+ (t - 1) * d, :]) for t = 1:3])
     @test _mapstandardisers(_mark, est)(Zs) ≈ out
     θs = (scaledlogit.(θ.array, lower, upper) .- sθ.mean) ./ sθ.std # the parameters on the scale of training
     @test _inputoutput(est, Z, θ.array)[2] ≈ θs
@@ -2429,7 +2429,7 @@ end
     # ---- Training: the parameters are transformed before they are standardised, and the estimates lie within the bounds.
     # The bounds are saved with the estimator, so it is loaded into an estimator constructed without them ----
     for (est, arch) in ((PointEstimator(network(), d; num_summaries, lower, upper), () -> PointEstimator(network(), d; num_summaries)),
-                        (IntervalEstimator(network(), d; num_summaries, lower, upper), () -> IntervalEstimator(network(), d; num_summaries)))
+        (IntervalEstimator(network(), d; num_summaries, lower, upper), () -> IntervalEstimator(network(), d; num_summaries)))
         savepath = mktempdir()
         trained = train(est, θ_train, θ_val, Z_train, Z_val; epochs = 2, savepath = savepath, verbose = false)
         @test trained.parameter_standardiser.mean ≈ Standardiser(scaledlogit.(θ_train.array, lower, upper)).mean
@@ -2505,7 +2505,7 @@ end
     sP = Standardiser(PackedReplicates(Zv; max_sample_size = 7))             # the padding is excluded
     @test sP.mean ≈ sv.mean && sP.std ≈ sv.std
     @test Standardiser(fill(5.0f0, 2, 10)).std == ones(Float32, 2, 1)        # zero variance: σ = 1
-    @test Standardiser([1f7, 1f7 + 1]).std == 1f0                           # variation too small to resolve in single precision: σ = 1
+    @test Standardiser([1.0f7, 1.0f7 + 1]).std == 1.0f0                           # variation too small to resolve in single precision: σ = 1
     @test_throws ArgumentError Standardiser(fill(NaN, 2, 3))                 # non-finite values
     @test_throws ArgumentError Standardiser((Z, Z))                          # unsupported container
     S = randn(Float32, 2, K)
@@ -2703,21 +2703,25 @@ end
         @test _invariantloss(loss, sl, θl)
     end
     for loss in ((x, y) -> tanhloss(x, y, 0.1), (x, y) -> tanhloss(x, y, 0.1; joint = false), (x, y) -> tanhloss(x, y, 1e-4), # incl. saturated
-                 (x, y) -> kpowerloss(x, y, 0.5), (x, y) -> kpowerloss(x, y, 2; safeorigin = false), (x, y) -> Flux.huber_loss(x, y),
-                 (x, y) -> mean(abs.(x .- y) ./ abs.(y)), (x, y) -> mean(abs.(log.(x) .- log.(y))), (x, y) -> error("a loss that throws"))
+        (x, y) -> kpowerloss(x, y, 0.5), (x, y) -> kpowerloss(x, y, 2; safeorigin = false), (x, y) -> Flux.huber_loss(x, y),
+        (x, y) -> mean(abs.(x .- y) ./ abs.(y)), (x, y) -> mean(abs.(log.(x) .- log.(y))), (x, y) -> error("a loss that throws"))
         @test !_invariantloss(loss, sl, θl)
     end
     # Constants chosen for the original scale are detected, also when the loss is nearly linear on the standardised scale
     θ289 = 500 .+ 289 .* randn(2, 200)
     @test !_invariantloss((x, y) -> tanhloss(x, y, 50), Standardiser(θ289), θ289)
     @test !_invariantloss((x, y) -> Flux.huber_loss(x, y; delta = 6), Standardiser(θ289), θ289)
-    for θs in (1f-3 .* randn(Float32, 2, 100) .+ 0.5f0, 1f3 .* randn(Float32, 2, 100), 1f5 .+ randn(Float32, 2, 100), randn(Float32, 1, 100), randn(Float32, 1000, 100))
+    for θs in (1.0f-3 .* randn(Float32, 2, 100) .+ 0.5f0, 1.0f3 .* randn(Float32, 2, 100), 1.0f5 .+ randn(Float32, 2, 100), randn(Float32, 1, 100), randn(Float32, 1000, 100))
         @test _invariantloss(NeuralEstimators.mae, Standardiser(θs), θs)
         @test !_invariantloss((x, y) -> tanhloss(x, y, 0.1), Standardiser(θs), θs)
     end
     θ1000 = randn(1000, 100)
     @test !_invariantloss((x, y) -> kpowerloss(x, y, 0.5; safeorigin = false), Standardiser(θ1000), θ1000) # a power of a sum over many parameters
-    seed!(3); u = rand(); seed!(3); _invariantloss(NeuralEstimators.mae, sl, θl); @test rand() == u # the global random stream is unchanged
+    seed!(3)
+    u = rand()
+    seed!(3)
+    _invariantloss(NeuralEstimators.mae, sl, θl)
+    @test rand() == u # the global random stream is unchanged
     # The neural network: a final linear layer with one output per parameter
     @test _linearoutputs(PointEstimator(network(), d; num_summaries)) == d                       # the MLP inference network
     @test _linearoutputs(PointEstimator(Chain(Dense(m, 16, gelu), Dense(16, d)))) == d             # a single network
@@ -2847,12 +2851,12 @@ end
     q2 = QuantileEstimator(network(), 3; num_summaries, i = 1, standardise_data = sZ, standardise_parameters = Standardiser([0, 1, 2], [1, 2, 3]))
     @test_throws DimensionMismatch q2(Z[:, 1:2], [0.2f0, 0.7f0]) # a single conditioning vector whose length equals the number of data sets
     # Data in double precision are rounded to single precision before they are standardised, as for estimate()
-    Z64 = 1f6 .+ Float64.(Z)
+    Z64 = 1.0f6 .+ Float64.(Z)
     est64 = PointEstimator(network(), d; num_summaries, standardise_data = Standardiser(Z64))
     @test est64(Z64) ≈ estimate(est64, Z64; use_gpu = false)
 
     # ---- Statistics ----
-    @test Standardiser(fill(1, 1, 1), fill(3, 1, 1)).std === 3f0 # a single statistic is stored as a number
+    @test Standardiser(fill(1, 1, 1), fill(3, 1, 1)).std === 3.0f0 # a single statistic is stored as a number
     single = PriorEstimator(GaussianMixture(d, 0); standardise_parameters = Standardiser(fill(1, 1, 1), fill(3, 1, 1)))
     scalar = PriorEstimator(single.q; standardise_parameters = Standardiser(1, 3))
     @test logdensity(single, θ; use_gpu = false) ≈ logdensity(scalar, θ; use_gpu = false)

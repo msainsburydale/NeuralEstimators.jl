@@ -1238,7 +1238,7 @@ end
     # Parametric bootstrap, with an estimator for matrix data
     est = train(make_estimator(Lux, :point), θ_train, θ_val, Z_train, Z_val; epochs = 1, verbose = false, device = cpu_device(), savepath = nothing)
     θ₁ = sampler(1)
-    @test size(bootstrap(est, θ₁, reduce(hcat, [simulator(θ₁) for _ in 1:5]); use_gpu = false)) == (d, 5)
+    @test size(bootstrap(est, θ₁, reduce(hcat, [simulator(θ₁) for _ = 1:5]); use_gpu = false)) == (d, 5)
     @test size(bootstrap(est, θ₁, (θ, m) -> simulator(θ), n; B = 5, use_gpu = false)) == (d, 5)
 
     # Non-parametric bootstrap, which resamples the replicates of a data set, with a DeepSet
@@ -1247,7 +1247,7 @@ end
         Lux.Chain(Lux.Dense(1 => 16, Lux.relu), Lux.Dense(16 => num_summaries, Lux.relu)),
         Lux.Chain(Lux.Dense(num_summaries => 16, Lux.relu), Lux.Dense(16 => num_summaries))
     )
-    replicates(θ) = [θ[1, k] .+ θ[2, k] .* randn(Float32, 1, 10) for k in 1:size(θ, 2)]
+    replicates(θ) = [θ[1, k] .+ θ[2, k] .* randn(Float32, 1, 10) for k = 1:size(θ, 2)]
     θ_tr, θ_va = sampler(16), sampler(16)
     est = LuxEstimator(PointEstimator(ds, d; num_summaries = num_summaries, depth = 1, width = 8))
     est = train(est, θ_tr, θ_va, replicates(θ_tr), replicates(θ_va); epochs = 1, verbose = false, device = cpu_device(), adtype = AutoZygote(), savepath = nothing)
