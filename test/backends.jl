@@ -896,6 +896,19 @@ end
     end
 end
 
+@testset "setsummarynetwork copies the summary network and its parameters (Lux)" begin
+    original = setdatastandardiser(make_estimator(Lux, :point), Standardiser(Z_train))
+    target = make_estimator(Lux, :point)
+    transferred = setsummarynetwork(target, original)
+    @test summarynetwork(transferred) === summarynetwork(original)
+    @test transferred.ps.summary_network === original.ps.summary_network
+    @test transferred.st.summary_network === original.st.summary_network
+    @test transferred.ps.inference_network === target.ps.inference_network
+    @test transferred.estimator.inference_network === target.estimator.inference_network
+    @test datastandardiser(transferred) === datastandardiser(original)
+    @test isnothing(datastandardiser(setdatastandardiser(target, nothing)))
+end
+
 # A Lux Ensemble keeps the standardisers of its components when it is saved and loaded
 @testset "Standardisation: saving and loading a Lux Ensemble" begin
     θ_tr, θ_va = sampler(64), sampler(64)

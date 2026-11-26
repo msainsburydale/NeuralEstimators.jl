@@ -67,6 +67,8 @@ summarynetwork
 
 setsummarynetwork
 
+setdatastandardiser
+
 summarystatistics
 
 datastandardiser

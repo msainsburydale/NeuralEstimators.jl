@@ -59,6 +59,26 @@ summarynetwork(estimator::LuxEstimator) = summarynetwork(estimator.estimator)
 setsummarynetwork(estimator::LuxEstimator, network) = @set estimator.estimator.summary_network = network
 _has_summary_network(e::LuxEstimator) = hasfield(typeof(e.estimator), :summary_network)
 
+# The methods above take an untyped second argument, which is ambiguous with the methods that take another estimator
+# (setsummarynetwork(::AbstractNeuralEstimator, ::AbstractNeuralEstimator) and likewise for setdatastandardiser) when both
+# arguments are a LuxEstimator. These methods are the more specific ones.
+function setdatastandardiser(estimator::LuxEstimator, standardiser)
+    LuxEstimator(setdatastandardiser(estimator.estimator, standardiser), estimator.ps, estimator.st)
+end
+function setdatastandardiser(estimator::LuxEstimator, original::AbstractNeuralEstimator)
+    setdatastandardiser(estimator, _unmark(datastandardiser(original)))
+end
+function setsummarynetwork(estimator::LuxEstimator, original::AbstractNeuralEstimator)
+    estimator = setsummarynetwork(estimator, summarynetwork(original))
+    # Flux stores the summary-network parameters in the network object, which the method above copies. Lux stores them in
+    # ps and st, so they are copied too; they are shared with original, as the Flux network object is
+    if original isa LuxEstimator
+        estimator = @set estimator.ps.summary_network = original.ps.summary_network
+        estimator = @set estimator.st.summary_network = original.st.summary_network
+    end
+    setdatastandardiser(estimator, original)
+end
+
 # Loss function inherited from estimator type
 _loss(estimator::LuxEstimator, loss = nothing) = _loss(estimator.estimator, loss)
 

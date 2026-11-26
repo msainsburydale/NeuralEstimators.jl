@@ -37,9 +37,14 @@ summarynetwork(estimator::AbstractNeuralEstimator) = estimator.summary_network
 
 """
 	setsummarynetwork(estimator::AbstractNeuralEstimator, network)
-Returns a new estimator identical to `estimator` but with the summary network replaced by `network`. Useful for transfer learning.
+	setsummarynetwork(estimator::AbstractNeuralEstimator, original::AbstractNeuralEstimator)
+Returns a new estimator identical to `estimator` but with the summary network replaced by `network`, or by the summary
+network of another estimator `original`. Useful for transfer learning.
 
-The data standardiser of `estimator` is unchanged: if `network` was trained in another estimator, `original`, construct `estimator` with `standardise_data = datastandardiser(original)`, so that the network sees data on the same scale.
+The first method leaves the data standardiser of `estimator` unchanged. The second method also copies the data standardiser
+of `original` (see [`setdatastandardiser`](@ref)), so that the summary network sees data on the same scale. When both
+estimators are a [`LuxEstimator`](@ref), it also copies the parameters and state of the summary network; training the new
+estimator with `freeze_summary_network = true` (see [`train`](@ref)) leaves them fixed.
 
 Note that [`RatioEstimator`](@ref) has a second summary network for the parameters, accessible via `estimator.summary_network_θ`, which is not affected by this function.
 
@@ -48,14 +53,39 @@ See also [`summarynetwork`](@ref) and [`datastandardiser`](@ref).
 function setsummarynetwork(estimator::AbstractNeuralEstimator, network)
     @set estimator.summary_network = network  # using Accessors
 end
+function setsummarynetwork(estimator::AbstractNeuralEstimator, original::AbstractNeuralEstimator)
+    estimator = setsummarynetwork(estimator, summarynetwork(original))
+    setdatastandardiser(estimator, original)
+end
+
+"""
+	setdatastandardiser(estimator::AbstractNeuralEstimator, standardiser)
+	setdatastandardiser(estimator::AbstractNeuralEstimator, original::AbstractNeuralEstimator)
+Returns a new estimator identical to `estimator` but with its data standardiser replaced by `standardiser`, or by the data
+standardiser of another estimator `original`.
+
+`standardiser` is a value accepted by the keyword argument `standardise_data` of an estimator: `true`, `false` (equivalently
+`nothing`), a [`Standardiser`](@ref), or, for data stored as [`DataAndSummaries`](@ref) objects, a named tuple
+`(Z = …, S = …)` of these.
+
+See also [`datastandardiser`](@ref) and [`setsummarynetwork`](@ref).
+"""
+function setdatastandardiser(estimator::AbstractNeuralEstimator, standardiser)
+    hasfield(typeof(estimator), :data_standardiser) || throw(ArgumentError("$(nameof(typeof(estimator))) has no data standardiser"))
+    @set estimator.data_standardiser = _standardiser(standardiser)
+end
+function setdatastandardiser(estimator::AbstractNeuralEstimator, original::AbstractNeuralEstimator)
+    setdatastandardiser(estimator, _unmark(datastandardiser(original)))
+end
 
 """
 	datastandardiser(estimator::AbstractNeuralEstimator)
 Returns the data standardiser of `estimator` (see [`Standardiser`](@ref)): a `Standardiser`, `nothing` if the data are
 not standardised, or a named tuple `(Z = …, S = …)` of these (for data stored as [`DataAndSummaries`](@ref) objects).
 
-It can be passed as the keyword argument `standardise_data` of another estimator that reuses the summary network of
-`estimator` (e.g., for transfer learning; see [`setsummarynetwork`](@ref)), so that the network sees data on the same scale.
+To reuse the summary network of `estimator` in another estimator (e.g., for transfer learning), copy it together with this
+standardiser using [`setsummarynetwork`](@ref), or pass the standardiser to [`setdatastandardiser`](@ref), so that the
+network sees data on the same scale.
 """
 datastandardiser(estimator::AbstractNeuralEstimator) = estimator.data_standardiser
 

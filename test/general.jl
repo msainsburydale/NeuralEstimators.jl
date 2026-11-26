@@ -2663,6 +2663,19 @@ end
     @test trained2.data_standardiser.std == trained.data_standardiser.std
     reused = PointEstimator(summarynetwork(trained), d; num_summaries, standardise_data = datastandardiser(trained)) # e.g., transfer learning
     @test datastandardiser(reused) === datastandardiser(trained)
+    target = PointEstimator(network(), d; num_summaries)
+    transferred = setsummarynetwork(target, trained)
+    @test summarynetwork(transferred) === summarynetwork(trained)
+    @test datastandardiser(transferred) === datastandardiser(trained)
+    @test transferred.inference_network === target.inference_network
+    @test datastandardiser(setdatastandardiser(target, datastandardiser(trained))) === datastandardiser(trained)
+    @test datastandardiser(setdatastandardiser(target, marked)) === datastandardiser(trained) # a standardiser marked during training
+    @test isnothing(datastandardiser(setdatastandardiser(target, PointEstimator(network(), d; num_summaries, standardise_data = false))))
+    @test isnothing(datastandardiser(setdatastandardiser(target, nothing)))
+    withexpert = PointEstimator(network(), d; num_summaries, standardise_data = (Z = sZ, S = sS))
+    @test datastandardiser(setdatastandardiser(target, withexpert)) == (Z = sZ, S = sS)
+    @test datastandardiser(setsummarynetwork(target, withexpert)) == (Z = sZ, S = sS)
+    @test_throws ArgumentError setdatastandardiser(PriorEstimator(GaussianMixture(d, 0)), trained)
     trained = train(est, sampler, simulator; simulator_args = m, K = 100, epochs = 1, verbose = false) # fitted to the validation data
     @test trained.parameter_standardiser isa Standardiser{Matrix{Float32}}
     trained = train(est, θ_train, θ_val, simulator; simulator_args = m, epochs = 1, verbose = false)
