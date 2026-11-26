@@ -361,7 +361,10 @@ end
 
         # Check the neighbourhoods against a brute-force reference built from the full
         # distance matrix (the neighbours of location i are stored in the column A[:, i])
-        D = pairwise(Euclidean(), S, S, dims = 1)
+        # NB the distances are computed per pair, as adjacencymatrix() computes them: pairwise() uses the formula
+        # ‖a‖² + ‖b‖² - 2aᵀb, whose rounding error in single precision breaks near-ties differently (and leaves a nonzero
+        # diagonal), which made these checks fail occasionally
+        D = [euclidean(S[i, :], S[j, :]) for i ∈ 1:n, j ∈ 1:n]
         for i ∈ 1:n
             @test sort(nbrs(A₁, i)) == sort(partialsortperm(D[i, :], 2:(k + 1)))
             @test sort(nbrs(A₂, i)) == sort(setdiff(findall(<(r), D[i, :]), i))
